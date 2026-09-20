@@ -1,5 +1,5 @@
 module Zenoo
-  class SDFCardShader < Shader
+  class SDFCardShader
     VERTEX_SOURCE = <<~'GLSL'
       #version 330 core
       layout (location = 0) in vec2 in_unit_pos;
@@ -99,13 +99,9 @@ module Zenoo
       }
     GLSL
 
-    def initialize
-      super(VERTEX_SOURCE, FRAGMENT_SOURCE)
-    end
-
     # シングルトンインスタンス
     def self.instance
-      @instance ||= new
+      @instance ||= Shader.new(VERTEX_SOURCE, FRAGMENT_SOURCE)
     end
   end
 end

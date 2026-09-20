@@ -102,31 +102,38 @@ module Zenoo
       b_width = 0.0
       b_color = [0.0, 0.0, 0.0, 0.0]
       if border
-        b_width = border[:width] || border[0] || 1.0
-        b_color = normalize_color(border[:color] || border[1] || :cyan)
+        if border.is_a?(Hash)
+          b_width = (border[:width] || 1.0).to_f
+          b_color = normalize_color(border[:color] || :cyan)
+        elsif border.is_a?(Array)
+          b_width = (border[0] || 1.0).to_f
+          b_color = normalize_color(border[1] || :cyan)
+        end
       end
 
       s_blur = 0.0
       s_color = [0.0, 0.0, 0.0, 0.0]
       if shadow
-        s_blur = shadow[:blur] || shadow[0] || 8.0
-        s_color = normalize_color(shadow[:color] || shadow[1] || [0, 0, 0, 180])
+        if shadow.is_a?(Hash)
+          s_blur = (shadow[:blur] || 8.0).to_f
+          s_color = normalize_color(shadow[:color] || [0, 0, 0, 180])
+        elsif shadow.is_a?(Array)
+          s_blur = (shadow[0] || 8.0).to_f
+          s_color = normalize_color(shadow[1] || [0, 0, 0, 180])
+        end
       end
 
       mode = image ? 1.0 : 0.0
       p0 = [radius.to_f, b_width.to_f, s_blur.to_f, mode]
       uv = [0.0, 0.0, 1.0, 1.0]
 
-      native_img = image ? image.native : nil
-      native_shader = effective_shader ? effective_shader.native : nil
-      Native::Renderer.draw_quad(x, y, w, h, uv, c_color, p0, b_color, s_color, native_img, native_shader)
+      Native::Renderer.draw_quad(x, y, w, h, uv, c_color, p0, b_color, s_color, image, effective_shader)
     end
 
     def self.draw_rect(x, y, w, h, color = :white, shader: nil)
       effective_shader = shader || @current_shader
-      native_shader = effective_shader ? effective_shader.native : nil
       c_color = normalize_color(color)
-      Native::Renderer.draw_quad(x, y, w, h, [0.0, 0.0, 1.0, 1.0], c_color, nil, nil, nil, nil, native_shader)
+      Native::Renderer.draw_quad(x, y, w, h, [0.0, 0.0, 1.0, 1.0], c_color, nil, nil, nil, nil, effective_shader)
     end
 
     def self.draw_rounded_rect(x, y, w, h, radius, color = :white, shader: nil)
@@ -136,9 +143,8 @@ module Zenoo
     def self.draw_image(x, y, image, color = :white, shader: nil)
       return unless image
       effective_shader = shader || @current_shader
-      native_shader = effective_shader ? effective_shader.native : nil
       c_color = normalize_color(color)
-      Native::Renderer.draw_quad(x, y, image.width, image.height, [0.0, 0.0, 1.0, 1.0], c_color, nil, nil, nil, image.native, native_shader)
+      Native::Renderer.draw_quad(x, y, image.width, image.height, [0.0, 0.0, 1.0, 1.0], c_color, nil, nil, nil, image, effective_shader)
     end
   end
 end

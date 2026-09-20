@@ -354,8 +354,9 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mInput, "mouse_push?", input_mouse_push, 1);
     rb_define_singleton_method(mInput, "mouse_release?", input_mouse_release, 1);
 
-    // 3. Image
-    rb_cNativeImage = rb_define_class_under(rb_mNative, "Image", rb_cObject);
+    // 3. Image (Zenoo::Image)
+    rb_cNativeImage = rb_define_class_under(rb_mZenoo, "Image", rb_cObject);
+    rb_define_const(rb_mNative, "Image", rb_cNativeImage);
     rb_define_alloc_func(rb_cNativeImage, image_allocate);
     rb_define_method(rb_cNativeImage, "initialize", image_init, 2);
     rb_define_singleton_method(rb_cNativeImage, "load", image_s_load, 1);
@@ -364,8 +365,9 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "set_as_render_target", image_set_as_render_target, 0);
     rb_define_singleton_method(rb_cNativeImage, "reset_render_target", image_s_reset_render_target, 0);
 
-    // 4. Shader
-    rb_cNativeShader = rb_define_class_under(rb_mNative, "Shader", rb_cObject);
+    // 4. Shader (Zenoo::Shader)
+    rb_cNativeShader = rb_define_class_under(rb_mZenoo, "Shader", rb_cObject);
+    rb_define_const(rb_mNative, "Shader", rb_cNativeShader);
     rb_define_alloc_func(rb_cNativeShader, shader_allocate);
     rb_define_method(rb_cNativeShader, "initialize", shader_init, 2);
     rb_define_method(rb_cNativeShader, "set_int", shader_set_int, 2);

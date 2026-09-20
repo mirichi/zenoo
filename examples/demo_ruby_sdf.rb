@@ -8,9 +8,11 @@ puts "Starting Zenoo Pure Ruby SDF Demo..."
 ball_x = 100.0
 ball_dir = 1.0
 
+frame = 0
 Window.loop(1280, 720, "Zenoo on Ruby - Pure Ruby SDF Engine") do
-  # ESCキーで終了
-  break if Input.key_push?(:escape)
+  # ESCキーまたは60フレームで終了
+  frame += 1
+  break if Input.key_push?(:escape) || frame >= 60
 
   # 1. 往復アニメーション
   dt = Window.delta_time

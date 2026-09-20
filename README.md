@@ -31,10 +31,13 @@ DXRuby の手軽な精神を継承しつつ、現代的な SDF (Signed Distance 
 ```
 scratch/zenoo/
 ├── ext/
-│   └── zenoo/
-│       ├── extconf.rb         # mkmf ビルド設定
-│       ├── zenoo_all.c        # Unity build (高速・安全リンク)
-│       └── zenoo_ext.c        # CRuby C拡張バインディング (TypedData & GC連携)
+│   ├── zenoo/                 # CRuby C拡張
+│   │   ├── extconf.rb         # mkmf ビルド設定
+│   │   ├── zenoo_all.c        # Unity build (高速・安全リンク)
+│   │   └── zenoo_ext.c        # CRuby C拡張バインディング (TypedData & GC連携)
+│   └── spinel/                # Spinel native_* Cバインダ
+│       ├── zenoo_spinel.h     # Spinel GC連携ヘッダ
+│       └── zenoo_spinel.c     # sp_ZenImage / sp_ZenShader 自動回収グルー
 ├── include/
 │   ├── zenoo.h                # マイクロカーネル C APIヘッダー
 │   ├── glad/glad.h
@@ -45,7 +48,8 @@ scratch/zenoo/
 │   ├── zenoo_core.c           # ウィンドウ & 入力 & 時間管理
 │   └── zenoo_gfx.c            # 汎用Quadバッチ & テクスチャ & FBO & シェーダー
 ├── lib/
-│   ├── zenoo.rb               # エントリポイント
+│   ├── zenoo.rb               # CRuby エントリポイント
+│   ├── zenoo_spinel.rb        # Spinel native_* 完全互換クラスライブラリ
 │   └── zenoo/
 │       ├── image.rb           # 画像 & オフスクリーン描画 (FBO)
 │       ├── input.rb           # キー & マウス入力
@@ -54,10 +58,14 @@ scratch/zenoo/
 │       └── shaders/
 │           └── sdf_card_shader.rb # Ruby定義の万能SDFシェーダー (角丸/枠/影)
 ├── examples/
-│   ├── demo_ruby_sdf.rb       # Ruby側SDFシェーダーによる対話型デモ
-│   └── test_gc.rb             # 2.0GB相当のテクスチャ大量生成・GC自動回収テスト
-├── build.bat                  # C拡張ビルドスクリプト (Windows)
-└── build.sh                   # C拡張ビルドスクリプト (Linux)
+│   ├── demo_ruby_sdf.rb       # CRuby用 対話型SDFデモ
+│   ├── demo_spinel_sdf.rb     # Spinel用 AOTネイティブSDFデモ (完全互換)
+│   ├── demo_spinel_interactive.rb # Spinel用 マウス追従カードデモ
+│   ├── test_gc.rb             # CRuby GC回収テスト
+│   └── test_gc_spinel.rb      # Spinel GC回収テスト (1000画像即時回収)
+├── build.bat                  # CRuby C拡張ビルドスクリプト (Windows)
+├── build.sh                   # CRuby C拡張ビルドスクリプト (Linux)
+└── build_spinel.sh            # WSL2 Spinel AOT ビルドスクリプト
 ```
 
 ---
@@ -83,3 +91,23 @@ ruby -Ilib examples\demo_ruby_sdf.rb
 ruby -Ilib examples\test_gc.rb
 ```
 1024x1024 (約4MB) のテクスチャ 500枚（計 2.0GB）を連続生成・解放し、VRAM が即座にクリーンアップされることを検証します。
+
+---
+
+### 3. Spinel AOT ネイティブバイナリのビルド (WSL2)
+
+Spinel (https://github.com/matz/spinel) を用いて、Rubyスクリプトを単一の超高速ネイティブ実行ファイルにコンパイルします。
+
+```bash
+# WSL2 Ubuntu 上で実行
+cd /mnt/c/Users/sawar/.gemini/antigravity/scratch/zenoo
+
+# 対話型SDFデモのビルド & 実行
+./build_spinel.sh examples/demo_spinel_sdf.rb
+./build/demo_spinel_sdf
+
+# Spinel GC自動回収テストの実行 (1,000枚のテクスチャをSpinel GCで即時回収)
+./build_spinel.sh examples/test_gc_spinel.rb
+./build/test_gc_spinel
+```
+
