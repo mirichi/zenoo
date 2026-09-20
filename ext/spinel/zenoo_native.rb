@@ -57,6 +57,11 @@ module Zenoo
       native_func :mouse_release?, [:int], :bool, "sp_zen_input_mouse_release"
       native_func :mouse_x, [], :float, "sp_zen_input_mouse_x"
       native_func :mouse_y, [], :float, "sp_zen_input_mouse_y"
+      native_func :gamepad_connected?, [:int], :bool, "sp_zen_input_gamepad_connected"
+      native_func :gamepad_axis, [:int, :int], :float, "sp_zen_input_gamepad_axis"
+      native_func :gamepad_button_pressed?, [:int, :int], :bool, "sp_zen_input_gamepad_button_pressed"
+      native_func :gamepad_button_push?, [:int, :int], :bool, "sp_zen_input_gamepad_button_push"
+      native_func :gamepad_button_release?, [:int, :int], :bool, "sp_zen_input_gamepad_button_release"
     end
 
     # ==========================================

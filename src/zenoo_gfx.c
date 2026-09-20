@@ -295,12 +295,16 @@ void zen_gfx_shutdown(void) {
 }
 
 void zen_gfx_begin(uint32_t clear_color, int width, int height) {
-    float clr[4];
-    color_to_floats(clear_color, clr);
-
-    glViewport(0, 0, width, height);
-    glClearColor(clr[0], clr[1], clr[2], clr[3]);
-    glClear(GL_COLOR_BUFFER_BIT);
+    // オフスクリーン描画ターゲットの場合のみビューポートとクリアを実行
+    if (s_current_render_target) {
+        glViewport(0, 0, s_current_render_target->width, s_current_render_target->height);
+        float clr[4];
+        color_to_floats(clear_color, clr);
+        glClearColor(clr[0], clr[1], clr[2], clr[3]);
+        glClear(GL_COLOR_BUFFER_BIT);
+    } else {
+        (void)width; (void)height; (void)clear_color;
+    }
 
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);

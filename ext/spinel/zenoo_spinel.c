@@ -192,6 +192,26 @@ sp_bool sp_zen_input_mouse_release(sp_int btn) {
     return zen_is_mouse_release((int)btn) ? true : false;
 }
 
+sp_bool sp_zen_input_gamepad_connected(sp_int id) {
+    return zen_is_gamepad_connected((int)id) ? true : false;
+}
+
+double sp_zen_input_gamepad_axis(sp_int id, sp_int axis) {
+    return (double)zen_get_gamepad_axis((int)id, (int)axis);
+}
+
+sp_bool sp_zen_input_gamepad_button_pressed(sp_int id, sp_int button) {
+    return zen_is_gamepad_button_pressed((int)id, (int)button) ? true : false;
+}
+
+sp_bool sp_zen_input_gamepad_button_push(sp_int id, sp_int button) {
+    return zen_is_gamepad_button_push((int)id, (int)button) ? true : false;
+}
+
+sp_bool sp_zen_input_gamepad_button_release(sp_int id, sp_int button) {
+    return zen_is_gamepad_button_release((int)id, (int)button) ? true : false;
+}
+
 static ZenImage* unpack_image(sp_RbVal val) {
     if (val.tag == SP_TAG_OBJ && val.v.p) {
         sp_ZenImage* img = (sp_ZenImage*)val.v.p;

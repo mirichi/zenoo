@@ -18,8 +18,15 @@
 
 // 内部状態
 static GLFWwindow* s_window = NULL;
-static int s_win_width = 1280;
-static int s_win_height = 720;
+static int s_base_width = 1280;   // 仮想解像度 (ゲーム内論理座標系)
+static int s_base_height = 720;
+static int s_fb_width = 1280;     // 実際のフレームバッファ解像度 (物理ピクセル)
+static int s_fb_height = 720;
+static int s_vp_x = 0;            // レターボックスビューポート
+static int s_vp_y = 0;
+static int s_vp_w = 1280;
+static int s_vp_h = 720;
+static float s_vp_scale = 1.0f;
 static double s_last_time = 0.0;
 static double s_frame_start_time = 0.0;
 static float s_delta_time = 0.016667f;
@@ -35,6 +42,17 @@ static char s_keys_release[512] = {0}; // 離した瞬間 (リリース)
 static char s_mouse_pressed[8] = {0};  // 押されている状態 (持続)
 static char s_mouse_push[8] = {0};     // 押した瞬間 (トリガー)
 static char s_mouse_release[8] = {0};  // 離した瞬間 (リリース)
+
+#define ZEN_MAX_GAMEPADS 4
+#define ZEN_GAMEPAD_BUTTON_COUNT 15
+#define ZEN_GAMEPAD_AXIS_COUNT 6
+
+static unsigned char s_gamepad_buttons_pressed[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_BUTTON_COUNT] = {{0}};
+static unsigned char s_gamepad_buttons_push[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_BUTTON_COUNT] = {{0}};
+static unsigned char s_gamepad_buttons_release[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_BUTTON_COUNT] = {{0}};
+static float s_gamepad_axes[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_AXIS_COUNT] = {{0}};
+static unsigned char s_gamepad_connected[ZEN_MAX_GAMEPADS] = {0};
+
 static int s_is_in_update_loop = 0;
 
 // 前方宣言
@@ -79,11 +97,28 @@ static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
     s_mouse_y = ypos;
 }
 
+static void update_viewport(int fb_w, int fb_h) {
+    if (fb_w <= 0) fb_w = 1;
+    if (fb_h <= 0) fb_h = 1;
+    s_fb_width = fb_w;
+    s_fb_height = fb_h;
+
+    if (s_base_width <= 0 || s_base_height <= 0) return;
+
+    float scale_x = (float)fb_w / (float)s_base_width;
+    float scale_y = (float)fb_h / (float)s_base_height;
+    s_vp_scale = (scale_x < scale_y) ? scale_x : scale_y;
+    if (s_vp_scale <= 0.0001f) s_vp_scale = 1.0f;
+
+    s_vp_w = (int)(s_base_width * s_vp_scale);
+    s_vp_h = (int)(s_base_height * s_vp_scale);
+    s_vp_x = (fb_w - s_vp_w) / 2;
+    s_vp_y = (fb_h - s_vp_h) / 2;
+}
+
 static void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void)window;
-    s_win_width = width;
-    s_win_height = height;
-    glViewport(0, 0, width, height);
+    update_viewport(width, height);
 }
 
 static int s_is_fullscreen = 0;
@@ -132,8 +167,11 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
     glfwWindowHint(GLFW_FOCUSED, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 
-    s_win_width = width;
-    s_win_height = height;
+    s_base_width = width;
+    s_base_height = height;
+    s_fb_width = width;
+    s_fb_height = height;
+    update_viewport(width, height);
     s_window = glfwCreateWindow(width, height, title, monitor, NULL);
     if (!s_window) {
         glfwDefaultWindowHints();
@@ -246,8 +284,107 @@ void zen_poll_events(void) {
     memset(s_keys_release, 0, sizeof(s_keys_release));
     memset(s_mouse_push, 0, sizeof(s_mouse_push));
     memset(s_mouse_release, 0, sizeof(s_mouse_release));
+    memset(s_gamepad_buttons_push, 0, sizeof(s_gamepad_buttons_push));
+    memset(s_gamepad_buttons_release, 0, sizeof(s_gamepad_buttons_release));
     
     glfwPollEvents();
+
+#ifdef __EMSCRIPTEN__
+    for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
+        int jid = GLFW_JOYSTICK_1 + i;
+        if (glfwJoystickPresent(jid)) {
+            int axes_count = 0;
+            const float* axes = glfwGetJoystickAxes(jid, &axes_count);
+            int btn_count = 0;
+            const unsigned char* buttons = glfwGetJoystickButtons(jid, &btn_count);
+
+            if (axes || buttons) {
+                s_gamepad_connected[i] = 1;
+                if (axes) {
+                    for (int a = 0; a < ZEN_GAMEPAD_AXIS_COUNT; a++) {
+                        s_gamepad_axes[i][a] = (a < axes_count) ? axes[a] : 0.0f;
+                    }
+                }
+                if (buttons) {
+                    static const int html5_to_zen_btn[17] = {
+                        ZEN_GAMEPAD_BUTTON_A,            // 0 -> A
+                        ZEN_GAMEPAD_BUTTON_B,            // 1 -> B
+                        ZEN_GAMEPAD_BUTTON_X,            // 2 -> X
+                        ZEN_GAMEPAD_BUTTON_Y,            // 3 -> Y
+                        ZEN_GAMEPAD_BUTTON_LEFT_BUMPER,  // 4 -> LB
+                        ZEN_GAMEPAD_BUTTON_RIGHT_BUMPER, // 5 -> RB
+                        -1,                              // 6 -> LT
+                        -1,                              // 7 -> RT
+                        ZEN_GAMEPAD_BUTTON_BACK,         // 8 -> Back
+                        ZEN_GAMEPAD_BUTTON_START,        // 9 -> Start
+                        ZEN_GAMEPAD_BUTTON_LEFT_THUMB,   // 10 -> LThumb
+                        ZEN_GAMEPAD_BUTTON_RIGHT_THUMB,  // 11 -> RThumb
+                        ZEN_GAMEPAD_BUTTON_DPAD_UP,      // 12 -> Dpad Up
+                        ZEN_GAMEPAD_BUTTON_DPAD_DOWN,    // 13 -> Dpad Down
+                        ZEN_GAMEPAD_BUTTON_DPAD_LEFT,    // 14 -> Dpad Left
+                        ZEN_GAMEPAD_BUTTON_DPAD_RIGHT,   // 15 -> Dpad Right
+                        ZEN_GAMEPAD_BUTTON_GUIDE         // 16 -> Guide
+                    };
+                    unsigned char new_buttons[ZEN_GAMEPAD_BUTTON_COUNT] = {0};
+                    for (int h = 0; h < btn_count && h < 17; h++) {
+                        int zb = html5_to_zen_btn[h];
+                        if (zb >= 0 && zb < ZEN_GAMEPAD_BUTTON_COUNT) {
+                            new_buttons[zb] = buttons[h];
+                        }
+                    }
+                    if (btn_count > 6 && axes_count <= 4) {
+                        s_gamepad_axes[i][ZEN_GAMEPAD_AXIS_LEFT_TRIGGER] = buttons[6] ? 1.0f : -1.0f;
+                    }
+                    if (btn_count > 7 && axes_count <= 5) {
+                        s_gamepad_axes[i][ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER] = buttons[7] ? 1.0f : -1.0f;
+                    }
+
+                    for (int b = 0; b < ZEN_GAMEPAD_BUTTON_COUNT; b++) {
+                        unsigned char new_state = new_buttons[b];
+                        unsigned char old_state = s_gamepad_buttons_pressed[i][b];
+                        if (!old_state && new_state) {
+                            s_gamepad_buttons_push[i][b] = 1;
+                        } else if (old_state && !new_state) {
+                            s_gamepad_buttons_release[i][b] = 1;
+                        }
+                        s_gamepad_buttons_pressed[i][b] = new_state;
+                    }
+                }
+                continue;
+            }
+        }
+        s_gamepad_connected[i] = 0;
+        memset(s_gamepad_buttons_pressed[i], 0, sizeof(s_gamepad_buttons_pressed[i]));
+        memset(s_gamepad_axes[i], 0, sizeof(s_gamepad_axes[i]));
+    }
+#else
+    for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
+        int jid = GLFW_JOYSTICK_1 + i;
+        if (glfwJoystickPresent(jid) && glfwJoystickIsGamepad(jid)) {
+            GLFWgamepadstate state;
+            if (glfwGetGamepadState(jid, &state)) {
+                s_gamepad_connected[i] = 1;
+                for (int b = 0; b < ZEN_GAMEPAD_BUTTON_COUNT; b++) {
+                    unsigned char new_state = state.buttons[b];
+                    unsigned char old_state = s_gamepad_buttons_pressed[i][b];
+                    if (!old_state && new_state) {
+                        s_gamepad_buttons_push[i][b] = 1;
+                    } else if (old_state && !new_state) {
+                        s_gamepad_buttons_release[i][b] = 1;
+                    }
+                    s_gamepad_buttons_pressed[i][b] = new_state;
+                }
+                for (int a = 0; a < ZEN_GAMEPAD_AXIS_COUNT; a++) {
+                    s_gamepad_axes[i][a] = state.axes[a];
+                }
+                continue;
+            }
+        }
+        s_gamepad_connected[i] = 0;
+        memset(s_gamepad_buttons_pressed[i], 0, sizeof(s_gamepad_buttons_pressed[i]));
+        memset(s_gamepad_axes[i], 0, sizeof(s_gamepad_axes[i]));
+    }
+#endif
 
     if (!s_is_in_update_loop) {
         double current_time = glfwGetTime();
@@ -259,8 +396,33 @@ void zen_poll_events(void) {
 }
 
 void zen_begin_frame(uint32_t clear_color) {
-    glfwGetFramebufferSize(s_window, &s_win_width, &s_win_height);
-    zen_gfx_begin(clear_color, s_win_width, s_win_height);
+    int fb_w = s_fb_width, fb_h = s_fb_height;
+    if (s_window) {
+        glfwGetFramebufferSize(s_window, &fb_w, &fb_h);
+        update_viewport(fb_w, fb_h);
+    }
+
+    // 1. 全体を黒でクリア (レターボックス余白)
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(0, 0, s_fb_width, s_fb_height);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // 2. 仮想解像度アスペクト比のゲーム領域ビューポートとシザーを設定
+    glViewport(s_vp_x, s_vp_y, s_vp_w, s_vp_h);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(s_vp_x, s_vp_y, s_vp_w, s_vp_h);
+
+    // 3. ゲーム領域を指定色でクリア
+    float clr[4];
+    clr[0] = ((clear_color >> 24) & 0xFF) / 255.0f;
+    clr[1] = ((clear_color >> 16) & 0xFF) / 255.0f;
+    clr[2] = ((clear_color >> 8)  & 0xFF) / 255.0f;
+    clr[3] = (clear_color         & 0xFF) / 255.0f;
+    glClearColor(clr[0], clr[1], clr[2], clr[3]);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    zen_gfx_begin(clear_color, s_base_width, s_base_height);
 }
 
 void zen_clear(uint32_t color) {
@@ -278,7 +440,10 @@ void zen_set_vsync(int vsync) {
 
 void zen_end_frame(void) {
     zen_gfx_flush();
-    glfwSwapBuffers(s_window);
+    glDisable(GL_SCISSOR_TEST);
+    if (s_window) {
+        glfwSwapBuffers(s_window);
+    }
 }
 
 int zen_update(void) {
@@ -351,8 +516,7 @@ int zen_update(void) {
     }
 
     // 5. 新しいフレームの描画バッチ開始
-    glfwGetFramebufferSize(s_window, &s_win_width, &s_win_height);
-    zen_gfx_begin(ZEN_RGBA(0, 0, 0, 255), s_win_width, s_win_height);
+    zen_begin_frame(ZEN_RGBA(0, 0, 0, 255));
 
     return 1;
 }
@@ -366,13 +530,26 @@ float zen_get_delta_time(void) {
 }
 
 void zen_get_window_size(int* width, int* height) {
-    if (width) *width = s_win_width;
-    if (height) *height = s_win_height;
+    if (width) *width = s_base_width;
+    if (height) *height = s_base_height;
 }
 
 void zen_get_mouse_pos(float* x, float* y) {
-    if (x) *x = (float)s_mouse_x;
-    if (y) *y = (float)s_mouse_y;
+    int win_w = 1, win_h = 1;
+    if (s_window) glfwGetWindowSize(s_window, &win_w, &win_h);
+    if (win_w <= 0) win_w = 1;
+    if (win_h <= 0) win_h = 1;
+
+    // ウィンドウ論理座標 -> フレームバッファ物理ピクセル座標
+    float fb_mouse_x = (float)s_mouse_x * ((float)s_fb_width / (float)win_w);
+    float fb_mouse_y = (float)s_mouse_y * ((float)s_fb_height / (float)win_h);
+
+    // ビューポート内オフセットとスケールで仮想座標 (1280x720) に逆変換
+    float vx = (fb_mouse_x - (float)s_vp_x) / s_vp_scale;
+    float vy = (fb_mouse_y - (float)s_vp_y) / s_vp_scale;
+
+    if (x) *x = vx;
+    if (y) *y = vy;
 }
 
 int zen_is_mouse_pressed(int button) {
@@ -404,3 +581,33 @@ int zen_is_key_release(int key) {
     if (key >= 0 && key < 512) return s_keys_release[key];
     return 0;
 }
+
+int zen_is_gamepad_connected(int id) {
+    if (id < 0 || id >= ZEN_MAX_GAMEPADS) return 0;
+    return s_gamepad_connected[id];
+}
+
+float zen_get_gamepad_axis(int id, int axis) {
+    if (id < 0 || id >= ZEN_MAX_GAMEPADS) return 0.0f;
+    if (axis < 0 || axis >= ZEN_GAMEPAD_AXIS_COUNT) return 0.0f;
+    return s_gamepad_axes[id][axis];
+}
+
+int zen_is_gamepad_button_pressed(int id, int button) {
+    if (id < 0 || id >= ZEN_MAX_GAMEPADS) return 0;
+    if (button < 0 || button >= ZEN_GAMEPAD_BUTTON_COUNT) return 0;
+    return s_gamepad_buttons_pressed[id][button];
+}
+
+int zen_is_gamepad_button_push(int id, int button) {
+    if (id < 0 || id >= ZEN_MAX_GAMEPADS) return 0;
+    if (button < 0 || button >= ZEN_GAMEPAD_BUTTON_COUNT) return 0;
+    return s_gamepad_buttons_push[id][button];
+}
+
+int zen_is_gamepad_button_release(int id, int button) {
+    if (id < 0 || id >= ZEN_MAX_GAMEPADS) return 0;
+    if (button < 0 || button >= ZEN_GAMEPAD_BUTTON_COUNT) return 0;
+    return s_gamepad_buttons_release[id][button];
+}
+

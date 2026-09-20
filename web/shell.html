@@ -46,8 +46,9 @@
       border-radius: 8px;
       overflow: hidden;
       border: 1px solid #233554;
-      max-width: 98vw;
-      max-height: 75vh;
+      width: min(96vw, calc(75vh * 16 / 9));
+      height: min(calc(96vw * 9 / 16), 75vh);
+      aspect-ratio: 16 / 9;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -58,9 +59,8 @@
       border: 0px none;
       background-color: #000;
       outline: none;
-      max-width: 100%;
-      max-height: 100%;
-      aspect-ratio: 16 / 9;
+      width: 100% !important;
+      height: 100% !important;
       touch-action: none;
     }
     #controls-bar {

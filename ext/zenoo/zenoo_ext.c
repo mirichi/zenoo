@@ -301,6 +301,32 @@ static VALUE input_mouse_release(VALUE self, VALUE rb_btn) {
     return zen_is_mouse_release(NUM2INT(rb_btn)) ? Qtrue : Qfalse;
 }
 
+static VALUE input_gamepad_connected(VALUE self, VALUE rb_id) {
+    (void)self;
+    return zen_is_gamepad_connected(NUM2INT(rb_id)) ? Qtrue : Qfalse;
+}
+
+static VALUE input_gamepad_axis(VALUE self, VALUE rb_id, VALUE rb_axis) {
+    (void)self;
+    float val = zen_get_gamepad_axis(NUM2INT(rb_id), NUM2INT(rb_axis));
+    return DBL2NUM((double)val);
+}
+
+static VALUE input_gamepad_button_pressed(VALUE self, VALUE rb_id, VALUE rb_button) {
+    (void)self;
+    return zen_is_gamepad_button_pressed(NUM2INT(rb_id), NUM2INT(rb_button)) ? Qtrue : Qfalse;
+}
+
+static VALUE input_gamepad_button_push(VALUE self, VALUE rb_id, VALUE rb_button) {
+    (void)self;
+    return zen_is_gamepad_button_push(NUM2INT(rb_id), NUM2INT(rb_button)) ? Qtrue : Qfalse;
+}
+
+static VALUE input_gamepad_button_release(VALUE self, VALUE rb_id, VALUE rb_button) {
+    (void)self;
+    return zen_is_gamepad_button_release(NUM2INT(rb_id), NUM2INT(rb_button)) ? Qtrue : Qfalse;
+}
+
 // ==========================================
 // Zenoo::Native::Renderer
 // ==========================================
@@ -424,6 +450,11 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mInput, "mouse_pressed?", input_mouse_pressed, 1);
     rb_define_singleton_method(mInput, "mouse_push?", input_mouse_push, 1);
     rb_define_singleton_method(mInput, "mouse_release?", input_mouse_release, 1);
+    rb_define_singleton_method(mInput, "gamepad_connected?", input_gamepad_connected, 1);
+    rb_define_singleton_method(mInput, "gamepad_axis", input_gamepad_axis, 2);
+    rb_define_singleton_method(mInput, "gamepad_button_pressed?", input_gamepad_button_pressed, 2);
+    rb_define_singleton_method(mInput, "gamepad_button_push?", input_gamepad_button_push, 2);
+    rb_define_singleton_method(mInput, "gamepad_button_release?", input_gamepad_button_release, 2);
 
     // 3. Image (Zenoo::Image)
     rb_cNativeImage = rb_define_class_under(rb_mZenoo, "Image", rb_cObject);

@@ -82,7 +82,11 @@ module Zenoo
 
     def self.fps
       dt = delta_time
-      dt > 0.0001 ? (1.0 / dt) : 60.0
+      if dt > 0.001 && dt < 1.0
+        1.0 / dt
+      else
+        60.0
+      end
     end
 
     def self.vsync=(val)

@@ -1,5 +1,13 @@
 require_relative '../lib/zenoo'
 
+# 事前定義カラー定数 (毎フレームの Color.new を根絶)
+COLOR_ORANGE       = Color.new(255, 161, 0)
+COLOR_HP_GRAY      = Color.new(130, 130, 130)
+COLOR_GRID_DARK    = Color.new(50, 50, 60)
+COLOR_MENU_BG      = Color.new(0, 0, 0, (255 * 0.58).to_i)
+COLOR_BUTTON_HOVER = Color.new(70, 70, 80)
+COLOR_TEXT_GRAY    = Color.new(140, 140, 140)
+
 class Bullet
   attr_accessor :x, :y, :vx, :vy, :active, :speed
 
@@ -186,8 +194,7 @@ class Particle
       sx = @x - cx
       sy = @y - cy
       size = (@life.to_f / @max_life) * 10.0
-      orange = Color.new(255, 161, 0)
-      Window.draw_rect(sx.to_f - size / 2.0, sy.to_f - size / 2.0, size, size, orange)
+      Window.draw_rect(sx.to_f - size / 2.0, sy.to_f - size / 2.0, size, size, COLOR_ORANGE)
     end
   end
 end
@@ -294,8 +301,7 @@ class Enemy
         
         bar_width = size
         hp_ratio = @hp.to_f / @max_hp
-        gray = Color.new(130, 130, 130)
-        Window.draw_rect(sx - size / 2.0, sy - size / 2.0 - 10.0, bar_width, 5.0, gray)
+        Window.draw_rect(sx - size / 2.0, sy - size / 2.0 - 10.0, bar_width, 5.0, COLOR_HP_GRAY)
         Window.draw_rect(sx - size / 2.0, sy - size / 2.0 - 10.0, bar_width * hp_ratio, 5.0, Color::GREEN)
       else
         Window.draw_rect(sx - size / 2.0, sy - size / 2.0, size, size, Color::BLUE)
@@ -361,10 +367,9 @@ class Player
   end
 
   def update(bullet_manager)
-    @y -= @speed if Input.key_pressed?(:w)
-    @y += @speed if Input.key_pressed?(:s)
-    @x -= @speed if Input.key_pressed?(:a)
-    @x += @speed if Input.key_pressed?(:d)
+    # 移動 (Input.x / Input.y: キーボードWASD/矢印、パッド十字キー、左スティックを自動統合)
+    @x += Input.x * @speed
+    @y += Input.y * @speed
 
     cx = @x - 1280.0 / 2.0
     cy = @y - 720.0 / 2.0
@@ -372,20 +377,34 @@ class Player
     mx = Input.mouse_x + cx
     my = Input.mouse_y + cy
 
+    # マウス左クリック長押しでの追従移動 (グリッド1.5個分=150pxで最高速になるアナログ追従)
     if Input.mouse_pressed?(:left)
       dx = mx - @x
       dy = my - @y
       dist = Math.sqrt(dx * dx + dy * dy)
-      if dist > @speed
-        @x = @x + (dx / dist) * @speed
-        @y = @y + (dy / dist) * @speed
-      else
-        @x = mx
-        @y = my
+      if dist > 0.001
+        ratio = dist / 150.0
+        ratio = 1.0 if ratio > 1.0
+        move_speed = @speed * ratio
+        if dist > move_speed
+          @x += (dx / dist) * move_speed
+          @y += (dy / dist) * move_speed
+        else
+          @x = mx
+          @y = my
+        end
       end
     end
 
-    @rotation = Math.atan2(my - @y, mx - @x)
+    # 照準: 右スティック(Input.rx / Input.ry)優先、スティック未入力時はマウス照準
+    rx = Input.rx
+    ry = Input.ry
+
+    if rx != 0.0 || ry != 0.0
+      @rotation = Math.atan2(ry, rx)
+    else
+      @rotation = Math.atan2(my - @y, mx - @x)
+    end
 
     if @fire_timer > 0
       @fire_timer -= 1
@@ -481,8 +500,10 @@ class Game
   def update_draw_frame
     esc_pressed = Input.key_push?(:escape)
     right_clicked = Input.mouse_push?(:right)
+    start_pressed = Input.gamepad_button_push?(:start) || Input.gamepad_button_push?(:back)
+    b_pressed = (@game_state == 1) && Input.gamepad_button_push?(:b)
 
-    if esc_pressed || right_clicked
+    if esc_pressed || right_clicked || start_pressed || b_pressed
       if @game_state == 0
         @game_state = 1
       else
@@ -504,24 +525,29 @@ class Game
       my = Input.mouse_y
       left_click = Input.mouse_push?(:left)
 
-      hover1 = mx >= 380.0 && mx <= 1180.0 && my >= 245.0 && my <= 290.0
-      hover2 = mx >= 380.0 && mx <= 1180.0 && my >= 295.0 && my <= 340.0
-      hover3 = mx >= 380.0 && mx <= 1180.0 && my >= 345.0 && my <= 390.0
-      hover4 = mx >= 380.0 && mx <= 1180.0 && my >= 395.0 && my <= 440.0
+      pad_btn1 = Input.gamepad_button_push?(:a)
+      pad_btn2 = Input.gamepad_button_push?(:x)
+      pad_btn3 = Input.gamepad_button_push?(:y)
+      pad_btn4 = Input.gamepad_button_push?(:rb) || Input.gamepad_button_push?(:lb)
 
-      if (Input.key_push?(:"1") || (hover1 && left_click)) && @player.score >= shape_cost
+      hover1 = mx >= 140.0 && mx <= 1140.0 && my >= 245.0 && my <= 290.0
+      hover2 = mx >= 140.0 && mx <= 1140.0 && my >= 295.0 && my <= 340.0
+      hover3 = mx >= 140.0 && mx <= 1140.0 && my >= 345.0 && my <= 390.0
+      hover4 = mx >= 140.0 && mx <= 1140.0 && my >= 395.0 && my <= 440.0
+
+      if (Input.key_push?(:"1") || pad_btn1 || (hover1 && left_click)) && @player.score >= shape_cost
         @player.score = @player.score - shape_cost
         @player.sides = @player.sides + 1
       end
-      if (Input.key_push?(:"2") || (hover2 && left_click)) && @player.score >= 50
+      if (Input.key_push?(:"2") || pad_btn2 || (hover2 && left_click)) && @player.score >= 50
         @player.score = @player.score - 50
         @player.speed = @player.speed + 1.0
       end
-      if (Input.key_push?(:"3") || (hover3 && left_click)) && @player.score >= 50 && @player.fire_rate > 2
+      if (Input.key_push?(:"3") || pad_btn3 || (hover3 && left_click)) && @player.score >= 50 && @player.fire_rate > 2
         @player.score = @player.score - 50
         @player.fire_rate = @player.fire_rate - 2
       end
-      if (Input.key_push?(:"4") || (hover4 && left_click)) && @player.score >= 50
+      if (Input.key_push?(:"4") || pad_btn4 || (hover4 && left_click)) && @player.score >= 50
         @player.score = @player.score - 50
         @player.magnet_radius = @player.magnet_radius + 50.0
       end
@@ -532,20 +558,19 @@ class Game
     cx = @player.x - 1280.0 / 2.0
     cy = @player.y - 720.0 / 2.0
 
-    dark_gray = Color.new(50, 50, 60)
     grid_size = 100.0
     offset_x = -(cx.to_i % 100).to_f
     offset_y = -(cy.to_i % 100).to_f
 
     x = offset_x
     while x < 1280.0
-      Window.draw_line(x, 0.0, x, 720.0, dark_gray)
+      Window.draw_line(x, 0.0, x, 720.0, COLOR_GRID_DARK)
       x += grid_size
     end
 
     y = offset_y
     while y < 720.0
-      Window.draw_line(0.0, y, 1280.0, y, dark_gray)
+      Window.draw_line(0.0, y, 1280.0, y, COLOR_GRID_DARK)
       y += grid_size
     end
 
@@ -555,42 +580,46 @@ class Game
     @bullet_manager.draw(cx, cy)
     @player.draw(cx, cy)
 
-    score_str = "SCORE: #{@player.score}  FPS: #{Window.fps.to_i}"
+    if Input.gamepad_connected?(0)
+      score_str = "SCORE: #{@player.score}  FPS: #{Window.fps.to_i}  [PAD: CONNECTED]"
+    else
+      score_str = "SCORE: #{@player.score}  FPS: #{Window.fps.to_i}"
+    end
     Window.draw_text(20.0, 20.0, score_str, size: 24, color: Color::WHITE)
 
     if @game_state == 1
       # 半透明暗幕 (58% 黒)
-      bg_color = Color.new(0, 0, 0, (255 * 0.58).to_i)
-      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, bg_color)
+      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, COLOR_MENU_BG)
       
-      Window.draw_text(450.0, 150.0, "--- SKILL MENU ---", size: 32, color: Color::WHITE)
+      # タイトル (18文字 * 32px = 576px -> (1280 - 576) / 2 = 352)
+      Window.draw_text(352.0, 150.0, "--- SKILL MENU ---", size: 32, color: Color::WHITE)
       
       mx = Input.mouse_x
       my = Input.mouse_y
-      hover1 = mx >= 380.0 && mx <= 1180.0 && my >= 245.0 && my <= 290.0
-      hover2 = mx >= 380.0 && mx <= 1180.0 && my >= 295.0 && my <= 340.0
-      hover3 = mx >= 380.0 && mx <= 1180.0 && my >= 345.0 && my <= 390.0
-      hover4 = mx >= 380.0 && mx <= 1180.0 && my >= 395.0 && my <= 440.0
+      hover1 = mx >= 140.0 && mx <= 1140.0 && my >= 245.0 && my <= 290.0
+      hover2 = mx >= 140.0 && mx <= 1140.0 && my >= 295.0 && my <= 340.0
+      hover3 = mx >= 140.0 && mx <= 1140.0 && my >= 345.0 && my <= 390.0
+      hover4 = mx >= 140.0 && mx <= 1140.0 && my >= 395.0 && my <= 440.0
 
-      button_hover = Color.new(70, 70, 80)
-      Window.draw_rect(380.0, 245.0, 800.0, 45.0, button_hover) if hover1
-      Window.draw_rect(380.0, 295.0, 800.0, 45.0, button_hover) if hover2
-      Window.draw_rect(380.0, 345.0, 800.0, 45.0, button_hover) if hover3
-      Window.draw_rect(380.0, 395.0, 800.0, 45.0, button_hover) if hover4
+      Window.draw_rect(140.0, 245.0, 1000.0, 45.0, COLOR_BUTTON_HOVER) if hover1
+      Window.draw_rect(140.0, 295.0, 1000.0, 45.0, COLOR_BUTTON_HOVER) if hover2
+      Window.draw_rect(140.0, 345.0, 1000.0, 45.0, COLOR_BUTTON_HOVER) if hover3
+      Window.draw_rect(140.0, 395.0, 1000.0, 45.0, COLOR_BUTTON_HOVER) if hover4
 
       shape_cost = (@player.sides - 2) * 100
-      t1 = "[1] Upgrade Shape  (Cost: #{shape_cost}) -> Sides: #{@player.sides + 1}"
-      t2 = "[2] Speed Up       (Cost: 50) -> Speed: #{(@player.speed + 1.0).to_i}"
-      t3 = "[3] Fire Rate Up   (Cost: 50)"
-      t4 = "[4] Magnet Radius  (Cost: 50) -> Range: #{(@player.magnet_radius + 50.0).to_i}"
+      t1 = "[1/A]  Upgrade Shape (Cost: #{shape_cost}) -> Sides: #{@player.sides + 1}"
+      t2 = "[2/X]  Speed Up      (Cost: 50) -> Speed: #{(@player.speed + 1.0).to_i}"
+      t3 = "[3/Y]  Fire Rate Up  (Cost: 50)"
+      t4 = "[4/RB] Magnet Radius (Cost: 50) -> Range: #{(@player.magnet_radius + 50.0).to_i}"
 
-      gray = Color.new(140, 140, 140)
-      Window.draw_text(400.0, 255.0, t1, size: 20, color: @player.score >= shape_cost ? Color::WHITE : gray)
-      Window.draw_text(400.0, 305.0, t2, size: 20, color: @player.score >= 50 ? Color::WHITE : gray)
-      Window.draw_text(400.0, 355.0, t3, size: 20, color: (@player.score >= 50 && @player.fire_rate > 2) ? Color::WHITE : gray)
-      Window.draw_text(400.0, 405.0, t4, size: 20, color: @player.score >= 50 ? Color::WHITE : gray)
+      # リストテキスト (最長48文字 * 20px = 960px -> 開始x=160, 終了x=1120, 中心=640)
+      Window.draw_text(160.0, 255.0, t1, size: 20, color: @player.score >= shape_cost ? Color::WHITE : COLOR_TEXT_GRAY)
+      Window.draw_text(160.0, 305.0, t2, size: 20, color: @player.score >= 50 ? Color::WHITE : COLOR_TEXT_GRAY)
+      Window.draw_text(160.0, 355.0, t3, size: 20, color: (@player.score >= 50 && @player.fire_rate > 2) ? Color::WHITE : COLOR_TEXT_GRAY)
+      Window.draw_text(160.0, 405.0, t4, size: 20, color: @player.score >= 50 ? Color::WHITE : COLOR_TEXT_GRAY)
       
-      Window.draw_text(400.0, 500.0, "Right Click or ESC to Resume", size: 16, color: gray)
+      # フッター (42文字 * 16px = 672px -> (1280 - 672) / 2 = 304)
+      Window.draw_text(304.0, 500.0, "Right Click / ESC / START / (B) to Resume", size: 16, color: COLOR_TEXT_GRAY)
     end
   end
 end

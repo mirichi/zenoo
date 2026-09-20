@@ -104,6 +104,40 @@ int    zen_is_key_pressed(int key);      // 押されている状態 (持続)
 int    zen_is_key_push(int key);         // 押した瞬間 (トリガー)
 int    zen_is_key_release(int key);      // 離した瞬間 (リリース)
 
+// ゲームパッド (GLFW標準ゲームパッドマッピング準拠)
+enum ZenGamepadButton {
+    ZEN_GAMEPAD_BUTTON_A            = 0,
+    ZEN_GAMEPAD_BUTTON_B            = 1,
+    ZEN_GAMEPAD_BUTTON_X            = 2,
+    ZEN_GAMEPAD_BUTTON_Y            = 3,
+    ZEN_GAMEPAD_BUTTON_LEFT_BUMPER  = 4,
+    ZEN_GAMEPAD_BUTTON_RIGHT_BUMPER = 5,
+    ZEN_GAMEPAD_BUTTON_BACK         = 6,
+    ZEN_GAMEPAD_BUTTON_START        = 7,
+    ZEN_GAMEPAD_BUTTON_GUIDE        = 8,
+    ZEN_GAMEPAD_BUTTON_LEFT_THUMB   = 9,
+    ZEN_GAMEPAD_BUTTON_RIGHT_THUMB  = 10,
+    ZEN_GAMEPAD_BUTTON_DPAD_UP      = 11,
+    ZEN_GAMEPAD_BUTTON_DPAD_RIGHT   = 12,
+    ZEN_GAMEPAD_BUTTON_DPAD_DOWN    = 13,
+    ZEN_GAMEPAD_BUTTON_DPAD_LEFT    = 14,
+};
+
+enum ZenGamepadAxis {
+    ZEN_GAMEPAD_AXIS_LEFT_X         = 0,
+    ZEN_GAMEPAD_AXIS_LEFT_Y         = 1,
+    ZEN_GAMEPAD_AXIS_RIGHT_X        = 2,
+    ZEN_GAMEPAD_AXIS_RIGHT_Y        = 3,
+    ZEN_GAMEPAD_AXIS_LEFT_TRIGGER   = 4,
+    ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER  = 5,
+};
+
+int    zen_is_gamepad_connected(int id);
+float  zen_get_gamepad_axis(int id, int axis);
+int    zen_is_gamepad_button_pressed(int id, int button);
+int    zen_is_gamepad_button_push(int id, int button);
+int    zen_is_gamepad_button_release(int id, int button);
+
 // ==========================================
 // 2. 画像 (Image) & オフスクリーン描画 API
 // ==========================================
