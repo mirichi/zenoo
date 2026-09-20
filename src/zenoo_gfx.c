@@ -4,7 +4,11 @@
 #include <math.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#ifdef __EMSCRIPTEN__
+#include <GLES3/gl3.h>
+#else
 #include "glad/glad.h"
+#endif
 #include "zenoo.h"
 
 #define MAX_QUADS 65536
@@ -81,9 +85,34 @@ static void color_to_floats(uint32_t c, float out[4]) {
 }
 
 static GLuint compile_shader(GLenum type, const char* source) {
+    const char* src_to_compile = source;
+#ifdef __EMSCRIPTEN__
+    char* patched_source = NULL;
+    const char* version_pos = strstr(source, "#version 330 core");
+    if (version_pos) {
+        size_t prefix_len = version_pos - source;
+        const char* rest = version_pos + strlen("#version 330 core");
+        const char* header = "#version 300 es\nprecision mediump float;\n";
+        size_t total_len = prefix_len + strlen(header) + strlen(rest) + 1;
+        patched_source = (char*)malloc(total_len);
+        if (patched_source) {
+            memcpy(patched_source, source, prefix_len);
+            strcpy(patched_source + prefix_len, header);
+            strcat(patched_source, rest);
+            src_to_compile = patched_source;
+        }
+    }
+#endif
+
     GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, NULL);
+    glShaderSource(shader, 1, &src_to_compile, NULL);
     glCompileShader(shader);
+
+#ifdef __EMSCRIPTEN__
+    if (patched_source) {
+        free(patched_source);
+    }
+#endif
 
     GLint status;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &status);

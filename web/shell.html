@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Zenoo Survival Shooting (Spinel Wasm)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 10px;
+      background-color: #0d0f18;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #header {
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0 0 4px 0;
+      font-size: 18px;
+      color: #00ffcc;
+      letter-spacing: 1px;
+    }
+    p {
+      margin: 0;
+      font-size: 11px;
+      color: #8892b0;
+    }
+    #canvas-container {
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #233554;
+      max-width: 98vw;
+      max-height: 75vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #000;
+    }
+    canvas.emscripten {
+      display: block;
+      border: 0px none;
+      background-color: #000;
+      outline: none;
+      max-width: 100%;
+      max-height: 100%;
+      aspect-ratio: 16 / 9;
+      touch-action: none;
+    }
+    #controls-bar {
+      margin-top: 10px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .btn {
+      background: #1e293b;
+      border: 1px solid #38bdf8;
+      color: #38bdf8;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .btn:active {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #64ffda;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>ZENOO SURVIVAL SHOOTING</h1>
+    <p>Powered by Spinel AOT &amp; WebGL 2.0</p>
+  </div>
+  <div id="canvas-container">
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" width="1280" height="720"></canvas>
+  </div>
+  <div id="controls-bar">
+    <button class="btn" id="btn-menu">MENU (右クリック/ESC)</button>
+    <button class="btn" id="btn-fullscreen">全画面</button>
+  </div>
+  <div id="status">Loading WebAssembly module...</div>
+
+  <script type='text/javascript'>
+    var statusElement = document.getElementById('status');
+    var canvasElement = document.getElementById('canvas');
+
+    var Module = {
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
+      canvas: canvasElement,
+      setStatus: function(text) {
+        if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+        if (text === Module.setStatus.last.text) return;
+        statusElement.innerText = text ? text : "操作: スワイプ/タップで移動, MENUボタンでスキルメニュー";
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads clear.');
+      }
+    };
+    Module.setStatus('Downloading...');
+    window.onerror = function() {
+      Module.setStatus('Exception thrown, see JavaScript console');
+    };
+
+    // タッチ操作のスクロール防止とサポート
+    function preventTouchDefault(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+    }
+    document.addEventListener('touchstart', preventTouchDefault, { passive: false });
+    document.addEventListener('touchmove', preventTouchDefault, { passive: false });
+    document.addEventListener('touchend', preventTouchDefault, { passive: false });
+
+    // MENU ボタン（右クリックまたはESCイベントを発火）
+    document.getElementById('btn-menu').addEventListener('click', function(e) {
+      e.preventDefault();
+      var rect = canvasElement.getBoundingClientRect();
+      var cx = rect.left + rect.width / 2;
+      var cy = rect.top + rect.height / 2;
+      var down = new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2 });
+      var up = new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2 });
+      canvasElement.dispatchEvent(down);
+      canvasElement.dispatchEvent(up);
+    });
+
+    // 全画面ボタン
+    document.getElementById('btn-fullscreen').addEventListener('click', function(e) {
+      e.preventDefault();
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(function(err) {});
+      } else {
+        document.exitFullscreen();
+      }
+    });
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

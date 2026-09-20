@@ -7,7 +7,12 @@
 #include <windows.h>
 #include <mmsystem.h>
 #endif
+#ifdef __EMSCRIPTEN__
+#include <GLES3/gl3.h>
+#include <emscripten.h>
+#else
 #include "glad/glad.h"
+#endif
 #include <GLFW/glfw3.h>
 #include "zenoo.h"
 
@@ -98,7 +103,7 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
     timeBeginPeriod(1);
 #endif
 
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__EMSCRIPTEN__)
     // WSL2/Linux環境でGPUハードウェアアクセラレーション(D3D12)を自動有効化
     setenv("GALLIUM_DRIVER", "d3d12", 0);
 #if defined(GLFW_PLATFORM) && defined(GLFW_PLATFORM_X11)
@@ -112,10 +117,16 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
         return 0;
     }
 
+#ifdef __EMSCRIPTEN__
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+#else
     // OpenGL 3.3 Core Profile
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#endif
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
     glfwWindowHint(GLFW_FOCUSED, GLFW_TRUE);
@@ -139,7 +150,7 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
     glfwShowWindow(s_window);
     glfwFocusWindow(s_window);
     glfwMakeContextCurrent(s_window);
-    glfwSwapInterval(0); // デフォルトでドライバのVSyncロックを解除 (SwapBuffersの100ms停止を排除)
+    glfwSwapInterval(0);
 
     // コールバック登録
     glfwSetKeyCallback(s_window, key_callback);
@@ -147,6 +158,7 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
     glfwSetCursorPosCallback(s_window, cursor_pos_callback);
     glfwSetFramebufferSizeCallback(s_window, framebuffer_size_callback);
 
+#ifndef __EMSCRIPTEN__
     // GLAD のロード
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         fprintf(stderr, "[Zenoo] Failed to load OpenGL with GLAD\n");
@@ -154,6 +166,7 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
         glfwTerminate();
         return 0;
     }
+#endif
 
     const GLubyte* renderer = glGetString(GL_RENDERER);
     const GLubyte* version = glGetString(GL_VERSION);
@@ -278,6 +291,24 @@ int zen_update(void) {
         // 2. ★Raylib方式★ SwapBuffersの直後に即座にOSイベントをポーリング (DWMのキュー詰まりを根絶)
         zen_poll_events();
 
+#ifdef __EMSCRIPTEN__
+        if (s_target_fps > 0) {
+            double target_dt = 1.0 / (double)s_target_fps;
+            double elapsed = glfwGetTime() - s_frame_start_time;
+            if (elapsed < target_dt) {
+                double remain_ms = (target_dt - elapsed) * 1000.0;
+                if (remain_ms >= 1.0) {
+                    emscripten_sleep((unsigned int)remain_ms);
+                } else {
+                    emscripten_sleep(1);
+                }
+            } else {
+                emscripten_sleep(0);
+            }
+        } else {
+            emscripten_sleep(0);
+        }
+#else
         // 3. イベント処理後に目標FPSまで精密待機 (WaitTime)
         // 120Hz/144Hz などの高リフレッシュレートモニターでも目標FPSを超えないよう制御
         if (s_target_fps > 0) {
@@ -300,6 +331,7 @@ int zen_update(void) {
                 }
             }
         }
+#endif
         double now = glfwGetTime();
         double dt = now - s_frame_start_time;
         if (dt <= 0.0001) dt = 0.016667;
