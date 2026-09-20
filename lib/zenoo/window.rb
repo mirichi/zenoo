@@ -16,7 +16,9 @@ module Zenoo
       return [1.0, 1.0, 1.0, 1.0] if col.nil?
       return COLOR_MAP[col] if COLOR_MAP.key?(col)
 
-      if col.is_a?(Array)
+      if col.is_a?(Color)
+        col.to_f4
+      elsif col.is_a?(Array)
         r = (col[0] || 0) / 255.0
         g = (col[1] || 0) / 255.0
         b = (col[2] || 0) / 255.0
@@ -34,6 +36,8 @@ module Zenoo
     end
 
     def self.color_to_uint32(col)
+      return col.to_i if col.is_a?(Color)
+
       floats = normalize_color(col)
       r = (floats[0] * 255).to_i & 0xFF
       g = (floats[1] * 255).to_i & 0xFF
@@ -45,7 +49,7 @@ module Zenoo
     # DXRuby風メインループ
     def self.loop(width = 1280, height = 720, title = "Zenoo", fullscreen: false, vsync: false, &block)
       Native::Window.init(width, height, title, fullscreen)
-      Native::Window.vsync = vsync
+      Native::Window.vsync = (vsync ? 1 : 0)
       Native::Window.target_fps = 60
 
       while Native::Window.update
@@ -82,7 +86,7 @@ module Zenoo
     end
 
     def self.vsync=(val)
-      Native::Window.vsync = val
+      Native::Window.vsync = (val ? 1 : 0)
     end
 
     @current_shader = nil
