@@ -1,0 +1,21 @@
+@echo off
+set "PATH=C:\Ruby34-x64\msys64\ucrt64\bin;C:\Ruby34-x64\msys64\usr\bin;C:\Ruby34-x64\bin;%PATH%"
+
+echo [Building Zenoo C Extension...]
+cd ext\zenoo
+ruby extconf.rb
+make clean
+make
+if errorlevel 1 (
+    echo [ERROR] Build failed!
+    cd ..\..
+    exit /b 1
+)
+cd ..\..
+echo.
+echo =======================================================
+echo  Zenoo C Extension (zenoo.so) Build Successful!
+echo  Run demo:
+echo    ruby -Ilib examples\demo_ruby_sdf.rb
+echo    ruby -Ilib examples\test_gc.rb
+echo =======================================================

@@ -1,0 +1,542 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#include "glad/glad.h"
+#include "zenoo.h"
+
+#define MAX_QUADS 65536
+
+// GPUに送る1つのQuadインスタンスの構造体 (汎用スロット方式)
+typedef struct {
+    float bounds[4];   // x, y, width, height (location = 1)
+    float color[4];    // r, g, b, a (location = 2)
+    float param0[4];   // 汎用パラメータスロット 0 (location = 3)
+    float param1[4];   // 汎用パラメータスロット 1 (location = 4)
+    float param2[4];   // 汎用パラメータスロット 2 (location = 5)
+    float uv[4];       // u, v, uw, vh (location = 6)
+} GpuQuad;
+
+static GpuQuad s_quad_buffer[MAX_QUADS];
+static int s_quad_count = 0;
+
+static GLuint s_quad_vao = 0;
+static GLuint s_unit_vbo = 0;
+static GLuint s_instance_vbo = 0;
+static GLuint s_shader_program = 0;
+
+static GLuint s_white_texture = 0;
+static GLuint s_active_texture = 0;
+static GLuint s_active_program = 0;
+
+// オフスクリーン描画ターゲット
+struct ZenImage {
+    GLuint texture_id;
+    GLuint fbo;
+    int width;
+    int height;
+    int has_fbo;
+};
+
+static ZenImage* s_current_render_target = NULL;
+static void (*s_gc_callback)(void) = NULL;
+
+// ヘルパー: 0xRRGGBBAA -> float[4]
+static void color_to_floats(uint32_t c, float out[4]) {
+    out[0] = ((c >> 24) & 0xFF) / 255.0f;
+    out[1] = ((c >> 16) & 0xFF) / 255.0f;
+    out[2] = ((c >> 8)  & 0xFF) / 255.0f;
+    out[3] = (c         & 0xFF) / 255.0f;
+}
+
+static GLuint compile_shader(GLenum type, const char* source) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, NULL);
+    glCompileShader(shader);
+
+    GLint status;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+    if (!status) {
+        char log[512];
+        glGetShaderInfoLog(shader, sizeof(log), NULL, log);
+        fprintf(stderr, "[Zenoo GFX] Shader compile error: %s\n", log);
+    }
+    return shader;
+}
+
+static const char* s_default_vert_src = 
+"#version 330 core\n"
+"layout (location = 0) in vec2 in_unit_pos;\n"
+"layout (location = 1) in vec4 in_bounds;\n"
+"layout (location = 2) in vec4 in_color;\n"
+"layout (location = 3) in vec4 in_param0;\n"
+"layout (location = 4) in vec4 in_param1;\n"
+"layout (location = 5) in vec4 in_param2;\n"
+"layout (location = 6) in vec4 in_uv;\n"
+"uniform vec2 u_resolution;\n"
+"out vec4 v_color;\n"
+"out vec2 v_uv;\n"
+"void main() {\n"
+"    vec2 pos = in_bounds.xy + in_unit_pos * in_bounds.zw;\n"
+"    vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;\n"
+"    ndc.y = -ndc.y;\n"
+"    gl_Position = vec4(ndc, 0.0, 1.0);\n"
+"    v_color = in_color;\n"
+"    v_uv = in_uv.xy + in_unit_pos * in_uv.zw;\n"
+"}\n";
+
+static const char* s_default_frag_src =
+"#version 330 core\n"
+"in vec4 v_color;\n"
+"in vec2 v_uv;\n"
+"uniform sampler2D u_texture;\n"
+"out vec4 fragColor;\n"
+"void main() {\n"
+"    fragColor = v_color * texture(u_texture, v_uv);\n"
+"}\n";
+
+void zen_gfx_init(int width, int height) {
+    (void)width; (void)height;
+
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, s_default_vert_src);
+    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, s_default_frag_src);
+
+    s_shader_program = glCreateProgram();
+    glAttachShader(s_shader_program, vs);
+    glAttachShader(s_shader_program, fs);
+    glLinkProgram(s_shader_program);
+
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    // 1x1 白テクスチャの生成 (単色描画用: テクスチャ未指定時はこれをサンプリング)
+    glGenTextures(1, &s_white_texture);
+    glBindTexture(GL_TEXTURE_2D, s_white_texture);
+    uint32_t white_pixel = 0xFFFFFFFF;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &white_pixel);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    s_active_texture = s_white_texture;
+
+    static const float unit_quad[] = {
+        0.0f, 0.0f,
+        1.0f, 0.0f,
+        0.0f, 1.0f,
+        1.0f, 1.0f,
+    };
+
+    glGenVertexArrays(1, &s_quad_vao);
+    glBindVertexArray(s_quad_vao);
+
+    glGenBuffers(1, &s_unit_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, s_unit_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(unit_quad), unit_quad, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+
+    glGenBuffers(1, &s_instance_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, s_instance_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GpuQuad) * MAX_QUADS, NULL, GL_DYNAMIC_DRAW);
+
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, bounds));
+    glVertexAttribDivisor(1, 1);
+
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, color));
+    glVertexAttribDivisor(2, 1);
+
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, param0));
+    glVertexAttribDivisor(3, 1);
+
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, param1));
+    glVertexAttribDivisor(4, 1);
+
+    glEnableVertexAttribArray(5);
+    glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, param2));
+    glVertexAttribDivisor(5, 1);
+
+    glEnableVertexAttribArray(6);
+    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, uv));
+    glVertexAttribDivisor(6, 1);
+
+    glBindVertexArray(0);
+}
+
+void zen_gfx_shutdown(void) {
+    if (s_white_texture) glDeleteTextures(1, &s_white_texture);
+    if (s_unit_vbo) glDeleteBuffers(1, &s_unit_vbo);
+    if (s_instance_vbo) glDeleteBuffers(1, &s_instance_vbo);
+    if (s_quad_vao) glDeleteVertexArrays(1, &s_quad_vao);
+    if (s_shader_program) glDeleteProgram(s_shader_program);
+}
+
+void zen_gfx_begin(uint32_t clear_color, int width, int height) {
+    float clr[4];
+    color_to_floats(clear_color, clr);
+
+    glViewport(0, 0, width, height);
+    glClearColor(clr[0], clr[1], clr[2], clr[3]);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+    s_quad_count = 0;
+    s_active_program = s_shader_program;
+    s_active_texture = s_white_texture;
+}
+
+void zen_gfx_flush(void) {
+    if (s_quad_count == 0) return;
+
+    int cur_w, cur_h;
+    if (s_current_render_target) {
+        cur_w = s_current_render_target->width;
+        cur_h = s_current_render_target->height;
+    } else {
+        zen_get_window_size(&cur_w, &cur_h);
+    }
+
+    GLuint prog = (s_active_program != 0) ? s_active_program : s_shader_program;
+    glUseProgram(prog);
+
+    GLint u_res = glGetUniformLocation(prog, "u_resolution");
+    if (u_res >= 0) {
+        glUniform2f(u_res, (float)cur_w, (float)cur_h);
+    }
+
+    GLint u_tex = glGetUniformLocation(prog, "u_texture");
+    if (u_tex >= 0) {
+        glUniform1i(u_tex, 0);
+    }
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, s_active_texture);
+
+    glBindVertexArray(s_quad_vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, s_instance_vbo);
+    // Buffer Orphaning: GPUの描画完了待ち(ストール)を完全に排除するため、
+    // 古いバッファ領域を破棄して即座に新しいメモリを確保する
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GpuQuad) * MAX_QUADS, NULL, GL_STREAM_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GpuQuad) * s_quad_count, s_quad_buffer);
+
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, s_quad_count);
+
+    glBindVertexArray(0);
+    s_quad_count = 0;
+}
+
+static void bind_texture(GLuint tex_id) {
+    GLuint target_tex = (tex_id != 0) ? tex_id : s_white_texture;
+    if (s_active_texture != target_tex) {
+        zen_gfx_flush();
+        s_active_texture = target_tex;
+    }
+}
+
+static void push_quad(const GpuQuad* q) {
+    if (s_quad_count >= MAX_QUADS) {
+        zen_gfx_flush();
+    }
+    s_quad_buffer[s_quad_count++] = *q;
+}
+
+// ==========================================
+// 画像 (Image) & オフスクリーン描画実装
+// ==========================================
+ZenImage* zen_image_create(int width, int height) {
+    if (width <= 0 || height <= 0) return NULL;
+
+    ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
+    if (!img && s_gc_callback) {
+        // メモリ不足: RubyのGCをトリガーして再試行
+        s_gc_callback();
+        img = (ZenImage*)calloc(1, sizeof(ZenImage));
+    }
+    if (!img) return NULL;
+
+    img->width = width;
+    img->height = height;
+
+    glGenTextures(1, &img->texture_id);
+    if (!img->texture_id && s_gc_callback) {
+        s_gc_callback();
+        glGenTextures(1, &img->texture_id);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, img->texture_id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    return img;
+}
+
+ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pixels) {
+    if (width <= 0 || height <= 0 || !pixels) return NULL;
+
+    ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
+    if (!img && s_gc_callback) {
+        s_gc_callback();
+        img = (ZenImage*)calloc(1, sizeof(ZenImage));
+    }
+    if (!img) return NULL;
+
+    img->width = width;
+    img->height = height;
+
+    glGenTextures(1, &img->texture_id);
+    if (!img->texture_id && s_gc_callback) {
+        s_gc_callback();
+        glGenTextures(1, &img->texture_id);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, img->texture_id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    return img;
+}
+
+ZenImage* zen_image_load(const char* filepath) {
+    if (!filepath) return NULL;
+
+    int w, h, channels;
+    stbi_set_flip_vertically_on_load(0);
+    unsigned char* data = stbi_load(filepath, &w, &h, &channels, 4);
+    if (!data) {
+        fprintf(stderr, "[Zenoo Image] Failed to load image: %s (%s)\n", filepath, stbi_failure_reason());
+        return NULL;
+    }
+
+    ZenImage* img = zen_image_create_from_pixels(w, h, (const uint32_t*)data);
+    stbi_image_free(data);
+    return img;
+}
+
+void zen_image_destroy(ZenImage* image) {
+    if (!image) return;
+    zen_gfx_flush();
+
+    if (s_current_render_target == image) {
+        zen_set_render_target(NULL);
+    }
+    if (s_active_texture == image->texture_id) {
+        s_active_texture = s_white_texture;
+    }
+
+    if (image->has_fbo) {
+        glDeleteFramebuffers(1, &image->fbo);
+    }
+    if (image->texture_id) {
+        glDeleteTextures(1, &image->texture_id);
+    }
+    free(image);
+}
+
+void zen_image_get_size(const ZenImage* image, int* width, int* height) {
+    if (!image) {
+        if (width) *width = 0;
+        if (height) *height = 0;
+        return;
+    }
+    if (width) *width = image->width;
+    if (height) *height = image->height;
+}
+
+void zen_set_render_target(ZenImage* target) {
+    zen_gfx_flush();
+
+    s_current_render_target = target;
+
+    if (target != NULL) {
+        if (!target->has_fbo) {
+            glGenFramebuffers(1, &target->fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->texture_id, 0);
+            target->has_fbo = 1;
+        } else {
+            glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
+        }
+        glViewport(0, 0, target->width, target->height);
+    } else {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        int win_w, win_h;
+        zen_get_window_size(&win_w, &win_h);
+        glViewport(0, 0, win_w, win_h);
+    }
+}
+
+// ==========================================
+// 汎用シェーダー (ZenShader) API 実装
+// ==========================================
+struct ZenShader {
+    GLuint program_id;
+};
+
+ZenShader* zen_shader_create(const char* vert_src, const char* frag_src) {
+    const char* vs_code = (vert_src && strlen(vert_src) > 0) ? vert_src : s_default_vert_src;
+    const char* fs_code = (frag_src && strlen(frag_src) > 0) ? frag_src : s_default_frag_src;
+
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, vs_code);
+    if (!vs) return NULL;
+    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, fs_code);
+    if (!fs) {
+        glDeleteShader(vs);
+        return NULL;
+    }
+
+    GLuint prog = glCreateProgram();
+    glAttachShader(prog, vs);
+    glAttachShader(prog, fs);
+    glLinkProgram(prog);
+
+    GLint status;
+    glGetProgramiv(prog, GL_LINK_STATUS, &status);
+    if (!status) {
+        char log[512];
+        glGetProgramInfoLog(prog, sizeof(log), NULL, log);
+        fprintf(stderr, "[Zenoo Shader] Link error: %s\n", log);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        glDeleteProgram(prog);
+        return NULL;
+    }
+
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    ZenShader* shader = (ZenShader*)malloc(sizeof(ZenShader));
+    if (!shader) {
+        glDeleteProgram(prog);
+        return NULL;
+    }
+    shader->program_id = prog;
+    return shader;
+}
+
+static void bind_shader(ZenShader* shader) {
+    GLuint prog = shader ? shader->program_id : s_shader_program;
+    if (s_active_program != prog) {
+        zen_gfx_flush();
+        s_active_program = prog;
+    }
+}
+
+void zen_shader_destroy(ZenShader* shader) {
+    if (!shader) return;
+    if (s_active_program == shader->program_id) {
+        zen_gfx_flush();
+        s_active_program = s_shader_program;
+    }
+    if (shader->program_id) {
+        glDeleteProgram(shader->program_id);
+    }
+    free(shader);
+}
+
+void zen_shader_set_int(ZenShader* shader, const char* name, int value) {
+    if (!shader) return;
+    glUseProgram(shader->program_id);
+    GLint loc = glGetUniformLocation(shader->program_id, name);
+    if (loc >= 0) glUniform1i(loc, value);
+}
+
+void zen_shader_set_float(ZenShader* shader, const char* name, float value) {
+    if (!shader) return;
+    glUseProgram(shader->program_id);
+    GLint loc = glGetUniformLocation(shader->program_id, name);
+    if (loc >= 0) glUniform1f(loc, value);
+}
+
+void zen_shader_set_vec2(ZenShader* shader, const char* name, float x, float y) {
+    if (!shader) return;
+    glUseProgram(shader->program_id);
+    GLint loc = glGetUniformLocation(shader->program_id, name);
+    if (loc >= 0) glUniform2f(loc, x, y);
+}
+
+void zen_shader_set_vec3(ZenShader* shader, const char* name, float x, float y, float z) {
+    if (!shader) return;
+    glUseProgram(shader->program_id);
+    GLint loc = glGetUniformLocation(shader->program_id, name);
+    if (loc >= 0) glUniform3f(loc, x, y, z);
+}
+
+void zen_shader_set_vec4(ZenShader* shader, const char* name, float x, float y, float z, float w) {
+    if (!shader) return;
+    glUseProgram(shader->program_id);
+    GLint loc = glGetUniformLocation(shader->program_id, name);
+    if (loc >= 0) glUniform4f(loc, x, y, z, w);
+}
+
+void zen_shader_set_mat4(ZenShader* shader, const char* name, const float* mat4) {
+    if (!shader || !mat4) return;
+    glUseProgram(shader->program_id);
+    GLint loc = glGetUniformLocation(shader->program_id, name);
+    if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, mat4);
+}
+
+// ==========================================
+// 汎用 Quad バッチ & GC トリガー
+// ==========================================
+
+void zen_set_gc_trigger_callback(void (*callback)(void)) {
+    s_gc_callback = callback;
+}
+
+uint32_t zen_image_get_texture_id(const ZenImage* image) {
+    return image ? (uint32_t)image->texture_id : 0;
+}
+
+void zen_draw_quad_generic(float x, float y, float w, float h,
+                           const float uv[4],
+                           const float color[4],
+                           const float p0[4],
+                           const float p1[4],
+                           const float p2[4],
+                           ZenImage* texture,
+                           ZenShader* shader) {
+    bind_shader(shader);
+
+    if (texture) {
+        bind_texture(texture->texture_id);
+    } else {
+        bind_texture(0);
+    }
+
+    GpuQuad q;
+    q.bounds[0] = x; q.bounds[1] = y; q.bounds[2] = w; q.bounds[3] = h;
+
+    if (uv) memcpy(q.uv, uv, sizeof(float) * 4);
+    else { q.uv[0] = 0.0f; q.uv[1] = 0.0f; q.uv[2] = 1.0f; q.uv[3] = 1.0f; }
+
+    if (color) memcpy(q.color, color, sizeof(float) * 4);
+    else { q.color[0] = 1.0f; q.color[1] = 1.0f; q.color[2] = 1.0f; q.color[3] = 1.0f; }
+
+    if (p0) memcpy(q.param0, p0, sizeof(float) * 4);
+    else memset(q.param0, 0, sizeof(float) * 4);
+
+    if (p1) memcpy(q.param1, p1, sizeof(float) * 4);
+    else memset(q.param1, 0, sizeof(float) * 4);
+
+    if (p2) memcpy(q.param2, p2, sizeof(float) * 4);
+    else memset(q.param2, 0, sizeof(float) * 4);
+
+    push_quad(&q);
+}
+
+void zen_flush(void) {
+    zen_gfx_flush();
+}
