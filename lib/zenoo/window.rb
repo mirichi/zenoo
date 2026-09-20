@@ -158,5 +158,25 @@ module Zenoo
       c_color = normalize_color(color)
       Native::Renderer.draw_quad(x, y, image.width, image.height, [0.0, 0.0, 1.0, 1.0], c_color, nil, nil, nil, image, effective_shader)
     end
+
+    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color = :white)
+      c = normalize_color(color)
+      Native::Renderer.draw_triangle(
+        x1.to_f, y1.to_f, x2.to_f, y2.to_f, x3.to_f, y3.to_f,
+        c[0].to_f, c[1].to_f, c[2].to_f, c[3].to_f
+      )
+    end
+
+    def self.draw_line(x1, y1, x2, y2, color = :white)
+      c = normalize_color(color)
+      Native::Renderer.draw_line(
+        x1.to_f, y1.to_f, x2.to_f, y2.to_f,
+        c[0].to_f, c[1].to_f, c[2].to_f, c[3].to_f
+      )
+    end
+
+    def self.draw_text(x, y, text, size: 16, color: :white)
+      Font.draw_text(x, y, text, size: size, color: color)
+    end
   end
 end

@@ -22,6 +22,35 @@ typedef struct {
 static GpuQuad s_quad_buffer[MAX_QUADS];
 static int s_quad_count = 0;
 
+// 三角形・ライン用 頂点構造体
+typedef struct {
+    float pos[2];
+    float color[4];
+} SimpleVertex;
+
+#define MAX_PRIMITIVE_VERTS 16384
+
+static SimpleVertex s_tri_buffer[MAX_PRIMITIVE_VERTS];
+static int s_tri_count = 0;
+static GLuint s_tri_vao = 0;
+static GLuint s_tri_vbo = 0;
+
+static SimpleVertex s_line_buffer[MAX_PRIMITIVE_VERTS];
+static int s_line_count = 0;
+static GLuint s_line_vao = 0;
+static GLuint s_line_vbo = 0;
+
+static GLuint s_simple_program = 0;
+
+typedef enum {
+    RENDER_MODE_NONE = 0,
+    RENDER_MODE_QUAD,
+    RENDER_MODE_TRIANGLE,
+    RENDER_MODE_LINE
+} RenderMode;
+
+static RenderMode s_current_mode = RENDER_MODE_NONE;
+
 static GLuint s_quad_vao = 0;
 static GLuint s_unit_vbo = 0;
 static GLuint s_instance_vbo = 0;
@@ -97,6 +126,27 @@ static const char* s_default_frag_src =
 "    fragColor = v_color * texture(u_texture, v_uv);\n"
 "}\n";
 
+static const char* s_simple_vert_src =
+"#version 330 core\n"
+"layout (location = 0) in vec2 in_pos;\n"
+"layout (location = 1) in vec4 in_color;\n"
+"uniform vec2 u_resolution;\n"
+"out vec4 v_color;\n"
+"void main() {\n"
+"    vec2 ndc = (in_pos / u_resolution) * 2.0 - 1.0;\n"
+"    ndc.y = -ndc.y;\n"
+"    gl_Position = vec4(ndc, 0.0, 1.0);\n"
+"    v_color = in_color;\n"
+"}\n";
+
+static const char* s_simple_frag_src =
+"#version 330 core\n"
+"in vec4 v_color;\n"
+"out vec4 fragColor;\n"
+"void main() {\n"
+"    fragColor = v_color;\n"
+"}\n";
+
 void zen_gfx_init(int width, int height) {
     (void)width; (void)height;
 
@@ -110,6 +160,16 @@ void zen_gfx_init(int width, int height) {
 
     glDeleteShader(vs);
     glDeleteShader(fs);
+
+    // 単色プリミティブ用シェーダー (三角形・ライン)
+    GLuint vs_s = compile_shader(GL_VERTEX_SHADER, s_simple_vert_src);
+    GLuint fs_s = compile_shader(GL_FRAGMENT_SHADER, s_simple_frag_src);
+    s_simple_program = glCreateProgram();
+    glAttachShader(s_simple_program, vs_s);
+    glAttachShader(s_simple_program, fs_s);
+    glLinkProgram(s_simple_program);
+    glDeleteShader(vs_s);
+    glDeleteShader(fs_s);
 
     // 1x1 白テクスチャの生成 (単色描画用: テクスチャ未指定時はこれをサンプリング)
     glGenTextures(1, &s_white_texture);
@@ -165,6 +225,30 @@ void zen_gfx_init(int width, int height) {
     glVertexAttribDivisor(6, 1);
 
     glBindVertexArray(0);
+
+    // 三角形バッファ初期化
+    glGenVertexArrays(1, &s_tri_vao);
+    glBindVertexArray(s_tri_vao);
+    glGenBuffers(1, &s_tri_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, s_tri_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_DYNAMIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, pos));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, color));
+    glBindVertexArray(0);
+
+    // ラインバッファ初期化
+    glGenVertexArrays(1, &s_line_vao);
+    glBindVertexArray(s_line_vao);
+    glGenBuffers(1, &s_line_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, s_line_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_DYNAMIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, pos));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, color));
+    glBindVertexArray(0);
 }
 
 void zen_gfx_shutdown(void) {
@@ -173,6 +257,12 @@ void zen_gfx_shutdown(void) {
     if (s_instance_vbo) glDeleteBuffers(1, &s_instance_vbo);
     if (s_quad_vao) glDeleteVertexArrays(1, &s_quad_vao);
     if (s_shader_program) glDeleteProgram(s_shader_program);
+
+    if (s_tri_vbo) glDeleteBuffers(1, &s_tri_vbo);
+    if (s_tri_vao) glDeleteVertexArrays(1, &s_tri_vao);
+    if (s_line_vbo) glDeleteBuffers(1, &s_line_vbo);
+    if (s_line_vao) glDeleteVertexArrays(1, &s_line_vao);
+    if (s_simple_program) glDeleteProgram(s_simple_program);
 }
 
 void zen_gfx_begin(uint32_t clear_color, int width, int height) {
@@ -187,11 +277,14 @@ void zen_gfx_begin(uint32_t clear_color, int width, int height) {
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     s_quad_count = 0;
+    s_tri_count = 0;
+    s_line_count = 0;
+    s_current_mode = RENDER_MODE_NONE;
     s_active_program = s_shader_program;
     s_active_texture = s_white_texture;
 }
 
-void zen_gfx_flush(void) {
+static void flush_quads(void) {
     if (s_quad_count == 0) return;
 
     int cur_w, cur_h;
@@ -232,6 +325,76 @@ void zen_gfx_flush(void) {
     s_quad_count = 0;
 }
 
+static void flush_triangles(void) {
+    if (s_tri_count == 0) return;
+
+    int cur_w, cur_h;
+    if (s_current_render_target) {
+        cur_w = s_current_render_target->width;
+        cur_h = s_current_render_target->height;
+    } else {
+        zen_get_window_size(&cur_w, &cur_h);
+    }
+
+    glUseProgram(s_simple_program);
+    GLint u_res = glGetUniformLocation(s_simple_program, "u_resolution");
+    if (u_res >= 0) {
+        glUniform2f(u_res, (float)cur_w, (float)cur_h);
+    }
+
+    glBindVertexArray(s_tri_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, s_tri_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_STREAM_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(SimpleVertex) * s_tri_count, s_tri_buffer);
+
+    glDrawArrays(GL_TRIANGLES, 0, s_tri_count);
+
+    glBindVertexArray(0);
+    s_tri_count = 0;
+}
+
+static void flush_lines(void) {
+    if (s_line_count == 0) return;
+
+    int cur_w, cur_h;
+    if (s_current_render_target) {
+        cur_w = s_current_render_target->width;
+        cur_h = s_current_render_target->height;
+    } else {
+        zen_get_window_size(&cur_w, &cur_h);
+    }
+
+    glUseProgram(s_simple_program);
+    GLint u_res = glGetUniformLocation(s_simple_program, "u_resolution");
+    if (u_res >= 0) {
+        glUniform2f(u_res, (float)cur_w, (float)cur_h);
+    }
+
+    glBindVertexArray(s_line_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, s_line_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_STREAM_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(SimpleVertex) * s_line_count, s_line_buffer);
+
+    glDrawArrays(GL_LINES, 0, s_line_count);
+
+    glBindVertexArray(0);
+    s_line_count = 0;
+}
+
+void zen_gfx_flush(void) {
+    if (s_quad_count > 0) flush_quads();
+    if (s_tri_count > 0) flush_triangles();
+    if (s_line_count > 0) flush_lines();
+    s_current_mode = RENDER_MODE_NONE;
+}
+
+static void set_render_mode(RenderMode mode) {
+    if (s_current_mode != mode) {
+        zen_gfx_flush();
+        s_current_mode = mode;
+    }
+}
+
 static void bind_texture(GLuint tex_id) {
     GLuint target_tex = (tex_id != 0) ? tex_id : s_white_texture;
     if (s_active_texture != target_tex) {
@@ -241,8 +404,9 @@ static void bind_texture(GLuint tex_id) {
 }
 
 static void push_quad(const GpuQuad* q) {
+    set_render_mode(RENDER_MODE_QUAD);
     if (s_quad_count >= MAX_QUADS) {
-        zen_gfx_flush();
+        flush_quads();
     }
     s_quad_buffer[s_quad_count++] = *q;
 }
@@ -535,6 +699,49 @@ void zen_draw_quad_generic(float x, float y, float w, float h,
     else memset(q.param2, 0, sizeof(float) * 4);
 
     push_quad(&q);
+}
+
+void zen_draw_triangle(float x1, float y1, float x2, float y2, float x3, float y3, const float color[4]) {
+    set_render_mode(RENDER_MODE_TRIANGLE);
+    if (s_tri_count + 3 > MAX_PRIMITIVE_VERTS) {
+        flush_triangles();
+    }
+    float c[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    if (color) memcpy(c, color, sizeof(float) * 4);
+
+    s_tri_buffer[s_tri_count].pos[0] = x1;
+    s_tri_buffer[s_tri_count].pos[1] = y1;
+    memcpy(s_tri_buffer[s_tri_count].color, c, sizeof(float) * 4);
+    s_tri_count++;
+
+    s_tri_buffer[s_tri_count].pos[0] = x2;
+    s_tri_buffer[s_tri_count].pos[1] = y2;
+    memcpy(s_tri_buffer[s_tri_count].color, c, sizeof(float) * 4);
+    s_tri_count++;
+
+    s_tri_buffer[s_tri_count].pos[0] = x3;
+    s_tri_buffer[s_tri_count].pos[1] = y3;
+    memcpy(s_tri_buffer[s_tri_count].color, c, sizeof(float) * 4);
+    s_tri_count++;
+}
+
+void zen_draw_line(float x1, float y1, float x2, float y2, const float color[4]) {
+    set_render_mode(RENDER_MODE_LINE);
+    if (s_line_count + 2 > MAX_PRIMITIVE_VERTS) {
+        flush_lines();
+    }
+    float c[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    if (color) memcpy(c, color, sizeof(float) * 4);
+
+    s_line_buffer[s_line_count].pos[0] = x1;
+    s_line_buffer[s_line_count].pos[1] = y1;
+    memcpy(s_line_buffer[s_line_count].color, c, sizeof(float) * 4);
+    s_line_count++;
+
+    s_line_buffer[s_line_count].pos[0] = x2;
+    s_line_buffer[s_line_count].pos[1] = y2;
+    memcpy(s_line_buffer[s_line_count].color, c, sizeof(float) * 4);
+    s_line_count++;
 }
 
 void zen_flush(void) {

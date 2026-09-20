@@ -236,11 +236,13 @@ void zen_poll_events(void) {
     
     glfwPollEvents();
 
-    double current_time = glfwGetTime();
-    double dt = current_time - s_last_time;
-    if (dt <= 0.0001) dt = 0.016667;
-    s_delta_time = (float)dt;
-    s_last_time = current_time;
+    if (!s_is_in_update_loop) {
+        double current_time = glfwGetTime();
+        double dt = current_time - s_last_time;
+        if (dt <= 0.0001) dt = 0.016667;
+        s_delta_time = (float)dt;
+        s_last_time = current_time;
+    }
 }
 
 void zen_begin_frame(uint32_t clear_color) {
@@ -277,7 +279,8 @@ int zen_update(void) {
         zen_poll_events();
 
         // 3. イベント処理後に目標FPSまで精密待機 (WaitTime)
-        if (!s_vsync && s_target_fps > 0) {
+        // 120Hz/144Hz などの高リフレッシュレートモニターでも目標FPSを超えないよう制御
+        if (s_target_fps > 0) {
             double target_dt = 1.0 / (double)s_target_fps;
             double elapsed = glfwGetTime() - s_frame_start_time;
             if (elapsed < target_dt) {
@@ -297,11 +300,16 @@ int zen_update(void) {
                 }
             }
         }
-        s_frame_start_time = glfwGetTime();
+        double now = glfwGetTime();
+        double dt = now - s_frame_start_time;
+        if (dt <= 0.0001) dt = 0.016667;
+        s_delta_time = (float)dt;
+        s_frame_start_time = now;
     } else {
         s_is_in_update_loop = 1;
         zen_poll_events();
         s_frame_start_time = glfwGetTime();
+        s_delta_time = 0.016667f;
     }
 
     // 4. 終了判定

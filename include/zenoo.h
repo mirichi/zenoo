@@ -150,6 +150,8 @@ void       zen_draw_quad_generic(float x, float y, float w, float h,
                                  const float p2[4],
                                  ZenImage* texture,
                                  ZenShader* shader);
+void       zen_draw_triangle(float x1, float y1, float x2, float y2, float x3, float y3, const float color[4]);
+void       zen_draw_line(float x1, float y1, float x2, float y2, const float color[4]);
 void       zen_flush(void);
 
 #ifdef __cplusplus

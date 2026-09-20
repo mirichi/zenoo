@@ -215,7 +215,13 @@ static VALUE win_get_size_h(VALUE self) {
 
 static VALUE win_set_vsync(VALUE self, VALUE rb_vsync) {
     (void)self;
-    zen_set_vsync(RTEST(rb_vsync) ? 1 : 0);
+    int vsync = 0;
+    if (FIXNUM_P(rb_vsync)) {
+        vsync = (NUM2INT(rb_vsync) != 0) ? 1 : 0;
+    } else {
+        vsync = RTEST(rb_vsync) ? 1 : 0;
+    }
+    zen_set_vsync(vsync);
     return rb_vsync;
 }
 
@@ -350,6 +356,39 @@ static VALUE renderer_flush(VALUE self) {
     return Qnil;
 }
 
+static VALUE renderer_draw_triangle(VALUE self, VALUE rb_x1, VALUE rb_y1, VALUE rb_x2, VALUE rb_y2, VALUE rb_x3, VALUE rb_y3, VALUE rb_r, VALUE rb_g, VALUE rb_b, VALUE rb_a) {
+    (void)self;
+    float color[4] = {
+        (float)NUM2DBL(rb_r),
+        (float)NUM2DBL(rb_g),
+        (float)NUM2DBL(rb_b),
+        (float)NUM2DBL(rb_a)
+    };
+    zen_draw_triangle(
+        (float)NUM2DBL(rb_x1), (float)NUM2DBL(rb_y1),
+        (float)NUM2DBL(rb_x2), (float)NUM2DBL(rb_y2),
+        (float)NUM2DBL(rb_x3), (float)NUM2DBL(rb_y3),
+        color
+    );
+    return Qnil;
+}
+
+static VALUE renderer_draw_line(VALUE self, VALUE rb_x1, VALUE rb_y1, VALUE rb_x2, VALUE rb_y2, VALUE rb_r, VALUE rb_g, VALUE rb_b, VALUE rb_a) {
+    (void)self;
+    float color[4] = {
+        (float)NUM2DBL(rb_r),
+        (float)NUM2DBL(rb_g),
+        (float)NUM2DBL(rb_b),
+        (float)NUM2DBL(rb_a)
+    };
+    zen_draw_line(
+        (float)NUM2DBL(rb_x1), (float)NUM2DBL(rb_y1),
+        (float)NUM2DBL(rb_x2), (float)NUM2DBL(rb_y2),
+        color
+    );
+    return Qnil;
+}
+
 // ==========================================
 // C拡張初期化エントリポイント
 // ==========================================
@@ -411,5 +450,7 @@ void Init_zenoo(void) {
     // 5. Renderer
     VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");
     rb_define_singleton_method(mRenderer, "draw_quad", renderer_draw_quad, -1);
+    rb_define_singleton_method(mRenderer, "draw_triangle", renderer_draw_triangle, 10);
+    rb_define_singleton_method(mRenderer, "draw_line", renderer_draw_line, 8);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
 }

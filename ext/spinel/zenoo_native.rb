@@ -64,6 +64,14 @@ module Zenoo
     # ==========================================
     module Renderer
       native_func :flush, [], :nil, "sp_zen_renderer_flush"
+      native_func :draw_triangle, [
+        :float, :float, :float, :float, :float, :float,
+        :float, :float, :float, :float
+      ], :nil, "sp_zen_renderer_draw_triangle"
+      native_func :draw_line, [
+        :float, :float, :float, :float,
+        :float, :float, :float, :float
+      ], :nil, "sp_zen_renderer_draw_line"
       native_func :raw_draw_quad, [
         :float, :float, :float, :float,
         :float, :float, :float, :float,

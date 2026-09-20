@@ -89,6 +89,16 @@ void sp_zen_renderer_draw_quad_generic_wrapper(
     sp_RbVal shader_val
 );
 
+void sp_zen_renderer_draw_triangle(
+    double x1, double y1, double x2, double y2, double x3, double y3,
+    double r, double g, double b, double a
+);
+
+void sp_zen_renderer_draw_line(
+    double x1, double y1, double x2, double y2,
+    double r, double g, double b, double a
+);
+
 void sp_zen_renderer_flush(void);
 
 #endif // ZENOO_SPINEL_H

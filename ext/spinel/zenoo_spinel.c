@@ -268,6 +268,22 @@ void sp_zen_renderer_draw_quad_generic_wrapper(
                           uv, color, p0, p1, p2, img, sh);
 }
 
+void sp_zen_renderer_draw_triangle(
+    double x1, double y1, double x2, double y2, double x3, double y3,
+    double r, double g, double b, double a
+) {
+    float color[4] = { (float)r, (float)g, (float)b, (float)a };
+    zen_draw_triangle((float)x1, (float)y1, (float)x2, (float)y2, (float)x3, (float)y3, color);
+}
+
+void sp_zen_renderer_draw_line(
+    double x1, double y1, double x2, double y2,
+    double r, double g, double b, double a
+) {
+    float color[4] = { (float)r, (float)g, (float)b, (float)a };
+    zen_draw_line((float)x1, (float)y1, (float)x2, (float)y2, color);
+}
+
 void sp_zen_renderer_flush(void) {
     zen_flush();
 }
