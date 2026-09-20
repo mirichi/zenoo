@@ -61,11 +61,15 @@ module Zenoo
     end
 
     def self.width
-      Native::Window.size[0]
+      Native::Window.size_w
     end
 
     def self.height
-      Native::Window.size[1]
+      Native::Window.size_h
+    end
+
+    def self.size
+      [Native::Window.size_w, Native::Window.size_h]
     end
 
     def self.delta_time
@@ -82,6 +86,11 @@ module Zenoo
     end
 
     @current_shader = nil
+    @card_shader = nil
+
+    def self.card_shader
+      @card_shader ||= Shader.new(Shaders::CARD_VERTEX, Shaders::CARD_FRAGMENT)
+    end
 
     # ブロック内でのシェーダー適用スコープ (RAII / ensure で確実に元の状態に戻る)
     def self.with_shader(shader)
@@ -93,10 +102,9 @@ module Zenoo
     end
 
     # ----------------------------------------------------
-    # 描画 API (シェーダーは引数またはブロックで自動制御！)
+    # 描画 API 
     # ----------------------------------------------------
-    def self.draw_card(x, y, w, h, radius: 0.0, color: :white, border: nil, shadow: nil, image: nil, shader: nil)
-      effective_shader = shader || SDFCardShader.instance
+    def self.draw_card(x, y, w, h, radius: 0.0, color: :white, border: nil, shadow: nil, image: nil)
       c_color = normalize_color(color)
 
       b_width = 0.0
@@ -127,7 +135,7 @@ module Zenoo
       p0 = [radius.to_f, b_width.to_f, s_blur.to_f, mode]
       uv = [0.0, 0.0, 1.0, 1.0]
 
-      Native::Renderer.draw_quad(x, y, w, h, uv, c_color, p0, b_color, s_color, image, effective_shader)
+      Native::Renderer.draw_quad(x, y, w, h, uv, c_color, p0, b_color, s_color, image, card_shader)
     end
 
     def self.draw_rect(x, y, w, h, color = :white, shader: nil)
@@ -136,8 +144,8 @@ module Zenoo
       Native::Renderer.draw_quad(x, y, w, h, [0.0, 0.0, 1.0, 1.0], c_color, nil, nil, nil, nil, effective_shader)
     end
 
-    def self.draw_rounded_rect(x, y, w, h, radius, color = :white, shader: nil)
-      draw_card(x, y, w, h, radius: radius, color: color, shader: shader)
+    def self.draw_rounded_rect(x, y, w, h, radius, color = :white)
+      draw_card(x, y, w, h, radius: radius, color: color)
     end
 
     def self.draw_image(x, y, image, color = :white, shader: nil)

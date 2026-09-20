@@ -53,17 +53,17 @@ module Zenoo
       Native::Input.key_release?(resolve_key(key))
     end
 
-    # マウス座標 [x, y]
-    def self.mouse_pos
-      Native::Input.mouse_pos
-    end
-
+    # マウス座標
     def self.mouse_x
-      mouse_pos[0]
+      Native::Input.mouse_x
     end
 
     def self.mouse_y
-      mouse_pos[1]
+      Native::Input.mouse_y
+    end
+
+    def self.mouse_pos
+      [Native::Input.mouse_x, Native::Input.mouse_y]
     end
 
     def self.mouse_pressed?(button = :left)

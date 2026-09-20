@@ -199,6 +199,20 @@ static VALUE win_get_size(VALUE self) {
     return rb_ary_new_from_args(2, INT2NUM(w), INT2NUM(h));
 }
 
+static VALUE win_get_size_w(VALUE self) {
+    (void)self;
+    int w = 0, h = 0;
+    zen_get_window_size(&w, &h);
+    return INT2NUM(w);
+}
+
+static VALUE win_get_size_h(VALUE self) {
+    (void)self;
+    int w = 0, h = 0;
+    zen_get_window_size(&w, &h);
+    return INT2NUM(h);
+}
+
 static VALUE win_set_vsync(VALUE self, VALUE rb_vsync) {
     (void)self;
     zen_set_vsync(RTEST(rb_vsync) ? 1 : 0);
@@ -250,6 +264,20 @@ static VALUE input_mouse_pos(VALUE self) {
     float x = 0, y = 0;
     zen_get_mouse_pos(&x, &y);
     return rb_ary_new_from_args(2, DBL2NUM(x), DBL2NUM(y));
+}
+
+static VALUE input_mouse_x(VALUE self) {
+    (void)self;
+    float x = 0, y = 0;
+    zen_get_mouse_pos(&x, &y);
+    return DBL2NUM(x);
+}
+
+static VALUE input_mouse_y(VALUE self) {
+    (void)self;
+    float x = 0, y = 0;
+    zen_get_mouse_pos(&x, &y);
+    return DBL2NUM(y);
 }
 
 static VALUE input_mouse_pressed(VALUE self, VALUE rb_btn) {
@@ -338,6 +366,8 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "update", win_update, 0);
     rb_define_singleton_method(mWindow, "clear", win_clear, 1);
     rb_define_singleton_method(mWindow, "size", win_get_size, 0);
+    rb_define_singleton_method(mWindow, "size_w", win_get_size_w, 0);
+    rb_define_singleton_method(mWindow, "size_h", win_get_size_h, 0);
     rb_define_singleton_method(mWindow, "vsync=", win_set_vsync, 1);
     rb_define_singleton_method(mWindow, "target_fps=", win_set_target_fps, 1);
     rb_define_singleton_method(mWindow, "delta_time", win_get_delta_time, 0);
@@ -350,6 +380,8 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mInput, "key_push?", input_key_push, 1);
     rb_define_singleton_method(mInput, "key_release?", input_key_release, 1);
     rb_define_singleton_method(mInput, "mouse_pos", input_mouse_pos, 0);
+    rb_define_singleton_method(mInput, "mouse_x", input_mouse_x, 0);
+    rb_define_singleton_method(mInput, "mouse_y", input_mouse_y, 0);
     rb_define_singleton_method(mInput, "mouse_pressed?", input_mouse_pressed, 1);
     rb_define_singleton_method(mInput, "mouse_push?", input_mouse_push, 1);
     rb_define_singleton_method(mInput, "mouse_release?", input_mouse_release, 1);

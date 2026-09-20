@@ -1,6 +1,6 @@
 module Zenoo
-  class SDFCardShader
-    VERTEX_SOURCE = <<~'GLSL'
+  module Shaders
+    CARD_VERTEX = <<~'GLSL'
       #version 330 core
       layout (location = 0) in vec2 in_unit_pos;
       layout (location = 1) in vec4 in_bounds;
@@ -42,7 +42,7 @@ module Zenoo
       }
     GLSL
 
-    FRAGMENT_SOURCE = <<~'GLSL'
+    CARD_FRAGMENT = <<~'GLSL'
       #version 330 core
       in vec2 v_local_pos;
       in vec2 v_half_size;
@@ -50,12 +50,12 @@ module Zenoo
       in vec4 v_border_color;
       in vec4 v_shadow_color;
       in float v_corner_radius;
+      out vec4 fragColor;
       in float v_border_width;
       in float v_shadow_blur;
       flat in int v_mode;
       in vec2 v_uv;
       uniform sampler2D u_texture;
-      out vec4 fragColor;
 
       // ★Ruby側で定義された SDF 角丸ボックス距離関数！★
       float sd_rounded_box(vec2 p, vec2 b, float r) {
@@ -98,10 +98,5 @@ module Zenoo
           }
       }
     GLSL
-
-    # シングルトンインスタンス
-    def self.instance
-      @instance ||= Shader.new(VERTEX_SOURCE, FRAGMENT_SOURCE)
-    end
   end
 end
