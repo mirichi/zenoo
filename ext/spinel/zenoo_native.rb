@@ -131,7 +131,34 @@ module Zenoo
       native_func :reset_render_target, [], :nil, "sp_ZenImage_reset_render_target"
       native_func :free_count, [], :int, "sp_zen_get_image_free_count"
     end
+
+    # ==========================================
+    # 7. Native::FontHelper
+    # ==========================================
+    module FontHelper
+      native_func :glyph_visible, [], :bool,  "sp_zen_font_glyph_visible"
+      native_func :glyph_u0,      [], :float, "sp_zen_font_glyph_u0"
+      native_func :glyph_v0,      [], :float, "sp_zen_font_glyph_v0"
+      native_func :glyph_u1,      [], :float, "sp_zen_font_glyph_u1"
+      native_func :glyph_v1,      [], :float, "sp_zen_font_glyph_v1"
+      native_func :glyph_x0,      [], :float, "sp_zen_font_glyph_x0"
+      native_func :glyph_y0,      [], :float, "sp_zen_font_glyph_y0"
+      native_func :glyph_x1,      [], :float, "sp_zen_font_glyph_x1"
+      native_func :glyph_y1,      [], :float, "sp_zen_font_glyph_y1"
+      native_func :glyph_advance, [], :float, "sp_zen_font_glyph_advance"
+      native_func :atlas_image_raw, [:int], :any, "sp_zen_font_atlas_image"
+    end
   end
+
+  # ==========================================
+  # 8. Native::Font (Spinel native_struct)
+  # ==========================================
+  native_struct "Zenoo::Native::Font", "sp_ZenFont", "sp_ZenFont_free"
+  native_new [:string], "sp_ZenFont_load"
+  native_method :metrics_ascent,   [:float], :float, "sp_zen_font_metrics_ascent"
+  native_method :metrics_descent,  [:float], :float, "sp_zen_font_metrics_descent"
+  native_method :metrics_line_gap, [:float], :float, "sp_zen_font_metrics_line_gap"
+  native_method :query_glyph,      [:int, :float], :bool, "sp_zen_font_query_glyph"
 end
 
 class Zenoo::Image
@@ -141,5 +168,38 @@ class Zenoo::Image
 
   def self.load(path)
     new(path)
+  end
+end
+
+class Zenoo::Native::Font
+  def self.load(path)
+    new(path.to_s)
+  end
+
+  def self.atlas_image
+    @atlas ||= Zenoo::Native::FontHelper.atlas_image_raw(0)
+  end
+
+  def metrics(size)
+    s = size.to_f
+    [metrics_ascent(s), metrics_descent(s), metrics_line_gap(s)]
+  end
+
+  def get_glyph(cp, size)
+    ok = query_glyph(cp.to_i, size.to_f)
+    return nil unless ok
+
+    [
+      Zenoo::Native::FontHelper.glyph_visible,
+      Zenoo::Native::FontHelper.glyph_u0,
+      Zenoo::Native::FontHelper.glyph_v0,
+      Zenoo::Native::FontHelper.glyph_u1,
+      Zenoo::Native::FontHelper.glyph_v1,
+      Zenoo::Native::FontHelper.glyph_x0,
+      Zenoo::Native::FontHelper.glyph_y0,
+      Zenoo::Native::FontHelper.glyph_x1,
+      Zenoo::Native::FontHelper.glyph_y1,
+      Zenoo::Native::FontHelper.glyph_advance
+    ]
   end
 end

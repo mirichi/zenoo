@@ -141,6 +141,13 @@ int    zen_is_gamepad_button_release(int id, int button);
 // ==========================================
 // 2. 画像 (Image) & オフスクリーン描画 API
 // ==========================================
+struct ZenImage {
+    uint32_t texture_id;
+    uint32_t fbo;
+    int width;
+    int height;
+    int has_fbo;
+};
 typedef struct ZenImage ZenImage;
 
 // 画像生成 & ロード
@@ -187,6 +194,26 @@ void       zen_draw_quad_generic(float x, float y, float w, float h,
 void       zen_draw_triangle(float x1, float y1, float x2, float y2, float x3, float y3, const float color[4]);
 void       zen_draw_line(float x1, float y1, float x2, float y2, const float color[4]);
 void       zen_flush(void);
+
+// ==========================================
+// 5. フォント (Font) & 動的SDFテクスチャアトラス API
+// ==========================================
+typedef struct ZenFont ZenFont;
+
+typedef struct {
+    int   codepoint;
+    float u0, v0, u1, v1; // テクスチャアトラス上のUV (0.0 .. 1.0)
+    float x0, y0, x1, y1; // ベースライン原点からの描画オフセット (ピクセル)
+    float advance_x;      // 次の文字までの送り幅 (ピクセル)
+    int   visible;        // 描画が必要か (空白文字は 0)
+} ZenGlyph;
+
+ZenFont*  zen_font_load(const char* filepath);
+ZenFont*  zen_font_load_memory(const unsigned char* data, size_t size);
+void      zen_font_destroy(ZenFont* font);
+int       zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* out_glyph);
+void      zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* descent, float* line_gap);
+ZenImage* zen_font_get_atlas_image(void);
 
 #ifdef __cplusplus
 }

@@ -186,8 +186,149 @@ module Zenoo
       )
     end
 
-    def self.draw_text(x, y, text, size: 16, color: :white)
-      Font.draw_text(x, y, text, size: size, color: color)
+    @sdf_font_shader = nil
+
+    def self.sdf_font_shader
+      @sdf_font_shader ||= Shader.new(Shaders::FONT_SDF_VERTEX, Shaders::FONT_SDF_FRAGMENT)
+    end
+
+    class CharContext
+      attr_accessor :char, :index, :line_index, :x, :y, :w, :h, :color, :scale, :visible
+      attr_accessor :outline_width, :outline_color
+
+      def reset(glyph, base_x, base_y, default_color, def_out_w, def_out_c)
+        @char = glyph.char
+        @index = glyph.index
+        @line_index = glyph.line_index
+        @x = base_x + glyph.x
+        @y = base_y + glyph.y
+        @w = glyph.w
+        @h = glyph.h
+        @color = default_color
+        @scale = 1.0
+        @visible = true
+        @outline_width = def_out_w
+        @outline_color = def_out_c
+      end
+    end
+
+    @char_ctx = CharContext.new
+
+    # ----------------------------------------------------
+    # 高品質 SDF テキスト描画 API
+    # ----------------------------------------------------
+    def self.draw_text(x, y, text_or_layout, font: nil, size: 24, color: :white, outline: nil, shadow: nil, &block)
+      layout = if text_or_layout.is_a?(TextLayout)
+                 text_or_layout
+               else
+                 TextLayout.new(text_or_layout, font: font, size: size)
+               end
+
+      atlas = Font.atlas_image
+      return unless atlas
+
+      c_color = normalize_color(color)
+
+      # アウトライン設定
+      outline_w = 0.0
+      outline_c = [0.0, 0.0, 0.0, 0.0]
+      if outline
+        if outline.is_a?(Numeric)
+          outline_w = outline.to_f
+          outline_c = [0.0, 0.0, 0.0, 1.0]
+        elsif outline.is_a?(Hash)
+          outline_w = (outline[:width] || 1.0).to_f
+          outline_c = normalize_color(outline[:color] || :black)
+        elsif outline.is_a?(Array)
+          outline_w = (outline[0] || 1.0).to_f
+          outline_c = normalize_color(outline[1] || :black)
+        end
+      end
+
+      # シャドウ設定
+      shadow_blur = 0.0
+      shadow_dx = 0.0
+      shadow_dy = 0.0
+      shadow_c = [0.0, 0.0, 0.0, 0.0]
+      if shadow
+        if shadow.is_a?(Hash)
+          shadow_blur = (shadow[:blur] || 2.0).to_f
+          off = shadow[:offset] || [2.0, 2.0]
+          shadow_dx = off[0].to_f
+          shadow_dy = off[1].to_f
+          shadow_c = normalize_color(shadow[:color] || [0, 0, 0, 180])
+        elsif shadow.is_a?(Array)
+          shadow_blur = (shadow[0] || 2.0).to_f
+          shadow_dx = (shadow[1] || 2.0).to_f
+          shadow_dy = (shadow[2] || 2.0).to_f
+          shadow_c = normalize_color(shadow[3] || [0, 0, 0, 180])
+        end
+      end
+
+      # 画面上ピクセルとアトラスピクセルのスケール比補正
+      scale_ratio = 48.0 / layout.font_size
+      s_atlas_dx = shadow_dx * scale_ratio
+      s_atlas_dy = shadow_dy * scale_ratio
+      s_atlas_blur = shadow_blur * scale_ratio
+      s_atlas_outline_w = outline_w * scale_ratio
+
+      p0 = [s_atlas_outline_w, s_atlas_blur, s_atlas_dx, s_atlas_dy]
+      p1 = outline_c
+      p2 = shadow_c
+      shader = sdf_font_shader
+
+      bx = x.to_f
+      by = y.to_f
+      glyphs = layout.glyphs
+      g_count = glyphs.length
+
+      if block_given?
+        ctx = @char_ctx
+        i = 0
+        while i < g_count
+          g = glyphs[i]
+          ctx.reset(g, bx, by, c_color, outline_w, outline_c)
+          yield(ctx)
+
+          if ctx.visible
+            gx = ctx.x
+            gy = ctx.y
+            gw = ctx.w
+            gh = ctx.h
+
+            if ctx.scale != 1.0
+              sc = ctx.scale
+              # 中心を基準にスケーリング
+              cx = gx + gw * 0.5
+              cy = gy + gh * 0.5
+              gw *= sc
+              gh *= sc
+              gx = cx - gw * 0.5
+              gy = cy - gh * 0.5
+            end
+
+            cur_color = (ctx.color.equal?(c_color)) ? c_color : normalize_color(ctx.color)
+            cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
+            cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : normalize_color(ctx.outline_color)
+
+            Native::Renderer.draw_quad(
+              gx, gy, gw, gh,
+              g.uv, cur_color, cur_p0, cur_p1, p2, atlas, shader
+            )
+          end
+          i += 1
+        end
+      else
+        i = 0
+        while i < g_count
+          g = glyphs[i]
+          Native::Renderer.draw_quad(
+            bx + g.x, by + g.y, g.w, g.h,
+            g.uv, c_color, p0, p1, p2, atlas, shader
+          )
+          i += 1
+        end
+      end
     end
   end
 end

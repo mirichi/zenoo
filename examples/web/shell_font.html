@@ -140,28 +140,6 @@
       Module.setStatus('Exception thrown, see JavaScript console');
     };
 
-    // タッチ操作のスクロール防止とサポート
-    function preventTouchDefault(e) {
-      if (e.target === canvasElement) {
-        e.preventDefault();
-      }
-    }
-    document.addEventListener('touchstart', preventTouchDefault, { passive: false });
-    document.addEventListener('touchmove', preventTouchDefault, { passive: false });
-    document.addEventListener('touchend', preventTouchDefault, { passive: false });
-
-    // MENU ボタン（右クリックまたはESCイベントを発火）
-    document.getElementById('btn-menu').addEventListener('click', function(e) {
-      e.preventDefault();
-      var rect = canvasElement.getBoundingClientRect();
-      var cx = rect.left + rect.width / 2;
-      var cy = rect.top + rect.height / 2;
-      var down = new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2 });
-      var up = new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2 });
-      canvasElement.dispatchEvent(down);
-      canvasElement.dispatchEvent(up);
-    });
-
     // 全画面ボタン
     document.getElementById('btn-fullscreen').addEventListener('click', function(e) {
       e.preventDefault();

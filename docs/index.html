@@ -87,6 +87,9 @@
     .card.gui::before {
       background: linear-gradient(90deg, #38bdf8, #c084fc);
     }
+    .card.font::before {
+      background: linear-gradient(90deg, #f59e0b, #ef4444);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -101,6 +104,7 @@
     }
     .card.game .card-tag { color: #00ffcc; }
     .card.gui .card-tag { color: #c084fc; }
+    .card.font .card-tag { color: #fbbf24; }
 
     .card h2 {
       font-size: 22px;
@@ -156,6 +160,14 @@
     .card.gui .btn-launch:hover {
       background: #c084fc;
       box-shadow: 0 0 20px rgba(192, 132, 252, 0.4);
+    }
+    .card.font .btn-launch {
+      background: #f59e0b;
+      color: #0b0d14;
+    }
+    .card.font .btn-launch:hover {
+      background: #fbbf24;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -215,6 +227,23 @@
         </ul>
       </div>
       <a href="gui/" class="btn-launch">GUI デモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Font Demo Card -->
+    <div class="card font">
+      <div>
+        <div class="card-tag">Text Engine</div>
+        <h2>SDF Font &amp; Sinclair 8x8</h2>
+        <p class="desc">
+          オンデマンド動的アトラス生成と SDF シェーダーによる高品質テキスト描画。袋文字、影、1文字アニメーション、レトロ 8x8 Sinclair フォントを体験できます。
+        </p>
+        <ul class="features">
+          <li>stb_truetype オンデマンド SDF ラスタライズ</li>
+          <li>日本語 M+ 1p &amp; Sinclair ZX Spectrum 8x8 フォント内蔵</li>
+          <li>袋文字・ドロップシャドウ・Siv3D風リアルタイムウェーブ</li>
+        </ul>
+      </div>
+      <a href="font/" class="btn-launch">フォントデモを起動 (Launch Demo) →</a>
     </div>
   </main>
 

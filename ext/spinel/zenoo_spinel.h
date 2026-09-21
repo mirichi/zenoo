@@ -106,4 +106,32 @@ void sp_zen_renderer_draw_line(
 
 void sp_zen_renderer_flush(void);
 
+// ==========================================
+// Font (sp_ZenFont)
+// ==========================================
+typedef struct sp_ZenFont_s {
+    sp_int cls_id;
+    ZenFont* font;
+} sp_ZenFont;
+
+void sp_ZenFont_free(void* p);
+sp_ZenFont* sp_ZenFont_load(sp_int cls_id, const char* path);
+sp_RbVal sp_zen_font_atlas_image(sp_int image_cls_id);
+
+sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size);
+sp_bool sp_zen_font_glyph_visible(void);
+double  sp_zen_font_glyph_u0(void);
+double  sp_zen_font_glyph_v0(void);
+double  sp_zen_font_glyph_u1(void);
+double  sp_zen_font_glyph_v1(void);
+double  sp_zen_font_glyph_x0(void);
+double  sp_zen_font_glyph_y0(void);
+double  sp_zen_font_glyph_x1(void);
+double  sp_zen_font_glyph_y1(void);
+double  sp_zen_font_glyph_advance(void);
+
+double sp_zen_font_metrics_ascent(sp_ZenFont* s, double size);
+double sp_zen_font_metrics_descent(sp_ZenFont* s, double size);
+double sp_zen_font_metrics_line_gap(sp_ZenFont* s, double size);
+
 #endif // ZENOO_SPINEL_H

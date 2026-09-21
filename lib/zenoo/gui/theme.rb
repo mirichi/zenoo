@@ -8,9 +8,10 @@ module Zenoo
                     :shadow_normal, :shadow_hover, :shadow_active,
                     :text_color, :text_disabled,
                     :accent_color, :accent_hover, :track_bg, :track_border,
-                    :corner_radius, :font_size
+                    :corner_radius, :font_size, :font
 
       def initialize
+        @font           = nil
         # ボタン・カード背景色
         @bg_normal      = Color.new(40, 44, 52, 230)
         @bg_hover       = Color.new(55, 60, 72, 245)

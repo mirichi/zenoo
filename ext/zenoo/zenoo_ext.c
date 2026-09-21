@@ -5,6 +5,8 @@ static VALUE rb_mZenoo;
 static VALUE rb_mNative;
 static VALUE rb_cNativeImage;
 static VALUE rb_cNativeShader;
+static VALUE rb_cNativeFont;
+
 
 // ==========================================
 // GC トリガーコールバック
@@ -159,6 +161,91 @@ static VALUE shader_set_vec4(VALUE self, VALUE rb_name, VALUE rb_x, VALUE rb_y, 
     TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
     zen_shader_set_vec4(shader, StringValueCStr(rb_name), (float)NUM2DBL(rb_x), (float)NUM2DBL(rb_y), (float)NUM2DBL(rb_z), (float)NUM2DBL(rb_w));
     return Qnil;
+}
+
+// ==========================================
+// Zenoo::Native::Font (TypedData)
+// ==========================================
+static void font_free(void* ptr) {
+    ZenFont* font = (ZenFont*)ptr;
+    if (font) {
+        zen_font_destroy(font);
+    }
+}
+
+static const rb_data_type_t zenoo_font_data_type = {
+    .wrap_struct_name = "Zenoo::Native::Font",
+    .function = {
+        .dmark = NULL,
+        .dfree = font_free,
+        .dsize = NULL,
+    },
+    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
+};
+
+static VALUE font_allocate(VALUE klass) {
+    return TypedData_Wrap_Struct(klass, &zenoo_font_data_type, NULL);
+}
+
+static VALUE font_s_load(VALUE klass, VALUE rb_path) {
+    const char* path = StringValueCStr(rb_path);
+    ZenFont* font = zen_font_load(path);
+    if (!font) {
+        rb_raise(rb_eRuntimeError, "Failed to load Font from file: %s", path);
+    }
+    return TypedData_Wrap_Struct(klass, &zenoo_font_data_type, font);
+}
+
+static VALUE font_get_glyph(VALUE self, VALUE rb_cp, VALUE rb_size) {
+    ZenFont* font;
+    TypedData_Get_Struct(self, ZenFont, &zenoo_font_data_type, font);
+
+    int cp = NUM2INT(rb_cp);
+    float size = (float)NUM2DBL(rb_size);
+
+    ZenGlyph g;
+    int ok = zen_font_get_glyph(font, cp, size, &g);
+    if (!ok) {
+        return Qnil;
+    }
+
+    VALUE ary = rb_ary_new_capa(10);
+    rb_ary_push(ary, g.visible ? Qtrue : Qfalse);
+    rb_ary_push(ary, DBL2NUM(g.u0));
+    rb_ary_push(ary, DBL2NUM(g.v0));
+    rb_ary_push(ary, DBL2NUM(g.u1));
+    rb_ary_push(ary, DBL2NUM(g.v1));
+    rb_ary_push(ary, DBL2NUM(g.x0));
+    rb_ary_push(ary, DBL2NUM(g.y0));
+    rb_ary_push(ary, DBL2NUM(g.x1));
+    rb_ary_push(ary, DBL2NUM(g.y1));
+    rb_ary_push(ary, DBL2NUM(g.advance_x));
+    return ary;
+}
+
+static VALUE font_get_metrics(VALUE self, VALUE rb_size) {
+    ZenFont* font;
+    TypedData_Get_Struct(self, ZenFont, &zenoo_font_data_type, font);
+
+    float size = (float)NUM2DBL(rb_size);
+    float ascent = 0, descent = 0, line_gap = 0;
+    zen_font_get_metrics(font, size, &ascent, &descent, &line_gap);
+
+    return rb_ary_new_from_args(3, DBL2NUM(ascent), DBL2NUM(descent), DBL2NUM(line_gap));
+}
+
+static VALUE s_atlas_image_obj = Qnil;
+
+static VALUE font_s_atlas_image(VALUE klass) {
+    (void)klass;
+    ZenImage* img = zen_font_get_atlas_image();
+    if (!img) return Qnil;
+
+    if (NIL_P(s_atlas_image_obj)) {
+        s_atlas_image_obj = TypedData_Wrap_Struct(rb_cNativeImage, &zenoo_image_data_type, img);
+        rb_gc_register_address(&s_atlas_image_obj);
+    }
+    return s_atlas_image_obj;
 }
 
 // ==========================================
@@ -484,4 +571,12 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mRenderer, "draw_triangle", renderer_draw_triangle, 10);
     rb_define_singleton_method(mRenderer, "draw_line", renderer_draw_line, 8);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
+
+    // 6. Font (Zenoo::Native::Font)
+    rb_cNativeFont = rb_define_class_under(rb_mNative, "Font", rb_cObject);
+    rb_define_alloc_func(rb_cNativeFont, font_allocate);
+    rb_define_singleton_method(rb_cNativeFont, "load", font_s_load, 1);
+    rb_define_singleton_method(rb_cNativeFont, "atlas_image", font_s_atlas_image, 0);
+    rb_define_method(rb_cNativeFont, "get_glyph", font_get_glyph, 2);
+    rb_define_method(rb_cNativeFont, "metrics", font_get_metrics, 1);
 }

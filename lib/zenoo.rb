@@ -10,7 +10,7 @@ else
   if File.exist?(so_path)
     require so_path
   else
-    require 'zenoo/zenoo'
+    require 'zenoo'
   end
 end
 
@@ -19,18 +19,21 @@ end
 # ====================================================
 require_relative 'zenoo/color'
 require_relative 'zenoo/font'
+require_relative 'zenoo/text_layout'
 require_relative 'zenoo/shader'
 require_relative 'zenoo/shaders/sdf_card_shader'
+require_relative 'zenoo/shaders/sdf_font_shader'
 require_relative 'zenoo/image'
 require_relative 'zenoo/input'
 require_relative 'zenoo/window'
 require_relative 'zenoo/gui'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
-Window = Zenoo::Window unless defined?(Window)
-Input  = Zenoo::Input  unless defined?(Input)
-Image  = Zenoo::Image  unless defined?(Image)
-Shader = Zenoo::Shader unless defined?(Shader)
-Color  = Zenoo::Color  unless defined?(Color)
-Font   = Zenoo::Font   unless defined?(Font)
-GUI    = Zenoo::GUI    unless defined?(GUI)
+Window     = Zenoo::Window     unless defined?(Window)
+Input      = Zenoo::Input      unless defined?(Input)
+Image      = Zenoo::Image      unless defined?(Image)
+Shader     = Zenoo::Shader     unless defined?(Shader)
+Color      = Zenoo::Color      unless defined?(Color)
+Font       = Zenoo::Font       unless defined?(Font)
+TextLayout = Zenoo::TextLayout unless defined?(TextLayout)
+GUI        = Zenoo::GUI        unless defined?(GUI)

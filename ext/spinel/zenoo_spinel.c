@@ -307,3 +307,84 @@ void sp_zen_renderer_draw_line(
 void sp_zen_renderer_flush(void) {
     zen_flush();
 }
+
+// ==========================================
+// Font (sp_ZenFont)
+// ==========================================
+static ZenGlyph s_query_glyph_cache;
+static sp_ZenImage* s_atlas_zen_image = NULL;
+
+static void sp_ZenAtlasImage_noop_free(void* p) {
+    (void)p;
+}
+
+void sp_ZenFont_free(void* p) {
+    sp_ZenFont* s = (sp_ZenFont*)p;
+    if (s && s->font) {
+        zen_font_destroy(s->font);
+        s->font = NULL;
+    }
+}
+
+sp_ZenFont* sp_ZenFont_load(sp_int cls_id, const char* path) {
+    ZenFont* font = zen_font_load(path);
+    if (!font) return NULL;
+
+    sp_ZenFont* s = (sp_ZenFont*)sp_gc_alloc(sizeof(sp_ZenFont), sp_ZenFont_free, NULL);
+    memset(s, 0, sizeof(*s));
+    s->cls_id = cls_id;
+    s->font = font;
+    return s;
+}
+
+sp_RbVal sp_zen_font_atlas_image(sp_int image_cls_id) {
+    ZenImage* img = zen_font_get_atlas_image();
+    if (!img) return sp_box_nil();
+
+    if (!s_atlas_zen_image) {
+        s_atlas_zen_image = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenAtlasImage_noop_free, NULL);
+        memset(s_atlas_zen_image, 0, sizeof(*s_atlas_zen_image));
+        s_atlas_zen_image->cls_id = image_cls_id;
+        s_atlas_zen_image->image = img;
+    }
+    return sp_box_obj(s_atlas_zen_image, (int)image_cls_id);
+}
+
+sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size) {
+    if (!s || !s->font) return false;
+    int ok = zen_font_get_glyph(s->font, (int)cp, (float)size, &s_query_glyph_cache);
+    return ok ? true : false;
+}
+
+sp_bool sp_zen_font_glyph_visible(void)  { return s_query_glyph_cache.visible ? true : false; }
+double  sp_zen_font_glyph_u0(void)       { return (double)s_query_glyph_cache.u0; }
+double  sp_zen_font_glyph_v0(void)       { return (double)s_query_glyph_cache.v0; }
+double  sp_zen_font_glyph_u1(void)       { return (double)s_query_glyph_cache.u1; }
+double  sp_zen_font_glyph_v1(void)       { return (double)s_query_glyph_cache.v1; }
+double  sp_zen_font_glyph_x0(void)       { return (double)s_query_glyph_cache.x0; }
+double  sp_zen_font_glyph_y0(void)       { return (double)s_query_glyph_cache.y0; }
+double  sp_zen_font_glyph_x1(void)       { return (double)s_query_glyph_cache.x1; }
+double  sp_zen_font_glyph_y1(void)       { return (double)s_query_glyph_cache.y1; }
+double  sp_zen_font_glyph_advance(void)  { return (double)s_query_glyph_cache.advance_x; }
+
+double sp_zen_font_metrics_ascent(sp_ZenFont* s, double size) {
+    if (!s || !s->font) return 0.0;
+    float ascent = 0.0f;
+    zen_font_get_metrics(s->font, (float)size, &ascent, NULL, NULL);
+    return (double)ascent;
+}
+
+double sp_zen_font_metrics_descent(sp_ZenFont* s, double size) {
+    if (!s || !s->font) return 0.0;
+    float descent = 0.0f;
+    zen_font_get_metrics(s->font, (float)size, NULL, &descent, NULL);
+    return (double)descent;
+}
+
+double sp_zen_font_metrics_line_gap(sp_ZenFont* s, double size) {
+    if (!s || !s->font) return 0.0;
+    float line_gap = 0.0f;
+    zen_font_get_metrics(s->font, (float)size, NULL, NULL, &line_gap);
+    return (double)line_gap;
+}
+
