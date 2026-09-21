@@ -63,16 +63,6 @@ static GLuint s_shader_program = 0;
 static GLuint s_white_texture = 0;
 static GLuint s_active_texture = 0;
 static GLuint s_active_program = 0;
-
-// オフスクリーン描画ターゲット
-struct ZenImage {
-    GLuint texture_id;
-    GLuint fbo;
-    int width;
-    int height;
-    int has_fbo;
-};
-
 static ZenImage* s_current_render_target = NULL;
 static void (*s_gc_callback)(void) = NULL;
 

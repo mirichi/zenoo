@@ -19,8 +19,9 @@ OUTPUT_DIR="build/wasm"
 mkdir -p "${OUTPUT_DIR}"
 
 echo "=== [1/4] Generating C code with Spinel AOT ==="
-"${SPINEL_BIN}" -Ilib "${TARGET_RB}" -c -o "${OUTPUT_DIR}/game_app.c"
+"${SPINEL_BIN}" --no-inline-hot -Ilib "${TARGET_RB}" -c -o "${OUTPUT_DIR}/game_app.c"
 sed -i 's/__attribute__((always_inline))//g' "${OUTPUT_DIR}/game_app.c"
+
 
 echo "=== [2/4] Building Spinel Runtime for Wasm ==="
 mkdir -p "${OUTPUT_DIR}/rt"
@@ -48,23 +49,30 @@ emar rcs "${OUTPUT_DIR}/libspinel_rt.a" "${OUTPUT_DIR}/rt"/*.o "${OUTPUT_DIR}/re
 echo "=== [3/4] Building Zenoo C Kernel for Wasm ==="
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_core.c -o "${OUTPUT_DIR}/zenoo_core.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${OUTPUT_DIR}/zenoo_gfx.o"
+emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${OUTPUT_DIR}/zenoo_font.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" ext/spinel/zenoo_spinel.c -o "${OUTPUT_DIR}/zenoo_spinel.o"
 
 echo "=== [4/4] Linking Wasm + WebGL HTML Application ==="
-emcc -O2 \
+emcc -O2 -g1 \
     -s USE_GLFW=3 \
     -s MAX_WEBGL_VERSION=2 \
     -s MIN_WEBGL_VERSION=2 \
     -s ASYNCIFY \
+    -s ASYNCIFY_STACK_SIZE=65536 \
+    -s STACK_SIZE=1048576 \
+    -s INITIAL_MEMORY=67108864 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s WASM=1 \
+    --preload-file assets@/assets \
     -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" \
     "${OUTPUT_DIR}/game_app.c" \
     "${OUTPUT_DIR}/zenoo_core.o" \
     "${OUTPUT_DIR}/zenoo_gfx.o" \
+    "${OUTPUT_DIR}/zenoo_font.o" \
     "${OUTPUT_DIR}/zenoo_spinel.o" \
     "${OUTPUT_DIR}/libspinel_rt.a" \
     -o "${OUTPUT_DIR}/index.html" \
-    --shell-file web/shell.html
+    --shell-file examples/web/shell.html
+
 
 echo "=== Build Complete! Output: ${OUTPUT_DIR}/index.html ==="

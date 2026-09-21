@@ -67,7 +67,8 @@ module Zenoo
               text_y += 1.0
             end
 
-            Font.draw_text(text_x, text_y, text_str, size: f_size, color: theme.text_color)
+            f_font = theme.font || Font.default
+            Window.draw_text(text_x, text_y, text_str, font: f_font, size: f_size, color: theme.text_color)
           end
         end
       end
@@ -93,19 +94,20 @@ module Zenoo
 
         f_size = theme.font_size.to_i
         f_size = 14 if f_size <= 0
+        f_font = theme.font || Font.default
 
         # 上部: ラベル & 数値
         has_label = label && label.to_s.length > 0
         if has_label
           label_str = label.to_s
-          Font.draw_text(rx, ry, label_str, size: f_size, color: theme.text_color)
+          Window.draw_text(rx, ry, label_str, font: f_font, size: f_size, color: theme.text_color)
 
           # 数値テキスト (小数点以下1桁)
           v_int = v_val.to_i
           v_dec = ((v_val - v_int.to_f).abs * 10.0).to_i
           val_str = "#{v_int}.#{v_dec}"
           val_w = val_str.length.to_f * f_size.to_f
-          Font.draw_text(rx + rw - val_w, ry, val_str, size: f_size, color: theme.accent_color)
+          Window.draw_text(rx + rw - val_w, ry, val_str, font: f_font, size: f_size, color: theme.accent_color)
 
           track_y = ry + f_size.to_f + 8.0
           track_h = 8.0
@@ -163,7 +165,8 @@ module Zenoo
         f_size = size ? size.to_i : theme.font_size.to_i
         f_size = 16 if f_size <= 0
         c_color = color || theme.text_color
-        Font.draw_text(x.to_f, y.to_f, text.to_s, size: f_size, color: c_color)
+        f_font = theme.font || Font.default
+        Window.draw_text(x.to_f, y.to_f, text.to_s, font: f_font, size: f_size, color: c_color)
       end
 
       # ----------------------------------------------------

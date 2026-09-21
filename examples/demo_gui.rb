@@ -46,7 +46,7 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
 
         tx = x.to_f + (w.to_f - text_w) / 2.0
         ty = y.to_f + (h.to_f - f_size.to_f) / 2.0
-        Font.draw_text(tx, ty, text_str, size: f_size, color: @col_white)
+        Window.draw_text(tx, ty, text_str, font: Font::SINCLAIR, size: f_size, color: @col_white)
       end
     end
   end
@@ -58,8 +58,8 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     ratio = 0.0 if ratio < 0.0
     ratio = 1.0 if ratio > 1.0
 
-    # ラベル
-    Font.draw_text(x, y, label.to_s, size: 14, color: @col_white) if label
+    # ラベル (Sinclair 8x8 フォント)
+    Window.draw_text(x, y, label.to_s, font: Font::SINCLAIR, size: 14, color: @col_white) if label
 
     track_y = y + 20.0
     track_h = 10.0
@@ -73,7 +73,7 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
   end
 
   def draw_label(x, y, text, size, color, theme)
-    Font.draw_text(x, y, text.to_s, size: (size || 16), color: (color || @col_white))
+    Window.draw_text(x, y, text.to_s, font: Font::SINCLAIR, size: (size || 16), color: (color || @col_white))
   end
 
   def hit_test_button(x, y, w, h, px, py, theme)
@@ -91,6 +91,9 @@ end
 card_renderer = Zenoo::GUI::CardRenderer.new
 flat_renderer = RetroFlatRenderer.new
 using_custom = false
+
+# GUI デモは 8x8 Sinclair フォントで精密にレイアウト調整されているため、テーマに SINCLAIR を設定
+GUI.theme.font = Font::SINCLAIR
 
 # GUI の状態変数
 counter = 0

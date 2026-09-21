@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Zenoo Survival Shooting (Spinel Wasm)</title>
+  <title>Zenoo SDF Text &amp; Font Showcase (Spinel Wasm)</title>
   <style>
     * {
       box-sizing: border-box;
@@ -79,9 +79,20 @@
       font-weight: bold;
       cursor: pointer;
       touch-action: manipulation;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
     }
     .btn:active {
       background: #38bdf8;
+      color: #0f172a;
+    }
+    .btn-back {
+      border-color: #a855f7;
+      color: #c084fc;
+    }
+    .btn-back:active {
+      background: #c084fc;
       color: #0f172a;
     }
     #status {
@@ -93,14 +104,14 @@
 </head>
 <body>
   <div id="header">
-    <h1>ZENOO SURVIVAL SHOOTING</h1>
-    <p>Powered by Spinel AOT &amp; WebGL 2.0</p>
+    <h1>ZENOO SDF TEXT &amp; FONT SHOWCASE</h1>
+    <p>SDF Dynamic Atlas &amp; High Quality Typography | Powered by Spinel AOT &amp; WebGL 2.0</p>
   </div>
   <div id="canvas-container">
     <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" width="1280" height="720"></canvas>
   </div>
   <div id="controls-bar">
-    <button class="btn" id="btn-menu">MENU (右クリック/ESC)</button>
+    <a href="../" class="btn btn-back">← ポータルに戻る</a>
     <button class="btn" id="btn-fullscreen">全画面</button>
   </div>
   <div id="status">Loading WebAssembly module...</div>
@@ -116,7 +127,7 @@
       setStatus: function(text) {
         if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
         if (text === Module.setStatus.last.text) return;
-        statusElement.innerText = text ? text : "操作: スワイプ/タップで移動, MENUボタンでスキルメニュー";
+        statusElement.innerText = text ? text : "SDF動的アトラス & 高品質日本語・袋文字・8x8レトロフォント描画デモ";
       },
       totalDependencies: 0,
       monitorRunDependencies: function(left) {

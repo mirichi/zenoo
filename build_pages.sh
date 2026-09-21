@@ -55,51 +55,68 @@ emar rcs "${CACHE_DIR}/libspinel_rt.a" "${CACHE_DIR}/rt"/*.o "${CACHE_DIR}/regex
 echo "=== [3/5] Building Common Zenoo C Kernel ==="
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_core.c -o "${CACHE_DIR}/zenoo_core.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${CACHE_DIR}/zenoo_gfx.o"
+emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${CACHE_DIR}/zenoo_font.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" ext/spinel/zenoo_spinel.c -o "${CACHE_DIR}/zenoo_spinel.o"
 
-echo "=== [4/5] Building Survival Shooting Game (docs/game) ==="
-"${SPINEL_BIN}" -Ilib examples/game_zenoo.rb -c -o "${DOCS_DIR}/game/app.c"
+COMMON_EMCC_FLAGS=(
+    -O2
+    -s USE_GLFW=3
+    -s MAX_WEBGL_VERSION=2
+    -s MIN_WEBGL_VERSION=2
+    -s ASYNCIFY
+    -s ASYNCIFY_STACK_SIZE=65536
+    -s STACK_SIZE=1048576
+    -s INITIAL_MEMORY=67108864
+    -s ALLOW_MEMORY_GROWTH=1
+    -s WASM=1
+    --preload-file assets@/assets
+    -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib"
+)
+
+COMMON_OBJS=(
+    "${CACHE_DIR}/zenoo_core.o"
+    "${CACHE_DIR}/zenoo_gfx.o"
+    "${CACHE_DIR}/zenoo_font.o"
+    "${CACHE_DIR}/zenoo_spinel.o"
+    "${CACHE_DIR}/libspinel_rt.a"
+)
+
+echo "=== [4/6] Building Survival Shooting Game (docs/game) ==="
+"${SPINEL_BIN}" --no-inline-hot -Ilib examples/game_zenoo.rb -c -o "${DOCS_DIR}/game/app.c"
 sed -i 's/__attribute__((always_inline))//g' "${DOCS_DIR}/game/app.c"
 
-emcc -O2 \
-    -s USE_GLFW=3 \
-    -s MAX_WEBGL_VERSION=2 \
-    -s MIN_WEBGL_VERSION=2 \
-    -s ASYNCIFY \
-    -s ALLOW_MEMORY_GROWTH=1 \
-    -s WASM=1 \
-    -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" \
+emcc "${COMMON_EMCC_FLAGS[@]}" \
     "${DOCS_DIR}/game/app.c" \
-    "${CACHE_DIR}/zenoo_core.o" \
-    "${CACHE_DIR}/zenoo_gfx.o" \
-    "${CACHE_DIR}/zenoo_spinel.o" \
-    "${CACHE_DIR}/libspinel_rt.a" \
+    "${COMMON_OBJS[@]}" \
     -o "${DOCS_DIR}/game/index.html" \
     --shell-file examples/web/shell_game.html
 
 rm -f "${DOCS_DIR}/game/app.c"
 
-echo "=== [5/5] Building Immediate Mode GUI Demo (docs/gui) ==="
-"${SPINEL_BIN}" -Ilib examples/demo_gui.rb -c -o "${DOCS_DIR}/gui/app.c"
+echo "=== [5/6] Building Immediate Mode GUI Demo (docs/gui) ==="
+"${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_gui.rb -c -o "${DOCS_DIR}/gui/app.c"
 sed -i 's/__attribute__((always_inline))//g' "${DOCS_DIR}/gui/app.c"
 
-emcc -O2 \
-    -s USE_GLFW=3 \
-    -s MAX_WEBGL_VERSION=2 \
-    -s MIN_WEBGL_VERSION=2 \
-    -s ASYNCIFY \
-    -s ALLOW_MEMORY_GROWTH=1 \
-    -s WASM=1 \
-    -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" \
+emcc "${COMMON_EMCC_FLAGS[@]}" \
     "${DOCS_DIR}/gui/app.c" \
-    "${CACHE_DIR}/zenoo_core.o" \
-    "${CACHE_DIR}/zenoo_gfx.o" \
-    "${CACHE_DIR}/zenoo_spinel.o" \
-    "${CACHE_DIR}/libspinel_rt.a" \
+    "${COMMON_OBJS[@]}" \
     -o "${DOCS_DIR}/gui/index.html" \
     --shell-file examples/web/shell_gui.html
 
 rm -f "${DOCS_DIR}/gui/app.c"
+
+echo "=== [6/6] Building SDF Text & Font Demo (docs/font) ==="
+mkdir -p "${DOCS_DIR}/font"
+"${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_ttf_sdf_font.rb -c -o "${DOCS_DIR}/font/app.c"
+sed -i 's/__attribute__((always_inline))//g' "${DOCS_DIR}/font/app.c"
+
+emcc "${COMMON_EMCC_FLAGS[@]}" \
+    "${DOCS_DIR}/font/app.c" \
+    "${COMMON_OBJS[@]}" \
+    -o "${DOCS_DIR}/font/index.html" \
+    --shell-file examples/web/shell_font.html
+
+rm -f "${DOCS_DIR}/font/app.c"
 
 echo ""
 echo "=========================================================="
@@ -107,4 +124,5 @@ echo " Showcase build complete!"
 echo " Portal: ${DOCS_DIR}/index.html"
 echo " Game  : ${DOCS_DIR}/game/index.html"
 echo " GUI   : ${DOCS_DIR}/gui/index.html"
+echo " Font  : ${DOCS_DIR}/font/index.html"
 echo "=========================================================="

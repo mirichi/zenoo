@@ -11,8 +11,9 @@ mkdir -p build
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/glad.c -o build/glad.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_core.c -o build/zenoo_core.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_gfx.c -o build/zenoo_gfx.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_font.c -o build/zenoo_font.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c ext/spinel/zenoo_spinel.c -o build/zenoo_spinel.o
-ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_core.o build/zenoo_gfx.o build/zenoo_spinel.o
+ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_core.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_spinel.o
 echo "  -> build/libzenoo_spinel.a created successfully."
 
 TARGET_RB="${1:-examples/demo_spinel_interactive.rb}"

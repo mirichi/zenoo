@@ -585,14 +585,14 @@ class Game
     else
       score_str = "SCORE: #{@player.score}  FPS: #{Window.fps.to_i}"
     end
-    Window.draw_text(20.0, 20.0, score_str, size: 24, color: Color::WHITE)
+    Window.draw_text(20.0, 20.0, score_str, font: Font::SINCLAIR, size: 24, color: Color::WHITE)
 
     if @game_state == 1
       # 半透明暗幕 (58% 黒)
       Window.draw_rect(0.0, 0.0, 1280.0, 720.0, COLOR_MENU_BG)
       
       # タイトル (18文字 * 32px = 576px -> (1280 - 576) / 2 = 352)
-      Window.draw_text(352.0, 150.0, "--- SKILL MENU ---", size: 32, color: Color::WHITE)
+      Window.draw_text(352.0, 150.0, "--- SKILL MENU ---", font: Font::SINCLAIR, size: 32, color: Color::WHITE)
       
       mx = Input.mouse_x
       my = Input.mouse_y
@@ -613,13 +613,13 @@ class Game
       t4 = "[4/RB] Magnet Radius (Cost: 50) -> Range: #{(@player.magnet_radius + 50.0).to_i}"
 
       # リストテキスト (最長48文字 * 20px = 960px -> 開始x=160, 終了x=1120, 中心=640)
-      Window.draw_text(160.0, 255.0, t1, size: 20, color: @player.score >= shape_cost ? Color::WHITE : COLOR_TEXT_GRAY)
-      Window.draw_text(160.0, 305.0, t2, size: 20, color: @player.score >= 50 ? Color::WHITE : COLOR_TEXT_GRAY)
-      Window.draw_text(160.0, 355.0, t3, size: 20, color: (@player.score >= 50 && @player.fire_rate > 2) ? Color::WHITE : COLOR_TEXT_GRAY)
-      Window.draw_text(160.0, 405.0, t4, size: 20, color: @player.score >= 50 ? Color::WHITE : COLOR_TEXT_GRAY)
+      Window.draw_text(160.0, 255.0, t1, font: Font::SINCLAIR, size: 20, color: @player.score >= shape_cost ? Color::WHITE : COLOR_TEXT_GRAY)
+      Window.draw_text(160.0, 305.0, t2, font: Font::SINCLAIR, size: 20, color: @player.score >= 50 ? Color::WHITE : COLOR_TEXT_GRAY)
+      Window.draw_text(160.0, 355.0, t3, font: Font::SINCLAIR, size: 20, color: (@player.score >= 50 && @player.fire_rate > 2) ? Color::WHITE : COLOR_TEXT_GRAY)
+      Window.draw_text(160.0, 405.0, t4, font: Font::SINCLAIR, size: 20, color: @player.score >= 50 ? Color::WHITE : COLOR_TEXT_GRAY)
       
       # フッター (42文字 * 16px = 672px -> (1280 - 672) / 2 = 304)
-      Window.draw_text(304.0, 500.0, "Right Click / ESC / START / (B) to Resume", size: 16, color: COLOR_TEXT_GRAY)
+      Window.draw_text(304.0, 500.0, "Right Click / ESC / START / (B) to Resume", font: Font::SINCLAIR, size: 16, color: COLOR_TEXT_GRAY)
     end
   end
 end
