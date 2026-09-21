@@ -140,9 +140,10 @@ module Zenoo
       [rf, gf, bf, af]
     end
 
-    # 0xRRGGBBAA 形式の uint32
+    # 0xRRGGBBAA 形式の uint32 (32bit signed環境で r >= 128 のオーバーフローを防止)
     def to_i
-      (@r << 24) | (@g << 16) | (@b << 8) | @a
+      r_part = @r >= 128 ? ((@r - 256) * 16777216) : (@r << 24)
+      r_part | (@g << 16) | (@b << 8) | @a
     end
     alias to_uint32 to_i
 

@@ -20,6 +20,7 @@ mkdir -p "${OUTPUT_DIR}"
 
 echo "=== [1/4] Generating C code with Spinel AOT ==="
 "${SPINEL_BIN}" -Ilib "${TARGET_RB}" -c -o "${OUTPUT_DIR}/game_app.c"
+sed -i 's/__attribute__((always_inline))//g' "${OUTPUT_DIR}/game_app.c"
 
 echo "=== [2/4] Building Spinel Runtime for Wasm ==="
 mkdir -p "${OUTPUT_DIR}/rt"

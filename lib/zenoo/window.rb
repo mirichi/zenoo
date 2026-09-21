@@ -43,7 +43,8 @@ module Zenoo
       g = (floats[1] * 255).to_i & 0xFF
       b = (floats[2] * 255).to_i & 0xFF
       a = (floats[3] * 255).to_i & 0xFF
-      (r << 24) | (g << 16) | (b << 8) | a
+      r_part = r >= 128 ? ((r - 256) * 16777216) : (r << 24)
+      r_part | (g << 16) | (b << 8) | a
     end
 
     # DXRuby風メインループ
@@ -54,10 +55,16 @@ module Zenoo
 
       while Native::Window.update
         Native::Window.clear(color_to_uint32([18, 20, 30, 255]))
+        Zenoo::GUI.begin_frame if defined?(Zenoo::GUI)
         yield
+        Zenoo::GUI.end_frame if defined?(Zenoo::GUI)
       end
     ensure
       Native::Window.shutdown
+    end
+
+    def self.time
+      Native::Window.time
     end
 
     def self.clear(color)

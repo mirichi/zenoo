@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zenoo WebAssembly Showcase</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #0b0d14;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+    header {
+      text-align: center;
+      max-width: 800px;
+      margin-bottom: 48px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: rgba(0, 255, 204, 0.1);
+      border: 1px solid #00ffcc;
+      border-radius: 999px;
+      color: #00ffcc;
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, #00ffcc 0%, #38bdf8 50%, #c084fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+    p.lead {
+      color: #94a3b8;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .showcase-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 420px));
+      gap: 32px;
+      width: 100%;
+      max-width: 900px;
+      justify-content: center;
+    }
+    .card {
+      background: #121622;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: transparent;
+      transition: background 0.3s ease;
+    }
+    .card.game::before {
+      background: linear-gradient(90deg, #00ffcc, #38bdf8);
+    }
+    .card.gui::before {
+      background: linear-gradient(90deg, #38bdf8, #c084fc);
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: #334155;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+    }
+    .card-tag {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .card.game .card-tag { color: #00ffcc; }
+    .card.gui .card-tag { color: #c084fc; }
+
+    .card h2 {
+      font-size: 22px;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .card p.desc {
+      color: #94a3b8;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+      flex-grow: 1;
+    }
+    .features {
+      list-style: none;
+      margin-bottom: 24px;
+    }
+    .features li {
+      font-size: 13px;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .features li::before {
+      content: '✓';
+      color: #38bdf8;
+      font-weight: bold;
+    }
+    .btn-launch {
+      display: block;
+      text-align: center;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .card.game .btn-launch {
+      background: #00ffcc;
+      color: #0b0d14;
+    }
+    .card.game .btn-launch:hover {
+      background: #38bdf8;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    }
+    .card.gui .btn-launch {
+      background: #a855f7;
+      color: #fff;
+    }
+    .card.gui .btn-launch:hover {
+      background: #c084fc;
+      box-shadow: 0 0 20px rgba(192, 132, 252, 0.4);
+    }
+    footer {
+      margin-top: 60px;
+      text-align: center;
+      font-size: 13px;
+      color: #64748b;
+    }
+    footer a {
+      color: #38bdf8;
+      text-decoration: none;
+    }
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="badge">RUBY + WEBASSEMBLY</div>
+    <h1>Zenoo Showcase</h1>
+    <p class="lead">
+      軽量・超高速 2D ゲーム＆グラフィックスエンジン <strong>Zenoo</strong> の WebAssembly デモコレクション。<br>
+      Pure Ruby で記述されたコードを <strong>Spinel AOT</strong> で C/Wasm にコンパイルし、WebGL 2.0 上で高速実行しています。
+    </p>
+  </header>
+
+  <main class="showcase-grid">
+    <!-- Game Demo Card -->
+    <div class="card game">
+      <div>
+        <div class="card-tag">Action Game</div>
+        <h2>Survival Shooting</h2>
+        <p class="desc">
+          群がる大量の敵を倒し、EXPオーブを集めてスキルメニューで武器やステータスを強化する 2D サバイバルアクションゲーム。
+        </p>
+        <ul class="features">
+          <li>1280x720 仮想解像度 &amp; アスペクト比自動維持</li>
+          <li>WebGL 2.0 インスタンス描画による大量オブジェクト表示</li>
+          <li>マウス・タッチ・キーボード完全対応</li>
+        </ul>
+      </div>
+      <a href="game/" class="btn-launch">ゲームをプレイ (Play Game) →</a>
+    </div>
+
+    <!-- GUI Demo Card -->
+    <div class="card gui">
+      <div>
+        <div class="card-tag">UI System</div>
+        <h2>Immediate Mode GUI</h2>
+        <p class="desc">
+          Pure Ruby で実装された即時モード (Immediate Mode) GUI システム。ボタン、スライダー、ラベル、GPU SDF 角丸カードを体験できます。
+        </p>
+        <ul class="features">
+          <li>SDF (符号付き距離関数) による角丸・枠線・影描画</li>
+          <li>マウスキャプチャ &amp; 排他制御付きボタン／スライダー</li>
+          <li>Style ボタンでモダンカード ↔ レトロフラットの即時切り替え</li>
+        </ul>
+      </div>
+      <a href="gui/" class="btn-launch">GUI デモを起動 (Launch Demo) →</a>
+    </div>
+  </main>
+
+  <footer>
+    <p>Powered by <strong>Zenoo</strong> &amp; <strong>Spinel AOT Compiler</strong></p>
+  </footer>
+</body>
+</html>
