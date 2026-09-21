@@ -1,6 +1,6 @@
 require_relative '../lib/zenoo'
 
-# 事前定義カラー定数 (毎フレームの Color.new を根絶)
+# 事前定義カラー定数
 COLOR_ORANGE       = Color.new(255, 161, 0)
 COLOR_HP_GRAY      = Color.new(130, 130, 130)
 COLOR_GRID_DARK    = Color.new(50, 50, 60)

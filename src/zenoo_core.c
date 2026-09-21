@@ -97,6 +97,24 @@ static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
     s_mouse_y = ypos;
 }
 
+static void window_focus_callback(GLFWwindow* window, int focused) {
+    (void)window;
+    if (!focused) {
+        for (int i = 0; i < 8; i++) {
+            if (s_mouse_pressed[i]) {
+                s_mouse_pressed[i] = 0;
+                s_mouse_release[i] = 1;
+            }
+        }
+        for (int i = 0; i < 512; i++) {
+            if (s_keys_pressed[i]) {
+                s_keys_pressed[i] = 0;
+                s_keys_release[i] = 1;
+            }
+        }
+    }
+}
+
 static void update_viewport(int fb_w, int fb_h) {
     if (fb_w <= 0) fb_w = 1;
     if (fb_h <= 0) fb_h = 1;
@@ -195,6 +213,7 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
     glfwSetMouseButtonCallback(s_window, mouse_button_callback);
     glfwSetCursorPosCallback(s_window, cursor_pos_callback);
     glfwSetFramebufferSizeCallback(s_window, framebuffer_size_callback);
+    glfwSetWindowFocusCallback(s_window, window_focus_callback);
 
 #ifndef __EMSCRIPTEN__
     // GLAD のロード

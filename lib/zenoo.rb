@@ -24,6 +24,7 @@ require_relative 'zenoo/shaders/sdf_card_shader'
 require_relative 'zenoo/image'
 require_relative 'zenoo/input'
 require_relative 'zenoo/window'
+require_relative 'zenoo/gui'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
 Window = Zenoo::Window unless defined?(Window)
@@ -32,3 +33,4 @@ Image  = Zenoo::Image  unless defined?(Image)
 Shader = Zenoo::Shader unless defined?(Shader)
 Color  = Zenoo::Color  unless defined?(Color)
 Font   = Zenoo::Font   unless defined?(Font)
+GUI    = Zenoo::GUI    unless defined?(GUI)
