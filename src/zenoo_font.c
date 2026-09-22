@@ -177,17 +177,13 @@ ZenFont* zen_font_load_memory(const unsigned char* data, size_t size) {
 // フォント読み込み (ファイルパス)
 ZenFont* zen_font_load(const char* filepath) {
     if (!filepath) {
-        printf("[Zenoo Font] zen_font_load called with NULL path!\n");
         return NULL;
     }
-    printf("[Zenoo Font] Attempting to open font: '%s'\n", filepath);
 
     FILE* f = fopen(filepath, "rb");
     if (!f) {
-        printf("[Zenoo Font] FAILED to open font file: '%s'\n", filepath);
         return NULL;
     }
-
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -213,13 +209,7 @@ ZenFont* zen_font_load(const char* filepath) {
 
     ZenFont* font = zen_font_load_memory(buffer, (size_t)size);
     free(buffer);
-    if (font) {
-        printf("[Zenoo Font] Successfully initialized font '%s' (%ld bytes)\n", filepath, size);
-    } else {
-        printf("[Zenoo Font] Failed to initialize font from memory for '%s'\n", filepath);
-    }
     return font;
-
 }
 
 void zen_font_destroy(ZenFont* font) {
@@ -240,12 +230,7 @@ void zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* 
 
 // グリフ取得 (キャッシュにあれば即返却、なければSDF生成してアトラス転送)
 int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* out_glyph) {
-    static int s_glyph_call_count = 0;
-    if (s_glyph_call_count++ < 10) {
-        printf("[Zenoo Font] get_glyph called: cp=%d ('%c'), size=%.1f\n", codepoint, (codepoint >= 32 && codepoint < 127) ? codepoint : '?', font_size);
-    }
     if (!font || !out_glyph) {
-        if (s_glyph_call_count < 10) printf("[Zenoo Font] get_glyph font or out_glyph is NULL!\n");
         return 0;
     }
 
