@@ -117,10 +117,6 @@ module Zenoo
       res
     end
 
-    # テキスト組版（Immutable な TextLayout）を生成
-    def layout(text, size: 24, line_spacing: 1.0, max_width: nil, align: :left)
-      TextLayout.new(text, font: self, size: size, line_spacing: line_spacing, max_width: max_width, align: align)
-    end
 
     # ----------------------------------------------------
     # SDF / TTF ベクターフォント基盤 (定数・デフォルトフォント)
@@ -177,9 +173,6 @@ module Zenoo
       MPLUS
     end
 
-    def self.layout(text, opt_or_size = 24, line_spacing = 1.0, max_width = nil, align = :left)
-      TextLayout.new(text, opt_or_size, line_spacing, max_width, align)
-    end
 
     def self.atlas_image
       Native::Font.atlas_image

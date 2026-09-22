@@ -58,11 +58,13 @@ def draw_styling_card(left_w)
                    shadow: { offset: [0, 0], blur: 5.0, color: [255, 40, 160, 240] }, font: Font::MPLUS)
 end
 
-def draw_layout_card(left_w, layout)
+def draw_sample_text_card(left_w)
   Window.draw_card(30, 380, left_w, 180, radius: 12.0, color: [24, 30, 48, 200], border: [1.0, [50, 65, 100]], shadow: [8.0, [0, 0, 0, 80]])
-  Window.draw_text(50, 395, "[2] Immutable TextLayout (組版・自動折り返し・中央寄せ)", size: 18, color: :cyan, font: Font::MPLUS)
-  Window.draw_text(60, 430, layout, color: [230, 235, 245],
+  Window.draw_text(50, 395, "[2] Direct String Rendering (高速・アロケーションフリー描画)", size: 18, color: :cyan, font: Font::MPLUS)
+  Window.draw_text(60, 435, "吾輩は猫である。名前はまだ無い。", size: 22, color: [230, 235, 245], font: Font::MPLUS,
                    shadow: { offset: [1, 1], blur: 1.5, color: [0, 0, 0, 140] })
+  Window.draw_text(60, 475, "どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所で", size: 18, color: [180, 200, 230], font: Font::MPLUS)
+  Window.draw_text(60, 505, "ニャーニャー泣いていた事だけは記憶している。", size: 18, color: [180, 200, 230], font: Font::MPLUS)
 end
 
 def draw_wave_card(left_w, time)
@@ -84,7 +86,9 @@ end
 def draw_atlas_card(right_x, right_w)
   Window.draw_card(right_x, 120, right_w, 140, radius: 12.0, color: [24, 30, 48, 200], border: [1.0, [50, 65, 100]], shadow: [8.0, [0, 0, 0, 80]])
   Window.draw_text(right_x + 20, 132, "Retro 8x8 Font (Font::SINCLAIR)", size: 16, color: :cyan, font: Font::MPLUS)
-  Window.draw_text(right_x + 20, 158, "10 PRINT \"ZENOO 2D ENGINE\"\n20 LET SCORE = 1982\n30 GOTO 10", size: 15, color: [100, 255, 180], font: Font::SINCLAIR, shadow: { offset: [1, 1], blur: 1.5, color: [0, 0, 0, 200] })
+  Window.draw_text(right_x + 20, 158, "10 PRINT \"ZENOO 2D ENGINE\"", size: 15, color: [100, 255, 180], font: Font::SINCLAIR, shadow: { offset: [1, 1], blur: 1.5, color: [0, 0, 0, 200] })
+  Window.draw_text(right_x + 20, 178, "20 LET SCORE = 1982", size: 15, color: [100, 255, 180], font: Font::SINCLAIR, shadow: { offset: [1, 1], blur: 1.5, color: [0, 0, 0, 200] })
+  Window.draw_text(right_x + 20, 198, "30 GOTO 10", size: 15, color: [100, 255, 180], font: Font::SINCLAIR, shadow: { offset: [1, 1], blur: 1.5, color: [0, 0, 0, 200] })
   Window.draw_text(right_x + 20, 230, "Public Domain (Unlicense) 8x8 TTF", size: 12, color: [160, 180, 210], font: Font::SINCLAIR)
 
   Window.draw_card(right_x, 280, right_w, 420, radius: 12.0, color: [24, 30, 48, 200], border: [1.0, [50, 65, 100]], shadow: [8.0, [0, 0, 0, 80]])
@@ -106,8 +110,6 @@ puts "=== [DEMO] Initializing Demo... ==="
 left_w = 780
 right_x = 830
 right_w = 420
-novel_text = "吾輩は猫である。名前はまだ無い。\nどこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。"
-sample_layout = nil
 
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
@@ -119,14 +121,11 @@ Window.loop(WINDOW_W, WINDOW_H, "Zenoo - High Quality SDF Text & Font Rendering 
     puts "=== [DEMO] Loop Frame #{frame_count}, Time: #{time.round(2)}, FPS: #{fps.round(1)} ==="
   end
 
-  sample_layout ||= TextLayout.new(novel_text, 20, 1.3, 720, :left, font: Font::MPLUS)
-
   Window.clear([16, 20, 32, 255])
-
 
   draw_header(fps)
   draw_styling_card(left_w)
-  draw_layout_card(left_w, sample_layout)
+  draw_sample_text_card(left_w)
   draw_wave_card(left_w, time)
   draw_atlas_card(right_x, right_w)
 

@@ -19,7 +19,6 @@ end
 # ====================================================
 require_relative 'zenoo/color'
 require_relative 'zenoo/font'
-require_relative 'zenoo/text_layout'
 require_relative 'zenoo/shader'
 require_relative 'zenoo/shaders/sdf_card_shader'
 require_relative 'zenoo/shaders/sdf_font_shader'
@@ -35,5 +34,4 @@ Image      = Zenoo::Image      unless defined?(Image)
 Shader     = Zenoo::Shader     unless defined?(Shader)
 Color      = Zenoo::Color      unless defined?(Color)
 Font       = Zenoo::Font       unless defined?(Font)
-TextLayout = Zenoo::TextLayout unless defined?(TextLayout)
 GUI        = Zenoo::GUI        unless defined?(GUI)
