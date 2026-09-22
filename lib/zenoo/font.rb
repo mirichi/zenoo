@@ -114,7 +114,6 @@ module Zenoo
              char_or_cp.to_i
            end
       res = @native.get_glyph(cp, size.to_f)
-      puts "[Font] get_glyph cp=#{cp}, ok=#{!res.nil?}" if cp == 65 || cp == 90 # 'A' or 'Z'
       res
     end
 
