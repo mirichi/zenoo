@@ -154,8 +154,10 @@ Window.loop(1280, 720, "Zenoo Immediate Mode GUI Demo") do
     preview_x, preview_y, preview_w, preview_h,
     radius: radius_val,
     color: Color.new(30, 34, 45, 240),
-    border: [2.0, Color.new(0, 200, 255, 180)],
-    shadow: [16.0, Color.new(0, 0, 0, 150)]
+    border_width: 2.0,
+    border_color: Color.new(0, 200, 255, 180),
+    shadow_blur: 16.0,
+    shadow_color: Color.new(0, 0, 0, 150)
   )
 
   GUI.label("Live Card Preview", preview_x + 30.0, preview_y + 30.0, 20, Color::WHITE)
@@ -177,8 +179,10 @@ Window.loop(1280, 720, "Zenoo Immediate Mode GUI Demo") do
     mini_x, mini_y, mini_w, mini_h,
     radius: radius_val,
     color: Color.new(r_val.to_i, g_val.to_i, b_val.to_i, 255),
-    border: [1.5, Color::WHITE],
-    shadow: [8.0, Color.new(0, 0, 0, 160)]
+    border_width: 1.5,
+    border_color: Color::WHITE,
+    shadow_blur: 8.0,
+    shadow_color: Color.new(0, 0, 0, 160)
   )
 
   # ミニカード中央に完全センタリング (12文字 * 12px = 144px -> (200 - 144) / 2 = 28px)

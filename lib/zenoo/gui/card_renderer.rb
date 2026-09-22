@@ -30,13 +30,20 @@ module Zenoo
           shadow_cfg = theme.shadow_hover
         end
 
+        b_w = border_cfg ? border_cfg[0] : 0.0
+        b_c = border_cfg ? border_cfg[1] : :cyan
+        s_b = shadow_cfg ? shadow_cfg[0] : 0.0
+        s_c = shadow_cfg ? shadow_cfg[1] : [0, 0, 0, 180]
+
         # 背景カード描画 (SDF角丸 + ボーダー + シャドウ)
         Window.draw_card(
           rx, ry, rw, rh,
           radius: theme.corner_radius,
           color: bg_col,
-          border: border_cfg,
-          shadow: shadow_cfg
+          border_width: b_w,
+          border_color: b_c,
+          shadow_blur: s_b,
+          shadow_color: s_c
         )
 
         # テキストの描画 (ボタン幅に収まるよう厳密に計算 & センタリング)
@@ -117,12 +124,14 @@ module Zenoo
         end
 
         # トラック溝 (背景)
+        tb_w = theme.track_border ? theme.track_border[0].to_f : 0.0
+        tb_c = theme.track_border ? theme.track_border[1] : :cyan
         Window.draw_card(
           rx, track_y, rw, track_h,
           radius: 4.0,
           color: theme.track_bg,
-          border: theme.track_border,
-          shadow: nil
+          border_width: tb_w,
+          border_color: tb_c
         )
 
         # 進行度フィル (左端からノブ位置まで)
@@ -132,9 +141,7 @@ module Zenoo
           Window.draw_card(
             rx, track_y, fill_w, track_h,
             radius: 4.0,
-            color: fill_color,
-            border: nil,
-            shadow: nil
+            color: fill_color
           )
         end
 
@@ -145,15 +152,17 @@ module Zenoo
         knob_y = track_y + (track_h - knob_size) / 2.0
 
         knob_color = Color::WHITE
-        knob_border = [2.0, (state == :active ? theme.accent_hover : theme.accent_color)]
-        knob_shadow = (state == :active) ? theme.shadow_active : theme.shadow_normal
+        kb_border = [2.0, (state == :active ? theme.accent_hover : theme.accent_color)]
+        kb_shadow = (state == :active ? theme.shadow_active : theme.shadow_normal)
 
         Window.draw_card(
           knob_x, knob_y, knob_size, knob_size,
           radius: knob_radius,
           color: knob_color,
-          border: knob_border,
-          shadow: knob_shadow
+          border_width: kb_border[0].to_f,
+          border_color: kb_border[1],
+          shadow_blur: kb_shadow[0].to_f,
+          shadow_color: kb_shadow[1]
         )
       end
 
