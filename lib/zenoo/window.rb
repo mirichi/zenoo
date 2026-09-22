@@ -119,35 +119,23 @@ module Zenoo
     # ----------------------------------------------------
     # 描画 API 
     # ----------------------------------------------------
-    def self.draw_card(x, y, w, h, radius: 0.0, color: :white, border: nil, shadow: nil, image: nil)
+    def self.draw_card(x, y, w, h,
+                       radius: 0.0,
+                       color: :white,
+                       border_width: 0.0,
+                       border_color: :cyan,
+                       shadow_blur: 0.0,
+                       shadow_color: [0, 0, 0, 180],
+                       image: nil)
       c_color = normalize_color(color)
+      b_width = border_width.to_f
+      b_color = (b_width > 0.0) ? normalize_color(border_color) : [0.0, 0.0, 0.0, 0.0]
 
-      b_width = 0.0
-      b_color = [0.0, 0.0, 0.0, 0.0]
-      if border
-        if border.is_a?(Hash)
-          b_width = (border[:width] || 1.0).to_f
-          b_color = normalize_color(border[:color] || :cyan)
-        elsif border.is_a?(Array)
-          b_width = (border[0] || 1.0).to_f
-          b_color = normalize_color(border[1] || :cyan)
-        end
-      end
-
-      s_blur = 0.0
-      s_color = [0.0, 0.0, 0.0, 0.0]
-      if shadow
-        if shadow.is_a?(Hash)
-          s_blur = (shadow[:blur] || 8.0).to_f
-          s_color = normalize_color(shadow[:color] || [0, 0, 0, 180])
-        elsif shadow.is_a?(Array)
-          s_blur = (shadow[0] || 8.0).to_f
-          s_color = normalize_color(shadow[1] || [0, 0, 0, 180])
-        end
-      end
+      s_blur = shadow_blur.to_f
+      s_color = (s_blur > 0.0) ? normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
 
       mode = image ? 1.0 : 0.0
-      p0 = [radius.to_f, b_width.to_f, s_blur.to_f, mode]
+      p0 = [radius.to_f, b_width, s_blur, mode]
       uv = [0.0, 0.0, 1.0, 1.0]
 
       Native::Renderer.draw_quad(x, y, w, h, uv, c_color, p0, b_color, s_color, image, card_shader)
@@ -217,7 +205,17 @@ module Zenoo
     # ----------------------------------------------------
     # 高品質 SDF テキスト描画 API (改行なし・文字列直接描画)
     # ----------------------------------------------------
-    def self.draw_text(x, y, text, font: nil, size: 24, color: :white, outline: nil, shadow: nil, &block)
+    def self.draw_text(x, y, text,
+                       font: nil,
+                       size: 24,
+                       color: :white,
+                       outline_width: 0.0,
+                       outline_color: :black,
+                       shadow_blur: 0.0,
+                       shadow_color: [0, 0, 0, 180],
+                       shadow_dx: 0.0,
+                       shadow_dy: 0.0,
+                       &block)
       return if text.nil?
 
       target_font = font || Font.default
@@ -231,52 +229,24 @@ module Zenoo
 
       c_color = normalize_color(color)
 
-      # アウトライン設定
-      outline_w = 0.0
-      outline_c = [0.0, 0.0, 0.0, 0.0]
-      if outline
-        if outline.is_a?(Numeric)
-          outline_w = outline.to_f
-          outline_c = [0.0, 0.0, 0.0, 1.0]
-        elsif outline.is_a?(Hash)
-          outline_w = (outline[:width] || 1.0).to_f
-          outline_c = normalize_color(outline[:color] || :black)
-        elsif outline.is_a?(Array)
-          outline_w = (outline[0] || 1.0).to_f
-          outline_c = normalize_color(outline[1] || :black)
-        end
-      end
+      outline_w = outline_width.to_f
+      outline_c = (outline_w > 0.0) ? normalize_color(outline_color) : [0.0, 0.0, 0.0, 0.0]
 
-      # シャドウ設定
-      shadow_blur = 0.0
-      shadow_dx = 0.0
-      shadow_dy = 0.0
-      shadow_c = [0.0, 0.0, 0.0, 0.0]
-      if shadow
-        if shadow.is_a?(Hash)
-          shadow_blur = (shadow[:blur] || 2.0).to_f
-          off = shadow[:offset] || [2.0, 2.0]
-          shadow_dx = off[0].to_f
-          shadow_dy = off[1].to_f
-          shadow_c = normalize_color(shadow[:color] || [0, 0, 0, 180])
-        elsif shadow.is_a?(Array)
-          shadow_blur = (shadow[0] || 2.0).to_f
-          shadow_dx = (shadow[1] || 2.0).to_f
-          shadow_dy = (shadow[2] || 2.0).to_f
-          shadow_c = normalize_color(shadow[3] || [0, 0, 0, 180])
-        end
-      end
+      s_blur = shadow_blur.to_f
+      s_dx = shadow_dx.to_f
+      s_dy = shadow_dy.to_f
+      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
 
       # 画面上ピクセルとアトラスピクセルのスケール比補正 (アトラス基準サイズは48px)
       scale_ratio = 48.0 / f_size
-      s_atlas_dx = shadow_dx * scale_ratio
-      s_atlas_dy = shadow_dy * scale_ratio
-      s_atlas_blur = shadow_blur * scale_ratio
+      s_atlas_dx = s_dx * scale_ratio
+      s_atlas_dy = s_dy * scale_ratio
+      s_atlas_blur = s_blur * scale_ratio
       s_atlas_outline_w = outline_w * scale_ratio
 
       p0 = [s_atlas_outline_w, s_atlas_blur, s_atlas_dx, s_atlas_dy]
       p1 = outline_c
-      p2 = shadow_c
+      p2 = s_c
       shader = sdf_font_shader
 
       metrics = target_font.metrics(f_size)

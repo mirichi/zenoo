@@ -29,8 +29,8 @@ Window.loop(1280, 720, "Zenoo on Ruby - Pure Ruby SDF Engine") do
   Window.draw_card(40, 20, Window.width - 80, 60,
     radius: 12,
     color: [24, 28, 42],
-    border: { width: 1, color: [60, 70, 100] },
-    shadow: { blur: 10, color: [0, 0, 0, 150] }
+    border_width: 1, border_color: [60, 70, 100],
+    shadow_blur: 10, shadow_color: [0, 0, 0, 150]
   )
 
   # 3. マウス追従カード
@@ -38,8 +38,8 @@ Window.loop(1280, 720, "Zenoo on Ruby - Pure Ruby SDF Engine") do
   Window.draw_card(mx - 80, my - 50, 160, 100,
     radius: 20,
     color: [35, 45, 75, 200],
-    border: { width: 2, color: :cyan },
-    shadow: { blur: 18, color: [0, 200, 255, 120] }
+    border_width: 2, border_color: :cyan,
+    shadow_blur: 18, shadow_color: [0, 200, 255, 120]
   )
 
   # 4. 往復するネオンカード
@@ -47,24 +47,24 @@ Window.loop(1280, 720, "Zenoo on Ruby - Pure Ruby SDF Engine") do
   Window.draw_card(ball_x, 140, 200, 120,
     radius: 16,
     color: [30, 32, 45],
-    border: { width: 3, color: card_color },
-    shadow: { blur: 24, color: [255, 215, 0, 160] }
+    border_width: 3, border_color: card_color,
+    shadow_blur: 24, shadow_color: [255, 215, 0, 160]
   )
 
   # 5. ガラスモーフィズム風カード (半透明 + 影)
   Window.draw_card(40, 320, 380, 340,
     radius: 24,
     color: [25, 30, 48, 220],
-    border: { width: 1.5, color: [255, 255, 255, 80] },
-    shadow: { blur: 20, color: [0, 0, 0, 180] }
+    border_width: 1.5, border_color: [255, 255, 255, 80],
+    shadow_blur: 20, shadow_color: [0, 0, 0, 180]
   )
 
   # 6. 右側カード
   Window.draw_card(460, 320, Window.width - 500, 340,
     radius: 16,
     color: [20, 24, 36],
-    border: { width: 1, color: [50, 60, 85] },
-    shadow: { blur: 12, color: [0, 0, 0, 140] }
+    border_width: 1, border_color: [50, 60, 85],
+    shadow_blur: 12, shadow_color: [0, 0, 0, 140]
   )
 end
 
