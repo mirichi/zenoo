@@ -19,11 +19,22 @@ module Zenoo
       if col.is_a?(Color)
         col.to_f4
       elsif col.is_a?(Array)
-        r = (col[0] || 0) / 255.0
-        g = (col[1] || 0) / 255.0
-        b = (col[2] || 0) / 255.0
-        a = (col[3] || 255) / 255.0
-        [r.to_f, g.to_f, b.to_f, a.to_f]
+        r = 0.0
+        g = 0.0
+        b = 0.0
+        a = 1.0
+        col.each_with_index do |v, i|
+          vf = v.to_f
+          r = vf if i == 0
+          g = vf if i == 1
+          b = vf if i == 2
+          a = vf if i == 3
+        end
+        if r <= 1.0 && g <= 1.0 && b <= 1.0
+          [r, g, b, a]
+        else
+          [r / 255.0, g / 255.0, b / 255.0, a / 255.0]
+        end
       elsif col.is_a?(Integer)
         r = ((col >> 24) & 0xFF) / 255.0
         g = ((col >> 16) & 0xFF) / 255.0
@@ -39,10 +50,21 @@ module Zenoo
       return col.to_i if col.is_a?(Color)
 
       floats = normalize_color(col)
-      r = (floats[0] * 255).to_i & 0xFF
-      g = (floats[1] * 255).to_i & 0xFF
-      b = (floats[2] * 255).to_i & 0xFF
-      a = (floats[3] * 255).to_i & 0xFF
+      rf = 0.0
+      gf = 0.0
+      bf = 0.0
+      af = 1.0
+      floats.each_with_index do |v, i|
+        vf = v.to_f
+        rf = vf if i == 0
+        gf = vf if i == 1
+        bf = vf if i == 2
+        af = vf if i == 3
+      end
+      r = (rf * 255).to_i & 0xFF
+      g = (gf * 255).to_i & 0xFF
+      b = (bf * 255).to_i & 0xFF
+      a = (af * 255).to_i & 0xFF
       r_part = r >= 128 ? ((r - 256) * 16777216) : (r << 24)
       r_part | (g << 16) | (b << 8) | a
     end
@@ -160,17 +182,33 @@ module Zenoo
 
     def self.draw_triangle(x1, y1, x2, y2, x3, y3, color = :white)
       c = normalize_color(color)
+      cr = 1.0; cg = 1.0; cb = 1.0; ca = 1.0
+      c.each_with_index do |v, i|
+        vf = v.to_f
+        cr = vf if i == 0
+        cg = vf if i == 1
+        cb = vf if i == 2
+        ca = vf if i == 3
+      end
       Native::Renderer.draw_triangle(
         x1.to_f, y1.to_f, x2.to_f, y2.to_f, x3.to_f, y3.to_f,
-        c[0].to_f, c[1].to_f, c[2].to_f, c[3].to_f
+        cr, cg, cb, ca
       )
     end
 
     def self.draw_line(x1, y1, x2, y2, color = :white)
       c = normalize_color(color)
+      cr = 1.0; cg = 1.0; cb = 1.0; ca = 1.0
+      c.each_with_index do |v, i|
+        vf = v.to_f
+        cr = vf if i == 0
+        cg = vf if i == 1
+        cb = vf if i == 2
+        ca = vf if i == 3
+      end
       Native::Renderer.draw_line(
         x1.to_f, y1.to_f, x2.to_f, y2.to_f,
-        c[0].to_f, c[1].to_f, c[2].to_f, c[3].to_f
+        cr, cg, cb, ca
       )
     end
 
@@ -335,6 +373,16 @@ module Zenoo
           i += 1
         end
       end
+    end
+
+    def self.canvas
+      @canvas ||= Canvas.new
+    end
+
+    def self.draw_path
+      c = canvas
+      c.begin_path
+      yield c
     end
   end
 end
