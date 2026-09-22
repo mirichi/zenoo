@@ -196,14 +196,14 @@ module Zenoo
       attr_accessor :char, :index, :line_index, :x, :y, :w, :h, :color, :scale, :visible
       attr_accessor :outline_width, :outline_color
 
-      def reset(glyph, base_x, base_y, default_color, def_out_w, def_out_c)
-        @char = glyph.char
-        @index = glyph.index
-        @line_index = glyph.line_index
-        @x = base_x + glyph.x
-        @y = base_y + glyph.y
-        @w = glyph.w
-        @h = glyph.h
+      def reset(char, index, gx, gy, gw, gh, default_color, def_out_w, def_out_c)
+        @char = char
+        @index = index
+        @line_index = 0
+        @x = gx
+        @y = gy
+        @w = gw
+        @h = gh
         @color = default_color
         @scale = 1.0
         @visible = true
@@ -215,17 +215,19 @@ module Zenoo
     @char_ctx = CharContext.new
 
     # ----------------------------------------------------
-    # 高品質 SDF テキスト描画 API
+    # 高品質 SDF テキスト描画 API (改行なし・文字列直接描画)
     # ----------------------------------------------------
-    def self.draw_text(x, y, text_or_layout, font: nil, size: 24, color: :white, outline: nil, shadow: nil, &block)
-      layout = if text_or_layout.is_a?(TextLayout)
-                 text_or_layout
-               else
-                 TextLayout.new(text_or_layout, font: font, size: size)
-               end
+    def self.draw_text(x, y, text, font: nil, size: 24, color: :white, outline: nil, shadow: nil, &block)
+      return if text.nil?
+
+      target_font = font || Font.default
+      return unless target_font
 
       atlas = Font.atlas_image
       return unless atlas
+
+      f_size = size.to_f
+      f_size = 24.0 if f_size <= 0.0
 
       c_color = normalize_color(color)
 
@@ -265,8 +267,8 @@ module Zenoo
         end
       end
 
-      # 画面上ピクセルとアトラスピクセルのスケール比補正
-      scale_ratio = 48.0 / layout.font_size
+      # 画面上ピクセルとアトラスピクセルのスケール比補正 (アトラス基準サイズは48px)
+      scale_ratio = 48.0 / f_size
       s_atlas_dx = shadow_dx * scale_ratio
       s_atlas_dy = shadow_dy * scale_ratio
       s_atlas_blur = shadow_blur * scale_ratio
@@ -277,55 +279,89 @@ module Zenoo
       p2 = shadow_c
       shader = sdf_font_shader
 
-      bx = x.to_f
-      by = y.to_f
-      glyphs = layout.glyphs
-      g_count = glyphs.length
+      metrics = target_font.metrics(f_size)
+      ascent = metrics[:ascent]
+
+      pen_x = x.to_f
+      pen_y = y.to_f + ascent
+
+      str = text.to_s
+      chars = str.chars
+      len = chars.length
+      return if len == 0
 
       if block_given?
         ctx = @char_ctx
         i = 0
-        while i < g_count
-          g = glyphs[i]
-          ctx.reset(g, bx, by, c_color, outline_w, outline_c)
-          yield(ctx)
+        while i < len
+          ch = chars[i]
+          glyph_data = target_font.get_glyph(ch, f_size)
+          adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
 
-          if ctx.visible
-            gx = ctx.x
-            gy = ctx.y
-            gw = ctx.w
-            gh = ctx.h
+          if glyph_data && glyph_data[0] # visible == true
+            _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv = glyph_data
+            gx = pen_x + x0
+            gy = pen_y + y0
+            gw = x1 - x0
+            gh = y1 - y0
+            uv = [u0, v0, u1 - u0, v1 - v0]
 
-            if ctx.scale != 1.0
-              sc = ctx.scale
-              # 中心を基準にスケーリング
-              cx = gx + gw * 0.5
-              cy = gy + gh * 0.5
-              gw *= sc
-              gh *= sc
-              gx = cx - gw * 0.5
-              gy = cy - gh * 0.5
+            ctx.reset(ch, i, gx, gy, gw, gh, c_color, outline_w, outline_c)
+            yield(ctx)
+
+            if ctx.visible
+              cgx = ctx.x
+              cgy = ctx.y
+              cgw = ctx.w
+              cgh = ctx.h
+
+              if ctx.scale != 1.0
+                sc = ctx.scale
+                # 中心を基準にスケーリング
+                cx = cgx + cgw * 0.5
+                cy = cgy + cgh * 0.5
+                cgw *= sc
+                cgh *= sc
+                cgx = cx - cgw * 0.5
+                cgy = cy - cgh * 0.5
+              end
+
+              cur_color = (ctx.color.equal?(c_color)) ? c_color : normalize_color(ctx.color)
+              cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
+              cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : normalize_color(ctx.outline_color)
+
+              Native::Renderer.draw_quad(
+                cgx, cgy, cgw, cgh,
+                uv, cur_color, cur_p0, cur_p1, p2, atlas, shader
+              )
             end
-
-            cur_color = (ctx.color.equal?(c_color)) ? c_color : normalize_color(ctx.color)
-            cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
-            cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : normalize_color(ctx.outline_color)
-
-            Native::Renderer.draw_quad(
-              gx, gy, gw, gh,
-              g.uv, cur_color, cur_p0, cur_p1, p2, atlas, shader
-            )
           end
+
+          pen_x += adv
           i += 1
         end
       else
         i = 0
-        while i < g_count
-          g = glyphs[i]
-          Native::Renderer.draw_quad(
-            bx + g.x, by + g.y, g.w, g.h,
-            g.uv, c_color, p0, p1, p2, atlas, shader
-          )
+        while i < len
+          ch = chars[i]
+          glyph_data = target_font.get_glyph(ch, f_size)
+          adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
+
+          if glyph_data && glyph_data[0] # visible == true
+            _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv = glyph_data
+            gx = pen_x + x0
+            gy = pen_y + y0
+            gw = x1 - x0
+            gh = y1 - y0
+            uv = [u0, v0, u1 - u0, v1 - v0]
+
+            Native::Renderer.draw_quad(
+              gx, gy, gw, gh,
+              uv, c_color, p0, p1, p2, atlas, shader
+            )
+          end
+
+          pen_x += adv
           i += 1
         end
       end
