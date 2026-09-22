@@ -90,6 +90,9 @@
     .card.font::before {
       background: linear-gradient(90deg, #f59e0b, #ef4444);
     }
+    .card.vector::before {
+      background: linear-gradient(90deg, #10b981, #06b6d4);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -105,6 +108,7 @@
     .card.game .card-tag { color: #00ffcc; }
     .card.gui .card-tag { color: #c084fc; }
     .card.font .card-tag { color: #fbbf24; }
+    .card.vector .card-tag { color: #34d399; }
 
     .card h2 {
       font-size: 22px;
@@ -168,6 +172,14 @@
     .card.font .btn-launch:hover {
       background: #fbbf24;
       box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+    }
+    .card.vector .btn-launch {
+      background: #10b981;
+      color: #0b0d14;
+    }
+    .card.vector .btn-launch:hover {
+      background: #34d399;
+      box-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -244,6 +256,23 @@
         </ul>
       </div>
       <a href="font/" class="btn-launch">フォントデモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Vector Graphics Demo Card -->
+    <div class="card vector">
+      <div>
+        <div class="card-tag">Vector Engine</div>
+        <h2>Vector Graphics</h2>
+        <p class="desc">
+          HTML5 Canvas 2D 互換のベクターグラフィックス API。パス構築、ベジエ曲線、耳刈り取り法 (Ear Clipping) 多角形分割、GPU シェーダーグラデーションを体験できます。
+        </p>
+        <ul class="features">
+          <li>HTML5 Canvas 2D 互換 API (move_to, line_to, bezier_curve_to)</li>
+          <li>耳刈り取り法 (Ear Clipping) によるリアルタイム多角形メッシュ化</li>
+          <li>GPU 高精度シェーダーによる線形 &amp; 放射グラデーション</li>
+        </ul>
+      </div>
+      <a href="vector/" class="btn-launch">ベクターデモを起動 (Launch Demo) →</a>
     </div>
   </main>
 

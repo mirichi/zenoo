@@ -486,6 +486,73 @@ static VALUE renderer_draw_triangle(VALUE self, VALUE rb_x1, VALUE rb_y1, VALUE 
     return Qnil;
 }
 
+static VALUE renderer_draw_triangles(VALUE self, VALUE rb_coords, VALUE rb_r, VALUE rb_g, VALUE rb_b, VALUE rb_a) {
+    (void)self;
+    Check_Type(rb_coords, T_ARRAY);
+    long len = RARRAY_LEN(rb_coords);
+    if (len < 6) return Qnil;
+
+    float color[4] = {
+        (float)NUM2DBL(rb_r),
+        (float)NUM2DBL(rb_g),
+        (float)NUM2DBL(rb_b),
+        (float)NUM2DBL(rb_a)
+    };
+
+    float buf[512];
+    long i = 0;
+    while (i < len) {
+        int chunk_floats = 0;
+        while (i < len && chunk_floats < 512) {
+            VALUE val = rb_ary_entry(rb_coords, i);
+            buf[chunk_floats++] = (float)NUM2DBL(val);
+            i++;
+        }
+        int num_verts = chunk_floats / 2;
+        zen_draw_triangles(buf, num_verts, color);
+    }
+    return Qnil;
+}
+
+static VALUE renderer_draw_triangles_gradient(VALUE self, VALUE rb_coords, VALUE rb_type,
+                                              VALUE rb_p0, VALUE rb_p1,
+                                              VALUE rb_c0, VALUE rb_c1) {
+    (void)self;
+    Check_Type(rb_coords, T_ARRAY);
+    long len = RARRAY_LEN(rb_coords);
+    if (len < 6) return Qnil;
+
+    int type = NUM2INT(rb_type);
+
+    float p0[4] = {0}, p1[4] = {0}, c0[4] = {1, 1, 1, 1}, c1[4] = {1, 1, 1, 1};
+    if (RB_TYPE_P(rb_p0, T_ARRAY) && RARRAY_LEN(rb_p0) >= 4) {
+        for (int j = 0; j < 4; j++) p0[j] = (float)NUM2DBL(rb_ary_entry(rb_p0, j));
+    }
+    if (RB_TYPE_P(rb_p1, T_ARRAY) && RARRAY_LEN(rb_p1) >= 4) {
+        for (int j = 0; j < 4; j++) p1[j] = (float)NUM2DBL(rb_ary_entry(rb_p1, j));
+    }
+    if (RB_TYPE_P(rb_c0, T_ARRAY) && RARRAY_LEN(rb_c0) >= 4) {
+        for (int j = 0; j < 4; j++) c0[j] = (float)NUM2DBL(rb_ary_entry(rb_c0, j));
+    }
+    if (RB_TYPE_P(rb_c1, T_ARRAY) && RARRAY_LEN(rb_c1) >= 4) {
+        for (int j = 0; j < 4; j++) c1[j] = (float)NUM2DBL(rb_ary_entry(rb_c1, j));
+    }
+
+    float buf[512];
+    long i = 0;
+    while (i < len) {
+        int chunk_floats = 0;
+        while (i < len && chunk_floats < 512) {
+            VALUE val = rb_ary_entry(rb_coords, i);
+            buf[chunk_floats++] = (float)NUM2DBL(val);
+            i++;
+        }
+        int num_verts = chunk_floats / 2;
+        zen_draw_triangles_gradient(buf, num_verts, type, p0, p1, c0, c1);
+    }
+    return Qnil;
+}
+
 static VALUE renderer_draw_line(VALUE self, VALUE rb_x1, VALUE rb_y1, VALUE rb_x2, VALUE rb_y2, VALUE rb_r, VALUE rb_g, VALUE rb_b, VALUE rb_a) {
     (void)self;
     float color[4] = {
@@ -569,6 +636,8 @@ void Init_zenoo(void) {
     VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");
     rb_define_singleton_method(mRenderer, "draw_quad", renderer_draw_quad, -1);
     rb_define_singleton_method(mRenderer, "draw_triangle", renderer_draw_triangle, 10);
+    rb_define_singleton_method(mRenderer, "draw_triangles", renderer_draw_triangles, 5);
+    rb_define_singleton_method(mRenderer, "draw_triangles_gradient", renderer_draw_triangles_gradient, 6);
     rb_define_singleton_method(mRenderer, "draw_line", renderer_draw_line, 8);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
 

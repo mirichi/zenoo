@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Zenoo Immediate Mode GUI Demo (Spinel Wasm)</title>
+  <title>Zenoo Immediate Mode GUI Showcase (Spinel Wasm)</title>
   <style>
     * {
       box-sizing: border-box;
@@ -22,12 +22,15 @@
       align-items: center;
       justify-content: center;
       min-height: 100vh;
+      min-height: 100dvh;
+      height: 100dvh;
       overflow: hidden;
       touch-action: none;
     }
     #header {
       margin-bottom: 8px;
       text-align: center;
+      flex-shrink: 0;
     }
     h1 {
       margin: 0 0 4px 0;
@@ -46,13 +49,14 @@
       border-radius: 8px;
       overflow: hidden;
       border: 1px solid #233554;
-      width: min(96vw, calc(75vh * 16 / 9));
-      height: min(calc(96vw * 9 / 16), 75vh);
+      width: min(96vw, calc(72dvh * 16 / 9));
+      height: min(calc(96vw * 9 / 16), 72dvh);
       aspect-ratio: 16 / 9;
       display: flex;
       align-items: center;
       justify-content: center;
       background-color: #000;
+      flex-shrink: 0;
     }
     canvas.emscripten {
       display: block;
@@ -68,6 +72,7 @@
       display: flex;
       gap: 12px;
       align-items: center;
+      flex-shrink: 0;
     }
     .btn {
       background: #1e293b;
@@ -99,13 +104,77 @@
       margin-top: 8px;
       font-size: 11px;
       color: #64ffda;
+      flex-shrink: 0;
+    }
+    #portrait-hint {
+      display: none;
+    }
+    @media (orientation: portrait) and (max-width: 600px) {
+      #portrait-hint {
+        display: block;
+        margin-top: 6px;
+        font-size: 11px;
+        color: #facc15;
+        background: rgba(250, 204, 21, 0.1);
+        padding: 4px 10px;
+        border-radius: 4px;
+        border: 1px dashed rgba(250, 204, 21, 0.3);
+      }
+      #canvas-container {
+        width: 98vw;
+        height: calc(98vw * 9 / 16);
+      }
+    }
+    @media (orientation: landscape) and (max-height: 550px) {
+      body {
+        padding: 0;
+        justify-content: center;
+      }
+      #header, #status, #portrait-hint {
+        display: none !important;
+      }
+      #canvas-container {
+        width: min(100vw, calc(100dvh * 16 / 9));
+        height: min(100dvh, calc(100vw * 9 / 16));
+        max-width: 100vw;
+        max-height: 100dvh;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+      }
+      #controls-bar {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        left: 8px;
+        margin-top: 0;
+        justify-content: space-between;
+        pointer-events: none;
+        z-index: 9999;
+      }
+      #controls-bar > * {
+        pointer-events: auto;
+      }
+      .btn {
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        padding: 6px 12px;
+        font-size: 11px;
+        border-radius: 20px;
+        opacity: 0.75;
+        transition: opacity 0.2s;
+      }
+      .btn:hover, .btn:active {
+        opacity: 1.0;
+      }
     }
   </style>
 </head>
 <body>
   <div id="header">
-    <h1>ZENOO IMMEDIATE MODE GUI DEMO</h1>
-    <p>Powered by Spinel AOT &amp; WebGL 2.0</p>
+    <h1>ZENOO IMMEDIATE MODE GUI SHOWCASE</h1>
+    <p>Pure Ruby GUI &amp; SDF Modern Cards | Powered by Spinel AOT &amp; WebGL 2.0</p>
   </div>
   <div id="canvas-container">
     <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" width="1280" height="720"></canvas>
@@ -115,6 +184,7 @@
     <button class="btn" id="btn-fullscreen">全画面</button>
   </div>
   <div id="status">Loading WebAssembly module...</div>
+  <div id="portrait-hint">📱 スマホを横向きにすると画面いっぱいに遊べます</div>
 
   <script type='text/javascript'>
     var statusElement = document.getElementById('status');
@@ -127,7 +197,7 @@
       setStatus: function(text) {
         if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
         if (text === Module.setStatus.last.text) return;
-        statusElement.innerText = text ? text : "操作: クリックでボタン操作、ドラッグでスライダー変更、Styleボタンで描画切替";
+        statusElement.innerText = text ? text : "Pure Ruby即時モードGUI (ボタン・スライダー・Modern/Retroスタイル切替)";
       },
       totalDependencies: 0,
       monitorRunDependencies: function(left) {
@@ -140,17 +210,88 @@
       Module.setStatus('Exception thrown, see JavaScript console');
     };
 
-    // タッチ操作のスクロール防止とサポート
-    function preventTouchDefault(e) {
+    // ----------------------------------------------------
+    // タッチ操作サポート (2本指タップで右クリック)
+    // ----------------------------------------------------
+    var isTwoFingerTouch = false;
+    var touchSuppressUntil = 0;
+    var lastTwoFingerPos = { x: 0, y: 0 };
+
+    function getTouchesCenter(touches) {
+      if (touches.length < 2) return { x: touches[0].clientX, y: touches[0].clientY };
+      return {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2
+      };
+    }
+
+    function dispatchMouseEvent(type, button, buttons, x, y) {
+      var ev = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        button: button,
+        buttons: buttons,
+        clientX: x,
+        clientY: y
+      });
+      canvasElement.dispatchEvent(ev);
+    }
+
+    function handleTouchStart(e) {
       if (e.target === canvasElement) {
         e.preventDefault();
       }
-    }
-    document.addEventListener('touchstart', preventTouchDefault, { passive: false });
-    document.addEventListener('touchmove', preventTouchDefault, { passive: false });
-    document.addEventListener('touchend', preventTouchDefault, { passive: false });
+      if (e.touches.length >= 2) {
+        dispatchMouseEvent('mouseup', 0, 0, e.touches[0].clientX, e.touches[0].clientY);
 
-    // ポインターキャプチャ (画面外にドラッグしてもマウスボタン離脱を確実に捕捉)
+        var center = getTouchesCenter(e.touches);
+        lastTwoFingerPos = center;
+        isTwoFingerTouch = true;
+        touchSuppressUntil = Date.now() + 200;
+
+        dispatchMouseEvent('mousedown', 2, 2, center.x, center.y);
+      }
+    }
+
+    function handleTouchMove(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (isTwoFingerTouch && e.touches.length >= 2) {
+        var center = getTouchesCenter(e.touches);
+        lastTwoFingerPos = center;
+        dispatchMouseEvent('mousemove', 2, 2, center.x, center.y);
+      }
+    }
+
+    function handleTouchEnd(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (isTwoFingerTouch) {
+        if (e.touches.length < 2) {
+          isTwoFingerTouch = false;
+          dispatchMouseEvent('mouseup', 2, 0, lastTwoFingerPos.x, lastTwoFingerPos.y);
+          touchSuppressUntil = Date.now() + 250;
+        }
+      }
+    }
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    // 2本指解除直後の synthetic 左クリックを抑止
+    canvasElement.addEventListener('mousedown', function(e) {
+      if (e.button === 0 && Date.now() < touchSuppressUntil) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }
+    }, true);
+
+    // ポインターキャプチャ
     canvasElement.addEventListener('pointerdown', function(e) {
       try {
         canvasElement.setPointerCapture(e.pointerId);
@@ -167,10 +308,9 @@
       } catch (err) {}
     });
 
-    // キャンバス外でマウスボタンが離された場合のセーフティ転送
     window.addEventListener('mouseup', function(e) {
       if (e.target !== canvasElement) {
-        var evt = new MouseEvent('mouseup', {
+        var ev = new MouseEvent('mouseup', {
           bubbles: true,
           cancelable: true,
           button: e.button,
@@ -178,20 +318,19 @@
           clientX: e.clientX,
           clientY: e.clientY
         });
-        canvasElement.dispatchEvent(evt);
+        canvasElement.dispatchEvent(ev);
       }
     });
 
-    // ウィンドウからフォーカスが外れた場合の全ボタンリリース
     window.addEventListener('blur', function() {
-      for (var btn = 0; btn < 3; btn++) {
-        var evt = new MouseEvent('mouseup', {
+      for (var b = 0; b < 3; b++) {
+        var ev = new MouseEvent('mouseup', {
           bubbles: true,
           cancelable: true,
-          button: btn,
+          button: b,
           buttons: 0
         });
-        canvasElement.dispatchEvent(evt);
+        canvasElement.dispatchEvent(ev);
       }
     });
 

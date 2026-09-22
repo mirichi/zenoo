@@ -25,10 +25,12 @@ require_relative 'zenoo/shaders/sdf_font_shader'
 require_relative 'zenoo/image'
 require_relative 'zenoo/input'
 require_relative 'zenoo/window'
+require_relative 'zenoo/canvas'
 require_relative 'zenoo/gui'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
 Window     = Zenoo::Window     unless defined?(Window)
+Canvas     = Zenoo::Canvas     unless defined?(Canvas)
 Input      = Zenoo::Input      unless defined?(Input)
 Image      = Zenoo::Image      unless defined?(Image)
 Shader     = Zenoo::Shader     unless defined?(Shader)

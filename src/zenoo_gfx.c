@@ -45,6 +45,11 @@ static GLuint s_line_vao = 0;
 static GLuint s_line_vbo = 0;
 
 static GLuint s_simple_program = 0;
+static int   s_tri_grad_type = 0; // 0: none, 1: linear, 2: radial
+static float s_tri_grad_p0[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+static float s_tri_grad_p1[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+static float s_tri_grad_color0[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+static float s_tri_grad_color1[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
 typedef enum {
     RENDER_MODE_NONE = 0,
@@ -82,7 +87,7 @@ static GLuint compile_shader(GLenum type, const char* source) {
     if (version_pos) {
         size_t prefix_len = version_pos - source;
         const char* rest = version_pos + strlen("#version 330 core");
-        const char* header = "#version 300 es\nprecision mediump float;\n";
+        const char* header = "#version 300 es\nprecision highp float;\nprecision highp int;\n";
         size_t total_len = prefix_len + strlen(header) + strlen(rest) + 1;
         patched_source = (char*)malloc(total_len);
         if (patched_source) {
@@ -151,19 +156,43 @@ static const char* s_simple_vert_src =
 "layout (location = 1) in vec4 in_color;\n"
 "uniform vec2 u_resolution;\n"
 "out vec4 v_color;\n"
+"out vec2 v_pos;\n"
 "void main() {\n"
 "    vec2 ndc = (in_pos / u_resolution) * 2.0 - 1.0;\n"
 "    ndc.y = -ndc.y;\n"
 "    gl_Position = vec4(ndc, 0.0, 1.0);\n"
 "    v_color = in_color;\n"
+"    v_pos = in_pos;\n"
 "}\n";
 
 static const char* s_simple_frag_src =
 "#version 330 core\n"
 "in vec4 v_color;\n"
+"in vec2 v_pos;\n"
+"uniform int u_grad_type;\n"
+"uniform vec4 u_grad_p0;\n"
+"uniform vec4 u_grad_p1;\n"
+"uniform vec4 u_grad_color0;\n"
+"uniform vec4 u_grad_color1;\n"
 "out vec4 fragColor;\n"
 "void main() {\n"
-"    fragColor = v_color;\n"
+"    if (u_grad_type == 1) {\n"
+"        vec2 dir = u_grad_p1.xy - u_grad_p0.xy;\n"
+"        float len_sq = dot(dir, dir);\n"
+"        vec2 dpos = v_pos - u_grad_p0.xy;\n"
+"        float t = (len_sq > 0.0001) ? clamp(dot(dpos, dir) / len_sq, 0.0, 1.0) : 0.0;\n"
+"        fragColor = mix(u_grad_color0, u_grad_color1, t);\n"
+"    } else if (u_grad_type == 2) {\n"
+"        vec2 center = u_grad_p0.xy;\n"
+"        float r0 = u_grad_p0.z;\n"
+"        float r1 = u_grad_p1.z;\n"
+"        float d = length(v_pos - center);\n"
+"        float dr = r1 - r0;\n"
+"        float t = (abs(dr) > 0.0001) ? clamp((d - r0) / dr, 0.0, 1.0) : 0.0;\n"
+"        fragColor = mix(u_grad_color0, u_grad_color1, t);\n"
+"    } else {\n"
+"        fragColor = v_color;\n"
+"    }\n"
 "}\n";
 
 void zen_gfx_init(int width, int height) {
@@ -365,6 +394,18 @@ static void flush_triangles(void) {
         glUniform2f(u_res, (float)cur_w, (float)cur_h);
     }
 
+    glUniform1i(glGetUniformLocation(s_simple_program, "u_grad_type"), s_tri_grad_type);
+    if (s_tri_grad_type > 0) {
+        glUniform4f(glGetUniformLocation(s_simple_program, "u_grad_p0"),
+                    s_tri_grad_p0[0], s_tri_grad_p0[1], s_tri_grad_p0[2], s_tri_grad_p0[3]);
+        glUniform4f(glGetUniformLocation(s_simple_program, "u_grad_p1"),
+                    s_tri_grad_p1[0], s_tri_grad_p1[1], s_tri_grad_p1[2], s_tri_grad_p1[3]);
+        glUniform4f(glGetUniformLocation(s_simple_program, "u_grad_color0"),
+                    s_tri_grad_color0[0], s_tri_grad_color0[1], s_tri_grad_color0[2], s_tri_grad_color0[3]);
+        glUniform4f(glGetUniformLocation(s_simple_program, "u_grad_color1"),
+                    s_tri_grad_color1[0], s_tri_grad_color1[1], s_tri_grad_color1[2], s_tri_grad_color1[3]);
+    }
+
     glBindVertexArray(s_tri_vao);
     glBindBuffer(GL_ARRAY_BUFFER, s_tri_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_STREAM_DRAW);
@@ -392,6 +433,7 @@ static void flush_lines(void) {
     if (u_res >= 0) {
         glUniform2f(u_res, (float)cur_w, (float)cur_h);
     }
+    glUniform1i(glGetUniformLocation(s_simple_program, "u_grad_type"), 0);
 
     glBindVertexArray(s_line_vao);
     glBindBuffer(GL_ARRAY_BUFFER, s_line_vbo);
@@ -725,6 +767,8 @@ void zen_draw_quad_generic(float x, float y, float w, float h,
 }
 
 void zen_draw_triangle(float x1, float y1, float x2, float y2, float x3, float y3, const float color[4]) {
+    if (s_tri_grad_type != 0 && s_tri_count > 0) flush_triangles();
+    s_tri_grad_type = 0;
     set_render_mode(RENDER_MODE_TRIANGLE);
     if (s_tri_count + 3 > MAX_PRIMITIVE_VERTS) {
         flush_triangles();
@@ -746,6 +790,61 @@ void zen_draw_triangle(float x1, float y1, float x2, float y2, float x3, float y
     s_tri_buffer[s_tri_count].pos[1] = y3;
     memcpy(s_tri_buffer[s_tri_count].color, c, sizeof(float) * 4);
     s_tri_count++;
+}
+
+void zen_draw_triangles(const float* coords, int num_vertices, const float color[4]) {
+    if (!coords || num_vertices <= 0) return;
+    if (s_tri_grad_type != 0 && s_tri_count > 0) flush_triangles();
+    s_tri_grad_type = 0;
+    set_render_mode(RENDER_MODE_TRIANGLE);
+
+    float c[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    if (color) memcpy(c, color, sizeof(float) * 4);
+
+    for (int i = 0; i < num_vertices; i++) {
+        if (s_tri_count >= MAX_PRIMITIVE_VERTS) {
+            flush_triangles();
+        }
+        s_tri_buffer[s_tri_count].pos[0] = coords[i * 2 + 0];
+        s_tri_buffer[s_tri_count].pos[1] = coords[i * 2 + 1];
+        memcpy(s_tri_buffer[s_tri_count].color, c, sizeof(float) * 4);
+        s_tri_count++;
+    }
+}
+
+void zen_draw_triangles_gradient(const float* coords, int num_vertices, int grad_type,
+                                const float p0[4], const float p1[4],
+                                const float color0[4], const float color1[4]) {
+    if (!coords || num_vertices <= 0) return;
+
+    bool param_changed = (s_tri_grad_type != grad_type);
+    if (!param_changed && grad_type > 0) {
+        if (p0 && memcmp(s_tri_grad_p0, p0, sizeof(float) * 4) != 0) param_changed = true;
+        if (p1 && memcmp(s_tri_grad_p1, p1, sizeof(float) * 4) != 0) param_changed = true;
+        if (color0 && memcmp(s_tri_grad_color0, color0, sizeof(float) * 4) != 0) param_changed = true;
+        if (color1 && memcmp(s_tri_grad_color1, color1, sizeof(float) * 4) != 0) param_changed = true;
+    }
+
+    if (param_changed && s_tri_count > 0) {
+        flush_triangles();
+    }
+
+    set_render_mode(RENDER_MODE_TRIANGLE);
+    s_tri_grad_type = grad_type;
+    if (p0) memcpy(s_tri_grad_p0, p0, sizeof(float) * 4);
+    if (p1) memcpy(s_tri_grad_p1, p1, sizeof(float) * 4);
+    if (color0) memcpy(s_tri_grad_color0, color0, sizeof(float) * 4);
+    if (color1) memcpy(s_tri_grad_color1, color1, sizeof(float) * 4);
+
+    for (int i = 0; i < num_vertices; i++) {
+        if (s_tri_count >= MAX_PRIMITIVE_VERTS) {
+            flush_triangles();
+        }
+        s_tri_buffer[s_tri_count].pos[0] = coords[i * 2 + 0];
+        s_tri_buffer[s_tri_count].pos[1] = coords[i * 2 + 1];
+        memcpy(s_tri_buffer[s_tri_count].color, s_tri_grad_color0, sizeof(float) * 4);
+        s_tri_count++;
+    }
 }
 
 void zen_draw_line(float x1, float y1, float x2, float y2, const float color[4]) {

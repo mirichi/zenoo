@@ -73,6 +73,14 @@ module Zenoo
         :float, :float, :float, :float, :float, :float,
         :float, :float, :float, :float
       ], :nil, "sp_zen_renderer_draw_triangle"
+      native_func :raw_draw_triangle_gradient, [
+        :int,
+        :float, :float, :float, :float,
+        :float, :float, :float, :float,
+        :float, :float, :float, :float,
+        :float, :float, :float, :float,
+        :float, :float, :float, :float, :float, :float
+      ], :nil, "sp_zen_renderer_draw_triangle_gradient"
       native_func :draw_line, [
         :float, :float, :float, :float,
         :float, :float, :float, :float
@@ -122,6 +130,84 @@ module Zenoo
           p2_0, p2_1, p2_2, p2_3,
           img, sh
         )
+      end
+
+      def self.draw_triangles(coords, r, g, b, a)
+        len = coords.size
+        i = 0
+        cr = r.to_f
+        cg = g.to_f
+        cb = b.to_f
+        ca = a.to_f
+        while i < len
+          Zenoo::Native::Renderer.draw_triangle(
+            coords[i].to_f,     coords[i + 1].to_f,
+            coords[i + 2].to_f, coords[i + 3].to_f,
+            coords[i + 4].to_f, coords[i + 5].to_f,
+            cr, cg, cb, ca
+          )
+          i += 6
+        end
+      end
+
+      def self.draw_triangles_gradient(coords, type, p0, p1, c0, c1)
+        p0_0 = 0.0; p0_1 = 0.0; p0_2 = 0.0; p0_3 = 0.0
+        p1_0 = 0.0; p1_1 = 0.0; p1_2 = 0.0; p1_3 = 0.0
+        c0_0 = 1.0; c0_1 = 1.0; c0_2 = 1.0; c0_3 = 1.0
+        c1_0 = 0.0; c1_1 = 0.0; c1_2 = 0.0; c1_3 = 1.0
+        if p0
+          p0.each_with_index do |v, i|
+            vf = v.to_f
+            p0_0 = vf if i == 0
+            p0_1 = vf if i == 1
+            p0_2 = vf if i == 2
+            p0_3 = vf if i == 3
+          end
+        end
+        if p1
+          p1.each_with_index do |v, i|
+            vf = v.to_f
+            p1_0 = vf if i == 0
+            p1_1 = vf if i == 1
+            p1_2 = vf if i == 2
+            p1_3 = vf if i == 3
+          end
+        end
+        if c0
+          c0.each_with_index do |v, i|
+            vf = v.to_f
+            c0_0 = vf if i == 0
+            c0_1 = vf if i == 1
+            c0_2 = vf if i == 2
+            c0_3 = vf if i == 3
+          end
+        end
+        if c1
+          c1.each_with_index do |v, i|
+            vf = v.to_f
+            c1_0 = vf if i == 0
+            c1_1 = vf if i == 1
+            c1_2 = vf if i == 2
+            c1_3 = vf if i == 3
+          end
+        end
+
+        len = coords.size
+        i = 0
+        gt = type.to_i
+        while i < len
+          Zenoo::Native::Renderer.raw_draw_triangle_gradient(
+            gt,
+            p0_0, p0_1, p0_2, p0_3,
+            p1_0, p1_1, p1_2, p1_3,
+            c0_0, c0_1, c0_2, c0_3,
+            c1_0, c1_1, c1_2, c1_3,
+            coords[i].to_f,     coords[i + 1].to_f,
+            coords[i + 2].to_f, coords[i + 3].to_f,
+            coords[i + 4].to_f, coords[i + 5].to_f
+          )
+          i += 6
+        end
       end
     end
     # ==========================================
