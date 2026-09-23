@@ -1,0 +1,13 @@
+diff --git a/lib/sp_slab.c b/lib/sp_slab.c
+index fe340608..9c2ecee4 100644
+--- a/lib/sp_slab.c
++++ b/lib/sp_slab.c
+@@ -242,7 +242,7 @@ static inline void bm_store(uint64_t *p, uint64_t v) { *p = v; }
+    middle; the pages are untouched until a chunk is carved, so the size costs
+    nothing but address space. */
+ static void sp_slab_reserve(void) {
+-#ifdef __wasi__
++#if defined(__wasi__) || defined(__EMSCRIPTEN__)
+   /* wasm has one linear memory that only grows: nothing to reserve, trim or
+      give back. 64 MB is taken as one aligned block (an engine commits its
+      pages as they are touched); past it every block is a malloc. */

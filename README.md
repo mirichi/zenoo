@@ -129,6 +129,9 @@ WSL2 または Linux 環境で以下を実行します：
 ```
 `docs/` 配下に全デモ（`game`, `gui`, `font`, `vector`）とポータル（`index.html`）が一括生成されます。
 
+> **Note (Wasm メモリ最適化)**:
+> ブラウザ上でのメモリ肥大化（700MB〜2GB）を防止するため、Spinel の GC スラブアロケータに Wasm 向けパッチを適用しています。詳細は [`patches/README.md`](file:///c:/Users/sawar/.gemini/antigravity/scratch/zenoo/patches/README.md) を参照してください。
+
 ### 任意の Ruby スクリプトを単体 Wasm ビルド
 
 ```bash
@@ -204,6 +207,9 @@ zenoo/
 ├── ext/                       # バインディング
 │   ├── zenoo/                 # CRuby C 拡張 (mkmf)
 │   └── spinel/                # Spinel AOT コンパイル用グルー
+├── patches/                   # 外部依存 (Spinel 等) 向けパッチ
+│   ├── README.md              # パッチ概要・適用手順
+│   └── 0001-fix-sp_slab-emscripten-wasm-memory.patch
 ├── server.rb                  # 統合開発サーバー (docs / wasm 切り替え対応)
 ├── build_pages.sh             # GitHub Pages 全デモ一括ビルドスクリプト
 ├── build_wasm.sh              # 単体 Wasm ビルドスクリプト
