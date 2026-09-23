@@ -389,7 +389,27 @@ module Zenoo
         Native::Renderer.draw_triangles_gradient(coords, 2, p0, p1, c0, c1)
       else
         color = resolve_color(style)
-        Native::Renderer.draw_triangles(coords, color[0], color[1], color[2], color[3] * @global_alpha)
+        cr = color[0].to_f
+        cg = color[1].to_f
+        cb = color[2].to_f
+        ca = (color[3] * @global_alpha).to_f
+        num_verts = coords.size / 2
+        verts = []
+        i = 0
+        while i < coords.size
+          verts.push(coords[i].to_f, coords[i + 1].to_f, cr, cg, cb, ca)
+          i += 2
+        end
+        data = verts.pack("f*")
+        Native::Renderer.draw_buffer(
+          Topology::TRIANGLES,
+          Layout::POS2_COLOR4,
+          false,
+          data,
+          num_verts,
+          nil,
+          nil
+        )
       end
     end
 
