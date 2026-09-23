@@ -18,6 +18,7 @@ module Zenoo
     POS2_UV2_COLOR4     = "\x02\x02\x04"             # pos(2), uv(2), color(4) -> 8 floats
     LINE                = "\x02\x04"                 # pos(2), color(4) -> 6 floats
     CARD_INSTANCED      = "\x04\x04\x04\x04\x04\x04" # bounds(4), color(4), p0(4), p1(4), p2(4), uv(4) -> 24 floats
+    QUAD_INSTANCED      = CARD_INSTANCED
     SPRITE_INSTANCED    = "\x04\x04\x04"             # bounds(4), color(4), uv(4) -> 12 floats
   end
 end

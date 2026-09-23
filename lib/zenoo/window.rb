@@ -160,16 +160,47 @@ module Zenoo
       s_color = (s_blur > 0.0) ? normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
 
       mode = image ? 1.0 : 0.0
-      p0 = [radius.to_f, b_width, s_blur, mode]
-      uv = [0.0, 0.0, 1.0, 1.0]
+      data = [
+        x.to_f, y.to_f, w.to_f, h.to_f,
+        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
+        radius.to_f, b_width, s_blur, mode,
+        b_color[0].to_f, b_color[1].to_f, b_color[2].to_f, b_color[3].to_f,
+        s_color[0].to_f, s_color[1].to_f, s_color[2].to_f, s_color[3].to_f,
+        0.0, 0.0, 1.0, 1.0
+      ].pack("f*")
 
-      Native::Renderer.draw_quad(x, y, w, h, uv, c_color, p0, b_color, s_color, image, card_shader)
+      Native::Renderer.draw_buffer(
+        Topology::TRIANGLE_STRIP,
+        Layout::CARD_INSTANCED,
+        true,
+        data,
+        1,
+        image,
+        card_shader
+      )
     end
 
     def self.draw_rect(x, y, w, h, color = :white, shader: nil)
       effective_shader = shader || @current_shader
       c_color = normalize_color(color)
-      Native::Renderer.draw_quad(x, y, w, h, [0.0, 0.0, 1.0, 1.0], c_color, nil, nil, nil, nil, effective_shader)
+      data = [
+        x.to_f, y.to_f, w.to_f, h.to_f,
+        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 1.0
+      ].pack("f*")
+
+      Native::Renderer.draw_buffer(
+        Topology::TRIANGLE_STRIP,
+        Layout::QUAD_INSTANCED,
+        true,
+        data,
+        1,
+        nil,
+        effective_shader
+      )
     end
 
     def self.draw_rounded_rect(x, y, w, h, radius, color = :white)
@@ -180,45 +211,63 @@ module Zenoo
       return unless image
       effective_shader = shader || @current_shader
       c_color = normalize_color(color)
-      Native::Renderer.draw_quad(x, y, image.width, image.height, [0.0, 0.0, 1.0, 1.0], c_color, nil, nil, nil, image, effective_shader)
+      data = [
+        x.to_f, y.to_f, image.width.to_f, image.height.to_f,
+        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 1.0
+      ].pack("f*")
+
+      Native::Renderer.draw_buffer(
+        Topology::TRIANGLE_STRIP,
+        Layout::QUAD_INSTANCED,
+        true,
+        data,
+        1,
+        image,
+        effective_shader
+      )
     end
 
     def self.draw_triangle(x1, y1, x2, y2, x3, y3, color = :white)
       c = normalize_color(color)
-      cr = 1.0; cg = 1.0; cb = 1.0; ca = 1.0
-      c.each_with_index do |v, i|
-        vf = v.to_f
-        cr = vf if i == 0
-        cg = vf if i == 1
-        cb = vf if i == 2
-        ca = vf if i == 3
-      end
-      Native::Renderer.draw_triangle(
-        x1.to_f, y1.to_f, x2.to_f, y2.to_f, x3.to_f, y3.to_f,
-        cr, cg, cb, ca
+      cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
+      data = [
+        x1.to_f, y1.to_f, cr, cg, cb, ca,
+        x2.to_f, y2.to_f, cr, cg, cb, ca,
+        x3.to_f, y3.to_f, cr, cg, cb, ca
+      ].pack("f*")
+
+      Native::Renderer.draw_buffer(
+        Topology::TRIANGLES,
+        Layout::POS2_COLOR4,
+        false,
+        data,
+        3,
+        nil,
+        @current_shader
       )
     end
 
     def self.draw_line(x1, y1, x2, y2, color = :white)
       c = normalize_color(color)
-      cr = 1.0; cg = 1.0; cb = 1.0; ca = 1.0
-      c.each_with_index do |v, i|
-        vf = v.to_f
-        cr = vf if i == 0
-        cg = vf if i == 1
-        cb = vf if i == 2
-        ca = vf if i == 3
-      end
-      Native::Renderer.draw_line(
-        x1.to_f, y1.to_f, x2.to_f, y2.to_f,
-        cr, cg, cb, ca
-      )
-    end
+      cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
+      data = [
+        x1.to_f, y1.to_f, cr, cg, cb, ca,
+        x2.to_f, y2.to_f, cr, cg, cb, ca
+      ].pack("f*")
 
-    # 汎用動的頂点バッファ描画 API
-    def self.draw_buffer(topology, layout, is_instanced, data, count, texture = nil, shader = nil)
-      effective_shader = shader || @current_shader
-      Native::Renderer.draw_buffer(topology, layout, is_instanced, data, count, texture, effective_shader)
+      Native::Renderer.draw_buffer(
+        Topology::LINES,
+        Layout::LINE,
+        false,
+        data,
+        2,
+        nil,
+        @current_shader
+      )
     end
 
     @sdf_font_shader = nil
@@ -347,9 +396,23 @@ module Zenoo
               cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
               cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : normalize_color(ctx.outline_color)
 
-              Native::Renderer.draw_quad(
-                cgx, cgy, cgw, cgh,
-                uv, cur_color, cur_p0, cur_p1, p2, atlas, shader
+              qdata = [
+                cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
+                cur_color[0].to_f, cur_color[1].to_f, cur_color[2].to_f, cur_color[3].to_f,
+                cur_p0[0].to_f, cur_p0[1].to_f, cur_p0[2].to_f, cur_p0[3].to_f,
+                cur_p1[0].to_f, cur_p1[1].to_f, cur_p1[2].to_f, cur_p1[3].to_f,
+                p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
+                uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
+              ].pack("f*")
+
+              Native::Renderer.draw_buffer(
+                Topology::TRIANGLE_STRIP,
+                Layout::CARD_INSTANCED,
+                true,
+                qdata,
+                1,
+                atlas,
+                shader
               )
             end
           end
@@ -372,9 +435,23 @@ module Zenoo
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
 
-            Native::Renderer.draw_quad(
-              gx, gy, gw, gh,
-              uv, c_color, p0, p1, p2, atlas, shader
+            qdata = [
+              gx.to_f, gy.to_f, gw.to_f, gh.to_f,
+              c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
+              p0[0].to_f, p0[1].to_f, p0[2].to_f, p0[3].to_f,
+              p1[0].to_f, p1[1].to_f, p1[2].to_f, p1[3].to_f,
+              p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
+              uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
+            ].pack("f*")
+
+            Native::Renderer.draw_buffer(
+              Topology::TRIANGLE_STRIP,
+              Layout::CARD_INSTANCED,
+              true,
+              qdata,
+              1,
+              atlas,
+              shader
             )
           end
 

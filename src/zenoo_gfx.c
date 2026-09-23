@@ -903,8 +903,16 @@ void zen_draw_buffer(int topology,
     zen_gfx_flush();
 
     // 1. シェーダーの準備
-    GLuint prog = shader ? shader->program_id : s_shader_program;
+    GLuint prog;
+    if (shader) {
+        prog = shader->program_id;
+    } else if (is_instanced) {
+        prog = s_shader_program; // Quad インスタンシング用デフォルトシェーダー
+    } else {
+        prog = s_simple_program; // 通常頂点描画用デフォルトシェーダー (pos: 0, color: 1)
+    }
     glUseProgram(prog);
+    s_active_program = prog;
 
     int cur_w, cur_h;
     if (s_current_render_target) {
@@ -918,10 +926,18 @@ void zen_draw_buffer(int topology,
         glUniform2f(u_res, (float)cur_w, (float)cur_h);
     }
 
+    if (prog == s_simple_program) {
+        GLint u_grad = glGetUniformLocation(s_simple_program, "u_grad_type");
+        if (u_grad >= 0) {
+            glUniform1i(u_grad, 0);
+        }
+    }
+
     // 2. テクスチャの準備
     GLuint tex_id = texture ? texture->texture_id : s_white_texture;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex_id);
+    s_active_texture = tex_id;
     GLint u_tex = glGetUniformLocation(prog, "u_texture");
     if (u_tex >= 0) {
         glUniform1i(u_tex, 0);
