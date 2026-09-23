@@ -423,45 +423,6 @@ static VALUE renderer_flush(VALUE self) {
     return Qnil;
 }
 
-static VALUE renderer_draw_triangles_gradient(VALUE self, VALUE rb_coords, VALUE rb_type,
-                                              VALUE rb_p0, VALUE rb_p1,
-                                              VALUE rb_c0, VALUE rb_c1) {
-    (void)self;
-    Check_Type(rb_coords, T_ARRAY);
-    long len = RARRAY_LEN(rb_coords);
-    if (len < 6) return Qnil;
-
-    int type = NUM2INT(rb_type);
-
-    float p0[4] = {0}, p1[4] = {0}, c0[4] = {1, 1, 1, 1}, c1[4] = {1, 1, 1, 1};
-    if (RB_TYPE_P(rb_p0, T_ARRAY) && RARRAY_LEN(rb_p0) >= 4) {
-        for (int j = 0; j < 4; j++) p0[j] = (float)NUM2DBL(rb_ary_entry(rb_p0, j));
-    }
-    if (RB_TYPE_P(rb_p1, T_ARRAY) && RARRAY_LEN(rb_p1) >= 4) {
-        for (int j = 0; j < 4; j++) p1[j] = (float)NUM2DBL(rb_ary_entry(rb_p1, j));
-    }
-    if (RB_TYPE_P(rb_c0, T_ARRAY) && RARRAY_LEN(rb_c0) >= 4) {
-        for (int j = 0; j < 4; j++) c0[j] = (float)NUM2DBL(rb_ary_entry(rb_c0, j));
-    }
-    if (RB_TYPE_P(rb_c1, T_ARRAY) && RARRAY_LEN(rb_c1) >= 4) {
-        for (int j = 0; j < 4; j++) c1[j] = (float)NUM2DBL(rb_ary_entry(rb_c1, j));
-    }
-
-    float buf[512];
-    long i = 0;
-    while (i < len) {
-        int chunk_floats = 0;
-        while (i < len && chunk_floats < 512) {
-            VALUE val = rb_ary_entry(rb_coords, i);
-            buf[chunk_floats++] = (float)NUM2DBL(val);
-            i++;
-        }
-        int num_verts = chunk_floats / 2;
-        zen_draw_triangles_gradient(buf, num_verts, type, p0, p1, c0, c1);
-    }
-    return Qnil;
-}
-
 static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout, VALUE rb_is_instanced, VALUE rb_data, VALUE rb_count, VALUE rb_tex, VALUE rb_shader) {
     (void)self;
     int topology = NUM2INT(rb_topology);
@@ -537,8 +498,8 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "set_as_render_target", image_set_as_render_target, 0);
     rb_define_singleton_method(rb_cNativeImage, "reset_render_target", image_s_reset_render_target, 0);
 
-    // 4. Shader (Zenoo::Shader)
-    rb_cNativeShader = rb_define_class_under(rb_mZenoo, "Shader", rb_cObject);
+    // 4. NativeShader (Zenoo::Native::NativeShader)
+    rb_cNativeShader = rb_define_class_under(rb_mNative, "NativeShader", rb_cObject);
     rb_define_const(rb_mNative, "Shader", rb_cNativeShader);
     rb_define_alloc_func(rb_cNativeShader, shader_allocate);
     rb_define_method(rb_cNativeShader, "initialize", shader_init, 2);
@@ -550,7 +511,6 @@ void Init_zenoo(void) {
 
     // 5. Renderer
     VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");
-    rb_define_singleton_method(mRenderer, "draw_triangles_gradient", renderer_draw_triangles_gradient, 6);
     rb_define_singleton_method(mRenderer, "draw_buffer", renderer_draw_buffer, 7);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
 

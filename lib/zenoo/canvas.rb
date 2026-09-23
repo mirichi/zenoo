@@ -371,46 +371,62 @@ module Zenoo
     private
 
     def render_triangles_with_style(coords, style)
-      if style.is_a?(LinearGradient) && Native::Renderer.respond_to?(:draw_triangles_gradient)
-        p0 = [style.x0, style.y0, 0.0, 0.0]
-        p1 = [style.x1, style.y1, 0.0, 0.0]
+      shader = Window.default_primitive_shader
+      num_verts = coords.size / 2
+      verts = []
+      i = 0
+
+      if style.is_a?(LinearGradient)
+        p0 = [style.x0.to_f, style.y0.to_f, 0.0, 0.0]
+        p1 = [style.x1.to_f, style.y1.to_f, 0.0, 0.0]
         c0 = style.stops.first ? resolve_color(style.stops.first[1]) : [1.0, 1.0, 1.0, 1.0]
         c1 = style.stops.last ? resolve_color(style.stops.last[1]) : [0.0, 0.0, 0.0, 1.0]
-        c0 = [c0[0], c0[1], c0[2], c0[3] * @global_alpha]
-        c1 = [c1[0], c1[1], c1[2], c1[3] * @global_alpha]
-        Native::Renderer.draw_triangles_gradient(coords, 1, p0, p1, c0, c1)
-      elsif style.is_a?(RadialGradient) && Native::Renderer.respond_to?(:draw_triangles_gradient)
-        p0 = [style.x0, style.y0, style.r0, 0.0]
-        p1 = [style.x1, style.y1, style.r1, 0.0]
+        shader.set_int("u_grad_type", 1)
+        shader.set_vec4("u_grad_p0", p0[0], p0[1], p0[2], p0[3])
+        shader.set_vec4("u_grad_p1", p1[0], p1[1], p1[2], p1[3])
+        shader.set_vec4("u_grad_color0", c0[0].to_f, c0[1].to_f, c0[2].to_f, (c0[3] * @global_alpha).to_f)
+        shader.set_vec4("u_grad_color1", c1[0].to_f, c1[1].to_f, c1[2].to_f, (c1[3] * @global_alpha).to_f)
+        while i < coords.size
+          verts.push(coords[i].to_f, coords[i + 1].to_f, 1.0, 1.0, 1.0, 1.0)
+          i += 2
+        end
+      elsif style.is_a?(RadialGradient)
+        p0 = [style.x0.to_f, style.y0.to_f, style.r0.to_f, 0.0]
+        p1 = [style.x1.to_f, style.y1.to_f, style.r1.to_f, 0.0]
         c0 = style.stops.first ? resolve_color(style.stops.first[1]) : [1.0, 1.0, 1.0, 1.0]
         c1 = style.stops.last ? resolve_color(style.stops.last[1]) : [0.0, 0.0, 0.0, 1.0]
-        c0 = [c0[0], c0[1], c0[2], c0[3] * @global_alpha]
-        c1 = [c1[0], c1[1], c1[2], c1[3] * @global_alpha]
-        Native::Renderer.draw_triangles_gradient(coords, 2, p0, p1, c0, c1)
+        shader.set_int("u_grad_type", 2)
+        shader.set_vec4("u_grad_p0", p0[0], p0[1], p0[2], p0[3])
+        shader.set_vec4("u_grad_p1", p1[0], p1[1], p1[2], p1[3])
+        shader.set_vec4("u_grad_color0", c0[0].to_f, c0[1].to_f, c0[2].to_f, (c0[3] * @global_alpha).to_f)
+        shader.set_vec4("u_grad_color1", c1[0].to_f, c1[1].to_f, c1[2].to_f, (c1[3] * @global_alpha).to_f)
+        while i < coords.size
+          verts.push(coords[i].to_f, coords[i + 1].to_f, 1.0, 1.0, 1.0, 1.0)
+          i += 2
+        end
       else
+        shader.set_int("u_grad_type", 0)
         color = resolve_color(style)
         cr = color[0].to_f
         cg = color[1].to_f
         cb = color[2].to_f
         ca = (color[3] * @global_alpha).to_f
-        num_verts = coords.size / 2
-        verts = []
-        i = 0
         while i < coords.size
           verts.push(coords[i].to_f, coords[i + 1].to_f, cr, cg, cb, ca)
           i += 2
         end
-        data = verts.pack("f*")
-        Native::Renderer.draw_buffer(
-          Topology::TRIANGLES,
-          Layout::POS2_COLOR4,
-          false,
-          data,
-          num_verts,
-          nil,
-          nil
-        )
       end
+
+      data = verts.pack("f*")
+      Native::Renderer.draw_buffer(
+        Topology::TRIANGLES,
+        Layout::POS2_COLOR4,
+        false,
+        data,
+        num_verts,
+        nil,
+        shader
+      )
     end
 
     public

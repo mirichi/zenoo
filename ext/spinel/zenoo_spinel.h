@@ -64,14 +64,7 @@ sp_bool sp_zen_input_gamepad_button_pressed(sp_int id, sp_int button);
 sp_bool sp_zen_input_gamepad_button_push(sp_int id, sp_int button);
 sp_bool sp_zen_input_gamepad_button_release(sp_int id, sp_int button);
 
-void sp_zen_renderer_draw_triangle_gradient(
-    sp_int grad_type,
-    double p0_0, double p0_1, double p0_2, double p0_3,
-    double p1_0, double p1_1, double p1_2, double p1_3,
-    double c0_0, double c0_1, double c0_2, double c0_3,
-    double c1_0, double c1_1, double c1_2, double c1_3,
-    double x1, double y1, double x2, double y2, double x3, double y3
-);
+
 
 void sp_zen_renderer_draw_buffer(
     sp_int topology,
