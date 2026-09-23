@@ -69,10 +69,6 @@ module Zenoo
     # ==========================================
     module Renderer
       native_func :flush, [], :nil, "sp_zen_renderer_flush"
-      native_func :draw_triangle, [
-        :float, :float, :float, :float, :float, :float,
-        :float, :float, :float, :float
-      ], :nil, "sp_zen_renderer_draw_triangle"
       native_func :raw_draw_triangle_gradient, [
         :int,
         :float, :float, :float, :float,
@@ -81,19 +77,6 @@ module Zenoo
         :float, :float, :float, :float,
         :float, :float, :float, :float, :float, :float
       ], :nil, "sp_zen_renderer_draw_triangle_gradient"
-      native_func :draw_line, [
-        :float, :float, :float, :float,
-        :float, :float, :float, :float
-      ], :nil, "sp_zen_renderer_draw_line"
-      native_func :raw_draw_quad, [
-        :float, :float, :float, :float,
-        :float, :float, :float, :float,
-        :float, :float, :float, :float,
-        :float, :float, :float, :float,
-        :float, :float, :float, :float,
-        :float, :float, :float, :float,
-        :any, :any
-      ], :nil, "sp_zen_renderer_draw_quad_generic_wrapper"
       native_func :raw_draw_buffer, [
         :int, :string, :int, :string, :int, :any, :any
       ], :nil, "sp_zen_renderer_draw_buffer"
@@ -108,61 +91,6 @@ module Zenoo
           img,
           sh
         )
-      end
-
-      def self.draw_quad(x, y, w, h, uv, color, p0, p1, p2, img, sh)
-        u0 = uv ? uv[0].to_f : 0.0
-        v0 = uv ? uv[1].to_f : 0.0
-        u1 = uv ? (uv[2] || 1.0).to_f : 1.0
-        v1 = uv ? (uv[3] || 1.0).to_f : 1.0
-
-        cr = color ? (color[0] || 1.0).to_f : 1.0
-        cg = color ? (color[1] || 1.0).to_f : 1.0
-        cb = color ? (color[2] || 1.0).to_f : 1.0
-        ca = color ? (color[3] || 1.0).to_f : 1.0
-
-        p0_0 = p0 ? p0[0].to_f : 0.0
-        p0_1 = p0 ? p0[1].to_f : 0.0
-        p0_2 = p0 ? p0[2].to_f : 0.0
-        p0_3 = p0 ? p0[3].to_f : 0.0
-
-        p1_0 = p1 ? p1[0].to_f : 0.0
-        p1_1 = p1 ? p1[1].to_f : 0.0
-        p1_2 = p1 ? p1[2].to_f : 0.0
-        p1_3 = p1 ? p1[3].to_f : 0.0
-
-        p2_0 = p2 ? p2[0].to_f : 0.0
-        p2_1 = p2 ? p2[1].to_f : 0.0
-        p2_2 = p2 ? p2[2].to_f : 0.0
-        p2_3 = p2 ? p2[3].to_f : 0.0
-
-        Zenoo::Native::Renderer.raw_draw_quad(
-          x.to_f, y.to_f, w.to_f, h.to_f,
-          u0, v0, u1, v1,
-          cr, cg, cb, ca,
-          p0_0, p0_1, p0_2, p0_3,
-          p1_0, p1_1, p1_2, p1_3,
-          p2_0, p2_1, p2_2, p2_3,
-          img, sh
-        )
-      end
-
-      def self.draw_triangles(coords, r, g, b, a)
-        len = coords.size
-        i = 0
-        cr = r.to_f
-        cg = g.to_f
-        cb = b.to_f
-        ca = a.to_f
-        while i < len
-          Zenoo::Native::Renderer.draw_triangle(
-            coords[i].to_f,     coords[i + 1].to_f,
-            coords[i + 2].to_f, coords[i + 3].to_f,
-            coords[i + 4].to_f, coords[i + 5].to_f,
-            cr, cg, cb, ca
-          )
-          i += 6
-        end
       end
 
       def self.draw_triangles_gradient(coords, type, p0, p1, c0, c1)

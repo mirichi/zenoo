@@ -228,74 +228,6 @@ static ZenShader* unpack_shader(sp_RbVal val) {
     return NULL;
 }
 
-void sp_zen_renderer_draw_quad_rect(
-    double x, double y, double w, double h,
-    double u, double v, double uw, double vh,
-    double r, double g, double b, double a,
-    sp_RbVal image_val,
-    sp_RbVal shader_val
-) {
-    float uv[4]    = { (float)u, (float)v, (float)uw, (float)vh };
-    float color[4] = { (float)r, (float)g, (float)b,  (float)a  };
-    ZenImage*  img = unpack_image(image_val);
-    ZenShader* sh  = unpack_shader(shader_val);
-
-    zen_draw_quad_generic((float)x, (float)y, (float)w, (float)h,
-                          uv, color, NULL, NULL, NULL, img, sh);
-}
-
-void sp_zen_renderer_draw_quad_card(
-    double x, double y, double w, double h,
-    double u, double v, double uw, double vh,
-    double r, double g, double b, double a,
-    double radius, double border_w, double shadow_blur, double mode,
-    double br, double bg, double bb, double ba,
-    double sr, double sg, double sb, double sa,
-    sp_RbVal image_val,
-    sp_RbVal shader_val
-) {
-    float uv[4]    = { (float)u, (float)v, (float)uw, (float)vh };
-    float color[4] = { (float)r, (float)g, (float)b,  (float)a  };
-    float p0[4]    = { (float)radius, (float)border_w, (float)shadow_blur, (float)mode };
-    float p1[4]    = { (float)br, (float)bg, (float)bb, (float)ba };
-    float p2[4]    = { (float)sr, (float)sg, (float)sb, (float)sa };
-    ZenImage*  img = unpack_image(image_val);
-    ZenShader* sh  = unpack_shader(shader_val);
-
-    zen_draw_quad_generic((float)x, (float)y, (float)w, (float)h,
-                          uv, color, p0, p1, p2, img, sh);
-}
-
-void sp_zen_renderer_draw_quad_generic_wrapper(
-    double x, double y, double w, double h,
-    double u, double v, double uw, double vh,
-    double r, double g, double b, double a,
-    double p0_0, double p0_1, double p0_2, double p0_3,
-    double p1_0, double p1_1, double p1_2, double p1_3,
-    double p2_0, double p2_1, double p2_2, double p2_3,
-    sp_RbVal image_val,
-    sp_RbVal shader_val
-) {
-    float uv[4]    = { (float)u, (float)v, (float)uw, (float)vh };
-    float color[4] = { (float)r, (float)g, (float)b,  (float)a  };
-    float p0[4]    = { (float)p0_0, (float)p0_1, (float)p0_2, (float)p0_3 };
-    float p1[4]    = { (float)p1_0, (float)p1_1, (float)p1_2, (float)p1_3 };
-    float p2[4]    = { (float)p2_0, (float)p2_1, (float)p2_2, (float)p2_3 };
-    ZenImage*  img = unpack_image(image_val);
-    ZenShader* sh  = unpack_shader(shader_val);
-
-    zen_draw_quad_generic((float)x, (float)y, (float)w, (float)h,
-                          uv, color, p0, p1, p2, img, sh);
-}
-
-void sp_zen_renderer_draw_triangle(
-    double x1, double y1, double x2, double y2, double x3, double y3,
-    double r, double g, double b, double a
-) {
-    float color[4] = { (float)r, (float)g, (float)b, (float)a };
-    zen_draw_triangle((float)x1, (float)y1, (float)x2, (float)y2, (float)x3, (float)y3, color);
-}
-
 void sp_zen_renderer_draw_triangle_gradient(
     sp_int grad_type,
     double p0_0, double p0_1, double p0_2, double p0_3,
@@ -314,14 +246,6 @@ void sp_zen_renderer_draw_triangle_gradient(
         (float)x3, (float)y3
     };
     zen_draw_triangles_gradient(tri_coords, 3, (int)grad_type, p0, p1, c0, c1);
-}
-
-void sp_zen_renderer_draw_line(
-    double x1, double y1, double x2, double y2,
-    double r, double g, double b, double a
-) {
-    float color[4] = { (float)r, (float)g, (float)b, (float)a };
-    zen_draw_line((float)x1, (float)y1, (float)x2, (float)y2, color);
 }
 
 void sp_zen_renderer_draw_buffer(

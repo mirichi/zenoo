@@ -182,21 +182,9 @@ void       zen_shader_set_mat4(ZenShader* shader, const char* name, const float*
 // メモリ不足時に言語側 (CRubyのrb_gc()やSpinelのGC) を呼び出すためのコールバック
 void       zen_set_gc_trigger_callback(void (*callback)(void));
 
-// 汎用Quad送出 (x, y, w, h, uv[4], color[4], param0[4], param1[4], param2[4], texture, shader)
-void       zen_draw_quad_generic(float x, float y, float w, float h,
-                                 const float uv[4],
-                                 const float color[4],
-                                 const float p0[4],
-                                 const float p1[4],
-                                 const float p2[4],
-                                 ZenImage* texture,
-                                 ZenShader* shader);
-void       zen_draw_triangle(float x1, float y1, float x2, float y2, float x3, float y3, const float color[4]);
-void       zen_draw_triangles(const float* coords, int num_vertices, const float color[4]);
 void       zen_draw_triangles_gradient(const float* coords, int num_vertices, int grad_type,
                                        const float p0[4], const float p1[4],
                                        const float color0[4], const float color1[4]);
-void       zen_draw_line(float x1, float y1, float x2, float y2, const float color[4]);
 void       zen_flush(void);
 
 // トポロジー種別定数 (OpenGL GLenum準拠)
