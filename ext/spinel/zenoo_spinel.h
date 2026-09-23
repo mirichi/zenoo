@@ -64,41 +64,6 @@ sp_bool sp_zen_input_gamepad_button_pressed(sp_int id, sp_int button);
 sp_bool sp_zen_input_gamepad_button_push(sp_int id, sp_int button);
 sp_bool sp_zen_input_gamepad_button_release(sp_int id, sp_int button);
 
-void sp_zen_renderer_draw_quad_rect(
-    double x, double y, double w, double h,
-    double u, double v, double uw, double vh,
-    double r, double g, double b, double a,
-    sp_RbVal image_val,
-    sp_RbVal shader_val
-);
-
-void sp_zen_renderer_draw_quad_card(
-    double x, double y, double w, double h,
-    double u, double v, double uw, double vh,
-    double r, double g, double b, double a,
-    double radius, double border_w, double shadow_blur, double mode,
-    double br, double bg, double bb, double ba,
-    double sr, double sg, double sb, double sa,
-    sp_RbVal image_val,
-    sp_RbVal shader_val
-);
-
-void sp_zen_renderer_draw_quad_generic_wrapper(
-    double x, double y, double w, double h,
-    double u, double v, double uw, double vh,
-    double r, double g, double b, double a,
-    double p0_0, double p0_1, double p0_2, double p0_3,
-    double p1_0, double p1_1, double p1_2, double p1_3,
-    double p2_0, double p2_1, double p2_2, double p2_3,
-    sp_RbVal image_val,
-    sp_RbVal shader_val
-);
-
-void sp_zen_renderer_draw_triangle(
-    double x1, double y1, double x2, double y2, double x3, double y3,
-    double r, double g, double b, double a
-);
-
 void sp_zen_renderer_draw_triangle_gradient(
     sp_int grad_type,
     double p0_0, double p0_1, double p0_2, double p0_3,
@@ -106,11 +71,6 @@ void sp_zen_renderer_draw_triangle_gradient(
     double c0_0, double c0_1, double c0_2, double c0_3,
     double c1_0, double c1_1, double c1_2, double c1_3,
     double x1, double y1, double x2, double y2, double x3, double y3
-);
-
-void sp_zen_renderer_draw_line(
-    double x1, double y1, double x2, double y2,
-    double r, double g, double b, double a
 );
 
 void sp_zen_renderer_draw_buffer(

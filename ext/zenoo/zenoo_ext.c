@@ -417,100 +417,9 @@ static VALUE input_gamepad_button_release(VALUE self, VALUE rb_id, VALUE rb_butt
 // ==========================================
 // Zenoo::Native::Renderer
 // ==========================================
-static void array_to_floats4(VALUE ary, float out[4], float def_val) {
-    if (NIL_P(ary) || !RB_TYPE_P(ary, T_ARRAY)) {
-        out[0] = def_val; out[1] = def_val; out[2] = def_val; out[3] = def_val;
-        return;
-    }
-    long len = RARRAY_LEN(ary);
-    for (int i = 0; i < 4; i++) {
-        out[i] = (i < len) ? (float)NUM2DBL(RARRAY_AREF(ary, i)) : def_val;
-    }
-}
-
-static VALUE renderer_draw_quad(int argc, VALUE* argv, VALUE self) {
-    (void)self;
-    VALUE rb_x, rb_y, rb_w, rb_h;
-    VALUE rb_uv, rb_color, rb_p0, rb_p1, rb_p2, rb_image, rb_shader;
-    rb_scan_args(argc, argv, "47", &rb_x, &rb_y, &rb_w, &rb_h,
-                 &rb_uv, &rb_color, &rb_p0, &rb_p1, &rb_p2, &rb_image, &rb_shader);
-
-    float x = (float)NUM2DBL(rb_x);
-    float y = (float)NUM2DBL(rb_y);
-    float w = (float)NUM2DBL(rb_w);
-    float h = (float)NUM2DBL(rb_h);
-
-    float uv[4], color[4], p0[4], p1[4], p2[4];
-    array_to_floats4(rb_uv, uv, 0.0f);
-    if (NIL_P(rb_uv)) { uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f; }
-
-    array_to_floats4(rb_color, color, 1.0f);
-    array_to_floats4(rb_p0, p0, 0.0f);
-    array_to_floats4(rb_p1, p1, 0.0f);
-    array_to_floats4(rb_p2, p2, 0.0f);
-
-    ZenImage* img = NULL;
-    if (!NIL_P(rb_image)) {
-        TypedData_Get_Struct(rb_image, ZenImage, &zenoo_image_data_type, img);
-    }
-
-    ZenShader* shader = NULL;
-    if (!NIL_P(rb_shader)) {
-        TypedData_Get_Struct(rb_shader, ZenShader, &zenoo_shader_data_type, shader);
-    }
-
-    zen_draw_quad_generic(x, y, w, h, uv, color, p0, p1, p2, img, shader);
-    return Qnil;
-}
-
 static VALUE renderer_flush(VALUE self) {
     (void)self;
     zen_flush();
-    return Qnil;
-}
-
-static VALUE renderer_draw_triangle(VALUE self, VALUE rb_x1, VALUE rb_y1, VALUE rb_x2, VALUE rb_y2, VALUE rb_x3, VALUE rb_y3, VALUE rb_r, VALUE rb_g, VALUE rb_b, VALUE rb_a) {
-    (void)self;
-    float color[4] = {
-        (float)NUM2DBL(rb_r),
-        (float)NUM2DBL(rb_g),
-        (float)NUM2DBL(rb_b),
-        (float)NUM2DBL(rb_a)
-    };
-    zen_draw_triangle(
-        (float)NUM2DBL(rb_x1), (float)NUM2DBL(rb_y1),
-        (float)NUM2DBL(rb_x2), (float)NUM2DBL(rb_y2),
-        (float)NUM2DBL(rb_x3), (float)NUM2DBL(rb_y3),
-        color
-    );
-    return Qnil;
-}
-
-static VALUE renderer_draw_triangles(VALUE self, VALUE rb_coords, VALUE rb_r, VALUE rb_g, VALUE rb_b, VALUE rb_a) {
-    (void)self;
-    Check_Type(rb_coords, T_ARRAY);
-    long len = RARRAY_LEN(rb_coords);
-    if (len < 6) return Qnil;
-
-    float color[4] = {
-        (float)NUM2DBL(rb_r),
-        (float)NUM2DBL(rb_g),
-        (float)NUM2DBL(rb_b),
-        (float)NUM2DBL(rb_a)
-    };
-
-    float buf[512];
-    long i = 0;
-    while (i < len) {
-        int chunk_floats = 0;
-        while (i < len && chunk_floats < 512) {
-            VALUE val = rb_ary_entry(rb_coords, i);
-            buf[chunk_floats++] = (float)NUM2DBL(val);
-            i++;
-        }
-        int num_verts = chunk_floats / 2;
-        zen_draw_triangles(buf, num_verts, color);
-    }
     return Qnil;
 }
 
@@ -550,22 +459,6 @@ static VALUE renderer_draw_triangles_gradient(VALUE self, VALUE rb_coords, VALUE
         int num_verts = chunk_floats / 2;
         zen_draw_triangles_gradient(buf, num_verts, type, p0, p1, c0, c1);
     }
-    return Qnil;
-}
-
-static VALUE renderer_draw_line(VALUE self, VALUE rb_x1, VALUE rb_y1, VALUE rb_x2, VALUE rb_y2, VALUE rb_r, VALUE rb_g, VALUE rb_b, VALUE rb_a) {
-    (void)self;
-    float color[4] = {
-        (float)NUM2DBL(rb_r),
-        (float)NUM2DBL(rb_g),
-        (float)NUM2DBL(rb_b),
-        (float)NUM2DBL(rb_a)
-    };
-    zen_draw_line(
-        (float)NUM2DBL(rb_x1), (float)NUM2DBL(rb_y1),
-        (float)NUM2DBL(rb_x2), (float)NUM2DBL(rb_y2),
-        color
-    );
     return Qnil;
 }
 
@@ -657,11 +550,7 @@ void Init_zenoo(void) {
 
     // 5. Renderer
     VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");
-    rb_define_singleton_method(mRenderer, "draw_quad", renderer_draw_quad, -1);
-    rb_define_singleton_method(mRenderer, "draw_triangle", renderer_draw_triangle, 10);
-    rb_define_singleton_method(mRenderer, "draw_triangles", renderer_draw_triangles, 5);
     rb_define_singleton_method(mRenderer, "draw_triangles_gradient", renderer_draw_triangles_gradient, 6);
-    rb_define_singleton_method(mRenderer, "draw_line", renderer_draw_line, 8);
     rb_define_singleton_method(mRenderer, "draw_buffer", renderer_draw_buffer, 7);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
 

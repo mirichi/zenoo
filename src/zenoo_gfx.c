@@ -11,22 +11,7 @@
 #endif
 #include "zenoo.h"
 
-#define MAX_QUADS 65536
-
-// GPUに送る1つのQuadインスタンスの構造体 (汎用スロット方式)
-typedef struct {
-    float bounds[4];   // x, y, width, height (location = 1)
-    float color[4];    // r, g, b, a (location = 2)
-    float param0[4];   // 汎用パラメータスロット 0 (location = 3)
-    float param1[4];   // 汎用パラメータスロット 1 (location = 4)
-    float param2[4];   // 汎用パラメータスロット 2 (location = 5)
-    float uv[4];       // u, v, uw, vh (location = 6)
-} GpuQuad;
-
-static GpuQuad s_quad_buffer[MAX_QUADS];
-static int s_quad_count = 0;
-
-// 三角形・ライン用 頂点構造体
+// グラデーション三角形用 頂点構造体
 typedef struct {
     float pos[2];
     float color[4];
@@ -39,11 +24,6 @@ static int s_tri_count = 0;
 static GLuint s_tri_vao = 0;
 static GLuint s_tri_vbo = 0;
 
-static SimpleVertex s_line_buffer[MAX_PRIMITIVE_VERTS];
-static int s_line_count = 0;
-static GLuint s_line_vao = 0;
-static GLuint s_line_vbo = 0;
-
 static GLuint s_simple_program = 0;
 static int   s_tri_grad_type = 0; // 0: none, 1: linear, 2: radial
 static float s_tri_grad_p0[4] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -51,18 +31,7 @@ static float s_tri_grad_p1[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 static float s_tri_grad_color0[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 static float s_tri_grad_color1[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
-typedef enum {
-    RENDER_MODE_NONE = 0,
-    RENDER_MODE_QUAD,
-    RENDER_MODE_TRIANGLE,
-    RENDER_MODE_LINE
-} RenderMode;
-
-static RenderMode s_current_mode = RENDER_MODE_NONE;
-
-static GLuint s_quad_vao = 0;
 static GLuint s_unit_vbo = 0;
-static GLuint s_instance_vbo = 0;
 static GLuint s_shader_program = 0;
 
 static GLuint s_dynamic_vao = 0;
@@ -239,62 +208,16 @@ void zen_gfx_init(int width, int height) {
         1.0f, 1.0f,
     };
 
-    glGenVertexArrays(1, &s_quad_vao);
-    glBindVertexArray(s_quad_vao);
-
     glGenBuffers(1, &s_unit_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, s_unit_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(unit_quad), unit_quad, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    glGenBuffers(1, &s_instance_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, s_instance_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(GpuQuad) * MAX_QUADS, NULL, GL_DYNAMIC_DRAW);
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, bounds));
-    glVertexAttribDivisor(1, 1);
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, color));
-    glVertexAttribDivisor(2, 1);
-
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, param0));
-    glVertexAttribDivisor(3, 1);
-
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, param1));
-    glVertexAttribDivisor(4, 1);
-
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, param2));
-    glVertexAttribDivisor(5, 1);
-
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(GpuQuad), (void*)offsetof(GpuQuad, uv));
-    glVertexAttribDivisor(6, 1);
-
-    glBindVertexArray(0);
-
-    // 三角形バッファ初期化
+    // 三角形バッファ初期化 (グラデーション描画用)
     glGenVertexArrays(1, &s_tri_vao);
     glBindVertexArray(s_tri_vao);
     glGenBuffers(1, &s_tri_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, s_tri_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, pos));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, color));
-    glBindVertexArray(0);
-
-    // ラインバッファ初期化
-    glGenVertexArrays(1, &s_line_vao);
-    glBindVertexArray(s_line_vao);
-    glGenBuffers(1, &s_line_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, s_line_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, pos));
@@ -318,14 +241,10 @@ void zen_gfx_init(int width, int height) {
 void zen_gfx_shutdown(void) {
     if (s_white_texture) glDeleteTextures(1, &s_white_texture);
     if (s_unit_vbo) glDeleteBuffers(1, &s_unit_vbo);
-    if (s_instance_vbo) glDeleteBuffers(1, &s_instance_vbo);
-    if (s_quad_vao) glDeleteVertexArrays(1, &s_quad_vao);
     if (s_shader_program) glDeleteProgram(s_shader_program);
 
     if (s_tri_vbo) glDeleteBuffers(1, &s_tri_vbo);
     if (s_tri_vao) glDeleteVertexArrays(1, &s_tri_vao);
-    if (s_line_vbo) glDeleteBuffers(1, &s_line_vbo);
-    if (s_line_vao) glDeleteVertexArrays(1, &s_line_vao);
     if (s_simple_program) glDeleteProgram(s_simple_program);
 
     if (s_dynamic_vbo) glDeleteBuffers(1, &s_dynamic_vbo);
@@ -348,53 +267,9 @@ void zen_gfx_begin(uint32_t clear_color, int width, int height) {
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    s_quad_count = 0;
     s_tri_count = 0;
-    s_line_count = 0;
-    s_current_mode = RENDER_MODE_NONE;
     s_active_program = s_shader_program;
     s_active_texture = s_white_texture;
-}
-
-static void flush_quads(void) {
-    if (s_quad_count == 0) return;
-
-    int cur_w, cur_h;
-    if (s_current_render_target) {
-        cur_w = s_current_render_target->width;
-        cur_h = s_current_render_target->height;
-    } else {
-        zen_get_window_size(&cur_w, &cur_h);
-    }
-
-    GLuint prog = (s_active_program != 0) ? s_active_program : s_shader_program;
-    glUseProgram(prog);
-
-    GLint u_res = glGetUniformLocation(prog, "u_resolution");
-    if (u_res >= 0) {
-        glUniform2f(u_res, (float)cur_w, (float)cur_h);
-    }
-
-    GLint u_tex = glGetUniformLocation(prog, "u_texture");
-    if (u_tex >= 0) {
-        glUniform1i(u_tex, 0);
-    }
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, s_active_texture);
-
-    glBindVertexArray(s_quad_vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, s_instance_vbo);
-    // Buffer Orphaning: GPUの描画完了待ち(ストール)を完全に排除するため、
-    // 古いバッファ領域を破棄して即座に新しいメモリを確保する
-    glBufferData(GL_ARRAY_BUFFER, sizeof(GpuQuad) * MAX_QUADS, NULL, GL_STREAM_DRAW);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GpuQuad) * s_quad_count, s_quad_buffer);
-
-    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, s_quad_count);
-
-    glBindVertexArray(0);
-    s_quad_count = 0;
 }
 
 static void flush_triangles(void) {
@@ -437,63 +312,8 @@ static void flush_triangles(void) {
     s_tri_count = 0;
 }
 
-static void flush_lines(void) {
-    if (s_line_count == 0) return;
-
-    int cur_w, cur_h;
-    if (s_current_render_target) {
-        cur_w = s_current_render_target->width;
-        cur_h = s_current_render_target->height;
-    } else {
-        zen_get_window_size(&cur_w, &cur_h);
-    }
-
-    glUseProgram(s_simple_program);
-    GLint u_res = glGetUniformLocation(s_simple_program, "u_resolution");
-    if (u_res >= 0) {
-        glUniform2f(u_res, (float)cur_w, (float)cur_h);
-    }
-    glUniform1i(glGetUniformLocation(s_simple_program, "u_grad_type"), 0);
-
-    glBindVertexArray(s_line_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, s_line_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_STREAM_DRAW);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(SimpleVertex) * s_line_count, s_line_buffer);
-
-    glDrawArrays(GL_LINES, 0, s_line_count);
-
-    glBindVertexArray(0);
-    s_line_count = 0;
-}
-
 void zen_gfx_flush(void) {
-    if (s_quad_count > 0) flush_quads();
     if (s_tri_count > 0) flush_triangles();
-    if (s_line_count > 0) flush_lines();
-    s_current_mode = RENDER_MODE_NONE;
-}
-
-static void set_render_mode(RenderMode mode) {
-    if (s_current_mode != mode) {
-        zen_gfx_flush();
-        s_current_mode = mode;
-    }
-}
-
-static void bind_texture(GLuint tex_id) {
-    GLuint target_tex = (tex_id != 0) ? tex_id : s_white_texture;
-    if (s_active_texture != target_tex) {
-        zen_gfx_flush();
-        s_active_texture = target_tex;
-    }
-}
-
-static void push_quad(const GpuQuad* q) {
-    set_render_mode(RENDER_MODE_QUAD);
-    if (s_quad_count >= MAX_QUADS) {
-        flush_quads();
-    }
-    s_quad_buffer[s_quad_count++] = *q;
 }
 
 // ==========================================
@@ -675,13 +495,7 @@ ZenShader* zen_shader_create(const char* vert_src, const char* frag_src) {
     return shader;
 }
 
-static void bind_shader(ZenShader* shader) {
-    GLuint prog = shader ? shader->program_id : s_shader_program;
-    if (s_active_program != prog) {
-        zen_gfx_flush();
-        s_active_program = prog;
-    }
-}
+
 
 void zen_shader_destroy(ZenShader* shader) {
     if (!shader) return;
@@ -749,89 +563,6 @@ uint32_t zen_image_get_texture_id(const ZenImage* image) {
     return image ? (uint32_t)image->texture_id : 0;
 }
 
-void zen_draw_quad_generic(float x, float y, float w, float h,
-                           const float uv[4],
-                           const float color[4],
-                           const float p0[4],
-                           const float p1[4],
-                           const float p2[4],
-                           ZenImage* texture,
-                           ZenShader* shader) {
-    bind_shader(shader);
-
-    if (texture) {
-        bind_texture(texture->texture_id);
-    } else {
-        bind_texture(0);
-    }
-
-    GpuQuad q;
-    q.bounds[0] = x; q.bounds[1] = y; q.bounds[2] = w; q.bounds[3] = h;
-
-    if (uv) memcpy(q.uv, uv, sizeof(float) * 4);
-    else { q.uv[0] = 0.0f; q.uv[1] = 0.0f; q.uv[2] = 1.0f; q.uv[3] = 1.0f; }
-
-    if (color) memcpy(q.color, color, sizeof(float) * 4);
-    else { q.color[0] = 1.0f; q.color[1] = 1.0f; q.color[2] = 1.0f; q.color[3] = 1.0f; }
-
-    if (p0) memcpy(q.param0, p0, sizeof(float) * 4);
-    else memset(q.param0, 0, sizeof(float) * 4);
-
-    if (p1) memcpy(q.param1, p1, sizeof(float) * 4);
-    else memset(q.param1, 0, sizeof(float) * 4);
-
-    if (p2) memcpy(q.param2, p2, sizeof(float) * 4);
-    else memset(q.param2, 0, sizeof(float) * 4);
-
-    push_quad(&q);
-}
-
-void zen_draw_triangle(float x1, float y1, float x2, float y2, float x3, float y3, const float color[4]) {
-    if (s_tri_grad_type != 0 && s_tri_count > 0) flush_triangles();
-    s_tri_grad_type = 0;
-    set_render_mode(RENDER_MODE_TRIANGLE);
-    if (s_tri_count + 3 > MAX_PRIMITIVE_VERTS) {
-        flush_triangles();
-    }
-    float c[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    if (color) memcpy(c, color, sizeof(float) * 4);
-
-    s_tri_buffer[s_tri_count].pos[0] = x1;
-    s_tri_buffer[s_tri_count].pos[1] = y1;
-    memcpy(s_tri_buffer[s_tri_count].color, c, sizeof(float) * 4);
-    s_tri_count++;
-
-    s_tri_buffer[s_tri_count].pos[0] = x2;
-    s_tri_buffer[s_tri_count].pos[1] = y2;
-    memcpy(s_tri_buffer[s_tri_count].color, c, sizeof(float) * 4);
-    s_tri_count++;
-
-    s_tri_buffer[s_tri_count].pos[0] = x3;
-    s_tri_buffer[s_tri_count].pos[1] = y3;
-    memcpy(s_tri_buffer[s_tri_count].color, c, sizeof(float) * 4);
-    s_tri_count++;
-}
-
-void zen_draw_triangles(const float* coords, int num_vertices, const float color[4]) {
-    if (!coords || num_vertices <= 0) return;
-    if (s_tri_grad_type != 0 && s_tri_count > 0) flush_triangles();
-    s_tri_grad_type = 0;
-    set_render_mode(RENDER_MODE_TRIANGLE);
-
-    float c[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    if (color) memcpy(c, color, sizeof(float) * 4);
-
-    for (int i = 0; i < num_vertices; i++) {
-        if (s_tri_count >= MAX_PRIMITIVE_VERTS) {
-            flush_triangles();
-        }
-        s_tri_buffer[s_tri_count].pos[0] = coords[i * 2 + 0];
-        s_tri_buffer[s_tri_count].pos[1] = coords[i * 2 + 1];
-        memcpy(s_tri_buffer[s_tri_count].color, c, sizeof(float) * 4);
-        s_tri_count++;
-    }
-}
-
 void zen_draw_triangles_gradient(const float* coords, int num_vertices, int grad_type,
                                 const float p0[4], const float p1[4],
                                 const float color0[4], const float color1[4]) {
@@ -849,7 +580,6 @@ void zen_draw_triangles_gradient(const float* coords, int num_vertices, int grad
         flush_triangles();
     }
 
-    set_render_mode(RENDER_MODE_TRIANGLE);
     s_tri_grad_type = grad_type;
     if (p0) memcpy(s_tri_grad_p0, p0, sizeof(float) * 4);
     if (p1) memcpy(s_tri_grad_p1, p1, sizeof(float) * 4);
@@ -865,25 +595,6 @@ void zen_draw_triangles_gradient(const float* coords, int num_vertices, int grad
         memcpy(s_tri_buffer[s_tri_count].color, s_tri_grad_color0, sizeof(float) * 4);
         s_tri_count++;
     }
-}
-
-void zen_draw_line(float x1, float y1, float x2, float y2, const float color[4]) {
-    set_render_mode(RENDER_MODE_LINE);
-    if (s_line_count + 2 > MAX_PRIMITIVE_VERTS) {
-        flush_lines();
-    }
-    float c[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    if (color) memcpy(c, color, sizeof(float) * 4);
-
-    s_line_buffer[s_line_count].pos[0] = x1;
-    s_line_buffer[s_line_count].pos[1] = y1;
-    memcpy(s_line_buffer[s_line_count].color, c, sizeof(float) * 4);
-    s_line_count++;
-
-    s_line_buffer[s_line_count].pos[0] = x2;
-    s_line_buffer[s_line_count].pos[1] = y2;
-    memcpy(s_line_buffer[s_line_count].color, c, sizeof(float) * 4);
-    s_line_count++;
 }
 
 void zen_flush(void) {
