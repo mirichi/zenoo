@@ -113,6 +113,16 @@ void sp_zen_renderer_draw_line(
     double r, double g, double b, double a
 );
 
+void sp_zen_renderer_draw_buffer(
+    sp_int topology,
+    const char* layout,
+    sp_int is_instanced,
+    const char* data,
+    sp_int count,
+    sp_RbVal image_val,
+    sp_RbVal shader_val
+);
+
 void sp_zen_renderer_flush(void);
 
 // ==========================================

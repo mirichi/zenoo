@@ -199,6 +199,26 @@ void       zen_draw_triangles_gradient(const float* coords, int num_vertices, in
 void       zen_draw_line(float x1, float y1, float x2, float y2, const float color[4]);
 void       zen_flush(void);
 
+// トポロジー種別定数 (OpenGL GLenum準拠)
+enum ZenTopology {
+    ZEN_TOPOLOGY_POINTS         = 0, // GL_POINTS
+    ZEN_TOPOLOGY_LINES          = 1, // GL_LINES
+    ZEN_TOPOLOGY_LINE_LOOP      = 2, // GL_LINE_LOOP
+    ZEN_TOPOLOGY_LINE_STRIP     = 3, // GL_LINE_STRIP
+    ZEN_TOPOLOGY_TRIANGLES      = 4, // GL_TRIANGLES
+    ZEN_TOPOLOGY_TRIANGLE_STRIP = 5, // GL_TRIANGLE_STRIP
+    ZEN_TOPOLOGY_TRIANGLE_FAN   = 6  // GL_TRIANGLE_FAN
+};
+
+// 汎用動的頂点バッファ描画 API (1バイト属性列 & バイナリバッファ)
+void       zen_draw_buffer(int topology,
+                           const uint8_t* layout,
+                           int is_instanced,
+                           const void* vertex_data,
+                           int count,
+                           ZenImage* texture,
+                           ZenShader* shader);
+
 // ==========================================
 // 5. フォント (Font) & 動的SDFテクスチャアトラス API
 // ==========================================

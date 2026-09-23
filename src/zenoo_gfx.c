@@ -65,6 +65,10 @@ static GLuint s_unit_vbo = 0;
 static GLuint s_instance_vbo = 0;
 static GLuint s_shader_program = 0;
 
+static GLuint s_dynamic_vao = 0;
+static GLuint s_dynamic_instanced_vao = 0;
+static GLuint s_dynamic_vbo = 0;
+
 static GLuint s_white_texture = 0;
 static GLuint s_active_texture = 0;
 static GLuint s_active_program = 0;
@@ -297,6 +301,18 @@ void zen_gfx_init(int width, int height) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, color));
     glBindVertexArray(0);
+
+    // 汎用動的バッファ初期化
+    glGenBuffers(1, &s_dynamic_vbo);
+
+    glGenVertexArrays(1, &s_dynamic_vao);
+
+    glGenVertexArrays(1, &s_dynamic_instanced_vao);
+    glBindVertexArray(s_dynamic_instanced_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, s_unit_vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glBindVertexArray(0);
 }
 
 void zen_gfx_shutdown(void) {
@@ -311,6 +327,10 @@ void zen_gfx_shutdown(void) {
     if (s_line_vbo) glDeleteBuffers(1, &s_line_vbo);
     if (s_line_vao) glDeleteVertexArrays(1, &s_line_vao);
     if (s_simple_program) glDeleteProgram(s_simple_program);
+
+    if (s_dynamic_vbo) glDeleteBuffers(1, &s_dynamic_vbo);
+    if (s_dynamic_vao) glDeleteVertexArrays(1, &s_dynamic_vao);
+    if (s_dynamic_instanced_vao) glDeleteVertexArrays(1, &s_dynamic_instanced_vao);
 }
 
 void zen_gfx_begin(uint32_t clear_color, int width, int height) {
@@ -868,4 +888,106 @@ void zen_draw_line(float x1, float y1, float x2, float y2, const float color[4])
 
 void zen_flush(void) {
     zen_gfx_flush();
+}
+
+void zen_draw_buffer(int topology,
+                      const uint8_t* layout,
+                      int is_instanced,
+                      const void* vertex_data,
+                      int count,
+                      ZenImage* texture,
+                      ZenShader* shader) {
+    if (!layout || count <= 0 || !vertex_data) return;
+
+    // 既存のバッチがあればFlush
+    zen_gfx_flush();
+
+    // 1. シェーダーの準備
+    GLuint prog = shader ? shader->program_id : s_shader_program;
+    glUseProgram(prog);
+
+    int cur_w, cur_h;
+    if (s_current_render_target) {
+        cur_w = s_current_render_target->width;
+        cur_h = s_current_render_target->height;
+    } else {
+        zen_get_window_size(&cur_w, &cur_h);
+    }
+    GLint u_res = glGetUniformLocation(prog, "u_resolution");
+    if (u_res >= 0) {
+        glUniform2f(u_res, (float)cur_w, (float)cur_h);
+    }
+
+    // 2. テクスチャの準備
+    GLuint tex_id = texture ? texture->texture_id : s_white_texture;
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex_id);
+    GLint u_tex = glGetUniformLocation(prog, "u_texture");
+    if (u_tex >= 0) {
+        glUniform1i(u_tex, 0);
+    }
+
+    // 3. stride の計算 (1バイト/属性の単純ループ)
+    int stride = 0;
+    for (int i = 0; layout[i] != 0; i++) {
+        stride += (int)layout[i] * (int)sizeof(float);
+    }
+    if (stride == 0) return;
+
+    size_t total_bytes = (size_t)stride * (size_t)count;
+
+    // 4. VAOとVBOのバインド・データ転送
+    GLuint vao = is_instanced ? s_dynamic_instanced_vao : s_dynamic_vao;
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, s_dynamic_vbo);
+
+    // Buffer Orphaning: 同期ストールを完全に排除
+    glBufferData(GL_ARRAY_BUFFER, total_bytes, NULL, GL_STREAM_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, total_bytes, vertex_data);
+
+    // 5. 頂点属性の設定
+    uintptr_t offset = 0;
+    int loc = is_instanced ? 1 : 0;
+    int num_attrs = 0;
+    for (int i = 0; layout[i] != 0; i++) {
+        int size = (int)layout[i];
+        glEnableVertexAttribArray(loc);
+        glVertexAttribPointer(loc, size, GL_FLOAT, GL_FALSE, stride, (void*)offset);
+        if (is_instanced) {
+            glVertexAttribDivisor(loc, 1);
+        }
+        offset += (size_t)size * sizeof(float);
+        loc++;
+        num_attrs++;
+    }
+
+    // 6. トポロジー判定とドローコール
+    GLenum gl_mode;
+    switch (topology) {
+        case ZEN_TOPOLOGY_POINTS:         gl_mode = GL_POINTS; break;
+        case ZEN_TOPOLOGY_LINES:          gl_mode = GL_LINES; break;
+        case ZEN_TOPOLOGY_LINE_LOOP:      gl_mode = GL_LINE_LOOP; break;
+        case ZEN_TOPOLOGY_LINE_STRIP:     gl_mode = GL_LINE_STRIP; break;
+        case ZEN_TOPOLOGY_TRIANGLES:      gl_mode = GL_TRIANGLES; break;
+        case ZEN_TOPOLOGY_TRIANGLE_STRIP: gl_mode = GL_TRIANGLE_STRIP; break;
+        case ZEN_TOPOLOGY_TRIANGLE_FAN:   gl_mode = GL_TRIANGLE_FAN; break;
+        default:                          gl_mode = GL_TRIANGLES; break;
+    }
+
+    if (is_instanced) {
+        glDrawArraysInstanced(gl_mode, 0, 4, count);
+    } else {
+        glDrawArrays(gl_mode, 0, count);
+    }
+
+    // 7. クリーンアップ (属性の無効化とDivisorリセット)
+    int start_loc = is_instanced ? 1 : 0;
+    for (int i = 0; i < num_attrs; i++) {
+        if (is_instanced) {
+            glVertexAttribDivisor(start_loc + i, 0);
+        }
+        glDisableVertexAttribArray(start_loc + i);
+    }
+
+    glBindVertexArray(0);
 }
