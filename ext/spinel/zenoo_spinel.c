@@ -228,25 +228,7 @@ static ZenShader* unpack_shader(sp_RbVal val) {
     return NULL;
 }
 
-void sp_zen_renderer_draw_triangle_gradient(
-    sp_int grad_type,
-    double p0_0, double p0_1, double p0_2, double p0_3,
-    double p1_0, double p1_1, double p1_2, double p1_3,
-    double c0_0, double c0_1, double c0_2, double c0_3,
-    double c1_0, double c1_1, double c1_2, double c1_3,
-    double x1, double y1, double x2, double y2, double x3, double y3
-) {
-    float p0[4] = { (float)p0_0, (float)p0_1, (float)p0_2, (float)p0_3 };
-    float p1[4] = { (float)p1_0, (float)p1_1, (float)p1_2, (float)p1_3 };
-    float c0[4] = { (float)c0_0, (float)c0_1, (float)c0_2, (float)c0_3 };
-    float c1[4] = { (float)c1_0, (float)c1_1, (float)c1_2, (float)c1_3 };
-    float tri_coords[6] = {
-        (float)x1, (float)y1,
-        (float)x2, (float)y2,
-        (float)x3, (float)y3
-    };
-    zen_draw_triangles_gradient(tri_coords, 3, (int)grad_type, p0, p1, c0, c1);
-}
+
 
 void sp_zen_renderer_draw_buffer(
     sp_int topology,

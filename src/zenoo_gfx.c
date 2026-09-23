@@ -11,28 +11,7 @@
 #endif
 #include "zenoo.h"
 
-// グラデーション三角形用 頂点構造体
-typedef struct {
-    float pos[2];
-    float color[4];
-} SimpleVertex;
-
-#define MAX_PRIMITIVE_VERTS 16384
-
-static SimpleVertex s_tri_buffer[MAX_PRIMITIVE_VERTS];
-static int s_tri_count = 0;
-static GLuint s_tri_vao = 0;
-static GLuint s_tri_vbo = 0;
-
-static GLuint s_simple_program = 0;
-static int   s_tri_grad_type = 0; // 0: none, 1: linear, 2: radial
-static float s_tri_grad_p0[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-static float s_tri_grad_p1[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-static float s_tri_grad_color0[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-static float s_tri_grad_color1[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-
 static GLuint s_unit_vbo = 0;
-static GLuint s_shader_program = 0;
 
 static GLuint s_dynamic_vao = 0;
 static GLuint s_dynamic_instanced_vao = 0;
@@ -92,105 +71,8 @@ static GLuint compile_shader(GLenum type, const char* source) {
     return shader;
 }
 
-static const char* s_default_vert_src = 
-"#version 330 core\n"
-"layout (location = 0) in vec2 in_unit_pos;\n"
-"layout (location = 1) in vec4 in_bounds;\n"
-"layout (location = 2) in vec4 in_color;\n"
-"layout (location = 3) in vec4 in_param0;\n"
-"layout (location = 4) in vec4 in_param1;\n"
-"layout (location = 5) in vec4 in_param2;\n"
-"layout (location = 6) in vec4 in_uv;\n"
-"uniform vec2 u_resolution;\n"
-"out vec4 v_color;\n"
-"out vec2 v_uv;\n"
-"void main() {\n"
-"    vec2 pos = in_bounds.xy + in_unit_pos * in_bounds.zw;\n"
-"    vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;\n"
-"    ndc.y = -ndc.y;\n"
-"    gl_Position = vec4(ndc, 0.0, 1.0);\n"
-"    v_color = in_color;\n"
-"    v_uv = in_uv.xy + in_unit_pos * in_uv.zw;\n"
-"}\n";
-
-static const char* s_default_frag_src =
-"#version 330 core\n"
-"in vec4 v_color;\n"
-"in vec2 v_uv;\n"
-"uniform sampler2D u_texture;\n"
-"out vec4 fragColor;\n"
-"void main() {\n"
-"    fragColor = v_color * texture(u_texture, v_uv);\n"
-"}\n";
-
-static const char* s_simple_vert_src =
-"#version 330 core\n"
-"layout (location = 0) in vec2 in_pos;\n"
-"layout (location = 1) in vec4 in_color;\n"
-"uniform vec2 u_resolution;\n"
-"out vec4 v_color;\n"
-"out vec2 v_pos;\n"
-"void main() {\n"
-"    vec2 ndc = (in_pos / u_resolution) * 2.0 - 1.0;\n"
-"    ndc.y = -ndc.y;\n"
-"    gl_Position = vec4(ndc, 0.0, 1.0);\n"
-"    v_color = in_color;\n"
-"    v_pos = in_pos;\n"
-"}\n";
-
-static const char* s_simple_frag_src =
-"#version 330 core\n"
-"in vec4 v_color;\n"
-"in vec2 v_pos;\n"
-"uniform int u_grad_type;\n"
-"uniform vec4 u_grad_p0;\n"
-"uniform vec4 u_grad_p1;\n"
-"uniform vec4 u_grad_color0;\n"
-"uniform vec4 u_grad_color1;\n"
-"out vec4 fragColor;\n"
-"void main() {\n"
-"    if (u_grad_type == 1) {\n"
-"        vec2 dir = u_grad_p1.xy - u_grad_p0.xy;\n"
-"        float len_sq = dot(dir, dir);\n"
-"        vec2 dpos = v_pos - u_grad_p0.xy;\n"
-"        float t = (len_sq > 0.0001) ? clamp(dot(dpos, dir) / len_sq, 0.0, 1.0) : 0.0;\n"
-"        fragColor = mix(u_grad_color0, u_grad_color1, t);\n"
-"    } else if (u_grad_type == 2) {\n"
-"        vec2 center = u_grad_p0.xy;\n"
-"        float r0 = u_grad_p0.z;\n"
-"        float r1 = u_grad_p1.z;\n"
-"        float d = length(v_pos - center);\n"
-"        float dr = r1 - r0;\n"
-"        float t = (abs(dr) > 0.0001) ? clamp((d - r0) / dr, 0.0, 1.0) : 0.0;\n"
-"        fragColor = mix(u_grad_color0, u_grad_color1, t);\n"
-"    } else {\n"
-"        fragColor = v_color;\n"
-"    }\n"
-"}\n";
-
 void zen_gfx_init(int width, int height) {
     (void)width; (void)height;
-
-    GLuint vs = compile_shader(GL_VERTEX_SHADER, s_default_vert_src);
-    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, s_default_frag_src);
-
-    s_shader_program = glCreateProgram();
-    glAttachShader(s_shader_program, vs);
-    glAttachShader(s_shader_program, fs);
-    glLinkProgram(s_shader_program);
-
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    // 単色プリミティブ用シェーダー (三角形・ライン)
-    GLuint vs_s = compile_shader(GL_VERTEX_SHADER, s_simple_vert_src);
-    GLuint fs_s = compile_shader(GL_FRAGMENT_SHADER, s_simple_frag_src);
-    s_simple_program = glCreateProgram();
-    glAttachShader(s_simple_program, vs_s);
-    glAttachShader(s_simple_program, fs_s);
-    glLinkProgram(s_simple_program);
-    glDeleteShader(vs_s);
-    glDeleteShader(fs_s);
 
     // 1x1 白テクスチャの生成 (単色描画用: テクスチャ未指定時はこれをサンプリング)
     glGenTextures(1, &s_white_texture);
@@ -213,21 +95,8 @@ void zen_gfx_init(int width, int height) {
     glBufferData(GL_ARRAY_BUFFER, sizeof(unit_quad), unit_quad, GL_STATIC_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    // 三角形バッファ初期化 (グラデーション描画用)
-    glGenVertexArrays(1, &s_tri_vao);
-    glBindVertexArray(s_tri_vao);
-    glGenBuffers(1, &s_tri_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, s_tri_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, pos));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (void*)offsetof(SimpleVertex, color));
-    glBindVertexArray(0);
-
     // 汎用動的バッファ初期化
     glGenBuffers(1, &s_dynamic_vbo);
-
     glGenVertexArrays(1, &s_dynamic_vao);
 
     glGenVertexArrays(1, &s_dynamic_instanced_vao);
@@ -241,11 +110,6 @@ void zen_gfx_init(int width, int height) {
 void zen_gfx_shutdown(void) {
     if (s_white_texture) glDeleteTextures(1, &s_white_texture);
     if (s_unit_vbo) glDeleteBuffers(1, &s_unit_vbo);
-    if (s_shader_program) glDeleteProgram(s_shader_program);
-
-    if (s_tri_vbo) glDeleteBuffers(1, &s_tri_vbo);
-    if (s_tri_vao) glDeleteVertexArrays(1, &s_tri_vao);
-    if (s_simple_program) glDeleteProgram(s_simple_program);
 
     if (s_dynamic_vbo) glDeleteBuffers(1, &s_dynamic_vbo);
     if (s_dynamic_vao) glDeleteVertexArrays(1, &s_dynamic_vao);
@@ -267,53 +131,12 @@ void zen_gfx_begin(uint32_t clear_color, int width, int height) {
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    s_tri_count = 0;
-    s_active_program = s_shader_program;
+    s_active_program = 0;
     s_active_texture = s_white_texture;
 }
 
-static void flush_triangles(void) {
-    if (s_tri_count == 0) return;
-
-    int cur_w, cur_h;
-    if (s_current_render_target) {
-        cur_w = s_current_render_target->width;
-        cur_h = s_current_render_target->height;
-    } else {
-        zen_get_window_size(&cur_w, &cur_h);
-    }
-
-    glUseProgram(s_simple_program);
-    GLint u_res = glGetUniformLocation(s_simple_program, "u_resolution");
-    if (u_res >= 0) {
-        glUniform2f(u_res, (float)cur_w, (float)cur_h);
-    }
-
-    glUniform1i(glGetUniformLocation(s_simple_program, "u_grad_type"), s_tri_grad_type);
-    if (s_tri_grad_type > 0) {
-        glUniform4f(glGetUniformLocation(s_simple_program, "u_grad_p0"),
-                    s_tri_grad_p0[0], s_tri_grad_p0[1], s_tri_grad_p0[2], s_tri_grad_p0[3]);
-        glUniform4f(glGetUniformLocation(s_simple_program, "u_grad_p1"),
-                    s_tri_grad_p1[0], s_tri_grad_p1[1], s_tri_grad_p1[2], s_tri_grad_p1[3]);
-        glUniform4f(glGetUniformLocation(s_simple_program, "u_grad_color0"),
-                    s_tri_grad_color0[0], s_tri_grad_color0[1], s_tri_grad_color0[2], s_tri_grad_color0[3]);
-        glUniform4f(glGetUniformLocation(s_simple_program, "u_grad_color1"),
-                    s_tri_grad_color1[0], s_tri_grad_color1[1], s_tri_grad_color1[2], s_tri_grad_color1[3]);
-    }
-
-    glBindVertexArray(s_tri_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, s_tri_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(SimpleVertex) * MAX_PRIMITIVE_VERTS, NULL, GL_STREAM_DRAW);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(SimpleVertex) * s_tri_count, s_tri_buffer);
-
-    glDrawArrays(GL_TRIANGLES, 0, s_tri_count);
-
-    glBindVertexArray(0);
-    s_tri_count = 0;
-}
-
 void zen_gfx_flush(void) {
-    if (s_tri_count > 0) flush_triangles();
+    // マイクロカーネル化により即時描画（draw_buffer）に統一されたため Flush 処理は不要
 }
 
 // ==========================================
@@ -455,12 +278,13 @@ struct ZenShader {
 };
 
 ZenShader* zen_shader_create(const char* vert_src, const char* frag_src) {
-    const char* vs_code = (vert_src && strlen(vert_src) > 0) ? vert_src : s_default_vert_src;
-    const char* fs_code = (frag_src && strlen(frag_src) > 0) ? frag_src : s_default_frag_src;
+    if (!vert_src || !frag_src || strlen(vert_src) == 0 || strlen(frag_src) == 0) {
+        return NULL;
+    }
 
-    GLuint vs = compile_shader(GL_VERTEX_SHADER, vs_code);
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, vert_src);
     if (!vs) return NULL;
-    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, fs_code);
+    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, frag_src);
     if (!fs) {
         glDeleteShader(vs);
         return NULL;
@@ -500,8 +324,7 @@ ZenShader* zen_shader_create(const char* vert_src, const char* frag_src) {
 void zen_shader_destroy(ZenShader* shader) {
     if (!shader) return;
     if (s_active_program == shader->program_id) {
-        zen_gfx_flush();
-        s_active_program = s_shader_program;
+        s_active_program = 0;
     }
     if (shader->program_id) {
         glDeleteProgram(shader->program_id);
@@ -563,40 +386,6 @@ uint32_t zen_image_get_texture_id(const ZenImage* image) {
     return image ? (uint32_t)image->texture_id : 0;
 }
 
-void zen_draw_triangles_gradient(const float* coords, int num_vertices, int grad_type,
-                                const float p0[4], const float p1[4],
-                                const float color0[4], const float color1[4]) {
-    if (!coords || num_vertices <= 0) return;
-
-    bool param_changed = (s_tri_grad_type != grad_type);
-    if (!param_changed && grad_type > 0) {
-        if (p0 && memcmp(s_tri_grad_p0, p0, sizeof(float) * 4) != 0) param_changed = true;
-        if (p1 && memcmp(s_tri_grad_p1, p1, sizeof(float) * 4) != 0) param_changed = true;
-        if (color0 && memcmp(s_tri_grad_color0, color0, sizeof(float) * 4) != 0) param_changed = true;
-        if (color1 && memcmp(s_tri_grad_color1, color1, sizeof(float) * 4) != 0) param_changed = true;
-    }
-
-    if (param_changed && s_tri_count > 0) {
-        flush_triangles();
-    }
-
-    s_tri_grad_type = grad_type;
-    if (p0) memcpy(s_tri_grad_p0, p0, sizeof(float) * 4);
-    if (p1) memcpy(s_tri_grad_p1, p1, sizeof(float) * 4);
-    if (color0) memcpy(s_tri_grad_color0, color0, sizeof(float) * 4);
-    if (color1) memcpy(s_tri_grad_color1, color1, sizeof(float) * 4);
-
-    for (int i = 0; i < num_vertices; i++) {
-        if (s_tri_count >= MAX_PRIMITIVE_VERTS) {
-            flush_triangles();
-        }
-        s_tri_buffer[s_tri_count].pos[0] = coords[i * 2 + 0];
-        s_tri_buffer[s_tri_count].pos[1] = coords[i * 2 + 1];
-        memcpy(s_tri_buffer[s_tri_count].color, s_tri_grad_color0, sizeof(float) * 4);
-        s_tri_count++;
-    }
-}
-
 void zen_flush(void) {
     zen_gfx_flush();
 }
@@ -608,20 +397,10 @@ void zen_draw_buffer(int topology,
                       int count,
                       ZenImage* texture,
                       ZenShader* shader) {
-    if (!layout || count <= 0 || !vertex_data) return;
-
-    // 既存のバッチがあればFlush
-    zen_gfx_flush();
+    if (!layout || count <= 0 || !vertex_data || !shader) return;
 
     // 1. シェーダーの準備
-    GLuint prog;
-    if (shader) {
-        prog = shader->program_id;
-    } else if (is_instanced) {
-        prog = s_shader_program; // Quad インスタンシング用デフォルトシェーダー
-    } else {
-        prog = s_simple_program; // 通常頂点描画用デフォルトシェーダー (pos: 0, color: 1)
-    }
+    GLuint prog = shader->program_id;
     glUseProgram(prog);
     s_active_program = prog;
 
@@ -635,13 +414,6 @@ void zen_draw_buffer(int topology,
     GLint u_res = glGetUniformLocation(prog, "u_resolution");
     if (u_res >= 0) {
         glUniform2f(u_res, (float)cur_w, (float)cur_h);
-    }
-
-    if (prog == s_simple_program) {
-        GLint u_grad = glGetUniformLocation(s_simple_program, "u_grad_type");
-        if (u_grad >= 0) {
-            glUniform1i(u_grad, 0);
-        }
     }
 
     // 2. テクスチャの準備

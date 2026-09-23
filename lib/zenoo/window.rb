@@ -127,12 +127,27 @@ module Zenoo
 
     @current_shader = nil
     @card_shader = nil
+    @default_sprite_shader = nil
+    @default_primitive_shader = nil
+
+    def self.default_sprite_shader
+      @default_sprite_shader ||= Shader.new(Shaders::DEFAULT_SPRITE_VERTEX, Shaders::DEFAULT_SPRITE_FRAGMENT)
+    end
+
+    def self.default_quad_shader
+      default_sprite_shader
+    end
+
+    def self.default_primitive_shader
+      @default_primitive_shader ||= Shader.new(Shaders::PRIMITIVE_VERTEX, Shaders::PRIMITIVE_FRAGMENT)
+    end
 
     def self.card_shader
       @card_shader ||= Shader.new(Shaders::CARD_VERTEX, Shaders::CARD_FRAGMENT)
     end
 
     # ブロック内でのシェーダー適用スコープ (RAII / ensure で確実に元の状態に戻る)
+    # ※ カスタムシェーダーは Image 描画 (draw_image) にのみ適用されます。
     def self.with_shader(shader)
       old_shader = @current_shader
       @current_shader = shader
@@ -180,27 +195,8 @@ module Zenoo
       )
     end
 
-    def self.draw_rect(x, y, w, h, color = :white, shader: nil)
-      effective_shader = shader || @current_shader
-      c_color = normalize_color(color)
-      data = [
-        x.to_f, y.to_f, w.to_f, h.to_f,
-        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 1.0, 1.0
-      ].pack("f*")
-
-      Native::Renderer.draw_buffer(
-        Topology::TRIANGLE_STRIP,
-        Layout::QUAD_INSTANCED,
-        true,
-        data,
-        1,
-        nil,
-        effective_shader
-      )
+    def self.draw_rect(x, y, w, h, color = :white)
+      draw_card(x, y, w, h, color: color)
     end
 
     def self.draw_rounded_rect(x, y, w, h, radius, color = :white)
@@ -209,20 +205,17 @@ module Zenoo
 
     def self.draw_image(x, y, image, color = :white, shader: nil)
       return unless image
-      effective_shader = shader || @current_shader
+      effective_shader = shader || @current_shader || default_sprite_shader
       c_color = normalize_color(color)
       data = [
         x.to_f, y.to_f, image.width.to_f, image.height.to_f,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0,
         0.0, 0.0, 1.0, 1.0
       ].pack("f*")
 
       Native::Renderer.draw_buffer(
         Topology::TRIANGLE_STRIP,
-        Layout::QUAD_INSTANCED,
+        Layout::SPRITE_INSTANCED,
         true,
         data,
         1,
@@ -247,7 +240,7 @@ module Zenoo
         data,
         3,
         nil,
-        @current_shader
+        default_primitive_shader
       )
     end
 
@@ -266,7 +259,7 @@ module Zenoo
         data,
         2,
         nil,
-        @current_shader
+        default_primitive_shader
       )
     end
 

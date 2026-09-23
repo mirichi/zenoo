@@ -182,9 +182,6 @@ void       zen_shader_set_mat4(ZenShader* shader, const char* name, const float*
 // メモリ不足時に言語側 (CRubyのrb_gc()やSpinelのGC) を呼び出すためのコールバック
 void       zen_set_gc_trigger_callback(void (*callback)(void));
 
-void       zen_draw_triangles_gradient(const float* coords, int num_vertices, int grad_type,
-                                       const float p0[4], const float p1[4],
-                                       const float color0[4], const float color1[4]);
 void       zen_flush(void);
 
 // トポロジー種別定数 (OpenGL GLenum準拠)
