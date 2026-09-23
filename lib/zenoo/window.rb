@@ -356,6 +356,9 @@ module Zenoo
       len = chars.length
       return if len == 0
 
+      batch = []
+      glyph_count = 0
+
       if block_given?
         ctx = @char_ctx
         i = 0
@@ -396,24 +399,15 @@ module Zenoo
               cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
               cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : normalize_color(ctx.outline_color)
 
-              qdata = [
+              batch.push(
                 cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
                 cur_color[0].to_f, cur_color[1].to_f, cur_color[2].to_f, cur_color[3].to_f,
                 cur_p0[0].to_f, cur_p0[1].to_f, cur_p0[2].to_f, cur_p0[3].to_f,
                 cur_p1[0].to_f, cur_p1[1].to_f, cur_p1[2].to_f, cur_p1[3].to_f,
                 p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
                 uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
-              ].pack("f*")
-
-              Native::Renderer.draw_buffer(
-                Topology::TRIANGLE_STRIP,
-                Layout::CARD_INSTANCED,
-                true,
-                qdata,
-                1,
-                atlas,
-                shader
               )
+              glyph_count += 1
             end
           end
 
@@ -435,29 +429,32 @@ module Zenoo
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
 
-            qdata = [
+            batch.push(
               gx.to_f, gy.to_f, gw.to_f, gh.to_f,
               c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
               p0[0].to_f, p0[1].to_f, p0[2].to_f, p0[3].to_f,
               p1[0].to_f, p1[1].to_f, p1[2].to_f, p1[3].to_f,
               p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
               uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
-            ].pack("f*")
-
-            Native::Renderer.draw_buffer(
-              Topology::TRIANGLE_STRIP,
-              Layout::CARD_INSTANCED,
-              true,
-              qdata,
-              1,
-              atlas,
-              shader
             )
+            glyph_count += 1
           end
 
           pen_x += adv
           i += 1
         end
+      end
+
+      if glyph_count > 0
+        Native::Renderer.draw_buffer(
+          Topology::TRIANGLE_STRIP,
+          Layout::CARD_INSTANCED,
+          true,
+          batch.pack("f*"),
+          glyph_count,
+          atlas,
+          shader
+        )
       end
     end
 
