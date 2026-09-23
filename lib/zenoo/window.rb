@@ -215,6 +215,12 @@ module Zenoo
       )
     end
 
+    # 汎用動的頂点バッファ描画 API
+    def self.draw_buffer(topology, layout, is_instanced, data, count, texture = nil, shader = nil)
+      effective_shader = shader || @current_shader
+      Native::Renderer.draw_buffer(topology, layout, is_instanced, data, count, texture, effective_shader)
+    end
+
     @sdf_font_shader = nil
 
     def self.sdf_font_shader

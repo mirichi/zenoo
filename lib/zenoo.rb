@@ -18,6 +18,7 @@ end
 # 共通 Ruby レイヤー (CRuby / Spinel 完全共通)
 # ====================================================
 require_relative 'zenoo/color'
+require_relative 'zenoo/layout'
 require_relative 'zenoo/font'
 require_relative 'zenoo/shader'
 require_relative 'zenoo/shaders/sdf_card_shader'
@@ -37,3 +38,5 @@ Shader     = Zenoo::Shader     unless defined?(Shader)
 Color      = Zenoo::Color      unless defined?(Color)
 Font       = Zenoo::Font       unless defined?(Font)
 GUI        = Zenoo::GUI        unless defined?(GUI)
+Topology   = Zenoo::Topology   unless defined?(Topology)
+Layout     = Zenoo::Layout     unless defined?(Layout)

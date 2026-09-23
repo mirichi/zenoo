@@ -94,6 +94,21 @@ module Zenoo
         :float, :float, :float, :float,
         :any, :any
       ], :nil, "sp_zen_renderer_draw_quad_generic_wrapper"
+      native_func :raw_draw_buffer, [
+        :int, :string, :int, :string, :int, :any, :any
+      ], :nil, "sp_zen_renderer_draw_buffer"
+
+      def self.draw_buffer(topology, layout, is_instanced, data, count, img, sh)
+        Zenoo::Native::Renderer.raw_draw_buffer(
+          topology.to_i,
+          layout.to_s,
+          is_instanced ? 1 : 0,
+          data.to_s,
+          count.to_i,
+          img,
+          sh
+        )
+      end
 
       def self.draw_quad(x, y, w, h, uv, color, p0, p1, p2, img, sh)
         u0 = uv ? uv[0].to_f : 0.0

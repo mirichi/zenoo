@@ -569,6 +569,29 @@ static VALUE renderer_draw_line(VALUE self, VALUE rb_x1, VALUE rb_y1, VALUE rb_x
     return Qnil;
 }
 
+static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout, VALUE rb_is_instanced, VALUE rb_data, VALUE rb_count, VALUE rb_tex, VALUE rb_shader) {
+    (void)self;
+    int topology = NUM2INT(rb_topology);
+    const uint8_t* layout = (const uint8_t*)StringValuePtr(rb_layout);
+    int is_instanced = RTEST(rb_is_instanced) ? 1 : 0;
+    Check_Type(rb_data, T_STRING);
+    const void* data = (const void*)RSTRING_PTR(rb_data);
+    int count = NUM2INT(rb_count);
+
+    ZenImage* img = NULL;
+    if (rb_obj_is_kind_of(rb_tex, rb_cNativeImage)) {
+        TypedData_Get_Struct(rb_tex, ZenImage, &zenoo_image_data_type, img);
+    }
+
+    ZenShader* sh = NULL;
+    if (rb_obj_is_kind_of(rb_shader, rb_cNativeShader)) {
+        TypedData_Get_Struct(rb_shader, ZenShader, &zenoo_shader_data_type, sh);
+    }
+
+    zen_draw_buffer(topology, layout, is_instanced, data, count, img, sh);
+    return Qnil;
+}
+
 // ==========================================
 // C拡張初期化エントリポイント
 // ==========================================
@@ -639,6 +662,7 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mRenderer, "draw_triangles", renderer_draw_triangles, 5);
     rb_define_singleton_method(mRenderer, "draw_triangles_gradient", renderer_draw_triangles_gradient, 6);
     rb_define_singleton_method(mRenderer, "draw_line", renderer_draw_line, 8);
+    rb_define_singleton_method(mRenderer, "draw_buffer", renderer_draw_buffer, 7);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
 
     // 6. Font (Zenoo::Native::Font)
