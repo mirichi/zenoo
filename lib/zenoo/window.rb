@@ -73,9 +73,10 @@ module Zenoo
     end
 
     class DrawCommand
-      attr_accessor :z, :order, :topology, :layout, :is_instanced, :data, :count, :image, :shader
+      attr_accessor :target, :z, :order, :topology, :layout, :is_instanced, :data, :count, :image, :shader
 
       def initialize
+        @target = nil
         @z = 0.0
         @order = 0
         @topology = 0
@@ -87,7 +88,8 @@ module Zenoo
         @shader = nil
       end
 
-      def set(z, order, topology, layout, is_instanced, data, count, image, shader)
+      def set(target, z, order, topology, layout, is_instanced, data, count, image, shader)
+        @target = target
         @z = z.to_f
         @order = order
         @topology = topology
@@ -104,8 +106,21 @@ module Zenoo
     @queue_count = 0
     @needs_z_sort = false
     @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
+    @current_target = nil
     @main_loop_block = nil
     @step_proc = nil
+
+    def self.current_target
+      @current_target
+    end
+
+    def self.with_target(target)
+      old_target = @current_target
+      @current_target = target
+      yield
+    ensure
+      @current_target = old_target
+    end
 
     def self.enqueue_draw(z, topology, layout, is_instanced, data, count, image, shader)
       cmd = nil
@@ -117,27 +132,29 @@ module Zenoo
       end
       zf = z.to_f
       @needs_z_sort = true if zf != 0.0
-      cmd.set(zf, @queue_count, topology, layout, is_instanced, data, count, image, shader)
+      cmd.set(@current_target, zf, @queue_count, topology, layout, is_instanced, data, count, image, shader)
       @queue_count += 1
     end
 
-    # 安定挿入ソート (昇順: 奥から手前へ描画)
+    # 安定挿入ソート (昇順: 奥から手前へ描画。描画先 target が異なる区間は跨がない)
     def self.sort_draw_queue
       return unless @needs_z_sort
       return if @queue_count <= 1
 
       i = 1
       while i < @queue_count
-        target = @command_pool[i]
-        tz = target.z
+        target_cmd = @command_pool[i]
+        tz = target_cmd.z
+        ttarget = target_cmd.target
         j = i - 1
         while j >= 0
           prev_cmd = @command_pool[j]
+          break if prev_cmd.target != ttarget
           break if prev_cmd.z <= tz
           @command_pool[j + 1] = prev_cmd
           j -= 1
         end
-        @command_pool[j + 1] = target
+        @command_pool[j + 1] = target_cmd
         i += 1
       end
     end
@@ -147,22 +164,80 @@ module Zenoo
 
       sort_draw_queue
 
+      active_target = nil
+
       i = 0
       while i < @queue_count
         cmd = @command_pool[i]
+
+        # 1. レンダーターゲット（描画先）の切り替え
+        if cmd.target != active_target
+          active_target = cmd.target
+          if active_target
+            active_target.set_as_render_target
+          else
+            Native::Image.reset_render_target
+          end
+        end
+
+        cur_topology = cmd.topology
+        cur_layout = cmd.layout
+        cur_is_instanced = cmd.is_instanced
+        cur_data = cmd.data
+        cur_count = cmd.count
+        cur_target = cmd.target
+        cur_image = cmd.image
+        cur_shader = cmd.shader
+
+        # 2. ドローコールのまとめ（バッチング）
+        # 条件: 描画先(target), 描画対象(image), シェーダー(shader), トポロジーが一致
+        can_batch = cur_is_instanced ||
+                    cur_topology == Topology::TRIANGLES ||
+                    cur_topology == Topology::LINES ||
+                    cur_topology == Topology::POINTS
+
+        next_idx = i + 1
+        if can_batch
+          while next_idx < @queue_count
+            ncmd = @command_pool[next_idx]
+            if ncmd.target == cur_target &&
+               ncmd.image == cur_image &&
+               ncmd.shader == cur_shader &&
+               ncmd.topology == cur_topology
+              cur_data = cur_data + ncmd.data
+              cur_count += ncmd.count
+              ncmd.data = nil
+              ncmd.image = nil
+              ncmd.shader = nil
+              ncmd.target = nil
+              next_idx += 1
+            else
+              break
+            end
+          end
+        end
+
+        # 3. GPU への一括描画送信
         Native::Renderer.draw_buffer(
-          cmd.topology,
-          cmd.layout,
-          cmd.is_instanced,
-          cmd.data,
-          cmd.count,
-          cmd.image,
-          cmd.shader
+          cur_topology,
+          cur_layout,
+          cur_is_instanced,
+          cur_data,
+          cur_count,
+          cur_image,
+          cur_shader
         )
+
         cmd.data = nil
         cmd.image = nil
         cmd.shader = nil
-        i += 1
+        cmd.target = nil
+
+        i = next_idx
+      end
+
+      if active_target != nil
+        Native::Image.reset_render_target
       end
 
       @queue_count = 0

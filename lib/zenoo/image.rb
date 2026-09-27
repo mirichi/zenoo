@@ -3,10 +3,7 @@ class Zenoo::Image
   # Image.render_to(canvas) do
   #   Window.draw_card(...)
   # end
-  def self.render_to(target)
-    target.set_as_render_target
-    yield
-  ensure
-    reset_render_target
+  def self.render_to(target, &block)
+    Zenoo::Window.with_target(target, &block)
   end
 end
