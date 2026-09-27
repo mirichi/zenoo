@@ -73,28 +73,30 @@ module Zenoo
     end
 
     class DrawCommand
-      attr_accessor :target, :z, :order, :topology, :layout, :is_instanced, :data, :count, :image, :shader
+      attr_accessor :target, :z, :order, :topology, :layout, :divisors, :base_vertex_count, :data, :count, :image, :shader
 
       def initialize
         @target = nil
         @z = 0.0
         @order = 0
         @topology = 0
-        @layout = 0
-        @is_instanced = false
+        @layout = ""
+        @divisors = ""
+        @base_vertex_count = 0
         @data = nil
         @count = 0
         @image = nil
         @shader = nil
       end
 
-      def set(target, z, order, topology, layout, is_instanced, data, count, image, shader)
+      def set(target, z, order, topology, layout, divisors, base_vertex_count, data, count, image, shader)
         @target = target
         @z = z.to_f
         @order = order
         @topology = topology
         @layout = layout
-        @is_instanced = is_instanced
+        @divisors = divisors
+        @base_vertex_count = base_vertex_count
         @data = data
         @count = count
         @image = image
@@ -122,7 +124,7 @@ module Zenoo
       @current_target = old_target
     end
 
-    def self.enqueue_draw(z, topology, layout, is_instanced, data, count, image, shader)
+    def self.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader)
       cmd = nil
       if @queue_count < @command_pool.length
         cmd = @command_pool[@queue_count]
@@ -132,7 +134,7 @@ module Zenoo
       end
       zf = z.to_f
       @needs_z_sort = true if zf != 0.0
-      cmd.set(@current_target, zf, @queue_count, topology, layout, is_instanced, data, count, image, shader)
+      cmd.set(@current_target, zf, @queue_count, topology, layout, divisors, base_vertex_count, data, count, image, shader)
       @queue_count += 1
     end
 
@@ -182,7 +184,8 @@ module Zenoo
 
         cur_topology = cmd.topology
         cur_layout = cmd.layout
-        cur_is_instanced = cmd.is_instanced
+        cur_divisors = cmd.divisors
+        cur_base_vertex_count = cmd.base_vertex_count
         cur_data = cmd.data
         cur_count = cmd.count
         cur_target = cmd.target
@@ -191,7 +194,7 @@ module Zenoo
 
         # 2. ドローコールのまとめ（バッチング）
         # 条件: 描画先(target), 描画対象(image), シェーダー(shader), トポロジーが一致
-        can_batch = cur_is_instanced ||
+        can_batch = cur_base_vertex_count > 0 ||
                     cur_topology == Topology::TRIANGLES ||
                     cur_topology == Topology::LINES ||
                     cur_topology == Topology::POINTS
@@ -221,7 +224,8 @@ module Zenoo
         Native::Renderer.draw_buffer(
           cur_topology,
           cur_layout,
-          cur_is_instanced,
+          cur_divisors,
+          cur_base_vertex_count,
           cur_data,
           cur_count,
           cur_image,
@@ -382,7 +386,8 @@ module Zenoo
         z,
         Topology::TRIANGLE_STRIP,
         Layout::CARD_INSTANCED,
-        true,
+        Divisor::CARD_INSTANCED,
+        4,
         data,
         1,
         image,
@@ -412,7 +417,8 @@ module Zenoo
         z,
         Topology::TRIANGLE_STRIP,
         Layout::SPRITE_INSTANCED,
-        true,
+        Divisor::SPRITE_INSTANCED,
+        4,
         data,
         1,
         image,
@@ -434,7 +440,8 @@ module Zenoo
         z,
         Topology::TRIANGLES,
         Layout::POS2_COLOR4,
-        false,
+        Divisor::POS2_COLOR4,
+        0,
         data,
         3,
         nil,
@@ -454,7 +461,8 @@ module Zenoo
         z,
         Topology::LINES,
         Layout::LINE,
-        false,
+        Divisor::LINE,
+        0,
         data,
         2,
         nil,
@@ -643,7 +651,8 @@ module Zenoo
           z,
           Topology::TRIANGLE_STRIP,
           Layout::CARD_INSTANCED,
-          true,
+          Divisor::CARD_INSTANCED,
+          4,
           batch.pack("f*"),
           glyph_count,
           atlas,

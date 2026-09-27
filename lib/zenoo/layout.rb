@@ -21,4 +21,15 @@ module Zenoo
     QUAD_INSTANCED      = CARD_INSTANCED
     SPRITE_INSTANCED    = "\x04\x04\x04"             # bounds(4), color(4), uv(4) -> 12 floats
   end
+
+  # 動的属性 Divisor (1バイト属性数列: 各バイトが glVertexAttribDivisor の値 0, 1 を表す)
+  module Divisor
+    DIRECT              = "\x00\x00"                 # 全属性が頂点データ (divisor: 0)
+    POS2_COLOR4         = "\x00\x00"                 # pos, color
+    POS2_UV2_COLOR4     = "\x00\x00\x00"             # pos, uv, color
+    LINE                = "\x00\x00"                 # pos, color
+    CARD_INSTANCED      = "\x01\x01\x01\x01\x01\x01" # 6属性すべてインスタンスデータ (divisor: 1)
+    QUAD_INSTANCED      = CARD_INSTANCED
+    SPRITE_INSTANCED    = "\x01\x01\x01"             # 3属性すべてインスタンスデータ (divisor: 1)
+  end
 end

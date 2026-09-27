@@ -4,13 +4,12 @@ module Zenoo
   module Shaders
     FONT_SDF_VERTEX = <<~'GLSL'
       #version 330 core
-      layout (location = 0) in vec2 in_unit_pos;
-      layout (location = 1) in vec4 in_bounds;
-      layout (location = 2) in vec4 in_color;
-      layout (location = 3) in vec4 in_param0;       // outline_width, shadow_blur, shadow_dx, shadow_dy
-      layout (location = 4) in vec4 in_param1;       // outline_color (r, g, b, a)
-      layout (location = 5) in vec4 in_param2;       // shadow_color (r, g, b, a)
-      layout (location = 6) in vec4 in_uv;
+      layout (location = 0) in vec4 in_bounds;
+      layout (location = 1) in vec4 in_color;
+      layout (location = 2) in vec4 in_param0;       // outline_width, shadow_blur, shadow_dx, shadow_dy
+      layout (location = 3) in vec4 in_param1;       // outline_color (r, g, b, a)
+      layout (location = 4) in vec4 in_param2;       // shadow_color (r, g, b, a)
+      layout (location = 5) in vec4 in_uv;
       uniform vec2 u_resolution;
 
       out vec4 v_color;
@@ -20,6 +19,7 @@ module Zenoo
       out vec2 v_uv;
 
       void main() {
+          vec2 in_unit_pos = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
           vec2 pos = in_bounds.xy + in_unit_pos * in_bounds.zw;
           vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
           ndc.y = -ndc.y;

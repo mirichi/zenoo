@@ -201,10 +201,11 @@ enum ZenTopology {
     ZEN_TOPOLOGY_TRIANGLE_FAN   = 6  // GL_TRIANGLE_FAN
 };
 
-// 汎用動的頂点バッファ描画 API (1バイト属性列 & バイナリバッファ)
+// 汎用動的頂点バッファ描画 API (1バイト属性列 & Divisor列 & バイナリバッファ)
 void       zen_draw_buffer(int topology,
                            const uint8_t* layout,
-                           int is_instanced,
+                           const uint8_t* divisors,
+                           int base_vertex_count,
                            const void* vertex_data,
                            int count,
                            ZenImage* texture,
