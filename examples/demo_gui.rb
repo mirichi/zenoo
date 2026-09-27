@@ -195,7 +195,7 @@ Window.loop(1280, 720, "Zenoo Immediate Mode GUI Demo") do
     frame_count += 1
     if frame_count >= test_max
       puts "GUI demo test completed successfully! (#{frame_count} frames)"
-      break
+      exit
     end
   end
 end

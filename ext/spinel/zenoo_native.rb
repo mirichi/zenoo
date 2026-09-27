@@ -111,7 +111,8 @@ module Zenoo
       native_func :glyph_y0,      [], :float, "sp_zen_font_glyph_y0"
       native_func :glyph_x1,      [], :float, "sp_zen_font_glyph_x1"
       native_func :glyph_y1,      [], :float, "sp_zen_font_glyph_y1"
-      native_func :glyph_advance, [], :float, "sp_zen_font_glyph_advance"
+      native_func :glyph_advance,   [], :float, "sp_zen_font_glyph_advance"
+      native_func :glyph_is_bitmap, [], :bool,  "sp_zen_font_glyph_is_bitmap"
       native_func :atlas_image_raw, [:int], :any, "sp_zen_font_atlas_image"
     end
   end
@@ -165,7 +166,8 @@ class Zenoo::Native::Font
       Zenoo::Native::FontHelper.glyph_y0,
       Zenoo::Native::FontHelper.glyph_x1,
       Zenoo::Native::FontHelper.glyph_y1,
-      Zenoo::Native::FontHelper.glyph_advance
+      Zenoo::Native::FontHelper.glyph_advance,
+      Zenoo::Native::FontHelper.glyph_is_bitmap
     ]
   end
 end

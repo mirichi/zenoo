@@ -10,14 +10,14 @@ require 'webrick'
 #   ruby server.rb 8080     # 任意ポートで docs/ を配信
 # ==============================================================================
 
-target = ARGV.first&.downcase == 'wasm' ? 'wasm' : 'docs'
+target = ARGV.first&.downcase == 'wasm' ? 'wasm' : 'examples/docs'
 port = if ARGV.any? { |a| a =~ /^\d+$/ }
          ARGV.find { |a| a =~ /^\d+$/ }.to_i
        else
          target == 'wasm' ? 8089 : 8088
        end
 
-dir = target == 'wasm' ? 'build/wasm' : 'docs'
+dir = target == 'wasm' ? 'build/wasm' : 'examples/docs'
 root = File.expand_path(dir, __dir__)
 
 mime_types = WEBrick::HTTPUtils::DefaultMimeTypes.merge(

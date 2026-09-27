@@ -106,6 +106,7 @@ double  sp_zen_font_glyph_y0(void);
 double  sp_zen_font_glyph_x1(void);
 double  sp_zen_font_glyph_y1(void);
 double  sp_zen_font_glyph_advance(void);
+sp_bool sp_zen_font_glyph_is_bitmap(void);
 
 double sp_zen_font_metrics_ascent(sp_ZenFont* s, double size);
 double sp_zen_font_metrics_descent(sp_ZenFont* s, double size);

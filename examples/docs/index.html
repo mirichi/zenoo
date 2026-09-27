@@ -93,6 +93,9 @@
     .card.vector::before {
       background: linear-gradient(90deg, #10b981, #06b6d4);
     }
+    .card.image::before {
+      background: linear-gradient(90deg, #ec4899, #8b5cf6);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -109,6 +112,7 @@
     .card.gui .card-tag { color: #c084fc; }
     .card.font .card-tag { color: #fbbf24; }
     .card.vector .card-tag { color: #34d399; }
+    .card.image .card-tag { color: #f472b6; }
 
     .card h2 {
       font-size: 22px;
@@ -180,6 +184,14 @@
     .card.vector .btn-launch:hover {
       background: #34d399;
       box-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
+    }
+    .card.image .btn-launch {
+      background: #ec4899;
+      color: #fff;
+    }
+    .card.image .btn-launch:hover {
+      background: #f43f5e;
+      box-shadow: 0 0 20px rgba(244, 63, 94, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -273,6 +285,23 @@
         </ul>
       </div>
       <a href="vector/" class="btn-launch">ベクターデモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Image & Blend Modes Demo Card -->
+    <div class="card image">
+      <div>
+        <div class="card-tag">Sprite Engine</div>
+        <h2>Sprite &amp; Blend Modes</h2>
+        <p class="desc">
+          Window.draw_image の新機能ショーケース。回転、拡大縮小・反転、ピボット位置指定、アルファ透過、ブレンド合成（通常・加算・乗算）を GPU Instancing で一括描画します。
+        </p>
+        <ul class="features">
+          <li>回転 (angle:)・拡大縮小/反転 (scale:)・ピボット指定 (pivot:)</li>
+          <li>基準点配置モード (offset_mode: :top_left / :center)</li>
+          <li>:alpha, :add (加算発光), :multiply (乗算影) のブレンド合成</li>
+        </ul>
+      </div>
+      <a href="image/" class="btn-launch">画像・合成デモを起動 (Launch Demo) →</a>
     </div>
   </main>
 

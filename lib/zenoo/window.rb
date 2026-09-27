@@ -732,7 +732,7 @@ module Zenoo
             gw = x1 - x0
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
-            is_bmp = is_bitmap ? 1.0 : 0.0
+            is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
 
             ctx.reset(ch, i, gx, gy, gw, gh, c_color, outline_w, outline_c, s_weight)
             yield(ctx)
@@ -794,7 +794,7 @@ module Zenoo
             gw = x1 - x0
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
-            is_bmp = is_bitmap ? 1.0 : 0.0
+            is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
             cur_p3 = [s_atlas_weight, is_bmp, 0.0, 0.0]
 
             batch.push(

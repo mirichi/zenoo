@@ -340,6 +340,7 @@ double  sp_zen_font_glyph_y0(void)       { return (double)s_query_glyph_cache.y0
 double  sp_zen_font_glyph_x1(void)       { return (double)s_query_glyph_cache.x1; }
 double  sp_zen_font_glyph_y1(void)       { return (double)s_query_glyph_cache.y1; }
 double  sp_zen_font_glyph_advance(void)  { return (double)s_query_glyph_cache.advance_x; }
+sp_bool sp_zen_font_glyph_is_bitmap(void) { return s_query_glyph_cache.is_bitmap ? true : false; }
 
 double sp_zen_font_metrics_ascent(sp_ZenFont* s, double size) {
     if (!s || !s->font) return 0.0;
