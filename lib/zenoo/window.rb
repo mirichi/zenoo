@@ -73,7 +73,7 @@ module Zenoo
     end
 
     class DrawCommand
-      attr_accessor :target, :z, :order, :topology, :layout, :divisors, :base_vertex_count, :data, :count, :image, :shader
+      attr_accessor :target, :z, :order, :topology, :layout, :divisors, :base_vertex_count, :data, :count, :image, :shader, :uniforms
 
       def initialize
         @target = nil
@@ -87,9 +87,10 @@ module Zenoo
         @count = 0
         @image = nil
         @shader = nil
+        @uniforms = nil
       end
 
-      def set(target, z, order, topology, layout, divisors, base_vertex_count, data, count, image, shader)
+      def set(target, z, order, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil)
         @target = target
         @z = z.to_f
         @order = order
@@ -101,6 +102,7 @@ module Zenoo
         @count = count
         @image = image
         @shader = shader
+        @uniforms = uniforms
       end
     end
 
@@ -124,7 +126,7 @@ module Zenoo
       @current_target = old_target
     end
 
-    def self.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader)
+    def self.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil)
       cmd = nil
       if @queue_count < @command_pool.length
         cmd = @command_pool[@queue_count]
@@ -134,7 +136,7 @@ module Zenoo
       end
       zf = z.to_f
       @needs_z_sort = true if zf != 0.0
-      cmd.set(@current_target, zf, @queue_count, topology, layout, divisors, base_vertex_count, data, count, image, shader)
+      cmd.set(@current_target, zf, @queue_count, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms)
       @queue_count += 1
     end
 
@@ -158,6 +160,25 @@ module Zenoo
         end
         @command_pool[j + 1] = target_cmd
         i += 1
+      end
+    end
+
+    def self.apply_uniforms(shader, uniforms)
+      return unless uniforms && shader
+
+      uniforms.each do |k, v|
+        case v
+        when Integer
+          shader.set_int(k.to_s, v)
+        when Float
+          shader.set_float(k.to_s, v)
+        when Array
+          case v.length
+          when 2 then shader.set_vec2(k.to_s, v[0].to_f, v[1].to_f)
+          when 3 then shader.set_vec3(k.to_s, v[0].to_f, v[1].to_f, v[2].to_f)
+          when 4 then shader.set_vec4(k.to_s, v[0].to_f, v[1].to_f, v[2].to_f, v[3].to_f)
+          end
+        end
       end
     end
 
@@ -191,9 +212,10 @@ module Zenoo
         cur_target = cmd.target
         cur_image = cmd.image
         cur_shader = cmd.shader
+        cur_uniforms = cmd.uniforms
 
         # 2. ドローコールのまとめ（バッチング）
-        # 条件: 描画先(target), 描画対象(image), シェーダー(shader), トポロジーが一致
+        # 条件: 描画先(target), 描画対象(image), シェーダー(shader), トポロジー, Uniform パラメータが一致
         can_batch = cur_base_vertex_count > 0 ||
                     cur_topology == Topology::TRIANGLES ||
                     cur_topology == Topology::LINES ||
@@ -206,19 +228,24 @@ module Zenoo
             if ncmd.target == cur_target &&
                ncmd.image == cur_image &&
                ncmd.shader == cur_shader &&
-               ncmd.topology == cur_topology
+               ncmd.topology == cur_topology &&
+               ncmd.uniforms == cur_uniforms
               cur_data = cur_data + ncmd.data
               cur_count += ncmd.count
               ncmd.data = nil
               ncmd.image = nil
               ncmd.shader = nil
               ncmd.target = nil
+              ncmd.uniforms = nil
               next_idx += 1
             else
               break
             end
           end
         end
+
+        # Uniform パラメータの適用（グラデーション等）
+        apply_uniforms(cur_shader, cur_uniforms) if cur_uniforms
 
         # 3. GPU への一括描画送信
         Native::Renderer.draw_buffer(
@@ -236,6 +263,7 @@ module Zenoo
         cmd.image = nil
         cmd.shader = nil
         cmd.target = nil
+        cmd.uniforms = nil
 
         i = next_idx
       end
@@ -325,7 +353,8 @@ module Zenoo
     @current_shader = nil
     @card_shader = nil
     @default_sprite_shader = nil
-    @default_primitive_shader = nil
+    @flat_primitive_shader = nil
+    @gradient_primitive_shader = nil
 
     def self.default_sprite_shader
       @default_sprite_shader ||= Shader.new(Shaders::DEFAULT_SPRITE_VERTEX, Shaders::DEFAULT_SPRITE_FRAGMENT)
@@ -335,8 +364,16 @@ module Zenoo
       default_sprite_shader
     end
 
+    def self.flat_primitive_shader
+      @flat_primitive_shader ||= Shader.new(Shaders::FLAT_PRIMITIVE_VERTEX, Shaders::FLAT_PRIMITIVE_FRAGMENT)
+    end
+
+    def self.gradient_primitive_shader
+      @gradient_primitive_shader ||= Shader.new(Shaders::GRADIENT_PRIMITIVE_VERTEX, Shaders::GRADIENT_PRIMITIVE_FRAGMENT)
+    end
+
     def self.default_primitive_shader
-      @default_primitive_shader ||= Shader.new(Shaders::PRIMITIVE_VERTEX, Shaders::PRIMITIVE_FRAGMENT)
+      flat_primitive_shader
     end
 
     def self.card_shader
@@ -428,13 +465,25 @@ module Zenoo
 
 
     def self.draw_triangle(x1, y1, x2, y2, x3, y3, color = :white, z: 0.0)
-      c = normalize_color(color)
-      cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
-      data = [
-        x1.to_f, y1.to_f, cr, cg, cb, ca,
-        x2.to_f, y2.to_f, cr, cg, cb, ca,
-        x3.to_f, y3.to_f, cr, cg, cb, ca
-      ].pack("f*")
+      if color.is_a?(Array) && color.length == 3 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
+        # 頂点ごとの色指定 [c1, c2, c3]
+        c1 = normalize_color(color[0])
+        c2 = normalize_color(color[1])
+        c3 = normalize_color(color[2])
+        data = [
+          x1.to_f, y1.to_f, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
+          x2.to_f, y2.to_f, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f,
+          x3.to_f, y3.to_f, c3[0].to_f, c3[1].to_f, c3[2].to_f, c3[3].to_f
+        ].pack("f*")
+      else
+        c = normalize_color(color)
+        cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
+        data = [
+          x1.to_f, y1.to_f, cr, cg, cb, ca,
+          x2.to_f, y2.to_f, cr, cg, cb, ca,
+          x3.to_f, y3.to_f, cr, cg, cb, ca
+        ].pack("f*")
+      end
 
       enqueue_draw(
         z,
@@ -445,17 +494,27 @@ module Zenoo
         data,
         3,
         nil,
-        default_primitive_shader
+        flat_primitive_shader
       )
     end
 
     def self.draw_line(x1, y1, x2, y2, color = :white, z: 0.0)
-      c = normalize_color(color)
-      cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
-      data = [
-        x1.to_f, y1.to_f, cr, cg, cb, ca,
-        x2.to_f, y2.to_f, cr, cg, cb, ca
-      ].pack("f*")
+      if color.is_a?(Array) && color.length == 2 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
+        # 始点・終点の色指定 [c1, c2]
+        c1 = normalize_color(color[0])
+        c2 = normalize_color(color[1])
+        data = [
+          x1.to_f, y1.to_f, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
+          x2.to_f, y2.to_f, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f
+        ].pack("f*")
+      else
+        c = normalize_color(color)
+        cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
+        data = [
+          x1.to_f, y1.to_f, cr, cg, cb, ca,
+          x2.to_f, y2.to_f, cr, cg, cb, ca
+        ].pack("f*")
+      end
 
       enqueue_draw(
         z,
@@ -466,7 +525,7 @@ module Zenoo
         data,
         2,
         nil,
-        default_primitive_shader
+        flat_primitive_shader
       )
     end
 
