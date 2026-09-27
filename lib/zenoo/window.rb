@@ -72,8 +72,102 @@ module Zenoo
       r_part | (g << 16) | (b << 8) | a
     end
 
+    class DrawCommand
+      attr_accessor :z, :order, :topology, :layout, :is_instanced, :data, :count, :image, :shader
+
+      def initialize
+        @z = 0.0
+        @order = 0
+        @topology = 0
+        @layout = 0
+        @is_instanced = false
+        @data = nil
+        @count = 0
+        @image = nil
+        @shader = nil
+      end
+
+      def set(z, order, topology, layout, is_instanced, data, count, image, shader)
+        @z = z.to_f
+        @order = order
+        @topology = topology
+        @layout = layout
+        @is_instanced = is_instanced
+        @data = data
+        @count = count
+        @image = image
+        @shader = shader
+      end
+    end
+
+    @command_pool = []
+    @queue_count = 0
+    @needs_z_sort = false
+    @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
     @main_loop_block = nil
     @step_proc = nil
+
+    def self.enqueue_draw(z, topology, layout, is_instanced, data, count, image, shader)
+      cmd = nil
+      if @queue_count < @command_pool.length
+        cmd = @command_pool[@queue_count]
+      else
+        cmd = DrawCommand.new
+        @command_pool.push(cmd)
+      end
+      zf = z.to_f
+      @needs_z_sort = true if zf != 0.0
+      cmd.set(zf, @queue_count, topology, layout, is_instanced, data, count, image, shader)
+      @queue_count += 1
+    end
+
+    # 安定挿入ソート (昇順: 奥から手前へ描画)
+    def self.sort_draw_queue
+      return unless @needs_z_sort
+      return if @queue_count <= 1
+
+      i = 1
+      while i < @queue_count
+        target = @command_pool[i]
+        tz = target.z
+        j = i - 1
+        while j >= 0
+          prev_cmd = @command_pool[j]
+          break if prev_cmd.z <= tz
+          @command_pool[j + 1] = prev_cmd
+          j -= 1
+        end
+        @command_pool[j + 1] = target
+        i += 1
+      end
+    end
+
+    def self.flush_draw_queue
+      return if @queue_count == 0
+
+      sort_draw_queue
+
+      i = 0
+      while i < @queue_count
+        cmd = @command_pool[i]
+        Native::Renderer.draw_buffer(
+          cmd.topology,
+          cmd.layout,
+          cmd.is_instanced,
+          cmd.data,
+          cmd.count,
+          cmd.image,
+          cmd.shader
+        )
+        cmd.data = nil
+        cmd.image = nil
+        cmd.shader = nil
+        i += 1
+      end
+
+      @queue_count = 0
+      @needs_z_sort = false
+    end
 
     # DXRuby風メインループ
     def self.loop(width = 1280, height = 720, title = "Zenoo", fullscreen: false, vsync: false, &block)
@@ -95,11 +189,20 @@ module Zenoo
       Native::Window.shutdown unless Native::Window.wasm?
     end
 
-    def self.__step_frame
-      Native::Window.clear(color_to_uint32([18, 20, 30, 255]))
+    def self.__update_step
       Zenoo::GUI.begin_frame if defined?(Zenoo::GUI)
       @main_loop_block.call if @main_loop_block
       Zenoo::GUI.end_frame if defined?(Zenoo::GUI)
+    end
+
+    def self.__draw_step
+      Native::Window.clear(@bg_color)
+      flush_draw_queue
+    end
+
+    def self.__step_frame
+      __update_step
+      __draw_step
     end
 
     def self.time
@@ -107,7 +210,8 @@ module Zenoo
     end
 
     def self.clear(color)
-      Native::Window.clear(color_to_uint32(color))
+      @bg_color = color_to_uint32(color)
+      Native::Window.clear(@bg_color)
     end
 
     def self.width
@@ -180,7 +284,8 @@ module Zenoo
                        border_color: :cyan,
                        shadow_blur: 0.0,
                        shadow_color: [0, 0, 0, 180],
-                       image: nil)
+                       image: nil,
+                       z: 0.0)
       c_color = normalize_color(color)
       b_width = border_width.to_f
       b_color = (b_width > 0.0) ? normalize_color(border_color) : [0.0, 0.0, 0.0, 0.0]
@@ -198,7 +303,8 @@ module Zenoo
         0.0, 0.0, 1.0, 1.0
       ].pack("f*")
 
-      Native::Renderer.draw_buffer(
+      enqueue_draw(
+        z,
         Topology::TRIANGLE_STRIP,
         Layout::CARD_INSTANCED,
         true,
@@ -209,15 +315,15 @@ module Zenoo
       )
     end
 
-    def self.draw_rect(x, y, w, h, color = :white)
-      draw_card(x, y, w, h, color: color)
+    def self.draw_rect(x, y, w, h, color = :white, z: 0.0)
+      draw_card(x, y, w, h, color: color, z: z)
     end
 
-    def self.draw_rounded_rect(x, y, w, h, radius, color = :white)
-      draw_card(x, y, w, h, radius: radius, color: color)
+    def self.draw_rounded_rect(x, y, w, h, radius, color = :white, z: 0.0)
+      draw_card(x, y, w, h, radius: radius, color: color, z: z)
     end
 
-    def self.draw_image(x, y, image, color = :white, shader: nil)
+    def self.draw_image(x, y, image, color = :white, shader: nil, z: 0.0)
       return unless image
       effective_shader = shader || @current_shader || default_sprite_shader
       c_color = normalize_color(color)
@@ -227,7 +333,8 @@ module Zenoo
         0.0, 0.0, 1.0, 1.0
       ].pack("f*")
 
-      Native::Renderer.draw_buffer(
+      enqueue_draw(
+        z,
         Topology::TRIANGLE_STRIP,
         Layout::SPRITE_INSTANCED,
         true,
@@ -238,7 +345,8 @@ module Zenoo
       )
     end
 
-    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color = :white)
+
+    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color = :white, z: 0.0)
       c = normalize_color(color)
       cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
       data = [
@@ -247,7 +355,8 @@ module Zenoo
         x3.to_f, y3.to_f, cr, cg, cb, ca
       ].pack("f*")
 
-      Native::Renderer.draw_buffer(
+      enqueue_draw(
+        z,
         Topology::TRIANGLES,
         Layout::POS2_COLOR4,
         false,
@@ -258,7 +367,7 @@ module Zenoo
       )
     end
 
-    def self.draw_line(x1, y1, x2, y2, color = :white)
+    def self.draw_line(x1, y1, x2, y2, color = :white, z: 0.0)
       c = normalize_color(color)
       cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
       data = [
@@ -266,7 +375,8 @@ module Zenoo
         x2.to_f, y2.to_f, cr, cg, cb, ca
       ].pack("f*")
 
-      Native::Renderer.draw_buffer(
+      enqueue_draw(
+        z,
         Topology::LINES,
         Layout::LINE,
         false,
@@ -318,6 +428,7 @@ module Zenoo
                        shadow_color: [0, 0, 0, 180],
                        shadow_dx: 0.0,
                        shadow_dy: 0.0,
+                       z: 0.0,
                        &block)
       return if text.nil?
 
@@ -453,7 +564,8 @@ module Zenoo
       end
 
       if glyph_count > 0
-        Native::Renderer.draw_buffer(
+        enqueue_draw(
+          z,
           Topology::TRIANGLE_STRIP,
           Layout::CARD_INSTANCED,
           true,
