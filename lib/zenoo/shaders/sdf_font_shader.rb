@@ -53,6 +53,17 @@ module Zenoo
           vec4 outline_color  = v_param1;
           vec4 shadow_color   = v_param2;
           float atlas_weight  = v_param3.x; // スケール補正済みウェイト値
+          float is_bitmap     = v_param3.y; // 1.0: 直接ラスタライズビットマップ, 0.0: SDF
+
+          // 直接ラスタライズビットマップモード (14px以下の極小文字用)
+          // 距離場計算を通さず、TrueType直接ラスタライズされたアルファ値をそのまま出力 (1ドット単位で超高精細)
+          if (is_bitmap > 0.5) {
+              float a = texture(u_texture, v_uv).r;
+              vec4 col = vec4(v_color.rgb, v_color.a * a);
+              if (col.a < 0.001) discard;
+              fragColor = col;
+              return;
+          }
 
           // 1チャンネル GL_RED アトラスからサンプリング
           float dist = texture(u_texture, v_uv).r;

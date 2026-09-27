@@ -232,6 +232,7 @@ typedef struct {
     float x0, y0, x1, y1; // ベースライン原点からの描画オフセット (ピクセル)
     float advance_x;      // 次の文字までの送り幅 (ピクセル)
     int   visible;        // 描画が必要か (空白文字は 0)
+    int   is_bitmap;      // 直接ラスタライズビットマップなら 1, SDFなら 0
 } ZenGlyph;
 
 ZenFont*  zen_font_load(const char* filepath);
