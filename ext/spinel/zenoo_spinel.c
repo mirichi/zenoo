@@ -104,6 +104,12 @@ void sp_ZenShader_set_vec4(sp_ZenShader* s, const char* name, double x, double y
     if (s && s->shader) zen_shader_set_vec4(s->shader, name, (float)x, (float)y, (float)z, (float)w);
 }
 
+void sp_ZenShader_set_mat4(sp_ZenShader* s, const char* name, const char* mat4_bytes) {
+    if (s && s->shader && mat4_bytes) {
+        zen_shader_set_mat4(s->shader, name, (const float*)mat4_bytes);
+    }
+}
+
 // ==========================================
 // Window / Input / Renderer
 // ==========================================
@@ -122,6 +128,29 @@ sp_int sp_zen_win_update(void) {
 
 void sp_zen_win_clear(uint32_t color) {
     zen_clear(color);
+}
+
+#include "sp_proc.h"
+
+static sp_Proc* s_wasm_step_proc = NULL;
+
+static void spinel_wasm_step_wrapper(void) {
+    if (s_wasm_step_proc) {
+        sp_int args[16] = {0};
+        sp_proc_call(s_wasm_step_proc, 0, args);
+    }
+}
+
+void sp_zen_win_start_wasm_loop(sp_RbVal proc_val) {
+    if (proc_val.tag == SP_TAG_OBJ && proc_val.v.p) {
+        s_wasm_step_proc = (sp_Proc*)proc_val.v.p;
+    }
+    zen_set_step_callback(spinel_wasm_step_wrapper);
+    zen_start_wasm_loop();
+}
+
+sp_bool sp_zen_win_is_wasm(void) {
+    return zen_is_wasm() ? true : false;
 }
 
 void sp_zen_win_shutdown(void) {

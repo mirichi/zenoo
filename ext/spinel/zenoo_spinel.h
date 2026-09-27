@@ -37,11 +37,14 @@ void sp_ZenShader_set_float(sp_ZenShader* s, const char* name, double val);
 void sp_ZenShader_set_vec2(sp_ZenShader* s, const char* name, double x, double y);
 void sp_ZenShader_set_vec3(sp_ZenShader* s, const char* name, double x, double y, double z);
 void sp_ZenShader_set_vec4(sp_ZenShader* s, const char* name, double x, double y, double z, double w);
+void sp_ZenShader_set_mat4(sp_ZenShader* s, const char* name, const char* mat4_bytes);
 
 // Window / Input / Renderer ラッパー
 sp_int sp_zen_win_init(sp_int w, sp_int h, const char* title, sp_int fullscreen);
 sp_int sp_zen_win_update(void);
 void sp_zen_win_clear(uint32_t color);
+void sp_zen_win_start_wasm_loop(sp_RbVal proc_val);
+sp_bool sp_zen_win_is_wasm(void);
 void sp_zen_win_shutdown(void);
 sp_int sp_zen_win_size_w(void);
 sp_int sp_zen_win_size_h(void);

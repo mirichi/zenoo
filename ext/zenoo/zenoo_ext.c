@@ -163,6 +163,23 @@ static VALUE shader_set_vec4(VALUE self, VALUE rb_name, VALUE rb_x, VALUE rb_y, 
     return Qnil;
 }
 
+static VALUE shader_set_mat4(VALUE self, VALUE rb_name, VALUE rb_mat) {
+    ZenShader* shader;
+    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
+    float m[16];
+    if (RB_TYPE_P(rb_mat, T_ARRAY) && RARRAY_LEN(rb_mat) >= 16) {
+        for (int i = 0; i < 16; i++) {
+            m[i] = (float)NUM2DBL(rb_ary_entry(rb_mat, i));
+        }
+    } else if (RB_TYPE_P(rb_mat, T_STRING) && RSTRING_LEN(rb_mat) >= (long)(16 * sizeof(float))) {
+        memcpy(m, RSTRING_PTR(rb_mat), 16 * sizeof(float));
+    } else {
+        rb_raise(rb_eArgError, "Expected 16-element Array of floats or packed String for mat4");
+    }
+    zen_shader_set_mat4(shader, StringValueCStr(rb_name), m);
+    return Qnil;
+}
+
 // ==========================================
 // Zenoo::Native::Font (TypedData)
 // ==========================================
@@ -334,6 +351,11 @@ static VALUE win_shutdown(VALUE self) {
     return Qnil;
 }
 
+static VALUE win_wasm_p(VALUE self) {
+    (void)self;
+    return Qfalse;
+}
+
 // ==========================================
 // Zenoo::Native::Input
 // ==========================================
@@ -469,6 +491,7 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "delta_time", win_get_delta_time, 0);
     rb_define_singleton_method(mWindow, "time", win_get_time, 0);
     rb_define_singleton_method(mWindow, "shutdown", win_shutdown, 0);
+    rb_define_singleton_method(mWindow, "wasm?", win_wasm_p, 0);
 
     // 2. Input
     VALUE mInput = rb_define_module_under(rb_mNative, "Input");
@@ -508,6 +531,7 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeShader, "set_vec2", shader_set_vec2, 3);
     rb_define_method(rb_cNativeShader, "set_vec3", shader_set_vec3, 4);
     rb_define_method(rb_cNativeShader, "set_vec4", shader_set_vec4, 5);
+    rb_define_method(rb_cNativeShader, "set_mat4", shader_set_mat4, 2);
 
     // 5. Renderer
     VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");

@@ -72,20 +72,34 @@ module Zenoo
       r_part | (g << 16) | (b << 8) | a
     end
 
+    @main_loop_block = nil
+    @step_proc = nil
+
     # DXRuby風メインループ
     def self.loop(width = 1280, height = 720, title = "Zenoo", fullscreen: false, vsync: false, &block)
       Native::Window.init(width, height, title, fullscreen)
       Native::Window.vsync = (vsync ? 1 : 0)
       Native::Window.target_fps = 60
 
-      while Native::Window.update
-        Native::Window.clear(color_to_uint32([18, 20, 30, 255]))
-        Zenoo::GUI.begin_frame if defined?(Zenoo::GUI)
-        yield
-        Zenoo::GUI.end_frame if defined?(Zenoo::GUI)
+      @main_loop_block = block
+
+      if Native::Window.wasm?
+        @step_proc = proc { __step_frame }
+        Zenoo::Native::Window.start_wasm_loop(@step_proc)
+      else
+        while Native::Window.update
+          __step_frame
+        end
       end
     ensure
-      Native::Window.shutdown
+      Native::Window.shutdown unless Native::Window.wasm?
+    end
+
+    def self.__step_frame
+      Native::Window.clear(color_to_uint32([18, 20, 30, 255]))
+      Zenoo::GUI.begin_frame if defined?(Zenoo::GUI)
+      @main_loop_block.call if @main_loop_block
+      Zenoo::GUI.end_frame if defined?(Zenoo::GUI)
     end
 
     def self.time
