@@ -371,41 +371,48 @@ module Zenoo
     private
 
     def render_triangles_with_style(coords, style)
-      shader = Window.default_primitive_shader
       num_verts = coords.size / 2
       verts = []
       i = 0
+      shader = nil
+      uniforms = nil
 
       if style.is_a?(LinearGradient)
+        shader = Window.gradient_primitive_shader
         p0 = [style.x0.to_f, style.y0.to_f, 0.0, 0.0]
         p1 = [style.x1.to_f, style.y1.to_f, 0.0, 0.0]
         c0 = style.stops.first ? resolve_color(style.stops.first[1]) : [1.0, 1.0, 1.0, 1.0]
         c1 = style.stops.last ? resolve_color(style.stops.last[1]) : [0.0, 0.0, 0.0, 1.0]
-        shader.set_int("u_grad_type", 1)
-        shader.set_vec4("u_grad_p0", p0[0], p0[1], p0[2], p0[3])
-        shader.set_vec4("u_grad_p1", p1[0], p1[1], p1[2], p1[3])
-        shader.set_vec4("u_grad_color0", c0[0].to_f, c0[1].to_f, c0[2].to_f, (c0[3] * @global_alpha).to_f)
-        shader.set_vec4("u_grad_color1", c1[0].to_f, c1[1].to_f, c1[2].to_f, (c1[3] * @global_alpha).to_f)
+        uniforms = {
+          u_grad_type: 1,
+          u_grad_p0: p0,
+          u_grad_p1: p1,
+          u_grad_color0: [c0[0].to_f, c0[1].to_f, c0[2].to_f, (c0[3] * @global_alpha).to_f],
+          u_grad_color1: [c1[0].to_f, c1[1].to_f, c1[2].to_f, (c1[3] * @global_alpha).to_f]
+        }
         while i < coords.size
           verts.push(coords[i].to_f, coords[i + 1].to_f, 1.0, 1.0, 1.0, 1.0)
           i += 2
         end
       elsif style.is_a?(RadialGradient)
+        shader = Window.gradient_primitive_shader
         p0 = [style.x0.to_f, style.y0.to_f, style.r0.to_f, 0.0]
         p1 = [style.x1.to_f, style.y1.to_f, style.r1.to_f, 0.0]
         c0 = style.stops.first ? resolve_color(style.stops.first[1]) : [1.0, 1.0, 1.0, 1.0]
         c1 = style.stops.last ? resolve_color(style.stops.last[1]) : [0.0, 0.0, 0.0, 1.0]
-        shader.set_int("u_grad_type", 2)
-        shader.set_vec4("u_grad_p0", p0[0], p0[1], p0[2], p0[3])
-        shader.set_vec4("u_grad_p1", p1[0], p1[1], p1[2], p1[3])
-        shader.set_vec4("u_grad_color0", c0[0].to_f, c0[1].to_f, c0[2].to_f, (c0[3] * @global_alpha).to_f)
-        shader.set_vec4("u_grad_color1", c1[0].to_f, c1[1].to_f, c1[2].to_f, (c1[3] * @global_alpha).to_f)
+        uniforms = {
+          u_grad_type: 2,
+          u_grad_p0: p0,
+          u_grad_p1: p1,
+          u_grad_color0: [c0[0].to_f, c0[1].to_f, c0[2].to_f, (c0[3] * @global_alpha).to_f],
+          u_grad_color1: [c1[0].to_f, c1[1].to_f, c1[2].to_f, (c1[3] * @global_alpha).to_f]
+        }
         while i < coords.size
           verts.push(coords[i].to_f, coords[i + 1].to_f, 1.0, 1.0, 1.0, 1.0)
           i += 2
         end
       else
-        shader.set_int("u_grad_type", 0)
+        shader = Window.flat_primitive_shader
         color = resolve_color(style)
         cr = color[0].to_f
         cg = color[1].to_f
@@ -427,7 +434,8 @@ module Zenoo
         data,
         num_verts,
         nil,
-        shader
+        shader,
+        uniforms
       )
     end
 

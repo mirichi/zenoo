@@ -39,8 +39,33 @@ module Zenoo
     DEFAULT_QUAD_VERTEX = DEFAULT_SPRITE_VERTEX
     DEFAULT_QUAD_FRAGMENT = DEFAULT_SPRITE_FRAGMENT
 
-    # 単色・グラデーション描画（三角形・ライン・ベクタパス）用頂点シェーダー
-    PRIMITIVE_VERTEX = <<~'GLSL'
+    # 単色・頂点カラー描画（三角形・ライン・単色パス）用頂点シェーダー（Uniform不要・最軽量）
+    FLAT_PRIMITIVE_VERTEX = <<~'GLSL'
+      #version 330 core
+      layout (location = 0) in vec2 in_pos;
+      layout (location = 1) in vec4 in_color;
+      uniform vec2 u_resolution;
+      out vec4 v_color;
+      void main() {
+          vec2 ndc = (in_pos / u_resolution) * 2.0 - 1.0;
+          ndc.y = -ndc.y;
+          gl_Position = vec4(ndc, 0.0, 1.0);
+          v_color = in_color;
+      }
+    GLSL
+
+    # 単色・頂点カラー描画用フラグメントシェーダー
+    FLAT_PRIMITIVE_FRAGMENT = <<~'GLSL'
+      #version 330 core
+      in vec4 v_color;
+      out vec4 fragColor;
+      void main() {
+          fragColor = v_color;
+      }
+    GLSL
+
+    # ピクセルグラデーション描画用頂点シェーダー
+    GRADIENT_PRIMITIVE_VERTEX = <<~'GLSL'
       #version 330 core
       layout (location = 0) in vec2 in_pos;
       layout (location = 1) in vec4 in_color;
@@ -56,12 +81,12 @@ module Zenoo
       }
     GLSL
 
-    # 単色・グラデーション描画用フラグメントシェーダー
-    PRIMITIVE_FRAGMENT = <<~'GLSL'
+    # ピクセルグラデーション描画用フラグメントシェーダー
+    GRADIENT_PRIMITIVE_FRAGMENT = <<~'GLSL'
       #version 330 core
       in vec4 v_color;
       in vec2 v_pos;
-      uniform int u_grad_type; // 0: 単色, 1: 線形グラデーション, 2: 放射グラデーション
+      uniform int u_grad_type; // 1: 線形グラデーション, 2: 放射グラデーション
       uniform vec4 u_grad_p0;
       uniform vec4 u_grad_p1;
       uniform vec4 u_grad_color0;
@@ -87,5 +112,9 @@ module Zenoo
           }
       }
     GLSL
+
+    # 互換用エイリアス
+    PRIMITIVE_VERTEX = FLAT_PRIMITIVE_VERTEX
+    PRIMITIVE_FRAGMENT = FLAT_PRIMITIVE_FRAGMENT
   end
 end
