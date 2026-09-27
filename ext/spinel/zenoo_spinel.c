@@ -278,6 +278,10 @@ void sp_zen_renderer_flush(void) {
     zen_flush();
 }
 
+void sp_zen_renderer_set_blend_mode(sp_int mode) {
+    zen_set_blend_mode((int)mode);
+}
+
 // ==========================================
 // Font (sp_ZenFont)
 // ==========================================
