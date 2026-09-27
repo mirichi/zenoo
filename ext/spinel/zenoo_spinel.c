@@ -262,7 +262,8 @@ static ZenShader* unpack_shader(sp_RbVal val) {
 void sp_zen_renderer_draw_buffer(
     sp_int topology,
     const char* layout,
-    sp_int is_instanced,
+    const char* divisors,
+    sp_int base_vertex_count,
     const char* data,
     sp_int count,
     sp_RbVal image_val,
@@ -270,7 +271,7 @@ void sp_zen_renderer_draw_buffer(
 ) {
     ZenImage*  img = unpack_image(image_val);
     ZenShader* sh  = unpack_shader(shader_val);
-    zen_draw_buffer((int)topology, (const uint8_t*)layout, (int)is_instanced, (const void*)data, (int)count, img, sh);
+    zen_draw_buffer((int)topology, (const uint8_t*)layout, (const uint8_t*)divisors, (int)base_vertex_count, (const void*)data, (int)count, img, sh);
 }
 
 void sp_zen_renderer_flush(void) {

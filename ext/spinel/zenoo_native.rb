@@ -73,14 +73,15 @@ module Zenoo
     module Renderer
       native_func :flush, [], :nil, "sp_zen_renderer_flush"
       native_func :raw_draw_buffer, [
-        :int, :string, :int, :string, :int, :any, :any
+        :int, :string, :string, :int, :string, :int, :any, :any
       ], :nil, "sp_zen_renderer_draw_buffer"
 
-      def self.draw_buffer(topology, layout, is_instanced, data, count, img, sh)
+      def self.draw_buffer(topology, layout, divisors, base_vertex_count, data, count, img, sh)
         Zenoo::Native::Renderer.raw_draw_buffer(
           topology.to_i,
           layout.to_s,
-          is_instanced ? 1 : 0,
+          divisors.to_s,
+          base_vertex_count.to_i,
           data.to_s,
           count.to_i,
           img,

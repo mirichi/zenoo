@@ -2,13 +2,12 @@ module Zenoo
   module Shaders
     CARD_VERTEX = <<~'GLSL'
       #version 330 core
-      layout (location = 0) in vec2 in_unit_pos;
-      layout (location = 1) in vec4 in_bounds;
-      layout (location = 2) in vec4 in_color;
-      layout (location = 3) in vec4 in_param0;       // corner_radius, border_width, shadow_blur, mode
-      layout (location = 4) in vec4 in_param1;       // border_color (r, g, b, a)
-      layout (location = 5) in vec4 in_param2;       // shadow_color (r, g, b, a)
-      layout (location = 6) in vec4 in_uv;
+      layout (location = 0) in vec4 in_bounds;
+      layout (location = 1) in vec4 in_color;
+      layout (location = 2) in vec4 in_param0;       // corner_radius, border_width, shadow_blur, mode
+      layout (location = 3) in vec4 in_param1;       // border_color (r, g, b, a)
+      layout (location = 4) in vec4 in_param2;       // shadow_color (r, g, b, a)
+      layout (location = 5) in vec4 in_uv;
       uniform vec2 u_resolution;
       out vec2 v_local_pos;
       out vec2 v_half_size;
@@ -21,6 +20,7 @@ module Zenoo
       flat out int v_mode;
       out vec2 v_uv;
       void main() {
+          vec2 in_unit_pos = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
           float x = in_bounds.x; float y = in_bounds.y; float w = in_bounds.z; float h = in_bounds.w;
           float shadow_blur = in_param0.z;
           float pad = shadow_blur * 2.0;

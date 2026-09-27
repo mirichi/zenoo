@@ -11,10 +11,8 @@
 #endif
 #include "zenoo.h"
 
-static GLuint s_unit_vbo = 0;
 
 static GLuint s_dynamic_vao = 0;
-static GLuint s_dynamic_instanced_vao = 0;
 static GLuint s_dynamic_vbo = 0;
 
 static GLuint s_white_texture = 0;
@@ -83,37 +81,15 @@ void zen_gfx_init(int width, int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     s_active_texture = s_white_texture;
 
-    static const float unit_quad[] = {
-        0.0f, 0.0f,
-        1.0f, 0.0f,
-        0.0f, 1.0f,
-        1.0f, 1.0f,
-    };
-
-    glGenBuffers(1, &s_unit_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, s_unit_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(unit_quad), unit_quad, GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
     // 汎用動的バッファ初期化
     glGenBuffers(1, &s_dynamic_vbo);
     glGenVertexArrays(1, &s_dynamic_vao);
-
-    glGenVertexArrays(1, &s_dynamic_instanced_vao);
-    glBindVertexArray(s_dynamic_instanced_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, s_unit_vbo);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glBindVertexArray(0);
 }
 
 void zen_gfx_shutdown(void) {
     if (s_white_texture) glDeleteTextures(1, &s_white_texture);
-    if (s_unit_vbo) glDeleteBuffers(1, &s_unit_vbo);
-
     if (s_dynamic_vbo) glDeleteBuffers(1, &s_dynamic_vbo);
     if (s_dynamic_vao) glDeleteVertexArrays(1, &s_dynamic_vao);
-    if (s_dynamic_instanced_vao) glDeleteVertexArrays(1, &s_dynamic_instanced_vao);
 }
 
 void zen_gfx_begin(uint32_t clear_color, int width, int height) {
@@ -392,7 +368,8 @@ void zen_flush(void) {
 
 void zen_draw_buffer(int topology,
                       const uint8_t* layout,
-                      int is_instanced,
+                      const uint8_t* divisors,
+                      int base_vertex_count,
                       const void* vertex_data,
                       int count,
                       ZenImage* texture,
@@ -436,27 +413,25 @@ void zen_draw_buffer(int topology,
     size_t total_bytes = (size_t)stride * (size_t)count;
 
     // 4. VAOとVBOのバインド・データ転送
-    GLuint vao = is_instanced ? s_dynamic_instanced_vao : s_dynamic_vao;
-    glBindVertexArray(vao);
+    glBindVertexArray(s_dynamic_vao);
     glBindBuffer(GL_ARRAY_BUFFER, s_dynamic_vbo);
 
     // Buffer Orphaning: 同期ストールを完全に排除
     glBufferData(GL_ARRAY_BUFFER, total_bytes, NULL, GL_STREAM_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0, total_bytes, vertex_data);
 
-    // 5. 頂点属性の設定
+    // 5. 頂点属性の設定 (常に location 0 から開始)
     uintptr_t offset = 0;
-    int loc = is_instanced ? 1 : 0;
     int num_attrs = 0;
     for (int i = 0; layout[i] != 0; i++) {
         int size = (int)layout[i];
-        glEnableVertexAttribArray(loc);
-        glVertexAttribPointer(loc, size, GL_FLOAT, GL_FALSE, stride, (void*)offset);
-        if (is_instanced) {
-            glVertexAttribDivisor(loc, 1);
+        int div = (divisors && divisors[i] != 0) ? (int)divisors[i] : 0;
+        glEnableVertexAttribArray(i);
+        glVertexAttribPointer(i, size, GL_FLOAT, GL_FALSE, stride, (void*)offset);
+        if (div > 0) {
+            glVertexAttribDivisor(i, div);
         }
         offset += (size_t)size * sizeof(float);
-        loc++;
         num_attrs++;
     }
 
@@ -473,19 +448,19 @@ void zen_draw_buffer(int topology,
         default:                          gl_mode = GL_TRIANGLES; break;
     }
 
-    if (is_instanced) {
-        glDrawArraysInstanced(gl_mode, 0, 4, count);
+    if (base_vertex_count > 0) {
+        glDrawArraysInstanced(gl_mode, 0, base_vertex_count, count);
     } else {
         glDrawArrays(gl_mode, 0, count);
     }
 
     // 7. クリーンアップ (属性の無効化とDivisorリセット)
-    int start_loc = is_instanced ? 1 : 0;
     for (int i = 0; i < num_attrs; i++) {
-        if (is_instanced) {
-            glVertexAttribDivisor(start_loc + i, 0);
+        int div = (divisors && divisors[i] != 0) ? (int)divisors[i] : 0;
+        if (div > 0) {
+            glVertexAttribDivisor(i, 0);
         }
-        glDisableVertexAttribArray(start_loc + i);
+        glDisableVertexAttribArray(i);
     }
 
     glBindVertexArray(0);

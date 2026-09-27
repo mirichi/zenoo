@@ -72,7 +72,8 @@ sp_bool sp_zen_input_gamepad_button_release(sp_int id, sp_int button);
 void sp_zen_renderer_draw_buffer(
     sp_int topology,
     const char* layout,
-    sp_int is_instanced,
+    const char* divisors,
+    sp_int base_vertex_count,
     const char* data,
     sp_int count,
     sp_RbVal image_val,

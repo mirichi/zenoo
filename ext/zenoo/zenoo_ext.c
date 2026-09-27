@@ -445,11 +445,12 @@ static VALUE renderer_flush(VALUE self) {
     return Qnil;
 }
 
-static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout, VALUE rb_is_instanced, VALUE rb_data, VALUE rb_count, VALUE rb_tex, VALUE rb_shader) {
+static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout, VALUE rb_divisors, VALUE rb_base_vertex_count, VALUE rb_data, VALUE rb_count, VALUE rb_tex, VALUE rb_shader) {
     (void)self;
     int topology = NUM2INT(rb_topology);
     const uint8_t* layout = (const uint8_t*)StringValuePtr(rb_layout);
-    int is_instanced = RTEST(rb_is_instanced) ? 1 : 0;
+    const uint8_t* divisors = NIL_P(rb_divisors) ? NULL : (const uint8_t*)StringValuePtr(rb_divisors);
+    int base_vertex_count = NUM2INT(rb_base_vertex_count);
     Check_Type(rb_data, T_STRING);
     const void* data = (const void*)RSTRING_PTR(rb_data);
     int count = NUM2INT(rb_count);
@@ -464,7 +465,7 @@ static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout
         TypedData_Get_Struct(rb_shader, ZenShader, &zenoo_shader_data_type, sh);
     }
 
-    zen_draw_buffer(topology, layout, is_instanced, data, count, img, sh);
+    zen_draw_buffer(topology, layout, divisors, base_vertex_count, data, count, img, sh);
     return Qnil;
 }
 
@@ -535,7 +536,7 @@ void Init_zenoo(void) {
 
     // 5. Renderer
     VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");
-    rb_define_singleton_method(mRenderer, "draw_buffer", renderer_draw_buffer, 7);
+    rb_define_singleton_method(mRenderer, "draw_buffer", renderer_draw_buffer, 8);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
 
     // 6. Font (Zenoo::Native::Font)
