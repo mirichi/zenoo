@@ -211,6 +211,16 @@ void       zen_draw_buffer(int topology,
                            ZenImage* texture,
                            ZenShader* shader);
 
+// ブレンドモード定数と制御 API
+enum ZenBlendMode {
+    ZEN_BLEND_ALPHA    = 0, // 通常アルファブレンド
+    ZEN_BLEND_ADD      = 1, // 加算合成
+    ZEN_BLEND_MULTIPLY = 2, // 乗算合成
+    ZEN_BLEND_NONE     = 3  // ブレンド無効
+};
+
+void       zen_set_blend_mode(int mode);
+
 // ==========================================
 // 5. フォント (Font) & 動的SDFテクスチャアトラス API
 // ==========================================

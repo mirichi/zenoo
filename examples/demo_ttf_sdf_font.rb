@@ -49,7 +49,7 @@ def draw_styling_card(left_w)
   Window.draw_text(dark_card_x + 15, dark_card_y + 8, "Dark Background (発光シャドウ・白フチ)", size: 14, color: [140, 170, 220], font: Font::MPLUS)
 
   Window.draw_text(dark_card_x + 15, dark_card_y + 32, "黒文字 ＋ 太い白フチ", size: 23, color: [30, 35, 50],
-                   outline_width: 3.0, outline_color: :white, font: Font::MPLUS)
+                   weight: 0.4, outline_width: 3.0, outline_color: :white, font: Font::MPLUS)
   Window.draw_text(dark_card_x + 15, dark_card_y + 68, "ネオン袋文字 (水色+紺)", size: 23, color: [80, 240, 255],
                    outline_width: 2.8, outline_color: [0, 30, 70, 255], font: Font::MPLUS)
   Window.draw_text(dark_card_x + 15, dark_card_y + 106, "ネオン発光 (Cyan Glow)", size: 24, color: :white,
@@ -59,12 +59,20 @@ def draw_styling_card(left_w)
 end
 
 def draw_sample_text_card(left_w)
-  Window.draw_card(30, 380, left_w, 180, radius: 12.0, color: [24, 30, 48, 200], border_width: 1.0, border_color: [50, 65, 100], shadow_blur: 8.0, shadow_color: [0, 0, 0, 80])
-  Window.draw_text(50, 395, "[2] Direct String Rendering (高速・アロケーションフリー描画)", size: 18, color: :cyan, font: Font::MPLUS)
-  Window.draw_text(60, 435, "吾輩は猫である。名前はまだ無い。", size: 22, color: [230, 235, 245], font: Font::MPLUS,
+  Window.draw_card(30, 380, left_w, 185, radius: 12.0, color: [24, 30, 48, 200], border_width: 1.0, border_color: [50, 65, 100], shadow_blur: 8.0, shadow_color: [0, 0, 0, 80])
+  Window.draw_text(50, 395, "[2] Direct String Rendering & SDF Weight (太さ無段階調整)", size: 18, color: :cyan, font: Font::MPLUS)
+  Window.draw_text(60, 430, "吾輩は猫である。名前はまだ無い。", size: 22, color: [230, 235, 245], font: Font::MPLUS,
                    shadow_blur: 1.5, shadow_dx: 1.0, shadow_dy: 1.0, shadow_color: [0, 0, 0, 140])
-  Window.draw_text(60, 475, "どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所で", size: 18, color: [180, 200, 230], font: Font::MPLUS)
-  Window.draw_text(60, 505, "ニャーニャー泣いていた事だけは記憶している。", size: 18, color: [180, 200, 230], font: Font::MPLUS)
+  Window.draw_text(60, 465, "どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所で", size: 17, color: [180, 200, 230], font: Font::MPLUS)
+  Window.draw_text(60, 492, "ニャーニャー泣いていた事だけは記憶している。", size: 17, color: [180, 200, 230], font: Font::MPLUS)
+
+  # SDF による無段階ウェイト比較 (Thin .. Regular .. Bold .. Heavy)
+  Window.draw_text(60, 528, "Weight: ", size: 15, color: :cyan, font: Font::MPLUS)
+  Window.draw_text(130, 528, "Thin (-0.7)", size: 15, weight: -0.7, color: [180, 200, 230], font: Font::MPLUS)
+  Window.draw_text(230, 528, "Regular (0.0)", size: 15, weight: 0.0, color: :white, font: Font::MPLUS)
+  Window.draw_text(355, 528, "Medium (+0.5)", size: 15, weight: 0.5, color: [255, 235, 120], font: Font::MPLUS)
+  Window.draw_text(485, 528, "Bold (+1.0)", size: 15, weight: 1.0, color: [255, 180, 80], font: Font::MPLUS)
+  Window.draw_text(595, 528, "Heavy (+1.6)", size: 15, weight: 1.6, color: :yellow, font: Font::MPLUS)
 end
 
 def draw_wave_card(left_w, time)
@@ -128,6 +136,8 @@ Window.loop(WINDOW_W, WINDOW_H, "Zenoo - High Quality SDF Text & Font Rendering 
   draw_sample_text_card(left_w)
   draw_wave_card(left_w, time)
   draw_atlas_card(right_x, right_w)
+
+  exit if Input.key_pressed?(:escape) || Input.key_pressed?(:q)
 
   if test_max > 0 && frame_count >= test_max
     puts "Font demo test completed successfully! (#{frame_count} frames)"

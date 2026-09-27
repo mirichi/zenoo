@@ -19,7 +19,8 @@ module Zenoo
     LINE                = "\x02\x04"                 # pos(2), color(4) -> 6 floats
     CARD_INSTANCED      = "\x04\x04\x04\x04\x04\x04" # bounds(4), color(4), p0(4), p1(4), p2(4), uv(4) -> 24 floats
     QUAD_INSTANCED      = CARD_INSTANCED
-    SPRITE_INSTANCED    = "\x04\x04\x04"             # bounds(4), color(4), uv(4) -> 12 floats
+    SPRITE_INSTANCED    = "\x04\x04\x04\x04\x04"     # bounds(4), color(4), uv(4), transform(4), pivot(4) -> 20 floats
+    FONT_INSTANCED      = "\x04\x04\x04\x04\x04\x04\x04" # bounds(4), color(4), p0(4), p1(4), p2(4), p3(4), uv(4) -> 28 floats
   end
 
   # 動的属性 Divisor (1バイト属性数列: 各バイトが glVertexAttribDivisor の値 0, 1 を表す)
@@ -30,6 +31,7 @@ module Zenoo
     LINE                = "\x00\x00"                 # pos, color
     CARD_INSTANCED      = "\x01\x01\x01\x01\x01\x01" # 6属性すべてインスタンスデータ (divisor: 1)
     QUAD_INSTANCED      = CARD_INSTANCED
-    SPRITE_INSTANCED    = "\x01\x01\x01"             # 3属性すべてインスタンスデータ (divisor: 1)
+    SPRITE_INSTANCED    = "\x01\x01\x01\x01\x01"     # 5属性すべてインスタンスデータ (divisor: 1)
+    FONT_INSTANCED      = "\x01\x01\x01\x01\x01\x01\x01" # 7属性すべてインスタンスデータ (divisor: 1)
   end
 end

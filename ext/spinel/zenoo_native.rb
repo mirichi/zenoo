@@ -72,6 +72,7 @@ module Zenoo
     # ==========================================
     module Renderer
       native_func :flush, [], :nil, "sp_zen_renderer_flush"
+      native_func :set_blend_mode, [:int], :nil, "sp_zen_renderer_set_blend_mode"
       native_func :raw_draw_buffer, [
         :int, :string, :string, :int, :string, :int, :any, :any
       ], :nil, "sp_zen_renderer_draw_buffer"

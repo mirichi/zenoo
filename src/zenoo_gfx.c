@@ -18,6 +18,7 @@ static GLuint s_dynamic_vbo = 0;
 static GLuint s_white_texture = 0;
 static GLuint s_active_texture = 0;
 static GLuint s_active_program = 0;
+static int s_current_blend_mode = -1;
 static ZenImage* s_current_render_target = NULL;
 static void (*s_gc_callback)(void) = NULL;
 
@@ -92,6 +93,29 @@ void zen_gfx_shutdown(void) {
     if (s_dynamic_vao) glDeleteVertexArrays(1, &s_dynamic_vao);
 }
 
+void zen_set_blend_mode(int mode) {
+    if (s_current_blend_mode == mode) return;
+    s_current_blend_mode = mode;
+    switch (mode) {
+        case ZEN_BLEND_ADD:
+            glEnable(GL_BLEND);
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ONE);
+            break;
+        case ZEN_BLEND_MULTIPLY:
+            glEnable(GL_BLEND);
+            glBlendFuncSeparate(GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+            break;
+        case ZEN_BLEND_NONE:
+            glDisable(GL_BLEND);
+            break;
+        case ZEN_BLEND_ALPHA:
+        default:
+            glEnable(GL_BLEND);
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            break;
+    }
+}
+
 void zen_gfx_begin(uint32_t clear_color, int width, int height) {
     // オフスクリーン描画ターゲットの場合のみビューポートとクリアを実行
     if (s_current_render_target) {
@@ -104,8 +128,8 @@ void zen_gfx_begin(uint32_t clear_color, int width, int height) {
         (void)width; (void)height; (void)clear_color;
     }
 
-    glEnable(GL_BLEND);
-    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    s_current_blend_mode = -1;
+    zen_set_blend_mode(ZEN_BLEND_ALPHA);
 
     s_active_program = 0;
     s_active_texture = s_white_texture;

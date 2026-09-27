@@ -1,5 +1,26 @@
 module Zenoo
+  module BlendMode
+    ALPHA    = 0
+    ADD      = 1
+    MULTIPLY = 2
+    NONE     = 3
+  end
+
   module Window
+    BLEND_MAP = {
+      alpha: BlendMode::ALPHA,
+      add: BlendMode::ADD,
+      additive: BlendMode::ADD,
+      multiply: BlendMode::MULTIPLY,
+      none: BlendMode::NONE
+    }.freeze
+
+    def self.normalize_blend_mode(mode)
+      return BlendMode::ALPHA if mode.nil?
+      return BLEND_MAP[mode] if BLEND_MAP.key?(mode)
+      mode.to_i
+    end
+
     COLOR_MAP = {
       white:   [1.0, 1.0, 1.0, 1.0],
       black:   [0.0, 0.0, 0.0, 1.0],
@@ -73,7 +94,7 @@ module Zenoo
     end
 
     class DrawCommand
-      attr_accessor :target, :z, :order, :topology, :layout, :divisors, :base_vertex_count, :data, :count, :image, :shader, :uniforms
+      attr_accessor :target, :z, :order, :topology, :layout, :divisors, :base_vertex_count, :data, :count, :image, :shader, :uniforms, :blend
 
       def initialize
         @target = nil
@@ -88,9 +109,10 @@ module Zenoo
         @image = nil
         @shader = nil
         @uniforms = nil
+        @blend = 0
       end
 
-      def set(target, z, order, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil)
+      def set(target, z, order, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil, blend = 0)
         @target = target
         @z = z.to_f
         @order = order
@@ -103,6 +125,7 @@ module Zenoo
         @image = image
         @shader = shader
         @uniforms = uniforms
+        @blend = blend.to_i
       end
     end
 
@@ -126,7 +149,7 @@ module Zenoo
       @current_target = old_target
     end
 
-    def self.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil)
+    def self.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil, blend = 0)
       cmd = nil
       if @queue_count < @command_pool.length
         cmd = @command_pool[@queue_count]
@@ -136,7 +159,7 @@ module Zenoo
       end
       zf = z.to_f
       @needs_z_sort = true if zf != 0.0
-      cmd.set(@current_target, zf, @queue_count, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms)
+      cmd.set(@current_target, zf, @queue_count, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
       @queue_count += 1
     end
 
@@ -213,9 +236,10 @@ module Zenoo
         cur_image = cmd.image
         cur_shader = cmd.shader
         cur_uniforms = cmd.uniforms
+        cur_blend = cmd.blend
 
         # 2. ドローコールのまとめ（バッチング）
-        # 条件: 描画先(target), 描画対象(image), シェーダー(shader), トポロジー, Uniform パラメータが一致
+        # 条件: 描画先(target), 描画対象(image), シェーダー(shader), トポロジー, Uniform パラメータ, ブレンドモードが一致
         can_batch = cur_base_vertex_count > 0 ||
                     cur_topology == Topology::TRIANGLES ||
                     cur_topology == Topology::LINES ||
@@ -229,7 +253,8 @@ module Zenoo
                ncmd.image == cur_image &&
                ncmd.shader == cur_shader &&
                ncmd.topology == cur_topology &&
-               ncmd.uniforms == cur_uniforms
+               ncmd.uniforms == cur_uniforms &&
+               ncmd.blend == cur_blend
               cur_data = cur_data + ncmd.data
               cur_count += ncmd.count
               ncmd.data = nil
@@ -243,6 +268,9 @@ module Zenoo
             end
           end
         end
+
+        # ブレンドモードの適用
+        Native::Renderer.set_blend_mode(cur_blend)
 
         # Uniform パラメータの適用（グラデーション等）
         apply_uniforms(cur_shader, cur_uniforms) if cur_uniforms
@@ -271,6 +299,8 @@ module Zenoo
       if active_target != nil
         Native::Image.reset_render_target
       end
+
+      Native::Renderer.set_blend_mode(BlendMode::ALPHA)
 
       @queue_count = 0
       @needs_z_sort = false
@@ -432,22 +462,78 @@ module Zenoo
       )
     end
 
-    def self.draw_rect(x, y, w, h, color = :white, z: 0.0)
-      draw_card(x, y, w, h, color: color, z: z)
+    def self.draw_rect(x, y, w, h, color = :white, z: 0.0, **opts)
+      draw_card(x, y, w, h, color: color, z: z, **opts)
     end
 
-    def self.draw_rounded_rect(x, y, w, h, radius, color = :white, z: 0.0)
-      draw_card(x, y, w, h, radius: radius, color: color, z: z)
+    def self.draw_rounded_rect(x, y, w, h, radius, color = :white, z: 0.0, **opts)
+      draw_card(x, y, w, h, radius: radius, color: color, z: z, **opts)
     end
 
-    def self.draw_image(x, y, image, color = :white, shader: nil, z: 0.0)
+    def self.draw_image(x, y, image,
+                        color_or_opt = :white,
+                        color: nil,
+                        angle: 0.0,
+                        scale: nil,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                        center_x: 0.5,
+                        center_y: 0.5,
+                        pivot: nil,
+                        offset_mode: :top_left,
+                        alpha: 1.0,
+                        blend: :alpha,
+                        shader: nil,
+                        z: 0.0)
       return unless image
       effective_shader = shader || @current_shader || default_sprite_shader
-      c_color = normalize_color(color)
+
+      # 第4引数 color_or_opt が指定され、かつキーワード color: がない場合
+      actual_color = color || color_or_opt || :white
+      c_color = normalize_color(actual_color)
+
+      # alpha の適用 (0.0..1.0 または 0..255)
+      if alpha
+        af = alpha.to_f
+        af = af / 255.0 if af > 1.0
+        af = 0.0 if af < 0.0
+        af = 1.0 if af > 1.0
+        c_color = [c_color[0], c_color[1], c_color[2], c_color[3] * af]
+      end
+
+      # スケール
+      sx = (scale ? scale.to_f : scale_x.to_f)
+      sy = (scale ? scale.to_f : scale_y.to_f)
+
+      # ピボット (center_x, center_y, または pivot: :center, :top_left, [px, py])
+      cx = center_x.to_f
+      cy = center_y.to_f
+      if pivot == :center
+        cx = 0.5
+        cy = 0.5
+      elsif pivot == :top_left
+        cx = 0.0
+        cy = 0.0
+      elsif pivot.is_a?(Array) && pivot.length >= 2
+        cx = pivot[0].to_f
+        cy = pivot[1].to_f
+      end
+
+      # 角度（度数法からラジアンへ変換）
+      rad = angle.to_f * (Math::PI / 180.0)
+
+      # offset_mode: 0.0 (:top_left), 1.0 (:center)
+      off_mode = (offset_mode == :center) ? 1.0 : 0.0
+
+      # blend mode
+      b_mode = normalize_blend_mode(blend)
+
       data = [
         x.to_f, y.to_f, image.width.to_f, image.height.to_f,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        0.0, 0.0, 1.0, 1.0
+        0.0, 0.0, 1.0, 1.0,
+        rad, sx, sy, off_mode,
+        cx, cy, 0.0, 0.0
       ].pack("f*")
 
       enqueue_draw(
@@ -459,7 +545,9 @@ module Zenoo
         data,
         1,
         image,
-        effective_shader
+        effective_shader,
+        nil,
+        b_mode
       )
     end
 
@@ -537,9 +625,9 @@ module Zenoo
 
     class CharContext
       attr_accessor :char, :index, :line_index, :x, :y, :w, :h, :color, :scale, :visible
-      attr_accessor :outline_width, :outline_color
+      attr_accessor :outline_width, :outline_color, :weight
 
-      def reset(char, index, gx, gy, gw, gh, default_color, def_out_w, def_out_c)
+      def reset(char, index, gx, gy, gw, gh, default_color, def_out_w, def_out_c, def_weight = 0.0)
         @char = char
         @index = index
         @line_index = 0
@@ -552,6 +640,7 @@ module Zenoo
         @visible = true
         @outline_width = def_out_w
         @outline_color = def_out_c
+        @weight = def_weight
       end
     end
 
@@ -564,6 +653,7 @@ module Zenoo
                        font: nil,
                        size: 24,
                        color: :white,
+                       weight: 0.0,
                        outline_width: 0.0,
                        outline_color: :black,
                        shadow_blur: 0.0,
@@ -599,10 +689,13 @@ module Zenoo
       s_atlas_dy = s_dy * scale_ratio
       s_atlas_blur = s_blur * scale_ratio
       s_atlas_outline_w = outline_w * scale_ratio
+      s_weight = weight.to_f
+      s_atlas_weight = s_weight * scale_ratio
 
       p0 = [s_atlas_outline_w, s_atlas_blur, s_atlas_dx, s_atlas_dy]
       p1 = outline_c
       p2 = s_c
+      p3 = [s_atlas_weight, 0.0, 0.0, 0.0]
       shader = sdf_font_shader
 
       metrics = target_font.metrics(f_size)
@@ -635,7 +728,7 @@ module Zenoo
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
 
-            ctx.reset(ch, i, gx, gy, gw, gh, c_color, outline_w, outline_c)
+            ctx.reset(ch, i, gx, gy, gw, gh, c_color, outline_w, outline_c, s_weight)
             yield(ctx)
 
             if ctx.visible
@@ -658,6 +751,7 @@ module Zenoo
               cur_color = (ctx.color.equal?(c_color)) ? c_color : normalize_color(ctx.color)
               cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
               cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : normalize_color(ctx.outline_color)
+              cur_p3 = (ctx.weight == s_weight) ? p3 : [ctx.weight * scale_ratio, 0.0, 0.0, 0.0]
 
               batch.push(
                 cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
@@ -665,6 +759,7 @@ module Zenoo
                 cur_p0[0].to_f, cur_p0[1].to_f, cur_p0[2].to_f, cur_p0[3].to_f,
                 cur_p1[0].to_f, cur_p1[1].to_f, cur_p1[2].to_f, cur_p1[3].to_f,
                 p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
+                cur_p3[0].to_f, cur_p3[1].to_f, cur_p3[2].to_f, cur_p3[3].to_f,
                 uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
               )
               glyph_count += 1
@@ -695,6 +790,7 @@ module Zenoo
               p0[0].to_f, p0[1].to_f, p0[2].to_f, p0[3].to_f,
               p1[0].to_f, p1[1].to_f, p1[2].to_f, p1[3].to_f,
               p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
+              p3[0].to_f, p3[1].to_f, p3[2].to_f, p3[3].to_f,
               uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
             )
             glyph_count += 1
@@ -709,8 +805,8 @@ module Zenoo
         enqueue_draw(
           z,
           Topology::TRIANGLE_STRIP,
-          Layout::CARD_INSTANCED,
-          Divisor::CARD_INSTANCED,
+          Layout::FONT_INSTANCED,
+          Divisor::FONT_INSTANCED,
           4,
           batch.pack("f*"),
           glyph_count,

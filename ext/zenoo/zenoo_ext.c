@@ -445,6 +445,13 @@ static VALUE renderer_flush(VALUE self) {
     return Qnil;
 }
 
+static VALUE renderer_set_blend_mode(VALUE self, VALUE rb_mode) {
+    (void)self;
+    int mode = NUM2INT(rb_mode);
+    zen_set_blend_mode(mode);
+    return Qnil;
+}
+
 static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout, VALUE rb_divisors, VALUE rb_base_vertex_count, VALUE rb_data, VALUE rb_count, VALUE rb_tex, VALUE rb_shader) {
     (void)self;
     int topology = NUM2INT(rb_topology);
@@ -538,6 +545,7 @@ void Init_zenoo(void) {
     VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");
     rb_define_singleton_method(mRenderer, "draw_buffer", renderer_draw_buffer, 8);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
+    rb_define_singleton_method(mRenderer, "set_blend_mode", renderer_set_blend_mode, 1);
 
     // 6. Font (Zenoo::Native::Font)
     rb_cNativeFont = rb_define_class_under(rb_mNative, "Font", rb_cObject);
