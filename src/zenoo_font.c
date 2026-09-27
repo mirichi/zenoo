@@ -69,6 +69,7 @@ static inline void zen_font_gl_pixel_storei(GLenum pname, GLint param) {
 typedef struct GlyphEntry {
     int font_id;
     int codepoint;
+    int pixel_size; // ビットマップの場合はそのピクセル高さ (SDFの場合は 0)
     ZenGlyph glyph;
     struct GlyphEntry* next;
 } GlyphEntry;
@@ -133,8 +134,8 @@ ZenImage* zen_font_get_atlas_image(void) {
 }
 
 // ハッシュ関数
-static unsigned int hash_key(int font_id, int codepoint) {
-    unsigned int h = ((unsigned int)font_id * 31) ^ (unsigned int)codepoint;
+static unsigned int hash_key(int font_id, int codepoint, int pixel_size) {
+    unsigned int h = ((unsigned int)font_id * 31) ^ ((unsigned int)codepoint * 17) ^ ((unsigned int)pixel_size * 53);
     return h % HASH_TABLE_SIZE;
 }
 
@@ -228,7 +229,9 @@ void zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* 
     if (line_gap) *line_gap = font->line_gap * scale;
 }
 
-// グリフ取得 (キャッシュにあれば即返却、なければSDF生成してアトラス転送)
+#define BITMAP_SIZE_THRESHOLD 15.0f // 14px以下の極小文字は stbtt_GetCodepointBitmap で直接ラスタライズ (1ドット単位で超高精細)
+
+// グリフ取得 (キャッシュにあれば即返却、なければビットマップまたはSDF生成してアトラス転送)
 int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* out_glyph) {
     if (!font || !out_glyph) {
         return 0;
@@ -236,25 +239,33 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
 
     init_atlas_if_needed();
 
-    unsigned int h = hash_key(font->id, codepoint);
+    int use_bitmap = (font_size < BITMAP_SIZE_THRESHOLD);
+    int pixel_size = use_bitmap ? (int)roundf(font_size) : 0;
+    if (use_bitmap && pixel_size < 1) pixel_size = 1;
+
+    unsigned int h = hash_key(font->id, codepoint, pixel_size);
     GlyphEntry* entry = s_glyph_hash[h];
     while (entry) {
-        if (entry->font_id == font->id && entry->codepoint == codepoint) {
-            // キャッシュヒット！font_size に合わせてスケーリングして返す
-            float scale_ratio = font_size / SDF_BASE_SIZE;
-            *out_glyph = entry->glyph;
-            out_glyph->x0 *= scale_ratio;
-            out_glyph->y0 *= scale_ratio;
-            out_glyph->x1 *= scale_ratio;
-            out_glyph->y1 *= scale_ratio;
-            out_glyph->advance_x *= scale_ratio;
+        if (entry->font_id == font->id && entry->codepoint == codepoint && entry->pixel_size == pixel_size) {
+            if (use_bitmap) {
+                *out_glyph = entry->glyph;
+            } else {
+                float scale_ratio = font_size / SDF_BASE_SIZE;
+                *out_glyph = entry->glyph;
+                out_glyph->x0 *= scale_ratio;
+                out_glyph->y0 *= scale_ratio;
+                out_glyph->x1 *= scale_ratio;
+                out_glyph->y1 *= scale_ratio;
+                out_glyph->advance_x *= scale_ratio;
+            }
             return 1;
         }
         entry = entry->next;
     }
 
-    // 未キャッシュ: SDF を生成
-    float base_scale = stbtt_ScaleForPixelHeight(&font->info, SDF_BASE_SIZE);
+    // 未キャッシュ: 生成処理
+    float req_pixel_size = use_bitmap ? (float)pixel_size : SDF_BASE_SIZE;
+    float scale = stbtt_ScaleForPixelHeight(&font->info, req_pixel_size);
 
     int advance_width = 0, lsb = 0;
     stbtt_GetCodepointHMetrics(&font->info, codepoint, &advance_width, &lsb);
@@ -266,25 +277,39 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
     ZenGlyph base_glyph;
     memset(&base_glyph, 0, sizeof(ZenGlyph));
     base_glyph.codepoint = codepoint;
-    base_glyph.advance_x = (float)advance_width * base_scale;
+    base_glyph.advance_x = (float)advance_width * scale;
     base_glyph.visible = !is_empty;
+    base_glyph.is_bitmap = use_bitmap;
 
     if (!is_empty) {
         int w = 0, h_out = 0, xoff = 0, yoff = 0;
-        float dist_scale = (float)SDF_ONEDGE / (float)SDF_PADDING;
+        unsigned char* pixels = NULL;
 
-        unsigned char* sdf = stbtt_GetCodepointSDF(
-            &font->info,
-            base_scale,
-            codepoint,
-            SDF_PADDING,
-            SDF_ONEDGE,
-            dist_scale,
-            &w, &h_out,
-            &xoff, &yoff
-        );
+        if (use_bitmap) {
+            // 直接ラスタライズビットマップ (14px以下: 線が潰れず1ドット単位でクリアに描画)
+            pixels = stbtt_GetCodepointBitmap(
+                &font->info,
+                scale, scale,
+                codepoint,
+                &w, &h_out,
+                &xoff, &yoff
+            );
+        } else {
+            // 符号付き距離場 (SDF: 15px以上のアウトライン・拡大縮小・回転対応)
+            float dist_scale = (float)SDF_ONEDGE / (float)SDF_PADDING;
+            pixels = stbtt_GetCodepointSDF(
+                &font->info,
+                scale,
+                codepoint,
+                SDF_PADDING,
+                SDF_ONEDGE,
+                dist_scale,
+                &w, &h_out,
+                &xoff, &yoff
+            );
+        }
 
-        if (sdf && w > 0 && h_out > 0) {
+        if (pixels && w > 0 && h_out > 0) {
             // アトラスへパッキング (棚詰め)
             if (s_atlas_x + w + 1 >= ATLAS_WIDTH) {
                 s_atlas_y += s_atlas_row_h + 1;
@@ -294,7 +319,6 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
 
             if (s_atlas_y + h_out + 1 >= ATLAS_HEIGHT) {
                 fprintf(stderr, "[Zenoo Font] Warning: Texture Atlas Full!\n");
-                // 簡易対応: アトラス左上に戻る (必要に応じてクリア)
                 s_atlas_x = 1;
                 s_atlas_y = 1;
                 s_atlas_row_h = 0;
@@ -305,13 +329,15 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
 
             // OpenGL テクスチャへ部分転送
             glBindTexture(GL_TEXTURE_2D, s_atlas_image->texture_id);
-            // 転送アライメントを 1バイトに設定 (奇数幅のグリフも安全に転送)
             zen_font_gl_pixel_storei(GL_UNPACK_ALIGNMENT, 1);
-            zen_font_gl_tex_sub_image_2d(GL_TEXTURE_2D, 0, dest_x, dest_y, w, h_out, GL_RED, GL_UNSIGNED_BYTE, sdf);
+            zen_font_gl_tex_sub_image_2d(GL_TEXTURE_2D, 0, dest_x, dest_y, w, h_out, GL_RED, GL_UNSIGNED_BYTE, pixels);
             zen_font_gl_pixel_storei(GL_UNPACK_ALIGNMENT, 4);
 
-
-            stbtt_FreeSDF(sdf, NULL);
+            if (use_bitmap) {
+                stbtt_FreeBitmap(pixels, NULL);
+            } else {
+                stbtt_FreeSDF(pixels, NULL);
+            }
 
             // UV 座標 (0.0 .. 1.0)
             base_glyph.u0 = (float)dest_x / (float)ATLAS_WIDTH;
@@ -331,6 +357,10 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
             }
         } else {
             base_glyph.visible = 0;
+            if (pixels) {
+                if (use_bitmap) stbtt_FreeBitmap(pixels, NULL);
+                else stbtt_FreeSDF(pixels, NULL);
+            }
         }
     }
 
@@ -339,19 +369,23 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
     if (new_entry) {
         new_entry->font_id = font->id;
         new_entry->codepoint = codepoint;
+        new_entry->pixel_size = pixel_size;
         new_entry->glyph = base_glyph;
         new_entry->next = s_glyph_hash[h];
         s_glyph_hash[h] = new_entry;
     }
 
-    // 要求サイズにスケーリングして返す
-    float scale_ratio = font_size / SDF_BASE_SIZE;
-    *out_glyph = base_glyph;
-    out_glyph->x0 *= scale_ratio;
-    out_glyph->y0 *= scale_ratio;
-    out_glyph->x1 *= scale_ratio;
-    out_glyph->y1 *= scale_ratio;
-    out_glyph->advance_x *= scale_ratio;
+    if (use_bitmap) {
+        *out_glyph = base_glyph;
+    } else {
+        float scale_ratio = font_size / SDF_BASE_SIZE;
+        *out_glyph = base_glyph;
+        out_glyph->x0 *= scale_ratio;
+        out_glyph->y0 *= scale_ratio;
+        out_glyph->x1 *= scale_ratio;
+        out_glyph->y1 *= scale_ratio;
+        out_glyph->advance_x *= scale_ratio;
+    }
 
     return 1;
 }

@@ -97,8 +97,6 @@ def draw_atlas_card(right_x, right_w)
   Window.draw_text(right_x + 20, 154, "10 PRINT \"ZENOO 2D ENGINE\"", size: 14, color: [100, 255, 180], font: Font::SINCLAIR)
   Window.draw_text(right_x + 20, 172, "20 LET SCORE = 1982", size: 14, color: [100, 255, 180], font: Font::SINCLAIR)
   Window.draw_text(right_x + 20, 190, "30 GOTO 10", size: 14, color: [100, 255, 180], font: Font::SINCLAIR)
-  Window.draw_text(right_x + 20, 216, "SDF 14px: 細かい日本語もクッキリ読める！", size: 14, color: [225, 235, 255], font: Font::MPLUS)
-  Window.draw_text(right_x + 20, 236, "SDF 11px: 極小サイズでも芯がかすれず明瞭", size: 11, color: [170, 195, 230], font: Font::MPLUS)
 
   Window.draw_card(right_x, 280, right_w, 420, radius: 12.0, color: [24, 30, 48, 200], border_width: 1.0, border_color: [50, 65, 100], shadow_blur: 8.0, shadow_color: [0, 0, 0, 80])
   Window.draw_text(right_x + 20, 295, "Live SDF Texture Atlas (2048x2048)", size: 18, color: :cyan, font: Font::MPLUS)

@@ -226,7 +226,7 @@ static VALUE font_get_glyph(VALUE self, VALUE rb_cp, VALUE rb_size) {
         return Qnil;
     }
 
-    VALUE ary = rb_ary_new_capa(10);
+    VALUE ary = rb_ary_new_capa(11);
     rb_ary_push(ary, g.visible ? Qtrue : Qfalse);
     rb_ary_push(ary, DBL2NUM(g.u0));
     rb_ary_push(ary, DBL2NUM(g.v0));
@@ -237,6 +237,7 @@ static VALUE font_get_glyph(VALUE self, VALUE rb_cp, VALUE rb_size) {
     rb_ary_push(ary, DBL2NUM(g.x1));
     rb_ary_push(ary, DBL2NUM(g.y1));
     rb_ary_push(ary, DBL2NUM(g.advance_x));
+    rb_ary_push(ary, g.is_bitmap ? Qtrue : Qfalse);
     return ary;
 }
 

@@ -721,7 +721,7 @@ module Zenoo
           adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
 
           if glyph_data && glyph_data[0] # visible == true
-            _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv = glyph_data
+            _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
             if f_size <= 20.0
               gx = (pen_x + x0).round
               gy = (pen_y + y0).round
@@ -732,6 +732,7 @@ module Zenoo
             gw = x1 - x0
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
+            is_bmp = is_bitmap ? 1.0 : 0.0
 
             ctx.reset(ch, i, gx, gy, gw, gh, c_color, outline_w, outline_c, s_weight)
             yield(ctx)
@@ -756,7 +757,7 @@ module Zenoo
               cur_color = (ctx.color.equal?(c_color)) ? c_color : normalize_color(ctx.color)
               cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
               cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : normalize_color(ctx.outline_color)
-              cur_p3 = (ctx.weight == s_weight) ? p3 : [ctx.weight * scale_ratio, 0.0, 0.0, 0.0]
+              cur_p3 = (ctx.weight == s_weight) ? [s_atlas_weight, is_bmp, 0.0, 0.0] : [ctx.weight * scale_ratio, is_bmp, 0.0, 0.0]
 
               batch.push(
                 cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
@@ -782,7 +783,7 @@ module Zenoo
           adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
 
           if glyph_data && glyph_data[0] # visible == true
-            _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv = glyph_data
+            _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
             if f_size <= 20.0
               gx = (pen_x + x0).round
               gy = (pen_y + y0).round
@@ -793,6 +794,8 @@ module Zenoo
             gw = x1 - x0
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
+            is_bmp = is_bitmap ? 1.0 : 0.0
+            cur_p3 = [s_atlas_weight, is_bmp, 0.0, 0.0]
 
             batch.push(
               gx.to_f, gy.to_f, gw.to_f, gh.to_f,
@@ -800,7 +803,7 @@ module Zenoo
               p0[0].to_f, p0[1].to_f, p0[2].to_f, p0[3].to_f,
               p1[0].to_f, p1[1].to_f, p1[2].to_f, p1[3].to_f,
               p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
-              p3[0].to_f, p3[1].to_f, p3[2].to_f, p3[3].to_f,
+              cur_p3[0].to_f, cur_p3[1].to_f, cur_p3[2].to_f, cur_p3[3].to_f,
               uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
             )
             glyph_count += 1
