@@ -19,10 +19,11 @@ fi
 SPINEL_DIR="${HOME}/spinel"
 SPINEL_BIN="${SPINEL_DIR}/bin/spinel"
 
-DOCS_DIR="docs"
+DOCS_DIR="examples/docs"
 CACHE_DIR="build/wasm_cache"
 mkdir -p "${DOCS_DIR}/game"
 mkdir -p "${DOCS_DIR}/gui"
+mkdir -p "${DOCS_DIR}/image"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -33,12 +34,11 @@ touch "${DOCS_DIR}/.nojekyll"
 cp examples/web/portal.html "${DOCS_DIR}/index.html"
 
 echo "=== [2/5] Building Common Spinel Runtime for Wasm ==="
-RT_FILES=(sp_bigint.c sp_crypto.c sp_pack.c sp_time.c sp_core.c sp_net.c sp_system.c sp_gc.c sp_slab.c sp_alloc.c sp_dtoa.c sp_marshal.c sp_format.c sp_string.c sp_inspect.c sp_array.c sp_str.c sp_hash.c sp_proc.c sp_exc.c sp_re.c sp_random.c sp_fiber.c sp_sched.c sp_io.c sp_iobuffer.c sp_cold.c sp_process.c sp_process_status.c)
-
-for f in "${RT_FILES[@]}"; do
-    obj="${CACHE_DIR}/rt/${f%.c}.o"
-    if [ ! -f "$obj" ] || [ "${SPINEL_DIR}/lib/$f" -nt "$obj" ]; then
-        emcc -c -O2 -I"${SPINEL_DIR}/lib" -I"${SPINEL_DIR}/lib/regexp" "${SPINEL_DIR}/lib/$f" -o "$obj"
+for f in "${SPINEL_DIR}"/lib/*.c; do
+    bn=$(basename "$f" .c)
+    obj="${CACHE_DIR}/rt/${bn}.o"
+    if [ ! -f "$obj" ] || [ "$f" -nt "$obj" ]; then
+        emcc -c -O2 -I"${SPINEL_DIR}/lib" -I"${SPINEL_DIR}/lib/regexp" "$f" -o "$obj"
     fi
 done
 
@@ -46,7 +46,7 @@ for f in "${SPINEL_DIR}"/lib/regexp/*.c; do
     bn=$(basename "$f" .c)
     obj="${CACHE_DIR}/regexp/${bn}.o"
     if [ ! -f "$obj" ] || [ "$f" -nt "$obj" ]; then
-        emcc -c -O2 -I"${SPINEL_DIR}/lib/regexp" "$f" -o "$obj"
+        emcc -c -O2 -I"${SPINEL_DIR}/lib/regexp" -I"${SPINEL_DIR}/lib/regexp/shim" "$f" -o "$obj"
     fi
 done
 
@@ -63,8 +63,6 @@ COMMON_EMCC_FLAGS=(
     -s USE_GLFW=3
     -s MAX_WEBGL_VERSION=2
     -s MIN_WEBGL_VERSION=2
-    -s ASYNCIFY
-    -s ASYNCIFY_STACK_SIZE=65536
     -s STACK_SIZE=1048576
     -s INITIAL_MEMORY=67108864
     -s ALLOW_MEMORY_GROWTH=1
@@ -81,62 +79,119 @@ COMMON_OBJS=(
     "${CACHE_DIR}/libspinel_rt.a"
 )
 
-echo "=== [4/7] Building Survival Shooting Game (docs/game) ==="
-"${SPINEL_BIN}" --no-inline-hot -Ilib examples/game_zenoo.rb -c -o "${DOCS_DIR}/game/app.c"
-sed -i 's/__attribute__((always_inline))//g' "${DOCS_DIR}/game/app.c"
+TARGET="${1:-all}"
 
-emcc "${COMMON_EMCC_FLAGS[@]}" \
-    "${DOCS_DIR}/game/app.c" \
-    "${COMMON_OBJS[@]}" \
-    -o "${DOCS_DIR}/game/index.html" \
-    --shell-file examples/web/shell_game.html
+strip_always_inline() {
+    python3 -c "import sys; p=sys.argv[1]; s=open(p, 'r', encoding='utf-8', errors='ignore').read().replace('__attribute__((always_inline))', ''); open(p, 'w', encoding='utf-8').write(s)" "$1"
+}
 
-rm -f "${DOCS_DIR}/game/app.c"
+build_game() {
+    echo "=== Building Survival Shooting Game (${DOCS_DIR}/game) ==="
+    mkdir -p "${DOCS_DIR}/game"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/game_zenoo.rb -c -o "${DOCS_DIR}/game/app.c"
+    strip_always_inline "${DOCS_DIR}/game/app.c"
 
-echo "=== [5/7] Building Immediate Mode GUI Demo (docs/gui) ==="
-"${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_gui.rb -c -o "${DOCS_DIR}/gui/app.c"
-sed -i 's/__attribute__((always_inline))//g' "${DOCS_DIR}/gui/app.c"
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/game/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/game/index.html" \
+        --shell-file examples/web/shell_game.html
 
-emcc "${COMMON_EMCC_FLAGS[@]}" \
-    "${DOCS_DIR}/gui/app.c" \
-    "${COMMON_OBJS[@]}" \
-    -o "${DOCS_DIR}/gui/index.html" \
-    --shell-file examples/web/shell_gui.html
+    rm -f "${DOCS_DIR}/game/app.c"
+    echo "-> Game build done!"
+}
 
-rm -f "${DOCS_DIR}/gui/app.c"
+build_gui() {
+    echo "=== Building Immediate Mode GUI Demo (${DOCS_DIR}/gui) ==="
+    mkdir -p "${DOCS_DIR}/gui"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_gui.rb -c -o "${DOCS_DIR}/gui/app.c"
+    strip_always_inline "${DOCS_DIR}/gui/app.c"
 
-echo "=== [6/7] Building SDF Text & Font Demo (docs/font) ==="
-mkdir -p "${DOCS_DIR}/font"
-"${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_ttf_sdf_font.rb -c -o "${DOCS_DIR}/font/app.c"
-sed -i 's/__attribute__((always_inline))//g' "${DOCS_DIR}/font/app.c"
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/gui/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/gui/index.html" \
+        --shell-file examples/web/shell_gui.html
 
-emcc "${COMMON_EMCC_FLAGS[@]}" \
-    "${DOCS_DIR}/font/app.c" \
-    "${COMMON_OBJS[@]}" \
-    -o "${DOCS_DIR}/font/index.html" \
-    --shell-file examples/web/shell_font.html
+    rm -f "${DOCS_DIR}/gui/app.c"
+    echo "-> GUI build done!"
+}
 
-rm -f "${DOCS_DIR}/font/app.c"
+build_font() {
+    echo "=== Building SDF Text & Font Demo (${DOCS_DIR}/font) ==="
+    mkdir -p "${DOCS_DIR}/font"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_ttf_sdf_font.rb -c -o "${DOCS_DIR}/font/app.c"
+    strip_always_inline "${DOCS_DIR}/font/app.c"
 
-echo "=== [7/7] Building Vector Graphics Demo (docs/vector) ==="
-mkdir -p "${DOCS_DIR}/vector"
-"${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_vector_graphics.rb -c -o "${DOCS_DIR}/vector/app.c"
-sed -i 's/__attribute__((always_inline))//g' "${DOCS_DIR}/vector/app.c"
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/font/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/font/index.html" \
+        --shell-file examples/web/shell_font.html
 
-emcc "${COMMON_EMCC_FLAGS[@]}" \
-    "${DOCS_DIR}/vector/app.c" \
-    "${COMMON_OBJS[@]}" \
-    -o "${DOCS_DIR}/vector/index.html" \
-    --shell-file examples/web/shell.html
+    rm -f "${DOCS_DIR}/font/app.c"
+    echo "-> Font build done!"
+}
 
-rm -f "${DOCS_DIR}/vector/app.c"
+build_vector() {
+    echo "=== Building Vector Graphics Demo (${DOCS_DIR}/vector) ==="
+    mkdir -p "${DOCS_DIR}/vector"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_vector_graphics.rb -c -o "${DOCS_DIR}/vector/app.c"
+    strip_always_inline "${DOCS_DIR}/vector/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/vector/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/vector/index.html" \
+        --shell-file examples/web/shell.html
+
+    rm -f "${DOCS_DIR}/vector/app.c"
+    echo "-> Vector build done!"
+}
+
+build_image() {
+    echo "=== Building Sprite & Blend Modes Demo (${DOCS_DIR}/image) ==="
+    mkdir -p "${DOCS_DIR}/image"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_draw_image.rb -c -o "${DOCS_DIR}/image/app.c"
+    strip_always_inline "${DOCS_DIR}/image/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/image/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/image/index.html" \
+        --shell-file examples/web/shell_image.html
+
+    rm -f "${DOCS_DIR}/image/app.c"
+    echo "-> Image build done!"
+}
+
+case "$TARGET" in
+    game)   build_game ;;
+    gui)    build_gui ;;
+    font)   build_font ;;
+    vector) build_vector ;;
+    image)  build_image ;;
+    all)
+        build_game
+        build_gui
+        build_font
+        build_vector
+        build_image
+        ;;
+    *)
+        echo "Unknown target: $TARGET"
+        echo "Usage: $0 [game|gui|font|vector|image|all]"
+        exit 1
+        ;;
+esac
 
 echo ""
 echo "=========================================================="
-echo " Showcase build complete!"
+echo " Showcase build complete! (target: $TARGET)"
 echo " Portal: ${DOCS_DIR}/index.html"
 echo " Game  : ${DOCS_DIR}/game/index.html"
 echo " GUI   : ${DOCS_DIR}/gui/index.html"
 echo " Font  : ${DOCS_DIR}/font/index.html"
 echo " Vector: ${DOCS_DIR}/vector/index.html"
+echo " Image : ${DOCS_DIR}/image/index.html"
 echo "=========================================================="

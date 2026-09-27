@@ -140,6 +140,6 @@ Window.loop(WINDOW_W, WINDOW_H, "Zenoo - High Quality SDF Text & Font Rendering 
 
   if test_max > 0 && frame_count >= test_max
     puts "Font demo test completed successfully! (#{frame_count} frames)"
-    break
+    exit
   end
 end

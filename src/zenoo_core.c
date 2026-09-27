@@ -10,6 +10,11 @@
 #ifdef __EMSCRIPTEN__
 #include <GLES3/gl3.h>
 #include <emscripten.h>
+#include <errno.h>
+#include <ucontext.h>
+int getcontext(ucontext_t *uc) { (void)uc; errno = ENOSYS; return -1; }
+void makecontext(ucontext_t *uc, void (*func)(void), int argc, ...) { (void)uc; (void)func; (void)argc; }
+int swapcontext(ucontext_t *oucp, const ucontext_t *ucp) { (void)oucp; (void)ucp; errno = ENOSYS; return -1; }
 #else
 #include "glad/glad.h"
 #endif
