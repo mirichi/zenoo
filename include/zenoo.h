@@ -80,6 +80,12 @@ void zen_shutdown(void);
 int  zen_update(void);
 void zen_clear(uint32_t color);
 
+// Wasm (Emscripten) requestAnimationFrame 駆動用 API
+typedef void (*zen_step_callback_fn)(void);
+void zen_set_step_callback(zen_step_callback_fn fn);
+void zen_start_wasm_loop(void);
+int  zen_is_wasm(void);
+
 // 【ハイブリッド方式 B】ロジックと描画を明示的に分離したい場合用
 int  zen_window_should_close(void);
 void zen_poll_events(void);                 // 純粋に入力・OSイベント・時間更新のみ

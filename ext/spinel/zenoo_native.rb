@@ -23,6 +23,7 @@ module Zenoo
   native_method :set_vec2,  [:string, :float, :float], :nil, "sp_ZenShader_set_vec2"
   native_method :set_vec3,  [:string, :float, :float, :float], :nil, "sp_ZenShader_set_vec3"
   native_method :set_vec4,  [:string, :float, :float, :float, :float], :nil, "sp_ZenShader_set_vec4"
+  native_method :set_mat4,  [:string, :string], :nil, "sp_ZenShader_set_mat4"
 
   module Native
     # ==========================================
@@ -39,6 +40,8 @@ module Zenoo
       native_func :delta_time, [], :float, "sp_zen_win_delta_time"
       native_func :time, [], :float, "sp_zen_win_time"
       native_func :shutdown, [], :nil, "sp_zen_win_shutdown"
+      native_func :wasm?, [], :bool, "sp_zen_win_is_wasm"
+      native_func :start_wasm_loop, [:any], :nil, "sp_zen_win_start_wasm_loop"
 
       def self.init(w, h, title, fullscreen = false)
         Zenoo::Native::Window.raw_init(w.to_i, h.to_i, title.to_s, fullscreen ? 1 : 0)

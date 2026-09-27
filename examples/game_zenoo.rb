@@ -634,7 +634,7 @@ Window.loop(1280, 720, "Zenoo Survival Shooting Game") do
     frame_count += 1
     if frame_count >= test_max
       puts "Game test completed successfully! (#{frame_count} frames)"
-      break
+      exit
     end
   end
 end

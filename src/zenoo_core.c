@@ -540,6 +540,85 @@ int zen_update(void) {
     return 1;
 }
 
+#ifdef __EMSCRIPTEN__
+static zen_step_callback_fn s_step_callback = NULL;
+
+void zen_set_step_callback(zen_step_callback_fn fn) {
+    s_step_callback = fn;
+}
+
+static double s_wasm_accumulator = 0.0;
+static double s_wasm_prev_time = 0.0;
+
+static void zen_wasm_tick(void) {
+    if (!s_window) return;
+
+    double now = emscripten_get_now() * 0.001; // 秒
+    if (s_wasm_prev_time <= 0.0) s_wasm_prev_time = now;
+    double dt = now - s_wasm_prev_time;
+    s_wasm_prev_time = now;
+
+    // 極端なラグ時（タブバックグラウンド移行等）のスパイラル防止
+    if (dt > 0.2) dt = 0.2;
+    if (dt <= 0.0) dt = 0.0001;
+
+    s_delta_time = (float)dt;
+    s_wasm_accumulator += dt;
+
+    double fixed_step = (s_target_fps > 0) ? (1.0 / (double)s_target_fps) : (1.0 / 60.0);
+
+    // 固定時間蓄積法: 蓄積時間が fixed_step を超えた時のみ更新＆描画 (rAF間引き制御)
+    if (s_wasm_accumulator >= fixed_step) {
+        int steps = 0;
+        while (s_wasm_accumulator >= fixed_step && steps < 2) {
+            s_wasm_accumulator -= fixed_step;
+            steps++;
+        }
+        if (s_wasm_accumulator > fixed_step * 2.0) {
+            s_wasm_accumulator = 0.0; // 追いつかない過度な蓄積はリセット
+        }
+
+        // 1. 入力・イベント更新
+        zen_poll_events();
+
+        // 2. 描画開始 (デフォルト色でクリア)
+        zen_begin_frame(ZEN_RGBA(18, 20, 30, 255));
+
+        // 3. 登録されたステップコールバック（Ruby ブロック呼び出し）を実行
+        if (s_step_callback) {
+            s_step_callback();
+        }
+
+        // 4. 描画確定・Flush & SwapBuffers
+        zen_end_frame();
+    }
+    // 蓄積時間が足りないフレーム (144Hzでの間引き時など) は Canvas を触らず何もしない
+}
+
+void zen_start_wasm_loop(void) {
+    s_wasm_prev_time = emscripten_get_now() * 0.001;
+    s_wasm_accumulator = 0.0;
+    // 0 = requestAnimationFrame に同期, 1 = simulate infinite loop (main を抜けてブラウザに制御を戻す)
+    emscripten_set_main_loop(zen_wasm_tick, 0, 1);
+}
+#else
+void zen_set_step_callback(zen_step_callback_fn fn) {
+    (void)fn;
+}
+
+void zen_start_wasm_loop(void) {
+    // ネイティブ環境では使用しない
+}
+#endif
+
+int zen_is_wasm(void) {
+#ifdef __EMSCRIPTEN__
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 double zen_get_time(void) {
     return glfwGetTime();
 }
