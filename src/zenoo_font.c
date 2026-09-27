@@ -58,9 +58,9 @@ static inline void zen_font_gl_pixel_storei(GLenum pname, GLint param) {
 #endif
 
 
-#define ATLAS_WIDTH  1024
-#define ATLAS_HEIGHT 1024
-#define SDF_BASE_SIZE 48.0f // SDFを生成する基準フォント高さ (ピクセル)
+#define ATLAS_WIDTH  2048
+#define ATLAS_HEIGHT 2048
+#define SDF_BASE_SIZE 72.0f // SDFを生成する基準フォント高さ (ピクセル: 72pxで微小漢字の解像度を大幅向上)
 #define SDF_PADDING   12    // アウトライン・影用の余白ピクセル (十分な余白で矩形化を防止)
 #define SDF_ONEDGE    128   // エッジ境界値 (0.5相当)
 #define HASH_TABLE_SIZE 4096

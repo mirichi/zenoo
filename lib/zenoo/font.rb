@@ -2,6 +2,8 @@
 
 module Zenoo
   class Font
+    SDF_BASE_SIZE = 72.0
+
     attr_reader :path, :native
 
 
