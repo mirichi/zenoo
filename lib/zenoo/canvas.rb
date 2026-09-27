@@ -418,7 +418,8 @@ module Zenoo
       end
 
       data = verts.pack("f*")
-      Native::Renderer.draw_buffer(
+      Window.enqueue_draw(
+        0.0,
         Topology::TRIANGLES,
         Layout::POS2_COLOR4,
         false,
