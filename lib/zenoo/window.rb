@@ -683,8 +683,8 @@ module Zenoo
       s_dy = shadow_dy.to_f
       s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
 
-      # 画面上ピクセルとアトラスピクセルのスケール比補正 (アトラス基準サイズは48px)
-      scale_ratio = 48.0 / f_size
+      # 画面上ピクセルとアトラスピクセルのスケール比補正 (アトラス基準サイズはFont::SDF_BASE_SIZE)
+      scale_ratio = Font::SDF_BASE_SIZE / f_size
       s_atlas_dx = s_dx * scale_ratio
       s_atlas_dy = s_dy * scale_ratio
       s_atlas_blur = s_blur * scale_ratio
@@ -722,8 +722,13 @@ module Zenoo
 
           if glyph_data && glyph_data[0] # visible == true
             _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv = glyph_data
-            gx = pen_x + x0
-            gy = pen_y + y0
+            if f_size <= 20.0
+              gx = (pen_x + x0).round
+              gy = (pen_y + y0).round
+            else
+              gx = pen_x + x0
+              gy = pen_y + y0
+            end
             gw = x1 - x0
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
@@ -778,8 +783,13 @@ module Zenoo
 
           if glyph_data && glyph_data[0] # visible == true
             _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv = glyph_data
-            gx = pen_x + x0
-            gy = pen_y + y0
+            if f_size <= 20.0
+              gx = (pen_x + x0).round
+              gy = (pen_y + y0).round
+            else
+              gx = pen_x + x0
+              gy = pen_y + y0
+            end
             gw = x1 - x0
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]

@@ -57,24 +57,43 @@ module Zenoo
           // 1チャンネル GL_RED アトラスからサンプリング
           float dist = texture(u_texture, v_uv).r;
 
-          // 最適化されたアンチエイリアス幅 (画面上 ちょうど1ピクセル幅のエッジ)
-          float fw = fwidth(dist) * 0.5;
-          if (fw < 0.0001) fw = 0.005;
+          // 画面1ピクセルあたりのSDFテクセル変化量
+          float raw_fw = fwidth(dist);
 
-          // エッジ閾値 (weight > 0 で太字化、weight < 0 で細字化)
+          // アンチエイリアス幅: 画面上 ちょうど1ピクセル幅
+          float fw = max(raw_fw * 0.5, 0.002);
+
+          // エッジ閾値 (weight による手動調整)
           float edge_threshold = 0.5 - atlas_weight * 0.04183;
 
           // 1. 本体のアルファ
-          float body_alpha = smoothstep(edge_threshold - fw, edge_threshold + fw, dist);
+          // 小サイズ文字 (raw_fw > 0.02) では、画面1ピクセルに対してアトラスが激しく縮小されるため、
+          // 4-Tap サブピクセル・スーパーサンプリング (Box Filter) でサンプリング漏れ・線の途切れ・潰れを防止
+          float body_alpha;
+          if (raw_fw > 0.02) {
+              vec2 d_uv_x = dFdx(v_uv) * 0.35;
+              vec2 d_uv_y = dFdy(v_uv) * 0.35;
+              float d0 = texture(u_texture, v_uv + d_uv_x + d_uv_y).r;
+              float d1 = texture(u_texture, v_uv - d_uv_x + d_uv_y).r;
+              float d2 = texture(u_texture, v_uv + d_uv_x - d_uv_y).r;
+              float d3 = texture(u_texture, v_uv - d_uv_x - d_uv_y).r;
+              float a0 = clamp((d0 - edge_threshold) / (fw * 2.0) + 0.5, 0.0, 1.0);
+              float a1 = clamp((d1 - edge_threshold) / (fw * 2.0) + 0.5, 0.0, 1.0);
+              float a2 = clamp((d2 - edge_threshold) / (fw * 2.0) + 0.5, 0.0, 1.0);
+              float a3 = clamp((d3 - edge_threshold) / (fw * 2.0) + 0.5, 0.0, 1.0);
+              body_alpha = (a0 + a1 + a2 + a3) * 0.25;
+          } else {
+              body_alpha = clamp((dist - edge_threshold) / (fw * 2.0) + 0.5, 0.0, 1.0);
+          }
 
           // 2. アウトライン (袋文字)
           float border_alpha = 0.0;
           if (outline_width > 0.0) {
-              // fw (アンチエイリアス幅) に対して十分なオフセットを確保し、縮小時の潰れ・滲みを防止
+              // fw に対して十分なオフセットを確保し、縮小時の潰れ・滲みを防止
               float outline_offset = max(outline_width * 0.04183, fw * 1.5);
               float border_dist = dist + outline_offset;
-              float b_alpha = smoothstep(edge_threshold - fw, edge_threshold + fw, border_dist);
-              // Quad 端部でのクリッピングフェード (削れすぎないよう端部のみに適用)
+              float b_alpha = clamp((border_dist - edge_threshold) / (fw * 2.0) + 0.5, 0.0, 1.0);
+              // Quad 端部でのクリッピングフェード
               float edge_fade = smoothstep(0.001, 0.02, dist);
               border_alpha = b_alpha * edge_fade;
           }
@@ -82,7 +101,8 @@ module Zenoo
           // 3. ドロップシャドウ
           float shadow_alpha = 0.0;
           if (shadow_color.a > 0.0 && (shadow_offset.x != 0.0 || shadow_offset.y != 0.0 || shadow_blur > 0.0)) {
-              vec2 s_uv = v_uv - shadow_offset * (1.0 / 1024.0);
+              vec2 tex_size = vec2(textureSize(u_texture, 0));
+              vec2 s_uv = v_uv - shadow_offset / tex_size;
               float s_dist = texture(u_texture, s_uv).r;
               float s_fw = fw + shadow_blur * 0.04183;
               float s_alpha = smoothstep(0.5 - s_fw, 0.5 + s_fw, s_dist) * shadow_color.a;

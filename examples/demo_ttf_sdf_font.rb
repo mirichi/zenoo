@@ -92,15 +92,16 @@ def draw_wave_card(left_w, time)
 end
 
 def draw_atlas_card(right_x, right_w)
-  Window.draw_card(right_x, 120, right_w, 140, radius: 12.0, color: [24, 30, 48, 200], border_width: 1.0, border_color: [50, 65, 100], shadow_blur: 8.0, shadow_color: [0, 0, 0, 80])
-  Window.draw_text(right_x + 20, 132, "Retro 8x8 Font (Font::SINCLAIR)", size: 16, color: :cyan, font: Font::MPLUS)
-  Window.draw_text(right_x + 20, 158, "10 PRINT \"ZENOO 2D ENGINE\"", size: 15, color: [100, 255, 180], font: Font::SINCLAIR, shadow_blur: 1.5, shadow_dx: 1.0, shadow_dy: 1.0, shadow_color: [0, 0, 0, 200])
-  Window.draw_text(right_x + 20, 178, "20 LET SCORE = 1982", size: 15, color: [100, 255, 180], font: Font::SINCLAIR, shadow_blur: 1.5, shadow_dx: 1.0, shadow_dy: 1.0, shadow_color: [0, 0, 0, 200])
-  Window.draw_text(right_x + 20, 198, "30 GOTO 10", size: 15, color: [100, 255, 180], font: Font::SINCLAIR, shadow_blur: 1.5, shadow_dx: 1.0, shadow_dy: 1.0, shadow_color: [0, 0, 0, 200])
-  Window.draw_text(right_x + 20, 230, "Public Domain (Unlicense) 8x8 TTF", size: 12, color: [160, 180, 210], font: Font::SINCLAIR)
+  Window.draw_card(right_x, 120, right_w, 148, radius: 12.0, color: [24, 30, 48, 200], border_width: 1.0, border_color: [50, 65, 100], shadow_blur: 8.0, shadow_color: [0, 0, 0, 80])
+  Window.draw_text(right_x + 20, 130, "Retro 8x8 & Small Text (14px/11px)", size: 16, color: :cyan, font: Font::MPLUS)
+  Window.draw_text(right_x + 20, 154, "10 PRINT \"ZENOO 2D ENGINE\"", size: 14, color: [100, 255, 180], font: Font::SINCLAIR)
+  Window.draw_text(right_x + 20, 172, "20 LET SCORE = 1982", size: 14, color: [100, 255, 180], font: Font::SINCLAIR)
+  Window.draw_text(right_x + 20, 190, "30 GOTO 10", size: 14, color: [100, 255, 180], font: Font::SINCLAIR)
+  Window.draw_text(right_x + 20, 216, "SDF 14px: 細かい日本語もクッキリ読める！", size: 14, color: [225, 235, 255], font: Font::MPLUS)
+  Window.draw_text(right_x + 20, 236, "SDF 11px: 極小サイズでも芯がかすれず明瞭", size: 11, color: [170, 195, 230], font: Font::MPLUS)
 
   Window.draw_card(right_x, 280, right_w, 420, radius: 12.0, color: [24, 30, 48, 200], border_width: 1.0, border_color: [50, 65, 100], shadow_blur: 8.0, shadow_color: [0, 0, 0, 80])
-  Window.draw_text(right_x + 20, 295, "Live SDF Texture Atlas (1024x1024)", size: 18, color: :cyan, font: Font::MPLUS)
+  Window.draw_text(right_x + 20, 295, "Live SDF Texture Atlas (2048x2048)", size: 18, color: :cyan, font: Font::MPLUS)
   Window.draw_text(right_x + 20, 322, "文字が動的にラスタライズされてアトラスへ追加されます", size: 13, color: [150, 170, 200], font: Font::MPLUS)
 
   atlas = Font.atlas_image
