@@ -472,27 +472,9 @@ int zen_update(void) {
         // 1. 前フレームの描画を Flush & SwapBuffers
         zen_end_frame();
 
-        // 2. ★Raylib方式★ SwapBuffersの直後に即座にOSイベントをポーリング (DWMのキュー詰まりを根絶)
+        // 2. SwapBuffersの直後に即座にOSイベントをポーリング (DWMのキュー詰まりを根絶)
         zen_poll_events();
 
-#ifdef __EMSCRIPTEN__
-        if (s_target_fps > 0) {
-            double target_dt = 1.0 / (double)s_target_fps;
-            double elapsed = glfwGetTime() - s_frame_start_time;
-            if (elapsed < target_dt) {
-                double remain_ms = (target_dt - elapsed) * 1000.0;
-                if (remain_ms >= 1.0) {
-                    emscripten_sleep((unsigned int)remain_ms);
-                } else {
-                    emscripten_sleep(1);
-                }
-            } else {
-                emscripten_sleep(0);
-            }
-        } else {
-            emscripten_sleep(0);
-        }
-#else
         // 3. イベント処理後に目標FPSまで精密待機 (WaitTime)
         // 120Hz/144Hz などの高リフレッシュレートモニターでも目標FPSを超えないよう制御
         if (s_target_fps > 0) {
@@ -515,7 +497,6 @@ int zen_update(void) {
                 }
             }
         }
-#endif
         double now = glfwGetTime();
         double dt = now - s_frame_start_time;
         if (dt <= 0.0001) dt = 0.016667;
