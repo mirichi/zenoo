@@ -36,10 +36,10 @@ Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)") do
 
     # 線形グラデーション (ゴールド -> マゼンタ)
     grad = c.create_linear_gradient(-80, -80, 80, 80)
-    grad.add_color_stop(0.0, [1.0, 0.85, 0.2, 0.95])
-    grad.add_color_stop(1.0, [1.0, 0.2, 0.5, 0.95])
+    grad.add_color_stop(0.0, [255, 217, 51, 242])
+    grad.add_color_stop(1.0, [255, 51, 128, 242])
     c.fill(grad)
-    c.stroke([1.0, 1.0, 1.0, 0.9], 4)
+    c.stroke([255, 255, 255, 230], 4)
     c.restore
   end
   Window.draw_text(110, 340, "Linear Gradient Star", size: 15, color: :white)
@@ -60,12 +60,12 @@ Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)") do
     end_y = start_y
 
     c.bezier_curve_to(cp1x, cp1y, cp2x, cp2y, end_x, end_y, 32)
-    c.stroke([0.2, 0.8, 1.0, 1.0], 7)
+    c.stroke([51, 204, 255, 255], 7)
 
     # 制御点
     c.fill_circle(start_x, start_y, 5, :white)
-    c.fill_circle(cp1x, cp1y, 4, [1.0, 0.3, 0.3, 1.0])
-    c.fill_circle(cp2x, cp2y, 4, [1.0, 0.3, 0.3, 1.0])
+    c.fill_circle(cp1x, cp1y, 4, [255, 77, 77, 255])
+    c.fill_circle(cp2x, cp2y, 4, [255, 77, 77, 255])
     c.fill_circle(end_x, end_y, 5, :white)
 
     # 制御線
@@ -74,7 +74,7 @@ Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)") do
     c.line_to(cp1x, cp1y)
     c.move_to(end_x, end_y)
     c.line_to(cp2x, cp2y)
-    c.stroke([1.0, 1.0, 1.0, 0.25], 1.5)
+    c.stroke([255, 255, 255, 64], 1.5)
   end
   Window.draw_text(390, 340, "Cubic Bézier Curve", size: 15, color: :white)
 
@@ -89,19 +89,19 @@ Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)") do
     light_x = orb_cx - 25 + Math.cos(t * 1.5) * 15
     light_y = orb_cy - 25 + Math.sin(t * 1.5) * 15
     rad_sphere = c.create_radial_gradient(light_x, light_y, 5, orb_cx, orb_cy, orb_r)
-    rad_sphere.add_color_stop(0.0, [1.0, 1.0, 1.0, 1.0])      # ハイライト白
-    rad_sphere.add_color_stop(1.0, [0.05, 0.2, 0.75, 0.95])   # ディープブルー
+    rad_sphere.add_color_stop(0.0, [255, 255, 255, 255])      # ハイライト白
+    rad_sphere.add_color_stop(1.0, [13, 51, 191, 242])   # ディープブルー
 
     c.begin_path
     c.circle(orb_cx, orb_cy, orb_r)
     c.fill(rad_sphere)
-    c.stroke([0.3, 0.7, 1.0, 0.8], 3)
+    c.stroke([77, 179, 255, 204], 3)
 
     # 外側のパルス発光グロー (外径アニメーション)
     glow_r = orb_r + 20 + Math.sin(t * 4) * 8
     rad_glow = c.create_radial_gradient(orb_cx, orb_cy, orb_r * 0.8, orb_cx, orb_cy, glow_r)
-    rad_glow.add_color_stop(0.0, [0.2, 0.8, 1.0, 0.4])
-    rad_glow.add_color_stop(1.0, [0.0, 0.5, 1.0, 0.0])
+    rad_glow.add_color_stop(0.0, [51, 204, 255, 102])
+    rad_glow.add_color_stop(1.0, [0, 128, 255, 0])
     c.begin_path
     c.circle(orb_cx, orb_cy, glow_r)
     c.fill(rad_glow)
@@ -117,18 +117,18 @@ Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)") do
 
     # 角丸矩形カード（垂直線形グラデーション）
     card_grad = c.create_linear_gradient(0, 0, 0, 160)
-    card_grad.add_color_stop(0.0, [0.25, 0.35, 0.55, 0.95])
-    card_grad.add_color_stop(1.0, [0.10, 0.15, 0.30, 0.95])
+    card_grad.add_color_stop(0.0, [64, 89, 140, 242])
+    card_grad.add_color_stop(1.0, [26, 38, 77, 242])
 
     c.begin_path
     c.round_rect(0, 0, 240, 160, 20)
     c.fill(card_grad)
-    c.stroke([0.4, 0.6, 0.9, 0.8], 2.5)
+    c.stroke([102, 153, 230, 204], 2.5)
 
     # カード内部のミニ図形
-    c.fill_rect(20, 20, 70, 50, [1.0, 0.6, 0.2, 0.9])
+    c.fill_rect(20, 20, 70, 50, [255, 153, 51, 230])
     c.stroke_rect(20, 20, 70, 50, :white, 2)
-    c.stroke_circle(160, 45, 22, [0.3, 1.0, 0.7, 1.0], 3)
+    c.stroke_circle(160, 45, 22, [77, 255, 179, 255], 3)
     c.restore
   end
   Window.draw_text(960, 340, "Round Rect & Card", size: 15, color: :white)
@@ -152,13 +152,15 @@ Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)") do
       c.quadratic_curve_to(35, 28, 0, 0)
       c.close_path
 
-      alpha = 0.5 + 0.3 * Math.sin(t * 2 + i)
-      c.fill([0.4 + 0.5 * (i.to_f / num_petals), 0.3, 0.8 - 0.4 * (i.to_f / num_petals), alpha])
-      c.stroke([1.0, 1.0, 1.0, 0.8], 2)
+      alpha = (128 + 77 * Math.sin(t * 2 + i)).round
+      cr = ((0.4 + 0.5 * (i.to_f / num_petals)) * 255).round
+      cb = ((0.8 - 0.4 * (i.to_f / num_petals)) * 255).round
+      c.fill([cr, 77, cb, alpha])
+      c.stroke([255, 255, 255, 204], 2)
       c.restore
     end
 
-    c.fill_circle(0, 0, 12, [1.0, 0.9, 0.3, 1.0])
+    c.fill_circle(0, 0, 12, [255, 230, 77, 255])
     c.restore
   end
   Window.draw_text(130, 640, "Mandala (Transforms)", size: 15, color: :white)
@@ -175,8 +177,8 @@ Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)") do
     c.move_to(cx, cy)
     c.arc(cx, cy, r, 0, Math::PI * 0.7)
     c.close_path
-    c.fill([0.3, 0.9, 0.5, 0.85])
-    c.stroke([0.1, 0.4, 0.2, 1.0], 3)
+    c.fill([77, 230, 128, 217])
+    c.stroke([26, 102, 51, 255], 3)
 
     # 扇形 2 (アニメーション)
     anim_end = Math::PI * 0.8 + (Math.sin(t * 2) + 1.0) * 0.5 * Math::PI * 0.8
@@ -184,13 +186,13 @@ Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)") do
     c.move_to(cx, cy)
     c.arc(cx, cy, r + 4, Math::PI * 0.8, anim_end)
     c.close_path
-    c.fill([0.9, 0.3, 0.6, 0.85])
-    c.stroke([0.5, 0.1, 0.3, 1.0], 3)
+    c.fill([230, 77, 153, 217])
+    c.stroke([128, 26, 77, 255], 3)
 
     # 外枠円弧ストローク
     c.begin_path
     c.arc(cx, cy, r + 16, 0, Math::PI * 2)
-    c.stroke([1.0, 1.0, 1.0, 0.3], 2)
+    c.stroke([255, 255, 255, 77], 2)
   end
   Window.draw_text(460, 640, "Arcs & Pie Slices", size: 15, color: :white)
 
@@ -204,9 +206,9 @@ Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)") do
     c.begin_path
     c.move_to(800, 520)
     c.bezier_curve_to(900, 440, mx - 40, my - 40, mx, my)
-    c.stroke([1.0, 0.85, 0.2, 0.9], 5)
+    c.stroke([255, 217, 51, 230], 5)
 
-    c.fill_circle(mx, my, 7, [1.0, 0.2, 0.2, 1.0])
+    c.fill_circle(mx, my, 7, [255, 51, 51, 255])
     c.stroke_circle(mx, my, 12, :white, 2)
   end
   Window.draw_text(800, 640, "Interactive Ribbon (Mouse: #{mx.to_i}, #{my.to_i})", size: 15, color: :white)

@@ -43,22 +43,17 @@ module Zenoo
         r = 0.0
         g = 0.0
         b = 0.0
-        a = 1.0
-        count = 0
+        a = 255.0
         col.each_with_index do |v, i|
           vf = v.to_f
           r = vf if i == 0
           g = vf if i == 1
           b = vf if i == 2
           a = vf if i == 3
-          count += 1
         end
-        if r <= 1.0 && g <= 1.0 && b <= 1.0 && (count < 4 || a <= 1.0)
-          [r, g, b, a]
-        else
-          a = (count >= 4) ? (a / 255.0) : 1.0
-          [r / 255.0, g / 255.0, b / 255.0, a]
-        end
+        [r / 255.0, g / 255.0, b / 255.0, a / 255.0]
+      elsif col.is_a?(String)
+        Color.hex(col).to_f4
       elsif col.is_a?(Integer)
         r = ((col >> 24) & 0xFF) / 255.0
         g = ((col >> 16) & 0xFF) / 255.0
@@ -481,7 +476,7 @@ module Zenoo
                         center_y: 0.5,
                         pivot: nil,
                         offset_mode: :top_left,
-                        alpha: 1.0,
+                        alpha: 255,
                         blend: :alpha,
                         shader: nil,
                         z: 0.0)
@@ -492,10 +487,9 @@ module Zenoo
       actual_color = color || color_or_opt || :white
       c_color = normalize_color(actual_color)
 
-      # alpha の適用 (0.0..1.0 または 0..255)
+      # alpha の適用 (0..255)
       if alpha
-        af = alpha.to_f
-        af = af / 255.0 if af > 1.0
+        af = alpha.to_f / 255.0
         af = 0.0 if af < 0.0
         af = 1.0 if af > 1.0
         c_color = [c_color[0], c_color[1], c_color[2], c_color[3] * af]
