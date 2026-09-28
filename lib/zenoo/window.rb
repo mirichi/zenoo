@@ -129,11 +129,35 @@ module Zenoo
     @needs_z_sort = false
     @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
     @current_target = nil
+    @active_gl_target = nil
+    @pending_images = []
     @main_loop_block = nil
     @step_proc = nil
 
     def self.current_target
       @current_target
+    end
+
+    def self.active_gl_target
+      @active_gl_target
+    end
+
+    def self.active_gl_target=(target)
+      @active_gl_target = target
+    end
+
+    def self.register_pending_image(img)
+      @pending_images << img unless @pending_images.include?(img)
+    end
+
+    def self.flush_pending_images
+      return if @pending_images.empty?
+
+      images = @pending_images.dup
+      @pending_images.clear
+      images.each do |img|
+        img.flush_draw_queue if img.respond_to?(:flush_draw_queue)
+      end
     end
 
     def self.with_target(target)
@@ -145,6 +169,11 @@ module Zenoo
     end
 
     def self.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil, blend = 0)
+      if @current_target
+        @current_target.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
+        return
+      end
+
       cmd = nil
       if @queue_count < @command_pool.length
         cmd = @command_pool[@queue_count]
@@ -154,11 +183,11 @@ module Zenoo
       end
       zf = z.to_f
       @needs_z_sort = true if zf != 0.0
-      cmd.set(@current_target, zf, @queue_count, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
+      cmd.set(nil, zf, @queue_count, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
       @queue_count += 1
     end
 
-    # 安定挿入ソート (昇順: 奥から手前へ描画。描画先 target が異なる区間は跨がない)
+    # 安定挿入ソート (画面キュー用: 奥から手前へ昇順描画)
     def self.sort_draw_queue
       return unless @needs_z_sort
       return if @queue_count <= 1
@@ -167,11 +196,9 @@ module Zenoo
       while i < @queue_count
         target_cmd = @command_pool[i]
         tz = target_cmd.z
-        ttarget = target_cmd.target
         j = i - 1
         while j >= 0
           prev_cmd = @command_pool[j]
-          break if prev_cmd.target != ttarget
           break if prev_cmd.z <= tz
           @command_pool[j + 1] = prev_cmd
           j -= 1
@@ -200,25 +227,16 @@ module Zenoo
       end
     end
 
-    def self.flush_draw_queue
-      return if @queue_count == 0
-
-      sort_draw_queue
-
-      active_target = nil
+    def self.execute_commands(pool, count)
+      return if count == 0
 
       i = 0
-      while i < @queue_count
-        cmd = @command_pool[i]
+      while i < count
+        cmd = pool[i]
 
-        # 1. レンダーターゲット（描画先）の切り替え
-        if cmd.target != active_target
-          active_target = cmd.target
-          if active_target
-            active_target.set_as_render_target
-          else
-            Native::Image.reset_render_target
-          end
+        # 0. 描画元テクスチャに未消化の描画キューがあれば先にフラッシュして焼き込む (オンデマンド描画)
+        if cmd.image && cmd.image.respond_to?(:has_pending_draws?) && cmd.image.has_pending_draws?
+          cmd.image.flush_draw_queue
         end
 
         cur_topology = cmd.topology
@@ -227,14 +245,12 @@ module Zenoo
         cur_base_vertex_count = cmd.base_vertex_count
         cur_data = cmd.data
         cur_count = cmd.count
-        cur_target = cmd.target
         cur_image = cmd.image
         cur_shader = cmd.shader
         cur_uniforms = cmd.uniforms
         cur_blend = cmd.blend
 
-        # 2. ドローコールのまとめ（バッチング）
-        # 条件: 描画先(target), 描画対象(image), シェーダー(shader), トポロジー, Uniform パラメータ, ブレンドモードが一致
+        # ドローコールのまとめ（バッチング）
         can_batch = cur_base_vertex_count > 0 ||
                     cur_topology == Topology::TRIANGLES ||
                     cur_topology == Topology::LINES ||
@@ -242,10 +258,13 @@ module Zenoo
 
         next_idx = i + 1
         if can_batch
-          while next_idx < @queue_count
-            ncmd = @command_pool[next_idx]
-            if ncmd.target == cur_target &&
-               ncmd.image == cur_image &&
+          while next_idx < count
+            ncmd = pool[next_idx]
+            if ncmd.image && ncmd.image.respond_to?(:has_pending_draws?) && ncmd.image.has_pending_draws?
+              ncmd.image.flush_draw_queue
+            end
+
+            if ncmd.image == cur_image &&
                ncmd.shader == cur_shader &&
                ncmd.topology == cur_topology &&
                ncmd.uniforms == cur_uniforms &&
@@ -267,10 +286,10 @@ module Zenoo
         # ブレンドモードの適用
         Native::Renderer.set_blend_mode(cur_blend)
 
-        # Uniform パラメータの適用（グラデーション等）
+        # Uniform パラメータの適用
         apply_uniforms(cur_shader, cur_uniforms) if cur_uniforms
 
-        # 3. GPU への一括描画送信
+        # GPU への一括描画送信
         Native::Renderer.draw_buffer(
           cur_topology,
           cur_layout,
@@ -290,15 +309,20 @@ module Zenoo
 
         i = next_idx
       end
+    end
 
-      if active_target != nil
-        Native::Image.reset_render_target
+    def self.flush_draw_queue
+      if @queue_count > 0
+        sort_draw_queue
+        execute_commands(@command_pool, @queue_count)
+        @queue_count = 0
+        @needs_z_sort = false
       end
 
-      Native::Renderer.set_blend_mode(BlendMode::ALPHA)
+      # 画面で使われずに残った Image キューがあればフレーム末尾で一括フラッシュ
+      flush_pending_images
 
-      @queue_count = 0
-      @needs_z_sort = false
+      Native::Renderer.set_blend_mode(BlendMode::ALPHA)
     end
 
     # DXRuby風メインループ
