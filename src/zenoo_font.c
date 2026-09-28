@@ -229,7 +229,7 @@ void zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* 
     if (line_gap) *line_gap = font->line_gap * scale;
 }
 
-#define BITMAP_SIZE_THRESHOLD 16.0f // 15px以下の極小文字は stbtt_GetCodepointBitmap で直接ラスタライズ (1ドット単位で超高精細)
+#define BITMAP_SIZE_THRESHOLD 17.0f // 16px以下の小サイズ文字は stbtt_GetCodepointBitmap で直接ラスタライズ (1ドット単位で超高精細)
 
 // グリフ取得 (キャッシュにあれば即返却、なければビットマップまたはSDF生成してアトラス転送)
 int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* out_glyph) {
@@ -239,8 +239,22 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
 
     init_atlas_if_needed();
 
-    int use_bitmap = (font_size < BITMAP_SIZE_THRESHOLD);
-    int pixel_size = use_bitmap ? (int)roundf(font_size) : 0;
+    int force_sdf = 0;
+    int force_bitmap = 0;
+    float actual_size = font_size;
+
+    if (font_size < 0.0f) {
+        force_sdf = 1;
+        actual_size = -font_size;
+    } else if (font_size >= 10000.0f) {
+        force_bitmap = 1;
+        actual_size = font_size - 10000.0f;
+    }
+
+    if (actual_size <= 0.0f) actual_size = 24.0f;
+
+    int use_bitmap = force_bitmap || (!force_sdf && actual_size < BITMAP_SIZE_THRESHOLD);
+    int pixel_size = use_bitmap ? (int)roundf(actual_size) : 0;
     if (use_bitmap && pixel_size < 1) pixel_size = 1;
 
     unsigned int h = hash_key(font->id, codepoint, pixel_size);
@@ -250,7 +264,7 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
             if (use_bitmap) {
                 *out_glyph = entry->glyph;
             } else {
-                float scale_ratio = font_size / SDF_BASE_SIZE;
+                float scale_ratio = actual_size / SDF_BASE_SIZE;
                 *out_glyph = entry->glyph;
                 out_glyph->x0 *= scale_ratio;
                 out_glyph->y0 *= scale_ratio;
@@ -378,7 +392,7 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
     if (use_bitmap) {
         *out_glyph = base_glyph;
     } else {
-        float scale_ratio = font_size / SDF_BASE_SIZE;
+        float scale_ratio = actual_size / SDF_BASE_SIZE;
         *out_glyph = base_glyph;
         out_glyph->x0 *= scale_ratio;
         out_glyph->y0 *= scale_ratio;

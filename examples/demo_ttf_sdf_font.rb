@@ -118,7 +118,8 @@ left_w = 780
 right_x = 830
 right_w = 420
 
-test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
+tf = ENV['ZENOO_AUTO_EXIT_FRAMES'] || ENV['ZENOO_TEST_FRAMES']
+test_max = tf ? tf.to_i : 0
 frame_count = 0
 Window.loop(WINDOW_W, WINDOW_H, "Zenoo - High Quality SDF Text & Font Rendering Demo") do
   time = Window.time

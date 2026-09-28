@@ -571,6 +571,10 @@ static void zen_wasm_tick(void) {
         zen_begin_frame(ZEN_RGBA(18, 20, 30, 255));
 
         // 3. 登録されたステップコールバック（Ruby ブロック呼び出し）を実行
+        static int s_tick_log_count = 0;
+        if (s_tick_log_count < 3) {
+            printf("[ZENOO_CORE] zen_wasm_tick step callback executing (frame %d)...\n", ++s_tick_log_count);
+        }
         if (s_step_callback) {
             s_step_callback();
         }
@@ -582,10 +586,12 @@ static void zen_wasm_tick(void) {
 }
 
 void zen_start_wasm_loop(void) {
+    printf("[ZENOO_CORE] zen_start_wasm_loop starting (simulate_infinite_loop=0)...\n");
     s_wasm_prev_time = emscripten_get_now() * 0.001;
     s_wasm_accumulator = 0.0;
-    // 0 = requestAnimationFrame に同期, 1 = simulate infinite loop (main を抜けてブラウザに制御を戻す)
-    emscripten_set_main_loop(zen_wasm_tick, 0, 1);
+    // 0 = requestAnimationFrame に同期, 0 = do not simulate infinite loop (return normally so main() completes safely)
+    emscripten_set_main_loop(zen_wasm_tick, 0, 0);
+    printf("[ZENOO_CORE] emscripten_set_main_loop registered successfully\n");
 }
 #else
 void zen_set_step_callback(zen_step_callback_fn fn) {

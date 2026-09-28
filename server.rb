@@ -32,6 +32,17 @@ server = WEBrick::HTTPServer.new(
   MimeTypes: mime_types
 )
 
+server.mount_proc('/__debug_log') do |req, res|
+  msg = req.query['msg'] || req.body
+  line = "[Browser Log] #{msg}\n"
+  $stdout.print(line)
+  $stdout.flush
+  File.open(File.expand_path('build/browser_debug.log', __dir__), 'a') { |f| f.write(line) }
+  res.status = 200
+  res['Access-Control-Allow-Origin'] = '*'
+  res.body = 'OK'
+end
+
 trap('INT') { server.shutdown }
 
 puts "=========================================================="

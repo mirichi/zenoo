@@ -30,13 +30,19 @@ module Zenoo
 
     # グリフの取得
     # 返り値: [visible, u0, v0, u1, v1, x0, y0, x1, y1, advance_x] または nil
-    def get_glyph(char_or_cp, size = 24.0)
+    def get_glyph(char_or_cp, size = 24.0, sdf = nil)
       cp = if char_or_cp.is_a?(String)
              char_or_cp.ord
            else
              char_or_cp.to_i
            end
-      res = @native.get_glyph(cp, size.to_f)
+      s = size.to_f
+      if sdf == true
+        s = -s
+      elsif sdf == false
+        s = s + 10000.0
+      end
+      res = @native.get_glyph(cp, s)
       res
     end
 

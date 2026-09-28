@@ -48,7 +48,7 @@ def create_spaceship_sprite
     # 船体中央のコア
     draw_circle(36, 40, 5, [255, 255, 255, 255])
 
-    Zenoo::Window.flush_draw_queue
+    #Zenoo::Window.flush_draw_queue
   end
   img
 end
@@ -273,9 +273,10 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
 
   # キーボード終了 & 自動テスト判定
   exit if Input.key_pressed?(:escape) || Input.key_pressed?(:q)
-  if ENV["ZENOO_AUTO_EXIT_FRAMES"]
+  test_frames = ENV["ZENOO_AUTO_EXIT_FRAMES"] || ENV["ZENOO_TEST_FRAMES"]
+  if test_frames
     @test_frame_counter = (@test_frame_counter || 0) + 1
-    exit if @test_frame_counter >= ENV["ZENOO_AUTO_EXIT_FRAMES"].to_i
+    exit if @test_frame_counter >= test_frames.to_i
   end
 end
 

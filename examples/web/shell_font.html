@@ -190,11 +190,42 @@
     var statusElement = document.getElementById('status');
     var canvasElement = document.getElementById('canvas');
 
+    function sendDebugLog(msg) {
+      try {
+        fetch('/__debug_log?msg=' + encodeURIComponent(msg)).catch(function(){});
+      } catch(e) {}
+    }
+
+    var origLog = console.log;
+    var origWarn = console.warn;
+    var origErr = console.error;
+    console.log = function() {
+      var str = Array.prototype.slice.call(arguments).join(' ');
+      sendDebugLog('[console.log] ' + str);
+      origLog.apply(console, arguments);
+    };
+    console.warn = function() {
+      var str = Array.prototype.slice.call(arguments).join(' ');
+      sendDebugLog('[console.warn] ' + str);
+      origWarn.apply(console, arguments);
+    };
+    console.error = function() {
+      var str = Array.prototype.slice.call(arguments).join(' ');
+      sendDebugLog('[console.error] ' + str);
+      origErr.apply(console, arguments);
+    };
+
     var Module = {
-      print: function(text) { console.log(text); },
-      printErr: function(text) { console.error(text); },
+      print: function(text) {
+        console.log('[Module.print] ' + text);
+      },
+      printErr: function(text) {
+        console.error('[Module.printErr] ' + text);
+        if (statusElement) statusElement.innerHTML += '<div style="color:#ff6b6b; font-size:12px; margin-top:4px;">[Err] ' + text + '</div>';
+      },
       canvas: canvasElement,
       setStatus: function(text) {
+        sendDebugLog('[setStatus] ' + text);
         if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
         if (text === Module.setStatus.last.text) return;
         statusElement.innerText = text ? text : "SDF動的アトラス & 高品質日本語・袋文字・8x8レトロフォント描画デモ";
@@ -206,9 +237,17 @@
       }
     };
     Module.setStatus('Downloading...');
-    window.onerror = function() {
-      Module.setStatus('Exception thrown, see JavaScript console');
+    window.onerror = function(msg, url, line, col, error) {
+      var detail = (msg || '') + ' (' + (url || '') + ':' + (line || '') + ') ' + (error ? (error.stack || error) : '');
+      sendDebugLog('[window.onerror] ' + detail);
+      Module.setStatus('Exception: ' + msg);
+      if (statusElement) statusElement.innerHTML += '<div style="color:#ff4444; font-weight:bold; font-size:13px; margin-top:6px; background:#220000; padding:4px 8px; border-radius:4px; text-align:left;">' + detail + '</div>';
     };
+    window.addEventListener('unhandledrejection', function(e) {
+      var detail = 'Promise Rejection: ' + (e.reason ? (e.reason.stack || e.reason) : e);
+      sendDebugLog('[unhandledrejection] ' + detail);
+      if (statusElement) statusElement.innerHTML += '<div style="color:#ff4444; font-weight:bold; font-size:13px; margin-top:6px; background:#220000; padding:4px 8px; border-radius:4px; text-align:left;">' + detail + '</div>';
+    });
 
     // ----------------------------------------------------
     // タッチ操作サポート (2本指タップで右クリック)

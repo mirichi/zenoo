@@ -660,6 +660,7 @@ module Zenoo
                        shadow_color: [0, 0, 0, 180],
                        shadow_dx: 0.0,
                        shadow_dy: 0.0,
+                       sdf: nil,
                        z: 0.0,
                        &block)
       return if text.nil?
@@ -682,6 +683,16 @@ module Zenoo
       s_dx = shadow_dx.to_f
       s_dy = shadow_dy.to_f
       s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
+
+      # sdf オプションの解決:
+      # - sdf: true  -> 強制 SDF
+      # - sdf: false -> 強制 ビットマップ (大文字でも直接ラスタライズ)
+      # - sdf: nil   -> 自動判定 (エフェクトがあれば SDF、なければサイズ判定)
+      effective_sdf = if sdf.nil?
+                        (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? true : nil
+                      else
+                        sdf ? true : false
+                      end
 
       # 画面上ピクセルとアトラスピクセルのスケール比補正 (アトラス基準サイズはFont::SDF_BASE_SIZE)
       scale_ratio = Font::SDF_BASE_SIZE / f_size
@@ -717,12 +728,13 @@ module Zenoo
         i = 0
         while i < len
           ch = chars[i]
-          glyph_data = target_font.get_glyph(ch, f_size)
+          glyph_data = target_font.get_glyph(ch, f_size, effective_sdf)
           adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
 
           if glyph_data && glyph_data[0] # visible == true
             _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
-            if f_size <= 20.0
+            is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
+            if is_bmp > 0.5 || f_size <= 20.0
               gx = (pen_x + x0).round
               gy = (pen_y + y0).round
             else
@@ -779,12 +791,13 @@ module Zenoo
         i = 0
         while i < len
           ch = chars[i]
-          glyph_data = target_font.get_glyph(ch, f_size)
+          glyph_data = target_font.get_glyph(ch, f_size, effective_sdf)
           adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
 
           if glyph_data && glyph_data[0] # visible == true
             _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
-            if f_size <= 20.0
+            is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
+            if is_bmp > 0.5 || f_size <= 20.0
               gx = (pen_x + x0).round
               gy = (pen_y + y0).round
             else
@@ -794,7 +807,6 @@ module Zenoo
             gw = x1 - x0
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
-            is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
             cur_p3 = [s_atlas_weight, is_bmp, 0.0, 0.0]
 
             batch.push(
