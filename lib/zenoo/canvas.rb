@@ -495,32 +495,11 @@ module Zenoo
     # 色の正規化
     # ----------------------------------------------------
     def resolve_color(val)
-      return [1.0, 1.0, 1.0, 1.0] if val.nil?
-      return resolve_color(val.stops.first ? val.stops.first[1] : :white) if val.is_a?(LinearGradient) || val.is_a?(RadialGradient)
-      return Window::COLOR_MAP[val] if val.is_a?(Symbol) && Window::COLOR_MAP.key?(val)
-
-      if val.is_a?(Color)
-        val.to_f4
-      elsif val.is_a?(String)
-        Color.hex(val).to_f4
-      elsif val.is_a?(Array)
-        r = 0.0
-        g = 0.0
-        b = 0.0
-        a = 255.0
-        val.each_with_index do |v, i|
-          vf = v.to_f
-          r = vf if i == 0
-          g = vf if i == 1
-          b = vf if i == 2
-          a = vf if i == 3
-        end
-        [r / 255.0, g / 255.0, b / 255.0, a / 255.0]
-      elsif val.is_a?(Integer)
-        Window.normalize_color(val)
-      else
-        [1.0, 1.0, 1.0, 1.0]
+      if val.is_a?(LinearGradient) || val.is_a?(RadialGradient)
+        return resolve_color(val.stops.first ? val.stops.first[1] : :white)
       end
+
+      Window.normalize_color(val)
     end
 
     # ----------------------------------------------------
