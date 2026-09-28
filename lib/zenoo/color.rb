@@ -41,6 +41,10 @@ module Zenoo
       new((r.to_f * 255.0).round, (g.to_f * 255.0).round, (b.to_f * 255.0).round, (a.to_f * 255.0).round)
     end
 
+    def self.rgba_f(r, g, b, a = 1.0)
+      from_floats(r, g, b, a)
+    end
+
     # HSV (色相: 0..360, 彩度: 0.0..1.0, 明度: 0.0..1.0)
     def self.hsv(h, s, v, a = 255)
       h_deg = h.to_f % 360.0
