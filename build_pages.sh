@@ -66,6 +66,7 @@ COMMON_EMCC_FLAGS=(
     -s STACK_SIZE=1048576
     -s INITIAL_MEMORY=67108864
     -s ALLOW_MEMORY_GROWTH=1
+    -s NO_EXIT_RUNTIME=1
     -s WASM=1
     --preload-file assets@/assets
     -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib"
