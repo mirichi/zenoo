@@ -1,329 +1,42 @@
 module Zenoo
-  module BlendMode
-    ALPHA    = 0
-    ADD      = 1
-    MULTIPLY = 2
-    NONE     = 3
-  end
-
   module Window
-    BLEND_MAP = {
-      alpha: BlendMode::ALPHA,
-      add: BlendMode::ADD,
-      additive: BlendMode::ADD,
-      multiply: BlendMode::MULTIPLY,
-      none: BlendMode::NONE
-    }.freeze
+    # ----------------------------------------------------
+    # 後方互換・定数・ヘルパー (内部実装は Zenoo::Backend に集約)
+    # ----------------------------------------------------
+    BLEND_MAP = Backend::BLEND_MAP
+    COLOR_MAP = Backend::COLOR_MAP
 
     def self.normalize_blend_mode(mode)
-      return BlendMode::ALPHA if mode.nil?
-      return BLEND_MAP[mode] if BLEND_MAP.key?(mode)
-      mode.to_i
+      Backend.normalize_blend_mode(mode)
     end
 
-    COLOR_MAP = {
-      white:   [1.0, 1.0, 1.0, 1.0],
-      black:   [0.0, 0.0, 0.0, 1.0],
-      red:     [1.0, 0.2, 0.2, 1.0],
-      green:   [0.2, 1.0, 0.3, 1.0],
-      blue:    [0.1, 0.5, 1.0, 1.0],
-      cyan:    [0.0, 0.9, 1.0, 1.0],
-      magenta: [1.0, 0.2, 0.8, 1.0],
-      yellow:  [1.0, 0.9, 0.1, 1.0],
-      clear:   [0.0, 0.0, 0.0, 0.0]
-    }
-
     def self.normalize_color(col)
-      return [1.0, 1.0, 1.0, 1.0] if col.nil?
-      return COLOR_MAP[col] if COLOR_MAP.key?(col)
-
-      if col.is_a?(Color)
-        col.to_f4
-      elsif col.is_a?(Array)
-        r = 0.0
-        g = 0.0
-        b = 0.0
-        a = 255.0
-        col.each_with_index do |v, i|
-          vf = v.to_f
-          r = vf if i == 0
-          g = vf if i == 1
-          b = vf if i == 2
-          a = vf if i == 3
-        end
-        [r / 255.0, g / 255.0, b / 255.0, a / 255.0]
-      elsif col.is_a?(String)
-        Color.hex(col).to_f4
-      elsif col.is_a?(Integer)
-        r = ((col >> 24) & 0xFF) / 255.0
-        g = ((col >> 16) & 0xFF) / 255.0
-        b = ((col >> 8) & 0xFF) / 255.0
-        a = (col & 0xFF) / 255.0
-        [r, g, b, a]
-      else
-        [1.0, 1.0, 1.0, 1.0]
-      end
+      Backend.normalize_color(col)
     end
 
     def self.color_to_uint32(col)
-      return col.to_i if col.is_a?(Color)
-
-      floats = normalize_color(col)
-      rf = 0.0
-      gf = 0.0
-      bf = 0.0
-      af = 1.0
-      floats.each_with_index do |v, i|
-        vf = v.to_f
-        rf = vf if i == 0
-        gf = vf if i == 1
-        bf = vf if i == 2
-        af = vf if i == 3
-      end
-      r = (rf * 255).to_i & 0xFF
-      g = (gf * 255).to_i & 0xFF
-      b = (bf * 255).to_i & 0xFF
-      a = (af * 255).to_i & 0xFF
-      r_part = r >= 128 ? ((r - 256) * 16777216) : (r << 24)
-      r_part | (g << 16) | (b << 8) | a
+      Backend.color_to_uint32(col)
     end
 
-    class DrawCommand
-      attr_accessor :target, :z, :order, :topology, :layout, :divisors, :base_vertex_count, :data, :count, :image, :shader, :uniforms, :blend
-
-      def initialize
-        @target = nil
-        @z = 0.0
-        @order = 0
-        @topology = 0
-        @layout = ""
-        @divisors = ""
-        @base_vertex_count = 0
-        @data = nil
-        @count = 0
-        @image = nil
-        @shader = nil
-        @uniforms = nil
-        @blend = 0
-      end
-
-      def set(target, z, order, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil, blend = 0)
-        @target = target
-        @z = z.to_f
-        @order = order
-        @topology = topology
-        @layout = layout
-        @divisors = divisors
-        @base_vertex_count = base_vertex_count
-        @data = data
-        @count = count
-        @image = image
-        @shader = shader
-        @uniforms = uniforms
-        @blend = blend.to_i
-      end
+    def self.with_target(target, &block)
+      Backend.with_target(target, &block)
     end
-
-    @command_pool = []
-    @queue_count = 0
-    @needs_z_sort = false
-    @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
-    @current_target = nil
-    @active_gl_target = nil
-    @pending_images = []
-    @main_loop_block = nil
-    @step_proc = nil
 
     def self.current_target
-      @current_target
-    end
-
-    def self.active_gl_target
-      @active_gl_target
-    end
-
-    def self.active_gl_target=(target)
-      @active_gl_target = target
-    end
-
-    def self.register_pending_image(img)
-      @pending_images << img unless @pending_images.include?(img)
-    end
-
-    def self.flush_pending_images
-      return if @pending_images.empty?
-
-      images = @pending_images.dup
-      @pending_images.clear
-      images.each do |img|
-        img.flush_draw_queue if img.respond_to?(:flush_draw_queue)
-      end
-    end
-
-    def self.with_target(target)
-      old_target = @current_target
-      @current_target = target
-      yield
-    ensure
-      @current_target = old_target
+      Backend.current_target
     end
 
     def self.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil, blend = 0)
-      if @current_target
-        @current_target.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
-        return
-      end
-
-      cmd = nil
-      if @queue_count < @command_pool.length
-        cmd = @command_pool[@queue_count]
-      else
-        cmd = DrawCommand.new
-        @command_pool.push(cmd)
-      end
-      zf = z.to_f
-      @needs_z_sort = true if zf != 0.0
-      cmd.set(nil, zf, @queue_count, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
-      @queue_count += 1
-    end
-
-    # 安定挿入ソート (画面キュー用: 奥から手前へ昇順描画)
-    def self.sort_draw_queue
-      return unless @needs_z_sort
-      return if @queue_count <= 1
-
-      i = 1
-      while i < @queue_count
-        target_cmd = @command_pool[i]
-        tz = target_cmd.z
-        j = i - 1
-        while j >= 0
-          prev_cmd = @command_pool[j]
-          break if prev_cmd.z <= tz
-          @command_pool[j + 1] = prev_cmd
-          j -= 1
-        end
-        @command_pool[j + 1] = target_cmd
-        i += 1
-      end
-    end
-
-    def self.apply_uniforms(shader, uniforms)
-      return unless uniforms && shader
-
-      uniforms.each do |k, v|
-        case v
-        when Integer
-          shader.set_int(k.to_s, v)
-        when Float
-          shader.set_float(k.to_s, v)
-        when Array
-          case v.length
-          when 2 then shader.set_vec2(k.to_s, v[0].to_f, v[1].to_f)
-          when 3 then shader.set_vec3(k.to_s, v[0].to_f, v[1].to_f, v[2].to_f)
-          when 4 then shader.set_vec4(k.to_s, v[0].to_f, v[1].to_f, v[2].to_f, v[3].to_f)
-          end
-        end
-      end
-    end
-
-    def self.execute_commands(pool, count)
-      return if count == 0
-
-      i = 0
-      while i < count
-        cmd = pool[i]
-
-        # 0. 描画元テクスチャに未消化の描画キューがあれば先にフラッシュして焼き込む (オンデマンド描画)
-        if cmd.image && cmd.image.respond_to?(:has_pending_draws?) && cmd.image.has_pending_draws?
-          cmd.image.flush_draw_queue
-        end
-
-        cur_topology = cmd.topology
-        cur_layout = cmd.layout
-        cur_divisors = cmd.divisors
-        cur_base_vertex_count = cmd.base_vertex_count
-        cur_data = cmd.data
-        cur_count = cmd.count
-        cur_image = cmd.image
-        cur_shader = cmd.shader
-        cur_uniforms = cmd.uniforms
-        cur_blend = cmd.blend
-
-        # ドローコールのまとめ（バッチング）
-        can_batch = cur_base_vertex_count > 0 ||
-                    cur_topology == Topology::TRIANGLES ||
-                    cur_topology == Topology::LINES ||
-                    cur_topology == Topology::POINTS
-
-        next_idx = i + 1
-        if can_batch
-          while next_idx < count
-            ncmd = pool[next_idx]
-            if ncmd.image && ncmd.image.respond_to?(:has_pending_draws?) && ncmd.image.has_pending_draws?
-              ncmd.image.flush_draw_queue
-            end
-
-            if ncmd.image == cur_image &&
-               ncmd.shader == cur_shader &&
-               ncmd.topology == cur_topology &&
-               ncmd.uniforms == cur_uniforms &&
-               ncmd.blend == cur_blend
-              cur_data = cur_data + ncmd.data
-              cur_count += ncmd.count
-              ncmd.data = nil
-              ncmd.image = nil
-              ncmd.shader = nil
-              ncmd.target = nil
-              ncmd.uniforms = nil
-              next_idx += 1
-            else
-              break
-            end
-          end
-        end
-
-        # ブレンドモードの適用
-        Native::Renderer.set_blend_mode(cur_blend)
-
-        # Uniform パラメータの適用
-        apply_uniforms(cur_shader, cur_uniforms) if cur_uniforms
-
-        # GPU への一括描画送信
-        Native::Renderer.draw_buffer(
-          cur_topology,
-          cur_layout,
-          cur_divisors,
-          cur_base_vertex_count,
-          cur_data,
-          cur_count,
-          cur_image,
-          cur_shader
-        )
-
-        cmd.data = nil
-        cmd.image = nil
-        cmd.shader = nil
-        cmd.target = nil
-        cmd.uniforms = nil
-
-        i = next_idx
-      end
+      Backend.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
     end
 
     def self.flush_draw_queue
-      if @queue_count > 0
-        sort_draw_queue
-        execute_commands(@command_pool, @queue_count)
-        @queue_count = 0
-        @needs_z_sort = false
-      end
-
-      # 画面で使われずに残った Image キューがあればフレーム末尾で一括フラッシュ
-      flush_pending_images
-
-      Native::Renderer.set_blend_mode(BlendMode::ALPHA)
+      Backend.flush_screen
     end
+
+    @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
+    @main_loop_block = nil
+    @step_proc = nil
 
     # DXRuby風メインループ
     def self.loop(width = 1280, height = 720, title = "Zenoo", fullscreen: false, vsync: false, &block)
