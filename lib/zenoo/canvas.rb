@@ -425,11 +425,11 @@ module Zenoo
       end
 
       data = verts.pack("f*")
-      Window.enqueue_draw(
+      Backend.enqueue_draw(
         0.0,
-        Topology::TRIANGLES,
-        Layout::POS2_COLOR4,
-        Divisor::POS2_COLOR4,
+        Backend::Topology::TRIANGLES,
+        Backend::Layout::POS2_COLOR4,
+        Backend::Divisor::POS2_COLOR4,
         0,
         data,
         num_verts,
@@ -499,7 +499,7 @@ module Zenoo
         return resolve_color(val.stops.first ? val.stops.first[1] : :white)
       end
 
-      Window.normalize_color(val)
+      Backend.normalize_color(val)
     end
 
     # ----------------------------------------------------
