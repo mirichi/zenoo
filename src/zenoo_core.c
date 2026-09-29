@@ -19,6 +19,11 @@ int swapcontext(ucontext_t *oucp, const ucontext_t *ucp) { (void)oucp; (void)ucp
 #include "glad/glad.h"
 #endif
 #include <GLFW/glfw3.h>
+#ifdef _WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#include <imm.h>
+#endif
 #include "zenoo.h"
 
 // 内部状態
@@ -43,10 +48,16 @@ static double s_mouse_y = 0.0;
 static char s_keys_pressed[512] = {0}; // 押されている状態 (持続)
 static char s_keys_push[512] = {0};    // 押した瞬間 (トリガー)
 static char s_keys_release[512] = {0}; // 離した瞬間 (リリース)
+static char s_keys_repeat[512] = {0};  // 押した瞬間またはリピート
 
 static char s_mouse_pressed[8] = {0};  // 押されている状態 (持続)
 static char s_mouse_push[8] = {0};     // 押した瞬間 (トリガー)
 static char s_mouse_release[8] = {0};  // 離した瞬間 (リリース)
+
+#define ZEN_CHAR_QUEUE_MAX 64
+static uint32_t s_char_queue[ZEN_CHAR_QUEUE_MAX] = {0};
+static int s_char_queue_count = 0;
+static int s_char_queue_read_idx = 0;
 
 #define ZEN_MAX_GAMEPADS 4
 #define ZEN_GAMEPAD_BUTTON_COUNT 15
@@ -76,6 +87,9 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
         if (action == GLFW_PRESS) {
             s_keys_pressed[key] = 1;
             s_keys_push[key] = 1;
+            s_keys_repeat[key] = 1;
+        } else if (action == GLFW_REPEAT) {
+            s_keys_repeat[key] = 1;
         } else if (action == GLFW_RELEASE) {
             s_keys_pressed[key] = 0;
             s_keys_release[key] = 1;
@@ -100,6 +114,13 @@ static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
     (void)window;
     s_mouse_x = xpos;
     s_mouse_y = ypos;
+}
+
+static void char_callback(GLFWwindow* window, unsigned int codepoint) {
+    (void)window;
+    if (s_char_queue_count < ZEN_CHAR_QUEUE_MAX) {
+        s_char_queue[s_char_queue_count++] = (uint32_t)codepoint;
+    }
 }
 
 static void window_focus_callback(GLFWwindow* window, int focused) {
@@ -215,6 +236,7 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
 
     // コールバック登録
     glfwSetKeyCallback(s_window, key_callback);
+    glfwSetCharCallback(s_window, char_callback);
     glfwSetMouseButtonCallback(s_window, mouse_button_callback);
     glfwSetCursorPosCallback(s_window, cursor_pos_callback);
     glfwSetFramebufferSizeCallback(s_window, framebuffer_size_callback);
@@ -306,10 +328,13 @@ int zen_get_target_fps(void) {
 void zen_poll_events(void) {
     memset(s_keys_push, 0, sizeof(s_keys_push));
     memset(s_keys_release, 0, sizeof(s_keys_release));
+    memset(s_keys_repeat, 0, sizeof(s_keys_repeat));
     memset(s_mouse_push, 0, sizeof(s_mouse_push));
     memset(s_mouse_release, 0, sizeof(s_mouse_release));
     memset(s_gamepad_buttons_push, 0, sizeof(s_gamepad_buttons_push));
     memset(s_gamepad_buttons_release, 0, sizeof(s_gamepad_buttons_release));
+    s_char_queue_count = 0;
+    s_char_queue_read_idx = 0;
     
     glfwPollEvents();
 
@@ -672,6 +697,11 @@ int zen_is_key_release(int key) {
     return 0;
 }
 
+int zen_is_key_repeat(int key) {
+    if (key >= 0 && key < 512) return s_keys_repeat[key];
+    return 0;
+}
+
 int zen_is_gamepad_connected(int id) {
     if (id < 0 || id >= ZEN_MAX_GAMEPADS) return 0;
     return s_gamepad_connected[id];
@@ -700,4 +730,68 @@ int zen_is_gamepad_button_release(int id, int button) {
     if (button < 0 || button >= ZEN_GAMEPAD_BUTTON_COUNT) return 0;
     return s_gamepad_buttons_release[id][button];
 }
+
+int zen_get_char_queue(uint32_t* buffer, int max_count) {
+    if (!buffer || max_count <= 0) return 0;
+    int count = (s_char_queue_count < max_count) ? s_char_queue_count : max_count;
+    for (int i = 0; i < count; i++) {
+        buffer[i] = s_char_queue[i];
+    }
+    return count;
+}
+
+int zen_get_char(void) {
+    if (s_char_queue_read_idx < s_char_queue_count) {
+        return (int)s_char_queue[s_char_queue_read_idx++];
+    }
+    return -1;
+}
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+void zen_push_char(unsigned int codepoint) {
+    if (s_char_queue_count < ZEN_CHAR_QUEUE_MAX) {
+        s_char_queue[s_char_queue_count++] = (uint32_t)codepoint;
+    }
+}
+
+#if defined(_WIN32)
+void zen_set_ime_position(int x, int y) {
+    if (!s_window) return;
+    HWND hwnd = glfwGetWin32Window(s_window);
+    if (!hwnd) return;
+    HIMC himc = ImmGetContext(hwnd);
+    if (himc) {
+        if (x < 0 || y < 0) {
+            ImmReleaseContext(hwnd, himc);
+            return;
+        }
+        int win_w = 0, win_h = 0;
+        glfwGetWindowSize(s_window, &win_w, &win_h);
+        float fb_to_win = (s_fb_width > 0 && win_w > 0) ? ((float)win_w / (float)s_fb_width) : 1.0f;
+        int screen_x = (int)((s_vp_x + (float)x * s_vp_scale) * fb_to_win);
+        int screen_y = (int)((s_vp_y + (float)y * s_vp_scale) * fb_to_win);
+
+        COMPOSITIONFORM cf;
+        cf.dwStyle = CFS_POINT;
+        cf.ptCurrentPos.x = screen_x;
+        cf.ptCurrentPos.y = screen_y;
+        ImmSetCompositionWindow(himc, &cf);
+        ImmReleaseContext(hwnd, himc);
+    }
+}
+#elif defined(__EMSCRIPTEN__)
+void zen_set_ime_position(int x, int y) {
+    EM_ASM({
+        if (window.zenooOnFocusTextInput) {
+            window.zenooOnFocusTextInput($0, $1);
+        }
+    }, x, y);
+}
+#else
+void zen_set_ime_position(int x, int y) {
+    (void)x; (void)y;
+}
+#endif
 

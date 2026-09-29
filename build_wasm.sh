@@ -65,6 +65,7 @@ emcc -O2 \
     -s INITIAL_MEMORY=67108864 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s WASM=1 \
+    -s EXPORTED_FUNCTIONS="['_main','_zen_push_char']" \
     --preload-file assets@/assets \
     -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" \
     "${OUTPUT_DIR}/app.c" \

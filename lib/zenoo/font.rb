@@ -46,6 +46,22 @@ module Zenoo
       res
     end
 
+    # 文字列の描画幅 (ピクセル単位) を計算
+    def text_width(text, size = 24.0)
+      return 0.0 unless text
+      s = size.to_f
+      w = 0.0
+      text.to_s.each_char do |ch|
+        g = get_glyph(ch, s)
+        w += g ? g[9] : s * 0.6
+      end
+      w
+    end
+
+    def self.text_width(text, size = 24.0)
+      default.text_width(text, size)
+    end
+
 
     # ----------------------------------------------------
     # SDF / TTF ベクターフォント基盤 (定数・デフォルトフォント)

@@ -241,6 +241,14 @@ sp_bool sp_zen_input_gamepad_button_release(sp_int id, sp_int button) {
     return zen_is_gamepad_button_release((int)id, (int)button) ? true : false;
 }
 
+sp_int sp_zen_input_get_char(void) {
+    return (sp_int)zen_get_char();
+}
+
+void sp_zen_input_set_ime_position(sp_int x, sp_int y) {
+    zen_set_ime_position((int)x, (int)y);
+}
+
 static ZenImage* unpack_image(sp_RbVal val) {
     if (val.tag == SP_TAG_OBJ && val.v.p) {
         sp_ZenImage* img = (sp_ZenImage*)val.v.p;

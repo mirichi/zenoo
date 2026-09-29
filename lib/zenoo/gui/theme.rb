@@ -39,7 +39,7 @@ module Zenoo
 
         # スタイル設定
         @corner_radius  = 8.0
-        @font_size      = 14
+        @font_size      = 18
       end
     end
   end

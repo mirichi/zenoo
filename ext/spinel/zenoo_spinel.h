@@ -66,6 +66,8 @@ double  sp_zen_input_gamepad_axis(sp_int id, sp_int axis);
 sp_bool sp_zen_input_gamepad_button_pressed(sp_int id, sp_int button);
 sp_bool sp_zen_input_gamepad_button_push(sp_int id, sp_int button);
 sp_bool sp_zen_input_gamepad_button_release(sp_int id, sp_int button);
+sp_int  sp_zen_input_get_char(void);
+void    sp_zen_input_set_ime_position(sp_int x, sp_int y);
 
 
 

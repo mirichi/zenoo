@@ -352,6 +352,13 @@ module Zenoo
 
     @char_ctx = CharContext.new
 
+    # テキスト描画幅の計算
+    def self.text_width(text, font: nil, size: 24)
+      target_font = font || Font.default
+      return 0.0 unless target_font
+      target_font.text_width(text, size)
+    end
+
     # ----------------------------------------------------
     # 高品質 SDF テキスト描画 API (改行なし・文字列直接描画)
     # ----------------------------------------------------
@@ -418,8 +425,8 @@ module Zenoo
       metrics = target_font.metrics(f_size)
       ascent = metrics[:ascent]
 
-      pen_x = x.to_f
-      pen_y = y.to_f + ascent
+      pen_x = x.to_f.round
+      pen_y = (y.to_f + ascent).round.to_f
 
       str = text.to_s
       chars = str.chars
@@ -440,13 +447,8 @@ module Zenoo
           if glyph_data && glyph_data[0] # visible == true
             _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
             is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
-            if is_bmp > 0.5 || f_size <= 20.0
-              gx = (pen_x + x0).round
-              gy = (pen_y + y0).round
-            else
-              gx = pen_x + x0
-              gy = pen_y + y0
-            end
+            gx = (pen_x + x0).round
+            gy = (pen_y + y0).round
             gw = x1 - x0
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]
@@ -503,13 +505,8 @@ module Zenoo
           if glyph_data && glyph_data[0] # visible == true
             _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
             is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
-            if is_bmp > 0.5 || f_size <= 20.0
-              gx = (pen_x + x0).round
-              gy = (pen_y + y0).round
-            else
-              gx = pen_x + x0
-              gy = pen_y + y0
-            end
+            gx = (pen_x + x0).round
+            gy = (pen_y + y0).round
             gw = x1 - x0
             gh = y1 - y0
             uv = [u0, v0, u1 - u0, v1 - v0]

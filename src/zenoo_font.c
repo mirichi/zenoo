@@ -229,7 +229,7 @@ void zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* 
     if (line_gap) *line_gap = font->line_gap * scale;
 }
 
-#define BITMAP_SIZE_THRESHOLD 17.0f // 16px以下の小サイズ文字は stbtt_GetCodepointBitmap で直接ラスタライズ (1ドット単位で超高精細)
+#define BITMAP_SIZE_THRESHOLD 36.0f // 36px以下の文字は stbtt_GetCodepointBitmap で直接ラスタライズ (1ドット単位で超高精細・ピクセルパーフェクト)
 
 // グリフ取得 (キャッシュにあれば即返却、なければビットマップまたはSDF生成してアトラス転送)
 int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* out_glyph) {

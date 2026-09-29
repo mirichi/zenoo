@@ -16,6 +16,9 @@ module Zenoo
     @mouse_rel   = false
     @hot_id      = nil
     @active_id   = nil
+    @focus_id    = nil
+    @cursor_pos  = 0
+    @blink_time  = 0.0
     class << self
       def theme
         @theme
@@ -33,6 +36,16 @@ module Zenoo
         @renderer = val
       end
 
+      def focus_id
+        @focus_id
+      end
+
+      def focus_id=(val)
+        @focus_id = val ? val.to_s : nil
+        @blink_time = 0.0
+        Input.set_ime_position(-1, -1) unless @focus_id
+      end
+
       # --------------------------------------------------
       # フレーム開始処理 (Window.loop の先頭で毎フレーム自動呼び出し)
       # --------------------------------------------------
@@ -43,6 +56,7 @@ module Zenoo
         @mouse_push = Input.mouse_push?(:left)
         @mouse_rel  = Input.mouse_release?(:left)
         @hot_id     = nil
+        @blink_time += Window.delta_time
       end
 
       # --------------------------------------------------
@@ -149,9 +163,129 @@ module Zenoo
       # ラベル (Label)
       # テキストを描画
       # --------------------------------------------------
-      def label(text, x, y, size = 16, color = nil)
+      def label(text, x, y, size = 18, color = nil)
         @renderer.draw_label(x.to_f, y.to_f, text, size, color, @theme)
         nil
+      end
+
+      # --------------------------------------------------
+      # テキストボックス (Text Box)
+      # フォーカス中に文字入力・キー操作を受け付け、更新された文字列を返却
+      # --------------------------------------------------
+      def text_box(label, x, y, w = 200.0, h = 42.0, text = "", id: nil)
+        widget_id = id ? id.to_s : label.to_s
+        rx = x.to_f
+        ry = y.to_f
+        rw = w.to_f
+        rh = h.to_f
+
+        hover = @renderer.hit_test_text_box(rx, ry, rw, rh, @mouse_x, @mouse_y, @theme)
+
+        # クリックによるフォーカス獲得 / キャレット移動 / フォーカス解除
+        if @mouse_push
+          if hover
+            @focus_id = widget_id
+            @blink_time = 0.0
+
+            # クリック位置からキャレット位置を算出
+            str = text.to_s
+            pad_x = 10.0
+            click_x = @mouse_x - (rx + pad_x)
+            f_font = @theme.font || Font.default
+            f_size = @theme.font_size.to_i
+            f_size = 14 if f_size <= 0
+
+            best_idx = str.length
+            accum_w = 0.0
+            str.each_char.with_index do |ch, idx|
+              char_w = f_font.text_width(ch, f_size)
+              if click_x < accum_w + char_w * 0.5
+                best_idx = idx
+                break
+              end
+              accum_w += char_w
+            end
+            @cursor_pos = best_idx
+          elsif @focus_id == widget_id
+            # ボックス外をクリックしたらフォーカス解除
+            @focus_id = nil
+            Input.set_ime_position(-1, -1)
+          end
+        end
+
+        cur_text = text.to_s.dup
+        is_focused = (@focus_id == widget_id)
+
+        # フォーカス中の入力処理
+        if is_focused
+          @cursor_pos = cur_text.length if @cursor_pos > cur_text.length
+          @cursor_pos = 0 if @cursor_pos < 0
+
+          # 1. IME変換候補位置の更新 (キャレットの直下)
+          f_font = @theme.font || Font.default
+          f_size = @theme.font_size.to_i
+          f_size = 14 if f_size <= 0
+          sub_str = cur_text[0...@cursor_pos] || ""
+          caret_offset = f_font.text_width(sub_str, f_size)
+          pad_x = 10.0
+          Input.set_ime_position(rx + pad_x + caret_offset, ry + rh + 2.0)
+
+          # 2. 特殊キー処理 (キーリピート対応)
+          if Input.key_repeat?(:backspace)
+            if @cursor_pos > 0
+              cur_text.slice!(@cursor_pos - 1)
+              @cursor_pos -= 1
+              @blink_time = 0.0
+            end
+          elsif Input.key_repeat?(:delete)
+            if @cursor_pos < cur_text.length
+              cur_text.slice!(@cursor_pos)
+              @blink_time = 0.0
+            end
+          elsif Input.key_repeat?(:left)
+            if @cursor_pos > 0
+              @cursor_pos -= 1
+              @blink_time = 0.0
+            end
+          elsif Input.key_repeat?(:right)
+            if @cursor_pos < cur_text.length
+              @cursor_pos += 1
+              @blink_time = 0.0
+            end
+          elsif Input.key_push?(:home)
+            @cursor_pos = 0
+            @blink_time = 0.0
+          elsif Input.key_push?(:end)
+            @cursor_pos = cur_text.length
+            @blink_time = 0.0
+          elsif Input.key_push?(:enter) || Input.key_push?(:escape)
+            @focus_id = nil
+            Input.set_ime_position(-1, -1)
+          end
+
+          # 3. 通常文字・日本語確定文字の入力
+          Input.input_chars.each do |ch|
+            next if ch == "\r" || ch == "\n"
+            cur_text.insert(@cursor_pos, ch)
+            @cursor_pos += ch.length
+            @blink_time = 0.0
+          end
+        end
+
+        # キャレット点滅 (0.5秒表示、0.5秒非表示)
+        blink_on = (@blink_time % 1.0) < 0.5
+
+        @renderer.draw_text_box(rx, ry, rw, rh, cur_text, is_focused, @cursor_pos, blink_on, @theme)
+        cur_text
+      end
+
+      def has_focus?(id)
+        @focus_id == id.to_s
+      end
+
+      def clear_focus
+        @focus_id = nil
+        Input.set_ime_position(-1, -1)
       end
     end
   end

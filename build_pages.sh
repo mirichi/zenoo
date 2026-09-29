@@ -68,6 +68,7 @@ COMMON_EMCC_FLAGS=(
     -s ALLOW_MEMORY_GROWTH=1
     -s NO_EXIT_RUNTIME=1
     -s WASM=1
+    -s EXPORTED_FUNCTIONS="['_main','_zen_push_char']"
     --preload-file assets@/assets
     -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib"
 )

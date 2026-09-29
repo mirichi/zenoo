@@ -375,6 +375,11 @@ static VALUE input_key_release(VALUE self, VALUE rb_key) {
     return zen_is_key_release(NUM2INT(rb_key)) ? Qtrue : Qfalse;
 }
 
+static VALUE input_key_repeat(VALUE self, VALUE rb_key) {
+    (void)self;
+    return zen_is_key_repeat(NUM2INT(rb_key)) ? Qtrue : Qfalse;
+}
+
 static VALUE input_mouse_pos(VALUE self) {
     (void)self;
     float x = 0, y = 0;
@@ -435,6 +440,54 @@ static VALUE input_gamepad_button_push(VALUE self, VALUE rb_id, VALUE rb_button)
 static VALUE input_gamepad_button_release(VALUE self, VALUE rb_id, VALUE rb_button) {
     (void)self;
     return zen_is_gamepad_button_release(NUM2INT(rb_id), NUM2INT(rb_button)) ? Qtrue : Qfalse;
+}
+
+static int zen_ext_utf32_to_utf8(uint32_t cp, char* out) {
+    if (cp <= 0x7F) {
+        out[0] = (char)cp;
+        out[1] = '\0';
+        return 1;
+    } else if (cp <= 0x7FF) {
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        out[2] = '\0';
+        return 2;
+    } else if (cp <= 0xFFFF) {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        out[3] = '\0';
+        return 3;
+    } else if (cp <= 0x10FFFF) {
+        out[0] = (char)(0xF0 | (cp >> 18));
+        out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+        out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[3] = (char)(0x80 | (cp & 0x3F));
+        out[4] = '\0';
+        return 4;
+    }
+    return 0;
+}
+
+static VALUE input_input_chars(VALUE self) {
+    (void)self;
+    uint32_t buf[64];
+    int count = zen_get_char_queue(buf, 64);
+    VALUE ary = rb_ary_new_capa(count);
+    char utf8_buf[8];
+    for (int i = 0; i < count; i++) {
+        int len = zen_ext_utf32_to_utf8(buf[i], utf8_buf);
+        if (len > 0) {
+            rb_ary_push(ary, rb_utf8_str_new(utf8_buf, len));
+        }
+    }
+    return ary;
+}
+
+static VALUE input_set_ime_position(VALUE self, VALUE rb_x, VALUE rb_y) {
+    (void)self;
+    zen_set_ime_position(NUM2INT(rb_x), NUM2INT(rb_y));
+    return Qnil;
 }
 
 // ==========================================
@@ -507,6 +560,7 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mInput, "key_pressed?", input_key_pressed, 1);
     rb_define_singleton_method(mInput, "key_push?", input_key_push, 1);
     rb_define_singleton_method(mInput, "key_release?", input_key_release, 1);
+    rb_define_singleton_method(mInput, "key_repeat?", input_key_repeat, 1);
     rb_define_singleton_method(mInput, "mouse_pos", input_mouse_pos, 0);
     rb_define_singleton_method(mInput, "mouse_x", input_mouse_x, 0);
     rb_define_singleton_method(mInput, "mouse_y", input_mouse_y, 0);
@@ -518,6 +572,8 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mInput, "gamepad_button_pressed?", input_gamepad_button_pressed, 2);
     rb_define_singleton_method(mInput, "gamepad_button_push?", input_gamepad_button_push, 2);
     rb_define_singleton_method(mInput, "gamepad_button_release?", input_gamepad_button_release, 2);
+    rb_define_singleton_method(mInput, "input_chars", input_input_chars, 0);
+    rb_define_singleton_method(mInput, "set_ime_position", input_set_ime_position, 2);
 
     // 3. Image (Zenoo::Image)
     rb_cNativeImage = rb_define_class_under(rb_mZenoo, "Image", rb_cObject);

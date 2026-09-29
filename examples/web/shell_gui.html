@@ -178,6 +178,8 @@
   </div>
   <div id="canvas-container">
     <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" width="1280" height="720"></canvas>
+    <input id="zenoo-hidden-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+      style="position: absolute; opacity: 0; pointer-events: none; left: -9999px; top: -9999px; width: 1px; height: 1px; font-size: 16px; border: none;">
   </div>
   <div id="controls-bar">
     <a href="../" class="btn btn-back">← ポータルに戻る</a>
@@ -343,6 +345,45 @@
         document.exitFullscreen();
       }
     });
+
+    // ----------------------------------------------------
+    // テキストボックス入力 / スマホソフトキーボード連携
+    // ----------------------------------------------------
+    var hiddenInput = document.getElementById('zenoo-hidden-input');
+
+    window.zenooOnFocusTextInput = function(x, y) {
+      if (!hiddenInput) return;
+      if (x >= 0 && y >= 0) {
+        hiddenInput.focus();
+      } else {
+        hiddenInput.blur();
+      }
+    };
+
+    if (hiddenInput) {
+      hiddenInput.addEventListener('input', function(e) {
+        var val = hiddenInput.value;
+        if (val && val.length > 0) {
+          for (var i = 0; i < val.length; i++) {
+            var code = val.charCodeAt(i);
+            if (code >= 0xD800 && code <= 0xDBFF && i + 1 < val.length) {
+              var high = code;
+              var low = val.charCodeAt(++i);
+              code = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
+            }
+            if (Module._zen_push_char) {
+              Module._zen_push_char(code);
+            }
+          }
+          hiddenInput.value = '';
+        }
+      });
+      hiddenInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          hiddenInput.blur();
+        }
+      });
+    }
   </script>
   {{{ SCRIPT }}}
 </body>

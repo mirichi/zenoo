@@ -71,45 +71,18 @@ module Zenoo
           // 画面1ピクセルあたりのSDFテクセル変化量
           float raw_fw = fwidth(dist);
 
-          // アダプティブ・アンチエイリアス幅 (Gemini提案の動的調整を統合):
-          // 大サイズでは 0.5 (画面1px幅) で超パッキリ引き締め、
-          // 小サイズ（raw_fw が大きい時）は 0.85 (画面1.7px幅) へスムーズに広げて細線の欠落・かすれを完全防止
-          float fw_scale = mix(0.5, 0.85, clamp((raw_fw - 0.01) * 35.0, 0.0, 1.0));
-          float fw = max(raw_fw * fw_scale, 0.002);
+          // アンチエイリアス幅: 画面上 ちょうど1ピクセル幅
+          float fw = max(raw_fw * 0.5, 0.001);
 
           // エッジ閾値 (weight による手動調整)
           float edge_threshold = 0.5 - atlas_weight * 0.04183;
 
-          // スクリーンスペース勾配 (動的分岐の外で安全に事前計算)
-          vec2 d_uv_x = dFdx(v_uv) * 0.35;
-          vec2 d_uv_y = dFdy(v_uv) * 0.35;
-
           // 1. 本体のアルファ
           float body_alpha;
           if (outline_width > 0.0) {
-              // 袋文字モード:
-              // 中心位置 (edge_threshold) を正確に維持して文字の太さ・グリフ形状を崩さず、
-              // smoothstep (S字エルミート補間) により自然で滑らかかつ引き締まった境界 (~0.75px) を実現。
               float b_fw = max(fw * 0.75, 0.002);
               body_alpha = smoothstep(edge_threshold - b_fw, edge_threshold + b_fw, dist);
-          } else if (raw_fw > 0.015) {
-              // 小サイズ通常文字 (17px等の縮小アンダーサンプリング領域):
-              // 1. 縮小バイリニア補間によるピーク低下（線の欠け・かすれ）を補正
-              float small_boost = clamp((raw_fw - 0.015) * 0.35, 0.0, 0.07);
-              float eff_thresh = edge_threshold - small_boost;
-
-              // 2. 4-Tap サブピクセルサンプリング (Box Filter) でサンプリング漏れ・線の途切れを防止
-              float d0 = texture(u_texture, v_uv + d_uv_x + d_uv_y).r;
-              float d1 = texture(u_texture, v_uv - d_uv_x + d_uv_y).r;
-              float d2 = texture(u_texture, v_uv + d_uv_x - d_uv_y).r;
-              float d3 = texture(u_texture, v_uv - d_uv_x - d_uv_y).r;
-              float a0 = clamp((d0 - eff_thresh) / (fw * 2.0) + 0.5, 0.0, 1.0);
-              float a1 = clamp((d1 - eff_thresh) / (fw * 2.0) + 0.5, 0.0, 1.0);
-              float a2 = clamp((d2 - eff_thresh) / (fw * 2.0) + 0.5, 0.0, 1.0);
-              float a3 = clamp((d3 - eff_thresh) / (fw * 2.0) + 0.5, 0.0, 1.0);
-              body_alpha = (a0 + a1 + a2 + a3) * 0.25;
           } else {
-              // 中〜大サイズ通常文字: 標準的な 1.0px 幅の滑らかなアンチエイリアス
               body_alpha = smoothstep(edge_threshold - fw, edge_threshold + fw, dist);
           }
 
