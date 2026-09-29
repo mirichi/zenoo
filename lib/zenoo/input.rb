@@ -7,10 +7,16 @@ module Zenoo
       enter: 257,
       tab: 258,
       backspace: 259,
+      insert: 260,
+      delete: 261,
       right: 262,
       left: 263,
       down: 264,
       up: 265,
+      page_up: 266,
+      page_down: 267,
+      home: 268,
+      end: 269,
       f11: 290,
     }
 
@@ -51,6 +57,38 @@ module Zenoo
     # 離した瞬間 (リリース)
     def self.key_release?(key)
       Native::Input.key_release?(resolve_key(key))
+    end
+
+    # 押した瞬間、または長押しによるキーリピート
+    def self.key_repeat?(key)
+      if Native::Input.respond_to?(:key_repeat?)
+        Native::Input.key_repeat?(resolve_key(key))
+      else
+        Native::Input.key_push?(resolve_key(key))
+      end
+    end
+
+    # フレーム内で入力された文字（UTF-8文字列）の配列
+    def self.input_chars
+      if Native::Input.respond_to?(:input_chars)
+        Native::Input.input_chars
+      elsif Native::Input.respond_to?(:get_char)
+        chars = []
+        while (cp = Native::Input.get_char) != -1
+          begin
+            chars << cp.chr(Encoding::UTF_8)
+          rescue
+          end
+        end
+        chars
+      else
+        []
+      end
+    end
+
+    # IME変換候補ウィンドウの位置設定
+    def self.set_ime_position(x, y)
+      Native::Input.set_ime_position(x.to_i, y.to_i) if Native::Input.respond_to?(:set_ime_position)
     end
 
     # マウス座標

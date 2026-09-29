@@ -22,6 +22,11 @@ module Zenoo
         raise NotImplementedError, "#{self.class}#draw_label must be implemented"
       end
 
+      # テキストボックス描画
+      def draw_text_box(x, y, w, h, text, focused, cursor_pos, blink_on, theme)
+        raise NotImplementedError, "#{self.class}#draw_text_box must be implemented"
+      end
+
       # ----------------------------------------------------
       # 当たり判定 (Hit-Test)
       # レンダラーの描画形状に合わせてオーバーライド可能
@@ -31,6 +36,10 @@ module Zenoo
       end
 
       def hit_test_slider(x, y, w, h, px, py, theme)
+        px >= x && px <= (x + w) && py >= y && py <= (y + h)
+      end
+
+      def hit_test_text_box(x, y, w, h, px, py, theme)
         px >= x && px <= (x + w) && py >= y && py <= (y + h)
       end
     end

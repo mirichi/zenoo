@@ -109,6 +109,13 @@ int    zen_is_mouse_release(int button); // 離した瞬間 (リリース)
 int    zen_is_key_pressed(int key);      // 押されている状態 (持続)
 int    zen_is_key_push(int key);         // 押した瞬間 (トリガー)
 int    zen_is_key_release(int key);      // 離した瞬間 (リリース)
+int    zen_is_key_repeat(int key);       // 押した瞬間またはOSキーリピート時
+
+// テキスト入力 & IME
+int    zen_get_char_queue(uint32_t* buffer, int max_count);
+int    zen_get_char(void);
+void   zen_push_char(unsigned int codepoint);
+void   zen_set_ime_position(int x, int y);
 
 // ゲームパッド (GLFW標準ゲームパッドマッピング準拠)
 enum ZenGamepadButton {

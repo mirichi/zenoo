@@ -49,21 +49,21 @@ module Zenoo
         # テキストの描画 (ボタン幅に収まるよう厳密に計算 & センタリング)
         if label
           text_str = label.to_s
-          text_len = text_str.length
-          if text_len > 0
+          if text_str.length > 0
             f_size = theme.font_size.to_i
             f_size = 14 if f_size <= 0
+            f_font = theme.font || Font.default
 
-            # 8x8 等幅フォント: 1文字幅 = f_size
-            text_w = text_len.to_f * f_size.to_f
+            text_w = f_font.text_width(text_str, f_size)
 
             # ボタン枠 (左右パディング 12px) からはみ出す場合は、ボタン内に収まるサイズに自動スケール
             pad_x = 12.0
             avail_w = rw - pad_x * 2.0
             if avail_w > 8.0 && text_w > avail_w
-              f_size = (avail_w / text_len.to_f).to_i
+              ratio = avail_w / text_w
+              f_size = (f_size * ratio).to_i
               f_size = 8 if f_size < 8
-              text_w = text_len.to_f * f_size.to_f
+              text_w = f_font.text_width(text_str, f_size)
             end
 
             text_x = rx + (rw - text_w) / 2.0
@@ -74,7 +74,6 @@ module Zenoo
               text_y += 1.0
             end
 
-            f_font = theme.font || Font.default
             Window.draw_text(text_x, text_y, text_str, font: f_font, size: f_size, color: theme.text_color)
           end
         end
@@ -113,7 +112,7 @@ module Zenoo
           v_int = v_val.to_i
           v_dec = ((v_val - v_int.to_f).abs * 10.0).to_i
           val_str = "#{v_int}.#{v_dec}"
-          val_w = val_str.length.to_f * f_size.to_f
+          val_w = f_font.text_width(val_str, f_size)
           Window.draw_text(rx + rw - val_w, ry, val_str, font: f_font, size: f_size, color: theme.accent_color)
 
           track_y = ry + f_size.to_f + 8.0
@@ -224,6 +223,71 @@ module Zenoo
 
         # 符号付き距離 dist <= 0.0 なら描画カードの内側！
         (term1 + term2 - r) <= 0.0
+      end
+
+      # ----------------------------------------------------
+      # テキストボックス描画
+      # ----------------------------------------------------
+      def draw_text_box(x, y, w, h, text, focused, cursor_pos, blink_on, theme)
+        rx = x.to_f
+        ry = y.to_f
+        rw = w.to_f
+        rh = h.to_f
+
+        # 背景色・枠線・影
+        bg_col = theme.bg_normal
+        if focused
+          border_cfg = [2.0, theme.accent_color]
+          shadow_cfg = theme.shadow_active
+        else
+          border_cfg = theme.border_normal
+          shadow_cfg = theme.shadow_normal
+        end
+
+        b_w = border_cfg ? border_cfg[0] : 1.0
+        b_c = border_cfg ? border_cfg[1] : [60, 70, 90, 255]
+        s_b = shadow_cfg ? shadow_cfg[0] : 0.0
+        s_c = shadow_cfg ? shadow_cfg[1] : [0, 0, 0, 180]
+
+        Window.draw_card(
+          rx, ry, rw, rh,
+          radius: theme.corner_radius,
+          color: bg_col,
+          border_width: b_w,
+          border_color: b_c,
+          shadow_blur: s_b,
+          shadow_color: s_c
+        )
+
+        f_size = theme.font_size.to_i
+        f_size = 14 if f_size <= 0
+        pad_x = 10.0
+        text_y = ry + (rh - f_size.to_f) / 2.0
+        f_font = theme.font || Font.default
+
+        str = text.to_s
+        sub_str = str[0...cursor_pos] || ""
+        caret_offset_x = f_font.text_width(sub_str, f_size)
+
+        avail_w = rw - pad_x * 2.0 - 4.0
+        scroll_x = 0.0
+        if caret_offset_x > avail_w
+          scroll_x = caret_offset_x - avail_w
+        end
+
+        text_x = rx + pad_x - scroll_x
+        Window.draw_text(text_x, text_y, str, font: f_font, size: f_size, color: theme.text_color)
+
+        if focused && blink_on
+          caret_x = text_x + caret_offset_x
+          if caret_x >= rx + pad_x - 2.0 && caret_x <= rx + rw - pad_x + 2.0
+            Window.draw_rect(caret_x, text_y - 1.0, 2.0, f_size.to_f + 2.0, color: theme.accent_color)
+          end
+        end
+      end
+
+      def hit_test_text_box(x, y, w, h, px, py, theme)
+        hit_test_button(x, y, w, h, px, py, theme)
       end
     end
   end
