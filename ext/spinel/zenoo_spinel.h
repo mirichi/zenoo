@@ -56,6 +56,7 @@ double sp_zen_win_time(void);
 sp_bool sp_zen_input_key_pressed(sp_int key);
 sp_bool sp_zen_input_key_push(sp_int key);
 sp_bool sp_zen_input_key_release(sp_int key);
+sp_bool sp_zen_input_key_repeat(sp_int key);
 double sp_zen_input_mouse_x(void);
 double sp_zen_input_mouse_y(void);
 sp_bool sp_zen_input_mouse_pressed(sp_int btn);

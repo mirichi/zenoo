@@ -55,6 +55,7 @@ module Zenoo
       native_func :key_pressed?, [:int], :bool, "sp_zen_input_key_pressed"
       native_func :key_push?, [:int], :bool, "sp_zen_input_key_push"
       native_func :key_release?, [:int], :bool, "sp_zen_input_key_release"
+      native_func :key_repeat?, [:int], :bool, "sp_zen_input_key_repeat"
       native_func :mouse_pressed?, [:int], :bool, "sp_zen_input_mouse_pressed"
       native_func :mouse_push?, [:int], :bool, "sp_zen_input_mouse_push"
       native_func :mouse_release?, [:int], :bool, "sp_zen_input_mouse_release"
@@ -67,6 +68,17 @@ module Zenoo
       native_func :gamepad_button_release?, [:int, :int], :bool, "sp_zen_input_gamepad_button_release"
       native_func :get_char, [], :int, "sp_zen_input_get_char"
       native_func :set_ime_position, [:int, :int], :nil, "sp_zen_input_set_ime_position"
+
+      def self.input_chars
+        chars = []
+        while (cp = Zenoo::Native::Input.get_char) != -1
+          begin
+            chars << cp.chr(Encoding::UTF_8)
+          rescue
+          end
+        end
+        chars
+      end
     end
 
     # ==========================================

@@ -118,9 +118,15 @@ static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
 
 static void char_callback(GLFWwindow* window, unsigned int codepoint) {
     (void)window;
+#ifndef __EMSCRIPTEN__
     if (s_char_queue_count < ZEN_CHAR_QUEUE_MAX) {
         s_char_queue[s_char_queue_count++] = (uint32_t)codepoint;
     }
+#else
+    // Emscripten環境では透明<input>経由 (zen_push_char) で英数・日本語とも入力されるため、
+    // GLFW onKeyPress からの二重注入を抑止する
+    (void)codepoint;
+#endif
 }
 
 static void window_focus_callback(GLFWwindow* window, int focused) {
@@ -326,6 +332,7 @@ int zen_get_target_fps(void) {
 }
 
 void zen_poll_events(void) {
+#ifndef __EMSCRIPTEN__
     memset(s_keys_push, 0, sizeof(s_keys_push));
     memset(s_keys_release, 0, sizeof(s_keys_release));
     memset(s_keys_repeat, 0, sizeof(s_keys_repeat));
@@ -335,6 +342,7 @@ void zen_poll_events(void) {
     memset(s_gamepad_buttons_release, 0, sizeof(s_gamepad_buttons_release));
     s_char_queue_count = 0;
     s_char_queue_read_idx = 0;
+#endif
     
     glfwPollEvents();
 
@@ -606,6 +614,17 @@ static void zen_wasm_tick(void) {
 
         // 4. 描画確定・Flush & SwapBuffers
         zen_end_frame();
+
+        // 5. フレーム内で消費されたワンショット入力をクリア
+        memset(s_keys_push, 0, sizeof(s_keys_push));
+        memset(s_keys_release, 0, sizeof(s_keys_release));
+        memset(s_keys_repeat, 0, sizeof(s_keys_repeat));
+        memset(s_mouse_push, 0, sizeof(s_mouse_push));
+        memset(s_mouse_release, 0, sizeof(s_mouse_release));
+        memset(s_gamepad_buttons_push, 0, sizeof(s_gamepad_buttons_push));
+        memset(s_gamepad_buttons_release, 0, sizeof(s_gamepad_buttons_release));
+        s_char_queue_count = 0;
+        s_char_queue_read_idx = 0;
     }
     // 蓄積時間が足りないフレーム (144Hzでの間引き時など) は Canvas を触らず何もしない
 }
