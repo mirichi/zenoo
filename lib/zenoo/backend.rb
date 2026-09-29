@@ -272,6 +272,8 @@ module Zenoo
     @current_target = nil
     @active_gl_target = nil
     @pending_images = []
+    @target_images = []
+    @target_queues = []
 
     def self.screen_queue
       @screen_queue
@@ -298,17 +300,31 @@ module Zenoo
     end
 
     def self.queue_for(image)
-      image.__draw_queue ||= DrawQueue.new(image)
+      idx = @target_images.index(image)
+      if idx
+        @target_queues[idx]
+      else
+        q = DrawQueue.new(image)
+        @target_images << image
+        @target_queues << q
+        q
+      end
     end
 
     def self.has_pending_draws?(image)
-      q = image.__draw_queue
-      q && q.has_pending_draws?
+      idx = @target_images.index(image)
+      if idx
+        @target_queues[idx].has_pending_draws?
+      else
+        false
+      end
     end
 
     def self.flush_image(image)
-      q = image.__draw_queue
-      q&.flush
+      idx = @target_images.index(image)
+      if idx
+        @target_queues[idx].flush
+      end
     end
 
     def self.register_pending_image(img)

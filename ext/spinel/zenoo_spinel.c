@@ -197,6 +197,10 @@ sp_bool sp_zen_input_key_release(sp_int key) {
     return zen_is_key_release((int)key) ? true : false;
 }
 
+sp_bool sp_zen_input_key_repeat(sp_int key) {
+    return zen_is_key_repeat((int)key) ? true : false;
+}
+
 double sp_zen_input_mouse_x(void) {
     float x = 0, y = 0;
     zen_get_mouse_pos(&x, &y);

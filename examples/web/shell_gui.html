@@ -350,6 +350,7 @@
     // テキストボックス入力 / スマホソフトキーボード連携
     // ----------------------------------------------------
     var hiddenInput = document.getElementById('zenoo-hidden-input');
+    var isComposing = false;
 
     window.zenooOnFocusTextInput = function(x, y) {
       if (!hiddenInput) return;
@@ -360,25 +361,61 @@
       }
     };
 
+    function sendStringToZenoo(text) {
+      if (!text || !Module._zen_push_char) return;
+      for (var i = 0; i < text.length; i++) {
+        var code = text.charCodeAt(i);
+        if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length) {
+          var high = code;
+          var low = text.charCodeAt(++i);
+          code = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
+        }
+        Module._zen_push_char(code);
+      }
+    }
+
+    // IME変換中の Enter が GLFW に漏れてテキストボックスのフォーカスが解除されるのを抑止
+    window.addEventListener('keydown', function(e) {
+      if (document.activeElement === hiddenInput && (isComposing || e.isComposing || e.keyCode === 229)) {
+        if (e.key === 'Enter') {
+          e.stopImmediatePropagation();
+        }
+      }
+    }, true);
+
     if (hiddenInput) {
+      // 変換開始
+      hiddenInput.addEventListener('compositionstart', function(e) {
+        isComposing = true;
+      });
+
+      // 変換確定 (日本語文字列を一括送信)
+      hiddenInput.addEventListener('compositionend', function(e) {
+        isComposing = false;
+        var text = e.data || hiddenInput.value;
+        if (text && text.length > 0) {
+          sendStringToZenoo(text);
+        }
+        hiddenInput.value = '';
+      });
+
+      // 直接入力 (半角英数など非IME入力時)
       hiddenInput.addEventListener('input', function(e) {
-        var val = hiddenInput.value;
-        if (val && val.length > 0) {
-          for (var i = 0; i < val.length; i++) {
-            var code = val.charCodeAt(i);
-            if (code >= 0xD800 && code <= 0xDBFF && i + 1 < val.length) {
-              var high = code;
-              var low = val.charCodeAt(++i);
-              code = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
-            }
-            if (Module._zen_push_char) {
-              Module._zen_push_char(code);
-            }
-          }
+        if (isComposing || e.isComposing) {
+          return; // IME変換中の未確定文字列は送信しない
+        }
+        var text = hiddenInput.value;
+        if (text && text.length > 0) {
+          sendStringToZenoo(text);
           hiddenInput.value = '';
         }
       });
+
+      // 決定キー (Enter/Escape) でフォーカス解除
       hiddenInput.addEventListener('keydown', function(e) {
+        if (isComposing || e.isComposing || e.keyCode === 229) {
+          return;
+        }
         if (e.key === 'Enter' || e.key === 'Escape') {
           hiddenInput.blur();
         }

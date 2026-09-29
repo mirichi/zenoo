@@ -86,13 +86,17 @@ module Zenoo
 
         if @active_id == widget_id
           if @mouse_rel || !@mouse_down
-            clicked = true if hover && @mouse_rel
+            clicked = true if hover
             @active_id = nil
           end
         elsif @active_id == nil && hover
           @hot_id = widget_id
           if @mouse_push
-            @active_id = widget_id
+            if @mouse_rel
+              clicked = true
+            else
+              @active_id = widget_id
+            end
           end
         end
 
@@ -140,11 +144,11 @@ module Zenoo
         elsif @active_id == nil && hover
           @hot_id = widget_id
           if @mouse_push
-            @active_id = widget_id
             ratio = (@mouse_x - rx) / rw
             ratio = 0.0 if ratio < 0.0
             ratio = 1.0 if ratio > 1.0
             v_val = v_min + ratio * (v_max - v_min)
+            @active_id = widget_id unless @mouse_rel
           end
         end
 
