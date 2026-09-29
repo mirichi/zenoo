@@ -75,8 +75,6 @@ def create_orb_sprite
     end
     # コアの白光
     draw_circle(48, 48, 6, [255, 255, 255, 255])
-
-    Zenoo::Window.flush_draw_queue
   end
   img
 end
@@ -87,7 +85,6 @@ def create_disc_sprite
   Zenoo::Image.render_to(img) do
     Zenoo::Window.clear([0, 0, 0, 0])
     draw_circle(40, 40, 38, [255, 255, 255, 255])
-    Zenoo::Window.flush_draw_queue
   end
   img
 end

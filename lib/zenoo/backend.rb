@@ -13,6 +13,46 @@ module Zenoo
   # Z ソート、FBO レンダーターゲット追跡、オンデマンドフラッシュを統括します。
   module Backend
     # ----------------------------------------------------
+    # 描画プリミティブトポロジー (OpenGL GLenum準拠)
+    # ----------------------------------------------------
+    module Topology
+      POINTS         = 0
+      LINES          = 1
+      LINE_LOOP      = 2
+      LINE_STRIP     = 3
+      TRIANGLES      = 4
+      TRIANGLE_STRIP = 5
+      TRIANGLE_FAN   = 6
+    end
+
+    # ----------------------------------------------------
+    # 動的頂点レイアウト (1バイト属性要素数列)
+    # ----------------------------------------------------
+    module Layout
+      POS2_COLOR4         = "\x02\x04"
+      POS2_UV2_COLOR4     = "\x02\x02\x04"
+      LINE                = "\x02\x04"
+      CARD_INSTANCED      = "\x04\x04\x04\x04\x04\x04"
+      QUAD_INSTANCED      = CARD_INSTANCED
+      SPRITE_INSTANCED    = "\x04\x04\x04\x04\x04"
+      FONT_INSTANCED      = "\x04\x04\x04\x04\x04\x04\x04"
+    end
+
+    # ----------------------------------------------------
+    # 動的属性 Divisor
+    # ----------------------------------------------------
+    module Divisor
+      DIRECT              = "\x00\x00"
+      POS2_COLOR4         = "\x00\x00"
+      POS2_UV2_COLOR4     = "\x00\x00\x00"
+      LINE                = "\x00\x00"
+      CARD_INSTANCED      = "\x01\x01\x01\x01\x01\x01"
+      QUAD_INSTANCED      = CARD_INSTANCED
+      SPRITE_INSTANCED    = "\x01\x01\x01\x01\x01"
+      FONT_INSTANCED      = "\x01\x01\x01\x01\x01\x01\x01"
+    end
+
+    # ----------------------------------------------------
     # ブレンドモード
     # ----------------------------------------------------
     BLEND_MAP = {

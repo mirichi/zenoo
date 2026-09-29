@@ -1,37 +1,12 @@
 module Zenoo
   module Window
-    # ----------------------------------------------------
-    # 後方互換・定数・ヘルパー (内部実装は Zenoo::Backend に集約)
-    # ----------------------------------------------------
-    BLEND_MAP = Backend::BLEND_MAP
-    COLOR_MAP = Backend::COLOR_MAP
-
-    def self.normalize_blend_mode(mode)
-      Backend.normalize_blend_mode(mode)
-    end
-
-    def self.normalize_color(col)
-      Backend.normalize_color(col)
-    end
-
-    def self.color_to_uint32(col)
-      Backend.color_to_uint32(col)
-    end
-
+    # オフスクリーンFBO描画ターゲットスコープ
     def self.with_target(target, &block)
       Backend.with_target(target, &block)
     end
 
     def self.current_target
       Backend.current_target
-    end
-
-    def self.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil, blend = 0)
-      Backend.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
-    end
-
-    def self.flush_draw_queue
-      Backend.flush_screen
     end
 
     @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
@@ -66,7 +41,7 @@ module Zenoo
 
     def self.__draw_step
       Native::Window.clear(@bg_color)
-      flush_draw_queue
+      Backend.flush_screen
     end
 
     def self.__step_frame
@@ -79,7 +54,7 @@ module Zenoo
     end
 
     def self.clear(color)
-      @bg_color = color_to_uint32(color)
+      @bg_color = Backend.color_to_uint32(color)
       Native::Window.clear(@bg_color)
     end
 
@@ -164,12 +139,12 @@ module Zenoo
                        shadow_color: [0, 0, 0, 180],
                        image: nil,
                        z: 0.0)
-      c_color = normalize_color(color)
+      c_color = Backend.normalize_color(color)
       b_width = border_width.to_f
-      b_color = (b_width > 0.0) ? normalize_color(border_color) : [0.0, 0.0, 0.0, 0.0]
+      b_color = (b_width > 0.0) ? Backend.normalize_color(border_color) : [0.0, 0.0, 0.0, 0.0]
 
       s_blur = shadow_blur.to_f
-      s_color = (s_blur > 0.0) ? normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
+      s_color = (s_blur > 0.0) ? Backend.normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
 
       mode = image ? 1.0 : 0.0
       data = [
@@ -181,11 +156,11 @@ module Zenoo
         0.0, 0.0, 1.0, 1.0
       ].pack("f*")
 
-      enqueue_draw(
+      Backend.enqueue_draw(
         z,
-        Topology::TRIANGLE_STRIP,
-        Layout::CARD_INSTANCED,
-        Divisor::CARD_INSTANCED,
+        Backend::Topology::TRIANGLE_STRIP,
+        Backend::Layout::CARD_INSTANCED,
+        Backend::Divisor::CARD_INSTANCED,
         4,
         data,
         1,
@@ -222,7 +197,7 @@ module Zenoo
 
       # 第4引数 color_or_opt が指定され、かつキーワード color: がない場合
       actual_color = color || color_or_opt || :white
-      c_color = normalize_color(actual_color)
+      c_color = Backend.normalize_color(actual_color)
 
       # alpha の適用 (0..255)
       if alpha
@@ -257,7 +232,7 @@ module Zenoo
       off_mode = (offset_mode == :center) ? 1.0 : 0.0
 
       # blend mode
-      b_mode = normalize_blend_mode(blend)
+      b_mode = Backend.normalize_blend_mode(blend)
 
       data = [
         x.to_f, y.to_f, image.width.to_f, image.height.to_f,
@@ -267,11 +242,11 @@ module Zenoo
         cx, cy, 0.0, 0.0
       ].pack("f*")
 
-      enqueue_draw(
+      Backend.enqueue_draw(
         z,
-        Topology::TRIANGLE_STRIP,
-        Layout::SPRITE_INSTANCED,
-        Divisor::SPRITE_INSTANCED,
+        Backend::Topology::TRIANGLE_STRIP,
+        Backend::Layout::SPRITE_INSTANCED,
+        Backend::Divisor::SPRITE_INSTANCED,
         4,
         data,
         1,
@@ -286,16 +261,16 @@ module Zenoo
     def self.draw_triangle(x1, y1, x2, y2, x3, y3, color = :white, z: 0.0)
       if color.is_a?(Array) && color.length == 3 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
         # 頂点ごとの色指定 [c1, c2, c3]
-        c1 = normalize_color(color[0])
-        c2 = normalize_color(color[1])
-        c3 = normalize_color(color[2])
+        c1 = Backend.normalize_color(color[0])
+        c2 = Backend.normalize_color(color[1])
+        c3 = Backend.normalize_color(color[2])
         data = [
           x1.to_f, y1.to_f, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
           x2.to_f, y2.to_f, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f,
           x3.to_f, y3.to_f, c3[0].to_f, c3[1].to_f, c3[2].to_f, c3[3].to_f
         ].pack("f*")
       else
-        c = normalize_color(color)
+        c = Backend.normalize_color(color)
         cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
         data = [
           x1.to_f, y1.to_f, cr, cg, cb, ca,
@@ -304,11 +279,11 @@ module Zenoo
         ].pack("f*")
       end
 
-      enqueue_draw(
+      Backend.enqueue_draw(
         z,
-        Topology::TRIANGLES,
-        Layout::POS2_COLOR4,
-        Divisor::POS2_COLOR4,
+        Backend::Topology::TRIANGLES,
+        Backend::Layout::POS2_COLOR4,
+        Backend::Divisor::POS2_COLOR4,
         0,
         data,
         3,
@@ -320,14 +295,14 @@ module Zenoo
     def self.draw_line(x1, y1, x2, y2, color = :white, z: 0.0)
       if color.is_a?(Array) && color.length == 2 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
         # 始点・終点の色指定 [c1, c2]
-        c1 = normalize_color(color[0])
-        c2 = normalize_color(color[1])
+        c1 = Backend.normalize_color(color[0])
+        c2 = Backend.normalize_color(color[1])
         data = [
           x1.to_f, y1.to_f, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
           x2.to_f, y2.to_f, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f
         ].pack("f*")
       else
-        c = normalize_color(color)
+        c = Backend.normalize_color(color)
         cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
         data = [
           x1.to_f, y1.to_f, cr, cg, cb, ca,
@@ -335,11 +310,11 @@ module Zenoo
         ].pack("f*")
       end
 
-      enqueue_draw(
+      Backend.enqueue_draw(
         z,
-        Topology::LINES,
-        Layout::LINE,
-        Divisor::LINE,
+        Backend::Topology::LINES,
+        Backend::Layout::LINE,
+        Backend::Divisor::LINE,
         0,
         data,
         2,
@@ -405,15 +380,15 @@ module Zenoo
       f_size = size.to_f
       f_size = 24.0 if f_size <= 0.0
 
-      c_color = normalize_color(color)
+      c_color = Backend.normalize_color(color)
 
       outline_w = outline_width.to_f
-      outline_c = (outline_w > 0.0) ? normalize_color(outline_color) : [0.0, 0.0, 0.0, 0.0]
+      outline_c = (outline_w > 0.0) ? Backend.normalize_color(outline_color) : [0.0, 0.0, 0.0, 0.0]
 
       s_blur = shadow_blur.to_f
       s_dx = shadow_dx.to_f
       s_dy = shadow_dy.to_f
-      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
+      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
 
       # sdf オプションの解決:
       # - sdf: true  -> 強制 SDF
@@ -497,9 +472,9 @@ module Zenoo
                 cgy = cy - cgh * 0.5
               end
 
-              cur_color = (ctx.color.equal?(c_color)) ? c_color : normalize_color(ctx.color)
+              cur_color = (ctx.color.equal?(c_color)) ? c_color : Backend.normalize_color(ctx.color)
               cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
-              cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : normalize_color(ctx.outline_color)
+              cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : Backend.normalize_color(ctx.outline_color)
               cur_p3 = (ctx.weight == s_weight) ? [s_atlas_weight, is_bmp, 0.0, 0.0] : [ctx.weight * scale_ratio, is_bmp, 0.0, 0.0]
 
               batch.push(
@@ -558,11 +533,11 @@ module Zenoo
       end
 
       if glyph_count > 0
-        enqueue_draw(
+        Backend.enqueue_draw(
           z,
-          Topology::TRIANGLE_STRIP,
-          Layout::FONT_INSTANCED,
-          Divisor::FONT_INSTANCED,
+          Backend::Topology::TRIANGLE_STRIP,
+          Backend::Layout::FONT_INSTANCED,
+          Backend::Divisor::FONT_INSTANCED,
           4,
           batch.pack("f*"),
           glyph_count,
