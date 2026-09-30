@@ -289,6 +289,43 @@ module Zenoo
       def hit_test_text_box(x, y, w, h, px, py, theme)
         hit_test_button(x, y, w, h, px, py, theme)
       end
+
+      # パネル (カード枠) 描画
+      def draw_panel(x, y, w, h, title, theme, opts = {})
+        rx = x.to_f
+        ry = y.to_f
+        rw = w.to_f
+        rh = h.to_f
+
+        radius     = (opts[:radius] || theme.corner_radius || 12.0).to_f
+        bg_col     = opts.key?(:color) ? opts[:color] : Color.new(24, 28, 38, 240)
+        b_width    = (opts[:border_width] || 1.5).to_f
+        b_col      = opts.key?(:border_color) ? opts[:border_color] : Color.new(60, 70, 90, 200)
+        s_blur     = (opts[:shadow_blur] || 16.0).to_f
+        s_col      = opts.key?(:shadow_color) ? opts[:shadow_color] : Color.new(0, 0, 0, 150)
+        card_image = opts[:image]
+        card_z     = (opts[:z] || 0.0).to_f
+
+        Window.draw_card(
+          rx, ry, rw, rh,
+          radius: radius,
+          color: bg_col,
+          border_width: b_width,
+          border_color: b_col,
+          shadow_blur: s_blur,
+          shadow_color: s_col,
+          image: card_image,
+          z: card_z
+        )
+
+        if title && !title.to_s.empty?
+          pad        = (opts[:padding] || 16.0).to_f
+          f_font     = opts[:font] || theme.font || Font.default
+          title_size = (opts[:title_size] || 20).to_i
+          title_col  = opts[:title_color] || Color::WHITE
+          Window.draw_text(rx + pad, ry + pad, title.to_s, font: f_font, size: title_size, color: title_col)
+        end
+      end
     end
   end
 end
