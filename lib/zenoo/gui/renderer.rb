@@ -27,6 +27,30 @@ module Zenoo
         raise NotImplementedError, "#{self.class}#draw_text_box must be implemented"
       end
 
+      # パネル (コンテナ枠) 描画
+      def draw_panel(x, y, w, h, title, theme, opts = {})
+        # デフォルトはシンプルな矩形描画
+        bg_col = opts[:color] || Color.new(24, 28, 38, 240)
+        border_col = opts[:border_color] || Color.new(60, 70, 90, 200)
+        border_w = (opts[:border_width] || 1.5).to_f
+
+        Window.draw_rect(x, y, w, h, bg_col)
+        if border_w > 0.0
+          Window.draw_rect(x, y, w, border_w, border_col)
+          Window.draw_rect(x, y + h - border_w, w, border_w, border_col)
+          Window.draw_rect(x, y, border_w, h, border_col)
+          Window.draw_rect(x + w - border_w, y, border_w, h, border_col)
+        end
+
+        if title && !title.to_s.empty?
+          f_font = opts[:font] || theme.font || Font.default
+          title_size = (opts[:title_size] || 20).to_i
+          title_col = opts[:title_color] || Color::WHITE
+          pad = (opts[:padding] || 16.0).to_f
+          Window.draw_text(x + pad, y + pad, title.to_s, font: f_font, size: title_size, color: title_col)
+        end
+      end
+
       # ----------------------------------------------------
       # 当たり判定 (Hit-Test)
       # レンダラーの描画形状に合わせてオーバーライド可能
