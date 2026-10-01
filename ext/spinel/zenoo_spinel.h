@@ -85,6 +85,8 @@ void sp_zen_renderer_draw_buffer(
 
 void sp_zen_renderer_flush(void);
 void sp_zen_renderer_set_blend_mode(sp_int mode);
+void sp_zen_renderer_set_scissor(sp_int x, sp_int y, sp_int w, sp_int h);
+void sp_zen_renderer_reset_scissor(void);
 
 // ==========================================
 // Font (sp_ZenFont)

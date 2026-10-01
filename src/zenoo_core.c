@@ -814,3 +814,17 @@ void zen_set_ime_position(int x, int y) {
 }
 #endif
 
+void zen_get_viewport_info(int* vp_x, int* vp_y, int* vp_w, int* vp_h, float* vp_scale, int* base_h) {
+    if (vp_x) *vp_x = s_vp_x;
+    if (vp_y) *vp_y = s_vp_y;
+    if (vp_w) *vp_w = s_vp_w;
+    if (vp_h) *vp_h = s_vp_h;
+    if (vp_scale) *vp_scale = s_vp_scale;
+    if (base_h) *base_h = s_base_height;
+}
+
+int zen_is_window_active(void) {
+    return s_window != NULL;
+}
+
+

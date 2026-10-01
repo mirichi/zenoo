@@ -426,16 +426,11 @@ module Zenoo
 
       data = verts.pack("f*")
       Backend.enqueue_draw(
-        0.0,
-        Backend::Topology::TRIANGLES,
-        Backend::Layout::POS2_COLOR4,
-        Backend::Divisor::POS2_COLOR4,
-        0,
+        Backend::Pipelines::TRIANGLES,
         data,
         num_verts,
-        nil,
-        shader,
-        uniforms
+        shader: shader,
+        uniforms: uniforms
       )
     end
 

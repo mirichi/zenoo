@@ -53,6 +53,30 @@ module Zenoo
     end
 
     # ----------------------------------------------------
+    # 描画パイプライン定義 (トポロジー・レイアウト・Divisor・頂点数を集約)
+    # ----------------------------------------------------
+    class Pipeline
+      attr_reader :topology, :layout, :divisors, :base_vertex_count, :default_shader
+
+      def initialize(topology, layout, divisors, base_vertex_count, default_shader = nil)
+        @topology = topology
+        @layout = layout
+        @divisors = divisors
+        @base_vertex_count = base_vertex_count
+        @default_shader = default_shader
+      end
+    end
+
+    module Pipelines
+      CARD      = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::CARD_INSTANCED, Divisor::CARD_INSTANCED, 4)
+      SPRITE    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::SPRITE_INSTANCED, Divisor::SPRITE_INSTANCED, 4)
+      FONT      = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::FONT_INSTANCED, Divisor::FONT_INSTANCED, 4)
+      TRIANGLES = Pipeline.new(Topology::TRIANGLES, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)
+      LINES     = Pipeline.new(Topology::LINES, Layout::LINE, Divisor::LINE, 0)
+    end
+
+
+    # ----------------------------------------------------
     # ブレンドモード
     # ----------------------------------------------------
     BLEND_MAP = {
@@ -142,38 +166,34 @@ module Zenoo
     # 描画コマンド
     # ----------------------------------------------------
     class DrawCommand
-      attr_accessor :target, :z, :order, :topology, :layout, :divisors, :base_vertex_count, :data, :count, :image, :shader, :uniforms, :blend
+      attr_accessor :target, :z, :order, :pipeline, :data, :count, :image, :shader, :uniforms, :blend, :clip
 
       def initialize
         @target = nil
         @z = 0.0
         @order = 0
-        @topology = 0
-        @layout = ""
-        @divisors = ""
-        @base_vertex_count = 0
+        @pipeline = nil
         @data = nil
         @count = 0
         @image = nil
         @shader = nil
         @uniforms = nil
         @blend = 0
+        @clip = nil
       end
 
-      def set(target, z, order, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil, blend = 0)
+      def set(target, z, order, pipeline, data, count, image = nil, shader = nil, uniforms = nil, blend = 0, clip = nil)
         @target = target
         @z = z.to_f
         @order = order
-        @topology = topology
-        @layout = layout
-        @divisors = divisors
-        @base_vertex_count = base_vertex_count
+        @pipeline = pipeline
         @data = data
         @count = count
         @image = image
         @shader = shader
         @uniforms = uniforms
         @blend = blend.to_i
+        @clip = clip
       end
     end
 
@@ -195,7 +215,7 @@ module Zenoo
         @queue_count > 0
       end
 
-      def enqueue(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil, blend = 0)
+      def enqueue(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0)
         cmd = nil
         if @queue_count < @command_pool.length
           cmd = @command_pool[@queue_count]
@@ -205,7 +225,8 @@ module Zenoo
         end
         zf = z.to_f
         @needs_z_sort = true if zf != 0.0
-        cmd.set(@owner, zf, @queue_count, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
+        clip = Backend.current_clip
+        cmd.set(@owner, zf, @queue_count, pipeline, data, count, image, shader, uniforms, blend, clip)
         @queue_count += 1
       end
 
@@ -274,6 +295,23 @@ module Zenoo
     @pending_images = []
     @target_images = []
     @target_queues = []
+    @clip_stack = []
+
+    def self.current_clip
+      @clip_stack.last
+    end
+
+    def self.push_clip(rect)
+      @clip_stack.push(rect)
+    end
+
+    def self.pop_clip
+      @clip_stack.pop
+    end
+
+    def self.clear_clips
+      @clip_stack.clear
+    end
 
     def self.screen_queue
       @screen_queue
@@ -341,13 +379,13 @@ module Zenoo
       end
     end
 
-    def self.enqueue_draw(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms = nil, blend = 0)
+    def self.enqueue_draw(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0)
       if @current_target
         queue = queue_for(@current_target)
-        queue.enqueue(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
+        queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z)
         register_pending_image(@current_target)
       else
-        @screen_queue.enqueue(z, topology, layout, divisors, base_vertex_count, data, count, image, shader, uniforms, blend)
+        @screen_queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z)
       end
     end
 
@@ -379,6 +417,8 @@ module Zenoo
     def self.execute_commands(pool, count)
       return if count == 0
 
+      active_gl_clip = :initial
+
       i = 0
       while i < count
         cmd = pool[i]
@@ -388,21 +428,29 @@ module Zenoo
           flush_image(cmd.image)
         end
 
-        cur_topology = cmd.topology
-        cur_layout = cmd.layout
-        cur_divisors = cmd.divisors
-        cur_base_vertex_count = cmd.base_vertex_count
+        cur_pipeline = cmd.pipeline
         cur_data = cmd.data
         cur_count = cmd.count
         cur_image = cmd.image
-        cur_shader = cmd.shader
+        cur_shader = cmd.shader || cur_pipeline.default_shader
         cur_uniforms = cmd.uniforms
         cur_blend = cmd.blend
+        cur_clip = cmd.clip
 
-        can_batch = cur_base_vertex_count > 0 ||
-                    cur_topology == Topology::TRIANGLES ||
-                    cur_topology == Topology::LINES ||
-                    cur_topology == Topology::POINTS
+        # シザーテストの適用（変更があった場合のみ切り替え）
+        if cur_clip != active_gl_clip
+          if cur_clip
+            Native::Renderer.set_scissor(cur_clip[0].to_i, cur_clip[1].to_i, cur_clip[2].to_i, cur_clip[3].to_i)
+          else
+            Native::Renderer.reset_scissor
+          end
+          active_gl_clip = cur_clip
+        end
+
+        can_batch = cur_pipeline.base_vertex_count > 0 ||
+                    cur_pipeline.topology == Topology::TRIANGLES ||
+                    cur_pipeline.topology == Topology::LINES ||
+                    cur_pipeline.topology == Topology::POINTS
 
         next_idx = i + 1
         if can_batch
@@ -412,18 +460,22 @@ module Zenoo
               flush_image(ncmd.image)
             end
 
-            if ncmd.image == cur_image &&
-               ncmd.shader == cur_shader &&
-               ncmd.topology == cur_topology &&
+            n_shader = ncmd.shader || ncmd.pipeline.default_shader
+            if ncmd.pipeline == cur_pipeline &&
+               ncmd.image == cur_image &&
+               n_shader == cur_shader &&
                ncmd.uniforms == cur_uniforms &&
-               ncmd.blend == cur_blend
+               ncmd.blend == cur_blend &&
+               ncmd.clip == cur_clip
               cur_data = cur_data + ncmd.data
               cur_count += ncmd.count
               ncmd.data = nil
               ncmd.image = nil
               ncmd.shader = nil
               ncmd.target = nil
+              ncmd.pipeline = nil
               ncmd.uniforms = nil
+              ncmd.clip = nil
               next_idx += 1
             else
               break
@@ -435,10 +487,10 @@ module Zenoo
         apply_uniforms(cur_shader, cur_uniforms) if cur_uniforms
 
         Native::Renderer.draw_buffer(
-          cur_topology,
-          cur_layout,
-          cur_divisors,
-          cur_base_vertex_count,
+          cur_pipeline.topology,
+          cur_pipeline.layout,
+          cur_pipeline.divisors,
+          cur_pipeline.base_vertex_count,
           cur_data,
           cur_count,
           cur_image,
@@ -449,10 +501,15 @@ module Zenoo
         cmd.image = nil
         cmd.shader = nil
         cmd.target = nil
+        cmd.pipeline = nil
         cmd.uniforms = nil
+        cmd.clip = nil
 
         i = next_idx
       end
+
+      # ループ完了後にシザーをリセット
+      Native::Renderer.reset_scissor if active_gl_clip != :initial
     end
   end
 end

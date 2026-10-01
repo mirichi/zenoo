@@ -40,11 +40,15 @@ module Zenoo
     end
 
     def self.__draw_step
-      Native::Window.clear(@bg_color)
       Backend.flush_screen
+      Backend.clear_clips
+      @offset_x = 0.0
+      @offset_y = 0.0
+      Native::Renderer.reset_scissor
     end
 
     def self.__step_frame
+      Native::Window.clear(@bg_color)
       __update_step
       __draw_step
     end
@@ -127,6 +131,69 @@ module Zenoo
       @current_shader = old_shader
     end
 
+    @offset_x = 0.0
+    @offset_y = 0.0
+
+    def self.offset_x
+      @offset_x
+    end
+
+    def self.offset_y
+      @offset_y
+    end
+
+    def self.current_clip
+      Backend.current_clip
+    end
+
+    # ビューポート・矩形クリッピングスコープ (glScissor & 遅延ディファード適用)
+    # - local: false => 元の画面座標系のまま指定矩形外をクリップ (Ebitengine SubImage 風)
+    # - local: true  => クリップ矩形の左上を (0, 0) とするローカル相対座標系 (UI ウィンドウ用)
+    # ※ 即時フラッシュせず描画コマンドにシザー情報を記録するため、全体で一貫したグローバル Z ソートが保たれます。
+    def self.clip(x, y, w, h, local: false)
+      prev_ox = @offset_x
+      prev_oy = @offset_y
+
+      # 現在の座標系における絶対論理座標を算出
+      abs_x = x.to_f + prev_ox
+      abs_y = y.to_f + prev_oy
+      req_w = w.to_f
+      req_h = h.to_f
+
+      # 親クリップ矩形との交差判定 (AABB Intersection)
+      parent_clip = Backend.current_clip
+      if parent_clip
+        px, py, pw, ph = parent_clip[0], parent_clip[1], parent_clip[2], parent_clip[3]
+        x1 = [abs_x, px].max
+        y1 = [abs_y, py].max
+        x2 = [abs_x + req_w, px + pw].min
+        y2 = [abs_y + req_h, py + ph].min
+        clip_x = x1
+        clip_y = y1
+        clip_w = [0.0, x2 - x1].max
+        clip_h = [0.0, y2 - y1].max
+      else
+        clip_x = abs_x
+        clip_y = abs_y
+        clip_w = [0.0, req_w].max
+        clip_h = [0.0, req_h].max
+      end
+
+      # ローカル座標系の場合はオフセットを更新
+      if local
+        @offset_x = abs_x
+        @offset_y = abs_y
+      end
+
+      Backend.push_clip([clip_x, clip_y, clip_w, clip_h])
+
+      yield
+    ensure
+      Backend.pop_clip
+      @offset_x = prev_ox
+      @offset_y = prev_oy
+    end
+
     # ----------------------------------------------------
     # 描画 API 
     # ----------------------------------------------------
@@ -146,9 +213,12 @@ module Zenoo
       s_blur = shadow_blur.to_f
       s_color = (s_blur > 0.0) ? Backend.normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
 
+      ax = x.to_f + @offset_x
+      ay = y.to_f + @offset_y
+
       mode = image ? 1.0 : 0.0
       data = [
-        x.to_f, y.to_f, w.to_f, h.to_f,
+        ax, ay, w.to_f, h.to_f,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
         radius.to_f, b_width, s_blur, mode,
         b_color[0].to_f, b_color[1].to_f, b_color[2].to_f, b_color[3].to_f,
@@ -157,15 +227,12 @@ module Zenoo
       ].pack("f*")
 
       Backend.enqueue_draw(
-        z,
-        Backend::Topology::TRIANGLE_STRIP,
-        Backend::Layout::CARD_INSTANCED,
-        Backend::Divisor::CARD_INSTANCED,
-        4,
+        Backend::Pipelines::CARD,
         data,
         1,
-        image,
-        card_shader
+        image: image,
+        shader: card_shader,
+        z: z
       )
     end
 
@@ -234,8 +301,11 @@ module Zenoo
       # blend mode
       b_mode = Backend.normalize_blend_mode(blend)
 
+      ax = x.to_f + @offset_x
+      ay = y.to_f + @offset_y
+
       data = [
-        x.to_f, y.to_f, image.width.to_f, image.height.to_f,
+        ax, ay, image.width.to_f, image.height.to_f,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
         0.0, 0.0, 1.0, 1.0,
         rad, sx, sy, off_mode,
@@ -243,83 +313,78 @@ module Zenoo
       ].pack("f*")
 
       Backend.enqueue_draw(
-        z,
-        Backend::Topology::TRIANGLE_STRIP,
-        Backend::Layout::SPRITE_INSTANCED,
-        Backend::Divisor::SPRITE_INSTANCED,
-        4,
+        Backend::Pipelines::SPRITE,
         data,
         1,
-        image,
-        effective_shader,
-        nil,
-        b_mode
+        image: image,
+        shader: effective_shader,
+        blend: b_mode,
+        z: z
       )
     end
 
 
     def self.draw_triangle(x1, y1, x2, y2, x3, y3, color = :white, z: 0.0)
+      ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
+      ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
+      ax3 = x3.to_f + @offset_x; ay3 = y3.to_f + @offset_y
+
       if color.is_a?(Array) && color.length == 3 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
         # 頂点ごとの色指定 [c1, c2, c3]
         c1 = Backend.normalize_color(color[0])
         c2 = Backend.normalize_color(color[1])
         c3 = Backend.normalize_color(color[2])
         data = [
-          x1.to_f, y1.to_f, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
-          x2.to_f, y2.to_f, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f,
-          x3.to_f, y3.to_f, c3[0].to_f, c3[1].to_f, c3[2].to_f, c3[3].to_f
+          ax1, ay1, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
+          ax2, ay2, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f,
+          ax3, ay3, c3[0].to_f, c3[1].to_f, c3[2].to_f, c3[3].to_f
         ].pack("f*")
       else
         c = Backend.normalize_color(color)
         cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
         data = [
-          x1.to_f, y1.to_f, cr, cg, cb, ca,
-          x2.to_f, y2.to_f, cr, cg, cb, ca,
-          x3.to_f, y3.to_f, cr, cg, cb, ca
+          ax1, ay1, cr, cg, cb, ca,
+          ax2, ay2, cr, cg, cb, ca,
+          ax3, ay3, cr, cg, cb, ca
         ].pack("f*")
       end
 
       Backend.enqueue_draw(
-        z,
-        Backend::Topology::TRIANGLES,
-        Backend::Layout::POS2_COLOR4,
-        Backend::Divisor::POS2_COLOR4,
-        0,
+        Backend::Pipelines::TRIANGLES,
         data,
         3,
-        nil,
-        flat_primitive_shader
+        shader: flat_primitive_shader,
+        z: z
       )
     end
 
     def self.draw_line(x1, y1, x2, y2, color = :white, z: 0.0)
+      ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
+      ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
+
       if color.is_a?(Array) && color.length == 2 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
         # 始点・終点の色指定 [c1, c2]
         c1 = Backend.normalize_color(color[0])
         c2 = Backend.normalize_color(color[1])
         data = [
-          x1.to_f, y1.to_f, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
-          x2.to_f, y2.to_f, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f
+          ax1, ay1, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
+          ax2, ay2, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f
         ].pack("f*")
       else
         c = Backend.normalize_color(color)
         cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
         data = [
-          x1.to_f, y1.to_f, cr, cg, cb, ca,
-          x2.to_f, y2.to_f, cr, cg, cb, ca
+          ax1, ay1, cr, cg, cb, ca,
+          ax2, ay2, cr, cg, cb, ca
         ].pack("f*")
       end
 
       Backend.enqueue_draw(
-        z,
-        Backend::Topology::LINES,
-        Backend::Layout::LINE,
-        Backend::Divisor::LINE,
-        0,
+        Backend::Pipelines::LINES,
         data,
         2,
-        nil,
-        flat_primitive_shader
+        shader: flat_primitive_shader,
+        z: z
       )
     end
 
@@ -425,8 +490,8 @@ module Zenoo
       metrics = target_font.metrics(f_size)
       ascent = metrics[:ascent]
 
-      pen_x = x.to_f.round
-      pen_y = (y.to_f + ascent).round.to_f
+      pen_x = (x.to_f + @offset_x).round
+      pen_y = (y.to_f + @offset_y + ascent).round.to_f
 
       str = text.to_s
       chars = str.chars
@@ -531,15 +596,12 @@ module Zenoo
 
       if glyph_count > 0
         Backend.enqueue_draw(
-          z,
-          Backend::Topology::TRIANGLE_STRIP,
-          Backend::Layout::FONT_INSTANCED,
-          Backend::Divisor::FONT_INSTANCED,
-          4,
+          Backend::Pipelines::FONT,
           batch.pack("f*"),
           glyph_count,
-          atlas,
-          shader
+          image: atlas,
+          shader: shader,
+          z: z
         )
       end
     end
@@ -550,8 +612,15 @@ module Zenoo
 
     def self.draw_path
       c = canvas
+      has_offset = (@offset_x != 0.0 || @offset_y != 0.0)
+      if has_offset
+        c.save
+        c.translate(@offset_x, @offset_y)
+      end
       c.begin_path
       yield c
+    ensure
+      c.restore if has_offset
     end
   end
 end

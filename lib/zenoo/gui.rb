@@ -81,13 +81,17 @@ module Zenoo
       # レイアウト & カーソル操作
       # --------------------------------------------------
       def cursor(x = nil, y = nil)
+        panel = @panel_stack.last
+        base_x = panel ? panel[:x] : 0.0
+        base_y = panel ? panel[:y] : 0.0
+
         if x && y
-          @cursor_x = x.to_f
-          @cursor_y = y.to_f
+          @cursor_x = base_x + x.to_f
+          @cursor_y = base_y + y.to_f
           @line_start_x = @cursor_x unless @in_row
           @line_max_h = 0.0 unless @in_row
         end
-        [@cursor_x, @cursor_y]
+        [@cursor_x - base_x, @cursor_y - base_y]
       end
 
       def set_cursor(x, y)
@@ -95,20 +99,24 @@ module Zenoo
       end
 
       def cursor_x
-        @cursor_x
+        base_x = @panel_stack.last ? @panel_stack.last[:x] : 0.0
+        @cursor_x - base_x
       end
 
       def cursor_x=(val)
-        @cursor_x = val.to_f
+        base_x = @panel_stack.last ? @panel_stack.last[:x] : 0.0
+        @cursor_x = base_x + val.to_f
         @line_start_x = @cursor_x unless @in_row
       end
 
       def cursor_y
-        @cursor_y
+        base_y = @panel_stack.last ? @panel_stack.last[:y] : 0.0
+        @cursor_y - base_y
       end
 
       def cursor_y=(val)
-        @cursor_y = val.to_f
+        base_y = @panel_stack.last ? @panel_stack.last[:y] : 0.0
+        @cursor_y = base_y + val.to_f
       end
 
       def spacing(x = nil, y = nil)
@@ -150,13 +158,13 @@ module Zenoo
       end
 
       # 横並びブロック
-      def row(spacing: nil)
+      def row(spacing: -1.0)
         prev_in_row       = @in_row
         prev_line_start_x = @line_start_x
         prev_line_max_h   = @line_max_h
         old_spacing_x     = @spacing_x
 
-        @spacing_x = spacing.to_f if spacing
+        @spacing_x = spacing.to_f if spacing >= 0.0
         @in_row = true
         @line_start_x = @cursor_x
         @line_max_h   = 0.0
@@ -177,31 +185,36 @@ module Zenoo
         end
       end
 
+      # --------------------------------------------------
       # パネル (コンテナ / ウィンドウ枠)
-      # draw_card と同等の全オプション (radius, color, border_width, border_color, shadow_blur, shadow_color, image, z) に対応
-      def panel(title = nil, *args, **opts)
-        # title 省略でキーワード引数のみの場合のケア
-        if title.is_a?(Hash)
-          opts = title.merge(opts)
-          title = nil
-        end
+      # --------------------------------------------------
+      def panel(title = "", w: 360.0, h: 400.0, padding: 16.0,
+                radius: -1.0, color: Color.new(24, 28, 38, 240),
+                border_width: 1.5, border_color: Color.new(60, 70, 90, 200),
+                shadow_blur: 16.0, shadow_color: Color.new(0, 0, 0, 150),
+                z: 0.0, title_size: 20, title_color: Color::WHITE, &block)
+        px  = @cursor_x
+        py  = @cursor_y
+        pw  = w.to_f
+        ph  = h.to_f
+        pad = padding.to_f
+        rad = (radius < 0.0) ? (@theme.corner_radius || 12.0).to_f : radius.to_f
 
-        # 座標とサイズの解決 (旧形式: title, x, y, w, h / 新形式: title, w: ..., h: ...)
-        if args.length >= 2 && args[0].is_a?(Numeric) && args[1].is_a?(Numeric)
-          px = args[0].to_f
-          py = args[1].to_f
-          pw = (args[2] || opts[:w] || 360.0).to_f
-          ph = (args[3] || opts[:h] || 400.0).to_f
-          auto_layout = false
-        else
-          px = opts[:x] ? opts[:x].to_f : @cursor_x
-          py = opts[:y] ? opts[:y].to_f : @cursor_y
-          pw = (args[0] || opts[:w] || 360.0).to_f
-          ph = (args[1] || opts[:h] || 400.0).to_f
-          auto_layout = true
-        end
+        opts = {
+          w: pw,
+          h: ph,
+          padding: pad,
+          radius: rad,
+          color: color,
+          border_width: border_width.to_f,
+          border_color: border_color,
+          shadow_blur: shadow_blur.to_f,
+          shadow_color: shadow_color,
+          z: z.to_f,
+          title_size: title_size.to_i,
+          title_color: title_color
+        }
 
-        padding = (opts[:padding] || 16.0).to_f
         @renderer.draw_panel(px, py, pw, ph, title, @theme, opts)
 
         prev_cx      = @cursor_x
@@ -210,12 +223,11 @@ module Zenoo
         prev_in_row  = @in_row
         @panel_stack.push({ x: px, y: py, w: pw, h: ph })
 
-        content_x = px + padding
-        content_y = py + padding
+        content_x = px + pad
+        content_y = py + pad
 
-        if title && !title.to_s.empty?
-          title_size = (opts[:title_size] || 20).to_i
-          content_y += title_size + @spacing_y + 4.0
+        if !title.empty?
+          content_y += title_size.to_i + @spacing_y + 4.0
         end
 
         @cursor_x     = content_x
@@ -231,7 +243,7 @@ module Zenoo
         @line_start_x = prev_lsx
         @in_row       = prev_in_row
 
-        advance_cursor(pw, ph) if auto_layout
+        advance_cursor(pw, ph)
       end
 
       # --------------------------------------------------
@@ -249,22 +261,12 @@ module Zenoo
       # ボタン (Button)
       # クリックされた瞬間のみ true を返却
       # --------------------------------------------------
-      def button(label, *args, **kwargs)
-        if args.length >= 2 && args[0].is_a?(Numeric) && args[1].is_a?(Numeric)
-          rx = args[0].to_f
-          ry = args[1].to_f
-          rw = (args[2] || kwargs[:w] || 140.0).to_f
-          rh = (args[3] || kwargs[:h] || 40.0).to_f
-          widget_id = (args[4] || kwargs[:id] || label).to_s
-          auto_layout = false
-        else
-          rw = (args[0] || kwargs[:w] || 140.0).to_f
-          rh = (kwargs[:h] || 40.0).to_f
-          rx = @cursor_x
-          ry = @cursor_y
-          widget_id = (kwargs[:id] || label).to_s
-          auto_layout = true
-        end
+      def button(label, w: 140.0, h: 40.0, id: "")
+        widget_id = id.empty? ? label.to_s : id.to_s
+        rx = @cursor_x
+        ry = @cursor_y
+        rw = w.to_f
+        rh = h.to_f
 
         hover = @renderer.hit_test_button(rx, ry, rw, rh, @mouse_x, @mouse_y, @theme)
         clicked = false
@@ -297,7 +299,7 @@ module Zenoo
         end
 
         @renderer.draw_button(rx, ry, rw, rh, label, state, @theme)
-        advance_cursor(rw, rh) if auto_layout
+        advance_cursor(rw, rh)
         clicked
       end
 
@@ -305,28 +307,15 @@ module Zenoo
       # スライダー (Slider)
       # マウスドラッグで値を変更し、更新された Float 値を返却
       # --------------------------------------------------
-      def slider(label, *args, **kwargs)
-        if args.length >= 5
-          rx = args[0].to_f
-          ry = args[1].to_f
-          rw = (args[2] || 200.0).to_f
-          rh = (args[3] || 32.0).to_f
-          v_val = (args[4] || 0.0).to_f
-          v_min = (args[5] || 0.0).to_f
-          v_max = (args[6] || 1.0).to_f
-          widget_id = (args[7] || kwargs[:id] || label).to_s
-          auto_layout = false
-        else
-          v_val = (args[0] || kwargs[:value] || 0.0).to_f
-          v_min = (args[1] || kwargs[:min] || 0.0).to_f
-          v_max = (args[2] || kwargs[:max] || 1.0).to_f
-          rw = (kwargs[:w] || 200.0).to_f
-          rh = (kwargs[:h] || 32.0).to_f
-          rx = @cursor_x
-          ry = @cursor_y
-          widget_id = (kwargs[:id] || label).to_s
-          auto_layout = true
-        end
+      def slider(label, value, min, max, w: 200.0, h: 32.0, id: "")
+        widget_id = id.empty? ? label.to_s : id.to_s
+        rx = @cursor_x
+        ry = @cursor_y
+        rw = w.to_f
+        rh = h.to_f
+        v_val = value.to_f
+        v_min = min.to_f
+        v_max = max.to_f
 
         hover = @renderer.hit_test_slider(rx, ry, rw, rh, @mouse_x, @mouse_y, @theme)
 
@@ -359,7 +348,7 @@ module Zenoo
         end
 
         @renderer.draw_slider(rx, ry, rw, rh, label, v_val, v_min, v_max, state, @theme)
-        advance_cursor(rw, rh) if auto_layout
+        advance_cursor(rw, rh)
         v_val
       end
 
@@ -367,29 +356,17 @@ module Zenoo
       # ラベル (Label)
       # テキストを描画
       # --------------------------------------------------
-      def label(text, *args, **kwargs)
-        if args.length >= 2 && args[0].is_a?(Numeric) && args[1].is_a?(Numeric)
-          rx = args[0].to_f
-          ry = args[1].to_f
-          f_size = (args[2] || kwargs[:size] || 18).to_i
-          col = args[3] || kwargs[:color]
-          auto_layout = false
-        else
-          f_size = (args[0] || kwargs[:size] || 18).to_i
-          col = args[1] || kwargs[:color]
-          rx = @cursor_x
-          ry = @cursor_y
-          auto_layout = true
-        end
+      def label(text, size: 18, color: Color::WHITE)
+        rx = @cursor_x
+        ry = @cursor_y
+        f_size = size.to_i
 
-        @renderer.draw_label(rx.to_f, ry.to_f, text, f_size, col, @theme)
+        @renderer.draw_label(rx, ry, text, f_size, color, @theme)
 
-        if auto_layout
-          f_font = @theme.font || Font.default
-          w = f_font.text_width(text.to_s, f_size)
-          h = f_size.to_f
-          advance_cursor(w, h)
-        end
+        f_font = @theme.font || Font.default
+        w = f_font.text_width(text.to_s, f_size)
+        h = f_size.to_f
+        advance_cursor(w, h)
         nil
       end
 
@@ -397,24 +374,13 @@ module Zenoo
       # テキストボックス (Text Box)
       # フォーカス中に文字入力・キー操作を受け付け、更新された文字列を返却
       # --------------------------------------------------
-      def text_box(label, *args, **kwargs)
-        if args.length >= 2 && args[0].is_a?(Numeric) && args[1].is_a?(Numeric)
-          rx = args[0].to_f
-          ry = args[1].to_f
-          rw = (args[2] || 200.0).to_f
-          rh = (args[3] || 42.0).to_f
-          cur_text = (args[4] || kwargs[:text] || "").to_s
-          widget_id = (kwargs[:id] || label).to_s
-          auto_layout = false
-        else
-          cur_text = (args[0] || kwargs[:text] || "").to_s
-          rw = (kwargs[:w] || 200.0).to_f
-          rh = (kwargs[:h] || 42.0).to_f
-          rx = @cursor_x
-          ry = @cursor_y
-          widget_id = (kwargs[:id] || label).to_s
-          auto_layout = true
-        end
+      def text_box(label, text, w: 200.0, h: 42.0, id: "")
+        widget_id = id.empty? ? label.to_s : id.to_s
+        rx = @cursor_x
+        ry = @cursor_y
+        rw = w.to_f
+        rh = h.to_f
+        cur_text = text.to_s
 
         hover = @renderer.hit_test_text_box(rx, ry, rw, rh, @mouse_x, @mouse_y, @theme)
 
@@ -425,7 +391,7 @@ module Zenoo
             @blink_time = 0.0
 
             # クリック位置からキャレット位置を算出
-            str = cur_text.to_s
+            str = cur_text
             pad_x = 10.0
             click_x = @mouse_x - (rx + pad_x)
             f_font = @theme.font || Font.default
@@ -450,7 +416,7 @@ module Zenoo
           end
         end
 
-        cur_text = cur_text.to_s.dup
+        cur_text = cur_text.dup
         is_focused = (@focus_id == widget_id)
 
         # フォーカス中の入力処理
@@ -513,7 +479,7 @@ module Zenoo
         blink_on = (@blink_time % 1.0) < 0.5
 
         @renderer.draw_text_box(rx, ry, rw, rh, cur_text, is_focused, @cursor_pos, blink_on, @theme)
-        advance_cursor(rw, rh) if auto_layout
+        advance_cursor(rw, rh)
         cur_text
       end
 
