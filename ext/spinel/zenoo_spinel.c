@@ -294,6 +294,14 @@ void sp_zen_renderer_set_blend_mode(sp_int mode) {
     zen_set_blend_mode((int)mode);
 }
 
+void sp_zen_renderer_set_scissor(sp_int x, sp_int y, sp_int w, sp_int h) {
+    zen_set_scissor((int)x, (int)y, (int)w, (int)h);
+}
+
+void sp_zen_renderer_reset_scissor(void) {
+    zen_reset_scissor();
+}
+
 // ==========================================
 // Font (sp_ZenFont)
 // ==========================================

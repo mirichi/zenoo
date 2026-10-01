@@ -129,8 +129,8 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     max_cut = [rw * 0.45, rh * 0.45].min
     cut = max_cut if cut > max_cut
 
-    bg_col     = opts.key?(:color) ? opts[:color] : Color.new(24, 28, 36, 245)
-    border_col = opts.key?(:border_color) ? opts[:border_color] : @col_accent
+    bg_col     = opts[:color] || Color.new(24, 28, 36, 245)
+    border_col = opts[:border_color] || @col_accent
     border_w   = (opts[:border_width] || 2.0).to_f
 
     # 1. 対角2隅カット (左上・右下) のパス

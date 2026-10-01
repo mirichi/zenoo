@@ -530,6 +530,22 @@ static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout
     return Qnil;
 }
 
+static VALUE renderer_set_scissor(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_w, VALUE rb_h) {
+    (void)self;
+    int x = NUM2INT(rb_x);
+    int y = NUM2INT(rb_y);
+    int w = NUM2INT(rb_w);
+    int h = NUM2INT(rb_h);
+    zen_set_scissor(x, y, w, h);
+    return Qnil;
+}
+
+static VALUE renderer_reset_scissor(VALUE self) {
+    (void)self;
+    zen_reset_scissor();
+    return Qnil;
+}
+
 // ==========================================
 // C拡張初期化エントリポイント
 // ==========================================
@@ -603,6 +619,8 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mRenderer, "draw_buffer", renderer_draw_buffer, 8);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
     rb_define_singleton_method(mRenderer, "set_blend_mode", renderer_set_blend_mode, 1);
+    rb_define_singleton_method(mRenderer, "set_scissor", renderer_set_scissor, 4);
+    rb_define_singleton_method(mRenderer, "reset_scissor", renderer_reset_scissor, 0);
 
     // 6. Font (Zenoo::Native::Font)
     rb_cNativeFont = rb_define_class_under(rb_mNative, "Font", rb_cObject);

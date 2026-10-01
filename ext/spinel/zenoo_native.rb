@@ -87,9 +87,15 @@ module Zenoo
     module Renderer
       native_func :flush, [], :nil, "sp_zen_renderer_flush"
       native_func :set_blend_mode, [:int], :nil, "sp_zen_renderer_set_blend_mode"
+      native_func :raw_set_scissor, [:int, :int, :int, :int], :nil, "sp_zen_renderer_set_scissor"
+      native_func :reset_scissor, [], :nil, "sp_zen_renderer_reset_scissor"
       native_func :raw_draw_buffer, [
         :int, :string, :string, :int, :string, :int, :any, :any
       ], :nil, "sp_zen_renderer_draw_buffer"
+
+      def self.set_scissor(x, y, w, h)
+        raw_set_scissor(x.to_i, y.to_i, w.to_i, h.to_i)
+      end
 
       def self.draw_buffer(topology, layout, divisors, base_vertex_count, data, count, img, sh)
         Zenoo::Native::Renderer.raw_draw_buffer(

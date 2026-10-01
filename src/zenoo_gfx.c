@@ -94,6 +94,7 @@ void zen_gfx_shutdown(void) {
 }
 
 void zen_set_blend_mode(int mode) {
+    if (!zen_is_window_active() && !s_current_render_target) return;
     if (s_current_blend_mode == mode) return;
     s_current_blend_mode = mode;
     switch (mode) {
@@ -488,4 +489,64 @@ void zen_draw_buffer(int topology,
     }
 
     glBindVertexArray(0);
+}
+
+void zen_set_scissor(int x, int y, int w, int h) {
+    if (!zen_is_window_active() && !s_current_render_target) return;
+    zen_gfx_flush();
+
+    if (w < 0) w = 0;
+    if (h < 0) h = 0;
+
+    glEnable(GL_SCISSOR_TEST);
+
+    if (s_current_render_target) {
+        int th = s_current_render_target->height;
+        int sy = th - (y + h);
+        glScissor(x, sy, w, h);
+    } else {
+        int vp_x = 0, vp_y = 0, vp_w = 0, vp_h = 0, base_h = 0;
+        float vp_scale = 1.0f;
+        zen_get_viewport_info(&vp_x, &vp_y, &vp_w, &vp_h, &vp_scale, &base_h);
+
+        int sx = vp_x + (int)floorf((float)x * vp_scale);
+        int sy = vp_y + (int)floorf((float)(base_h - (y + h)) * vp_scale);
+        int sw = (int)ceilf((float)w * vp_scale);
+        int sh = (int)ceilf((float)h * vp_scale);
+
+        // ゲーム領域の枠外にはみ出さないよう clamp
+        if (sx < vp_x) {
+            sw -= (vp_x - sx);
+            sx = vp_x;
+        }
+        if (sy < vp_y) {
+            sh -= (vp_y - sy);
+            sy = vp_y;
+        }
+        if (sx + sw > vp_x + vp_w) {
+            sw = (vp_x + vp_w) - sx;
+        }
+        if (sy + sh > vp_y + vp_h) {
+            sh = (vp_y + vp_h) - sy;
+        }
+        if (sw < 0) sw = 0;
+        if (sh < 0) sh = 0;
+
+        glScissor(sx, sy, sw, sh);
+    }
+}
+
+void zen_reset_scissor(void) {
+    if (!zen_is_window_active() && !s_current_render_target) return;
+    zen_gfx_flush();
+
+    if (s_current_render_target) {
+        glDisable(GL_SCISSOR_TEST);
+    } else {
+        int vp_x = 0, vp_y = 0, vp_w = 0, vp_h = 0, base_h = 0;
+        float vp_scale = 1.0f;
+        zen_get_viewport_info(&vp_x, &vp_y, &vp_w, &vp_h, &vp_scale, &base_h);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(vp_x, vp_y, vp_w, vp_h);
+    }
 }

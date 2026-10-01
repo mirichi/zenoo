@@ -298,11 +298,11 @@ module Zenoo
         rh = h.to_f
 
         radius     = (opts[:radius] || theme.corner_radius || 12.0).to_f
-        bg_col     = opts.key?(:color) ? opts[:color] : Color.new(24, 28, 38, 240)
+        bg_col     = opts[:color] || Color.new(24, 28, 38, 240)
         b_width    = (opts[:border_width] || 1.5).to_f
-        b_col      = opts.key?(:border_color) ? opts[:border_color] : Color.new(60, 70, 90, 200)
+        b_col      = opts[:border_color] || Color.new(60, 70, 90, 200)
         s_blur     = (opts[:shadow_blur] || 16.0).to_f
-        s_col      = opts.key?(:shadow_color) ? opts[:shadow_color] : Color.new(0, 0, 0, 150)
+        s_col      = opts[:shadow_color] || Color.new(0, 0, 0, 150)
         card_image = opts[:image]
         card_z     = (opts[:z] || 0.0).to_f
 

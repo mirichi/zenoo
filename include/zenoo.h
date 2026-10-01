@@ -96,6 +96,7 @@ void zen_end_frame(void);                   // 純粋に描画Flush・SwapBuffer
 double zen_get_time(void);
 float  zen_get_delta_time(void);
 void   zen_get_window_size(int* width, int* height);
+int    zen_is_window_active(void);
 void   zen_set_target_fps(int fps); // 目標FPS設定 (デフォルト60fps固定。0で無制限)
 int    zen_get_target_fps(void);
 void   zen_set_vsync(int vsync);    // 1: VSync有効, 0: VSync無効
@@ -196,6 +197,11 @@ void       zen_shader_set_mat4(ZenShader* shader, const char* name, const float*
 void       zen_set_gc_trigger_callback(void (*callback)(void));
 
 void       zen_flush(void);
+
+// ビューポート & クリッピング (glScissor)
+void       zen_get_viewport_info(int* vp_x, int* vp_y, int* vp_w, int* vp_h, float* vp_scale, int* base_h);
+void       zen_set_scissor(int x, int y, int w, int h);
+void       zen_reset_scissor(void);
 
 // トポロジー種別定数 (OpenGL GLenum準拠)
 enum ZenTopology {
