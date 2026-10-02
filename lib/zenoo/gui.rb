@@ -7,6 +7,22 @@ require_relative 'gui/card_renderer'
 module Zenoo
   # 即時モード (Immediate Mode) GUI システム
   module GUI
+    # ウィンドウ状態オブジェクト (位置・サイズ・フォーカス・開閉状態)
+    class WindowState
+      attr_accessor :id, :title, :x, :y, :w, :h, :z, :open
+
+      def initialize(id, title, x, y, w, h)
+        @id    = id.to_s
+        @title = title.to_s
+        @x     = x.to_f
+        @y     = y.to_f
+        @w     = w.to_f
+        @h     = h.to_f
+        @z     = 0.0
+        @open  = true
+      end
+    end
+
     @theme       = Theme.new
     @renderer    = CardRenderer.new
     @mouse_x     = 0.0
@@ -19,6 +35,16 @@ module Zenoo
     @focus_id    = nil
     @cursor_pos  = 0
     @blink_time  = 0.0
+
+    # ウィンドウ管理状態
+    @windows            = {} # id => WindowState
+    @window_order       = [] # [win_id, ...] (手前が末尾)
+    @hovered_window_id  = nil
+    @active_window_id   = nil
+    @dragging_window_id = nil
+    @drag_offset_x      = 0.0
+    @drag_offset_y      = 0.0
+    @current_window_id  = nil
 
     # レイアウト状態
     @cursor_x     = 0.0
@@ -56,6 +82,22 @@ module Zenoo
         Input.set_ime_position(-1, -1) unless @focus_id
       end
 
+      def windows
+        @windows
+      end
+
+      def window_order
+        @window_order
+      end
+
+      def hovered_window_id
+        @hovered_window_id
+      end
+
+      def active_window_id
+        @active_window_id
+      end
+
       # --------------------------------------------------
       # フレーム開始処理 (Window.loop の先頭で毎フレーム自動呼び出し)
       # --------------------------------------------------
@@ -68,6 +110,49 @@ module Zenoo
         @hot_id     = nil
         @blink_time += Window.delta_time
 
+        # 1. ウィンドウのドラッグ継続処理
+        if @dragging_window_id
+          if @mouse_down && (win = @windows[@dragging_window_id])
+            win.x = @mouse_x - @drag_offset_x
+            win.y = @mouse_y - @drag_offset_y
+          else
+            @dragging_window_id = nil
+          end
+        end
+
+        # 2. 前フレーム確定ウィンドウ情報に基づくマウス直下の最前面ウィンドウ特定
+        if @dragging_window_id
+          @hovered_window_id = @dragging_window_id
+        else
+          @hovered_window_id = nil
+          @window_order.reverse_each do |wid|
+            w = @windows[wid]
+            next unless w && w.open
+            if in_rect?(@mouse_x, @mouse_y, w.x, w.y, w.w, w.h)
+              @hovered_window_id = wid
+              break
+            end
+          end
+        end
+
+        # 3. ウィンドウクリック時の最前面化 (Bring to Front)
+        if @mouse_push
+          if @hovered_window_id
+            @active_window_id = @hovered_window_id
+            @window_order.delete(@hovered_window_id)
+            @window_order.push(@hovered_window_id)
+          else
+            @active_window_id = nil
+          end
+        end
+
+        # 4. ウィンドウごとのベース Z 割り当て (奥から順に 100.0, 200.0, 300.0, ...)
+        @window_order.each_with_index do |wid, idx|
+          if (w = @windows[wid])
+            w.z = 100.0 + idx * 100.0
+          end
+        end
+
         # レイアウト状態の初期化
         @cursor_x     = 0.0
         @cursor_y     = 0.0
@@ -75,6 +160,7 @@ module Zenoo
         @line_max_h   = 0.0
         @in_row       = false
         @panel_stack.clear
+        @current_window_id = nil
       end
 
       # --------------------------------------------------
@@ -257,6 +343,147 @@ module Zenoo
         px >= rx && px <= (rx + rw) && py >= ry && py <= (ry + rh)
       end
 
+      # コントロールの操作可否判定 (前面ウィンドウによる入力遮断 & クリップ範囲外遮断)
+      def can_interact?
+        # 1. ハードウェアクリッピング矩形外なら不可 (スクロールではみ出たコントロール等の遮断)
+        clip = Backend.current_clip
+        if clip
+          return false unless in_rect?(@mouse_x, @mouse_y, clip[0], clip[1], clip[2], clip[3])
+        end
+
+        # 2. マウス直下の最前面ウィンドウと現在のウィジェット所属コンテキストが一致しているか
+        @hovered_window_id == @current_window_id
+      end
+
+      # ローカル座標系対応のマウス X 座標
+      def gui_mouse_x
+        @mouse_x - Window.offset_x
+      end
+
+      # ローカル座標系対応のマウス Y 座標
+      def gui_mouse_y
+        @mouse_y - Window.offset_y
+      end
+
+      # --------------------------------------------------
+      # フローティングウィンドウ (Window)
+      # - ドラッグ移動、タイトルバー、最前面フォーカス切り替え
+      # - Window.clip(local: true) によるコンテンツのビューポートクリッピング
+      # --------------------------------------------------
+      def window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, &block)
+        win_id = id.to_s.empty? ? title.to_s : id.to_s
+        win = @windows[win_id]
+        unless win
+          def_x = x ? x.to_f : (60.0 + (@windows.size * 30.0) % 400.0)
+          def_y = y ? y.to_f : (60.0 + (@windows.size * 30.0) % 300.0)
+          win = WindowState.new(win_id, title.to_s, def_x, def_y, w.to_f, h.to_f)
+          @windows[win_id] = win
+          @window_order.push(win_id)
+          win.z = 100.0 + (@window_order.size - 1) * 100.0
+        end
+
+        return unless win.open
+
+        wx = win.x
+        wy = win.y
+        ww = win.w
+        wh = win.h
+        title_bar_h = 36.0
+        pad = padding.to_f
+
+        is_active = (@window_order.last == win_id)
+        win_z = win.z
+
+        # タイトルバーのドラッグ開始判定
+        # (最前面ウィンドウかつタイトルバー内で押下された場合)
+        if @mouse_push && @hovered_window_id == win_id
+          if in_rect?(@mouse_x, @mouse_y, wx, wy, ww, title_bar_h)
+            @dragging_window_id = win_id
+            @drag_offset_x = @mouse_x - wx
+            @drag_offset_y = @mouse_y - wy
+          end
+        end
+
+        # 1. ウィンドウ全体の装飾描画 (外枠・タイトルバー)
+        border_color = is_active ? Color.new(0, 200, 255, 220) : Color.new(60, 70, 90, 180)
+        border_w = is_active ? 2.0 : 1.5
+        shadow_blur = is_active ? 20.0 : 10.0
+        shadow_color = is_active ? Color.new(0, 0, 0, 180) : Color.new(0, 0, 0, 120)
+
+        # 背景カード
+        Window.draw_card(
+          wx, wy, ww, wh,
+          radius: 12.0,
+          color: Color.new(22, 26, 36, 245),
+          border_width: border_w,
+          border_color: border_color,
+          shadow_blur: shadow_blur,
+          shadow_color: shadow_color,
+          z: win_z
+        )
+
+        # タイトルバー帯
+        title_bg = is_active ? Color.new(35, 45, 65, 230) : Color.new(28, 32, 44, 230)
+        Window.draw_card(
+          wx + 2.0, wy + 2.0, ww - 4.0, title_bar_h,
+          radius: 10.0,
+          color: title_bg,
+          z: win_z + 1.0
+        )
+
+        # タイトルバー境界線
+        Window.draw_line(
+          wx + 1.0, wy + title_bar_h + 2.0,
+          wx + ww - 1.0, wy + title_bar_h + 2.0,
+          border_color,
+          z: win_z + 1.5
+        )
+
+        # タイトル文字列
+        f_font = @theme.font || Font.default
+        f_size = 16
+        title_col = is_active ? Color::WHITE : Color.new(180, 190, 210)
+        Window.draw_text(
+          wx + 14.0, wy + (title_bar_h - f_size.to_f) / 2.0 + 2.0,
+          win.title,
+          font: f_font,
+          size: f_size,
+          color: title_col,
+          z: win_z + 2.0
+        )
+
+        # 2. コンテンツ領域のクリッピング & レイアウト
+        content_x = wx + pad
+        content_y = wy + title_bar_h + 8.0
+        content_w = ww - pad * 2.0
+        content_h = wh - title_bar_h - pad - 8.0
+
+        prev_win_id = @current_window_id
+        @current_window_id = win_id
+
+        prev_cx  = @cursor_x
+        prev_cy  = @cursor_y
+        prev_lsx = @line_start_x
+        prev_in_row = @in_row
+
+        @cursor_x = 0.0
+        @cursor_y = 0.0
+        @line_start_x = 0.0
+        @in_row = false
+
+        begin
+          Window.clip(content_x, content_y, content_w, content_h, local: true, z: win_z + 10.0) do
+            yield win if block_given?
+          end
+        ensure
+          @current_window_id = prev_win_id
+          @cursor_x     = prev_cx
+          @cursor_y     = prev_cy
+          @line_start_x = prev_lsx
+          @in_row       = prev_in_row
+        end
+      end
+
       # --------------------------------------------------
       # ボタン (Button)
       # クリックされた瞬間のみ true を返却
@@ -268,7 +495,7 @@ module Zenoo
         rw = w.to_f
         rh = h.to_f
 
-        hover = @renderer.hit_test_button(rx, ry, rw, rh, @mouse_x, @mouse_y, @theme)
+        hover = can_interact? && @renderer.hit_test_button(rx, ry, rw, rh, gui_mouse_x, gui_mouse_y, @theme)
         clicked = false
 
         if @active_id == widget_id
@@ -317,14 +544,14 @@ module Zenoo
         v_min = min.to_f
         v_max = max.to_f
 
-        hover = @renderer.hit_test_slider(rx, ry, rw, rh, @mouse_x, @mouse_y, @theme)
+        hover = can_interact? && @renderer.hit_test_slider(rx, ry, rw, rh, gui_mouse_x, gui_mouse_y, @theme)
 
         if @active_id == widget_id
           if @mouse_rel || !@mouse_down
             @active_id = nil
           else
-            # ドラッグ中: マウスX座標から値を算出
-            ratio = (@mouse_x - rx) / rw
+            # ドラッグ中: ローカルマウスX座標から値を算出
+            ratio = (gui_mouse_x - rx) / rw
             ratio = 0.0 if ratio < 0.0
             ratio = 1.0 if ratio > 1.0
             v_val = v_min + ratio * (v_max - v_min)
@@ -332,7 +559,7 @@ module Zenoo
         elsif @active_id == nil && hover
           @hot_id = widget_id
           if @mouse_push
-            ratio = (@mouse_x - rx) / rw
+            ratio = (gui_mouse_x - rx) / rw
             ratio = 0.0 if ratio < 0.0
             ratio = 1.0 if ratio > 1.0
             v_val = v_min + ratio * (v_max - v_min)
@@ -382,7 +609,7 @@ module Zenoo
         rh = h.to_f
         cur_text = text.to_s
 
-        hover = @renderer.hit_test_text_box(rx, ry, rw, rh, @mouse_x, @mouse_y, @theme)
+        hover = can_interact? && @renderer.hit_test_text_box(rx, ry, rw, rh, gui_mouse_x, gui_mouse_y, @theme)
 
         # クリックによるフォーカス獲得 / キャレット移動 / フォーカス解除
         if @mouse_push
@@ -393,7 +620,7 @@ module Zenoo
             # クリック位置からキャレット位置を算出
             str = cur_text
             pad_x = 10.0
-            click_x = @mouse_x - (rx + pad_x)
+            click_x = gui_mouse_x - (rx + pad_x)
             f_font = @theme.font || Font.default
             f_size = @theme.font_size.to_i
             f_size = 14 if f_size <= 0
@@ -424,14 +651,16 @@ module Zenoo
           @cursor_pos = cur_text.length if @cursor_pos > cur_text.length
           @cursor_pos = 0 if @cursor_pos < 0
 
-          # 1. IME変換候補位置の更新 (キャレットの直下)
+          # 1. IME変換候補位置の更新 (キャレットの直下 - 画面絶対座標に変換)
           f_font = @theme.font || Font.default
           f_size = @theme.font_size.to_i
           f_size = 14 if f_size <= 0
           sub_str = cur_text[0...@cursor_pos] || ""
           caret_offset = f_font.text_width(sub_str, f_size)
           pad_x = 10.0
-          Input.set_ime_position(rx + pad_x + caret_offset, ry + rh + 2.0)
+          abs_ime_x = rx + pad_x + caret_offset + Window.offset_x
+          abs_ime_y = ry + rh + 2.0 + Window.offset_y
+          Input.set_ime_position(abs_ime_x, abs_ime_y)
 
           # 2. 特殊キー処理 (キーリピート対応)
           if Input.key_repeat?(:backspace)

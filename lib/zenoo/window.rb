@@ -149,8 +149,8 @@ module Zenoo
     # ビューポート・矩形クリッピングスコープ (glScissor & 遅延ディファード適用)
     # - local: false => 元の画面座標系のまま指定矩形外をクリップ (Ebitengine SubImage 風)
     # - local: true  => クリップ矩形の左上を (0, 0) とするローカル相対座標系 (UI ウィンドウ用)
-    # ※ 即時フラッシュせず描画コマンドにシザー情報を記録するため、全体で一貫したグローバル Z ソートが保たれます。
-    def self.clip(x, y, w, h, local: false)
+    # - z: Float     => クリップ全体の親キューにおける Z レベル。クリップ内部は独立して Z ソートされます。
+    def self.clip(x, y, w, h, local: false, z: 0.0)
       prev_ox = @offset_x
       prev_oy = @offset_y
 
@@ -185,7 +185,7 @@ module Zenoo
         @offset_y = abs_y
       end
 
-      Backend.push_clip([clip_x, clip_y, clip_w, clip_h])
+      Backend.push_clip([clip_x, clip_y, clip_w, clip_h], z)
 
       yield
     ensure
