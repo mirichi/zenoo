@@ -93,7 +93,7 @@ module Zenoo
     end
 
     # ----------------------------------------------------
-    # カラーマップと色変換 (0..255 統一)
+    # カラーマップと色変換
     # ----------------------------------------------------
     COLOR_MAP = {
       white:   [1.0, 1.0, 1.0, 1.0],
@@ -201,7 +201,8 @@ module Zenoo
     # 描画キュー管理クラス (画面用・各Image用で共通)
     # ----------------------------------------------------
     class DrawQueue
-      attr_reader :command_pool, :queue_count
+      attr_reader :command_pool, :queue_count, :owner
+      attr_accessor :needs_z_sort
 
       def initialize(owner = nil)
         @owner = owner # nil なら画面、Image ならその Image
@@ -215,19 +216,57 @@ module Zenoo
         @queue_count > 0
       end
 
-      def enqueue(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0)
-        cmd = nil
+      def allocate_command
         if @queue_count < @command_pool.length
-          cmd = @command_pool[@queue_count]
+          @command_pool[@queue_count]
         else
           cmd = DrawCommand.new
           @command_pool.push(cmd)
+          cmd
         end
+      end
+
+      def increment_count
+        @queue_count += 1
+      end
+
+      def enqueue(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0)
+        cmd = allocate_command
         zf = z.to_f
         @needs_z_sort = true if zf != 0.0
         clip = Backend.current_clip
         cmd.set(@owner, zf, @queue_count, pipeline, data, count, image, shader, uniforms, blend, clip)
         @queue_count += 1
+      end
+
+      # サブキュー (クリップ用) の内容を内部ソートし、親キューへ指定 Z で一括転送
+      def transfer_to(parent_queue, target_z)
+        return if @queue_count == 0
+
+        # 1. クリップ内部のコマンド群をローカル Z 順に安定ソート
+        sort
+
+        target_zf = target_z.to_f
+        parent_queue.needs_z_sort = true if target_zf != 0.0
+
+        # 2. ソートされた順序を保ったまま親キューへ転送
+        # (親キューでの z は target_zf に統一され、内部の前後関係は親キューの登録順序によって保持される)
+        i = 0
+        while i < @queue_count
+          cmd = @command_pool[i]
+          parent_cmd = parent_queue.allocate_command
+          parent_cmd.set(
+            parent_queue.owner, target_zf, parent_queue.queue_count,
+            cmd.pipeline, cmd.data, cmd.count,
+            cmd.image, cmd.shader, cmd.uniforms, cmd.blend, cmd.clip
+          )
+          parent_queue.increment_count
+          i += 1
+        end
+
+        # 転送完了したのでサブキューをリセット
+        @queue_count = 0
+        @needs_z_sort = false
       end
 
       def sort
@@ -287,30 +326,77 @@ module Zenoo
     end
 
     # ----------------------------------------------------
+    # クリップコンテキスト (クリップ矩形、独立描画キュー、親Z値のカプセル化)
+    # ----------------------------------------------------
+    class ClipContext
+      attr_accessor :rect, :queue, :z
+
+      def initialize
+        @rect = nil
+        @queue = DrawQueue.new(nil)
+        @z = 0.0
+      end
+
+      def set(rect, z, owner)
+        @rect = rect
+        @z = z.to_f
+        @queue.instance_variable_set(:@owner, owner)
+      end
+
+      def reset
+        @rect = nil
+        @z = 0.0
+        @queue.instance_variable_set(:@queue_count, 0)
+        @queue.needs_z_sort = false
+      end
+    end
+
+    # ----------------------------------------------------
     # バックエンド状態管理
     # ----------------------------------------------------
     @screen_queue = DrawQueue.new(nil)
     @current_target = nil
     @active_gl_target = nil
     @pending_images = []
-    @target_images = []
-    @target_queues = []
-    @clip_stack = []
+    @clip_stack = []        # ClipContext のスタック
+    @clip_context_pool = [] # 再利用可能な ClipContext プール
 
     def self.current_clip
-      @clip_stack.last
+      @clip_stack.last&.rect
     end
 
-    def self.push_clip(rect)
-      @clip_stack.push(rect)
+    def self.push_clip(rect, z = 0.0)
+      ctx = @clip_context_pool.pop || ClipContext.new
+      ctx.set(rect, z, @current_target)
+      @clip_stack.push(ctx)
     end
 
     def self.pop_clip
-      @clip_stack.pop
+      ctx = @clip_stack.pop
+      return unless ctx
+
+      parent_q = active_queue
+      ctx.queue.transfer_to(parent_q, ctx.z)
+      ctx.reset
+      @clip_context_pool.push(ctx)
     end
 
     def self.clear_clips
-      @clip_stack.clear
+      while (ctx = @clip_stack.pop)
+        ctx.reset
+        @clip_context_pool.push(ctx)
+      end
+    end
+
+    # 現在描画コマンドを受け付けるアクティブキュー
+    def self.active_queue
+      if !@clip_stack.empty?
+        @clip_stack.last.queue
+      elsif @current_target
+        queue_for(@current_target)
+      else
+        @screen_queue
+      end
     end
 
     def self.screen_queue
@@ -338,31 +424,17 @@ module Zenoo
     end
 
     def self.queue_for(image)
-      idx = @target_images.index(image)
-      if idx
-        @target_queues[idx]
-      else
-        q = DrawQueue.new(image)
-        @target_images << image
-        @target_queues << q
-        q
-      end
+      image.__draw_queue ||= DrawQueue.new(image)
     end
 
     def self.has_pending_draws?(image)
-      idx = @target_images.index(image)
-      if idx
-        @target_queues[idx].has_pending_draws?
-      else
-        false
-      end
+      q = image.__draw_queue
+      q ? q.has_pending_draws? : false
     end
 
     def self.flush_image(image)
-      idx = @target_images.index(image)
-      if idx
-        @target_queues[idx].flush
-      end
+      q = image.__draw_queue
+      q.flush if q
     end
 
     def self.register_pending_image(img)
@@ -380,13 +452,8 @@ module Zenoo
     end
 
     def self.enqueue_draw(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0)
-      if @current_target
-        queue = queue_for(@current_target)
-        queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z)
-        register_pending_image(@current_target)
-      else
-        @screen_queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z)
-      end
+      active_queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z)
+      register_pending_image(@current_target) if @current_target
     end
 
     def self.flush_screen
