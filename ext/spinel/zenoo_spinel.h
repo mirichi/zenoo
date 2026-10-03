@@ -27,6 +27,12 @@ sp_int sp_ZenImage_width(sp_ZenImage* s);
 sp_int sp_ZenImage_height(sp_ZenImage* s);
 void sp_ZenImage_set_as_render_target(sp_ZenImage* s);
 void sp_ZenImage_reset_render_target(void);
+sp_ZenImage* sp_ZenImage_sub_image(sp_ZenImage* s, sp_int x, sp_int y, sp_int w, sp_int h);
+sp_int sp_ZenImage_x(sp_ZenImage* s);
+sp_int sp_ZenImage_y(sp_ZenImage* s);
+sp_int sp_ZenImage_texture_width(sp_ZenImage* s);
+sp_int sp_ZenImage_texture_height(sp_ZenImage* s);
+sp_int sp_ZenImage_texture_id(sp_ZenImage* s);
 sp_int sp_zen_get_image_free_count(void);
 
 // Shader メソッド

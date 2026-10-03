@@ -65,6 +65,40 @@ void sp_ZenImage_reset_render_target(void) {
     zen_set_render_target(NULL);
 }
 
+sp_ZenImage* sp_ZenImage_sub_image(sp_ZenImage* s, sp_int x, sp_int y, sp_int w, sp_int h) {
+    if (!s || !s->image) return NULL;
+    zen_set_gc_trigger_callback(spinel_gc_hook);
+    sp_ZenImage* child = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
+    memset(child, 0, sizeof(*child));
+    child->cls_id = s->cls_id;
+    child->image = zen_image_sub_image(s->image, (int)x, (int)y, (int)w, (int)h);
+    return child;
+}
+
+sp_int sp_ZenImage_x(sp_ZenImage* s) {
+    return (s && s->image) ? (sp_int)s->image->x : 0;
+}
+
+sp_int sp_ZenImage_y(sp_ZenImage* s) {
+    return (s && s->image) ? (sp_int)s->image->y : 0;
+}
+
+sp_int sp_ZenImage_texture_width(sp_ZenImage* s) {
+    int tw = 0, th = 0;
+    if (s && s->image) zen_image_get_texture_size(s->image, &tw, &th);
+    return (sp_int)tw;
+}
+
+sp_int sp_ZenImage_texture_height(sp_ZenImage* s) {
+    int tw = 0, th = 0;
+    if (s && s->image) zen_image_get_texture_size(s->image, &tw, &th);
+    return (sp_int)th;
+}
+
+sp_int sp_ZenImage_texture_id(sp_ZenImage* s) {
+    return (s && s->image) ? (sp_int)zen_image_get_texture_id(s->image) : 0;
+}
+
 // ==========================================
 // Shader (sp_ZenShader)
 // ==========================================

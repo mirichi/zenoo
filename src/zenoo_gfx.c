@@ -141,34 +141,74 @@ void zen_gfx_flush(void) {
 }
 
 // ==========================================
-// 画像 (Image) & オフスクリーン描画実装
 // ==========================================
+// テクスチャ (Texture) & 画像 (Image) 実装
+// ==========================================
+ZenTexture* zen_texture_create(int width, int height) {
+    if (width <= 0 || height <= 0) return NULL;
+
+    ZenTexture* tex = (ZenTexture*)calloc(1, sizeof(ZenTexture));
+    if (!tex && s_gc_callback) {
+        s_gc_callback();
+        tex = (ZenTexture*)calloc(1, sizeof(ZenTexture));
+    }
+    if (!tex) return NULL;
+
+    tex->width = width;
+    tex->height = height;
+    tex->ref_count = 1;
+
+    glGenTextures(1, &tex->id);
+    if (!tex->id && s_gc_callback) {
+        s_gc_callback();
+        glGenTextures(1, &tex->id);
+    }
+
+    return tex;
+}
+
+void zen_texture_release(ZenTexture* texture) {
+    if (!texture) return;
+    texture->ref_count--;
+    if (texture->ref_count <= 0) {
+        if (s_active_texture == texture->id) {
+            s_active_texture = s_white_texture;
+        }
+        if (texture->id) {
+            glDeleteTextures(1, &texture->id);
+        }
+        free(texture);
+    }
+}
+
 ZenImage* zen_image_create(int width, int height) {
     if (width <= 0 || height <= 0) return NULL;
 
-    ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
-    if (!img && s_gc_callback) {
-        // メモリ不足: RubyのGCをトリガーして再試行
-        s_gc_callback();
-        img = (ZenImage*)calloc(1, sizeof(ZenImage));
-    }
-    if (!img) return NULL;
+    ZenTexture* tex = zen_texture_create(width, height);
+    if (!tex) return NULL;
 
-    img->width = width;
-    img->height = height;
-
-    glGenTextures(1, &img->texture_id);
-    if (!img->texture_id && s_gc_callback) {
-        s_gc_callback();
-        glGenTextures(1, &img->texture_id);
-    }
-
-    glBindTexture(GL_TEXTURE_2D, img->texture_id);
+    glBindTexture(GL_TEXTURE_2D, tex->id);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
+    if (!img && s_gc_callback) {
+        s_gc_callback();
+        img = (ZenImage*)calloc(1, sizeof(ZenImage));
+    }
+    if (!img) {
+        zen_texture_release(tex);
+        return NULL;
+    }
+
+    img->texture = tex;
+    img->x = 0;
+    img->y = 0;
+    img->width = width;
+    img->height = height;
 
     return img;
 }
@@ -176,6 +216,38 @@ ZenImage* zen_image_create(int width, int height) {
 ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pixels) {
     if (width <= 0 || height <= 0 || !pixels) return NULL;
 
+    ZenTexture* tex = zen_texture_create(width, height);
+    if (!tex) return NULL;
+
+    glBindTexture(GL_TEXTURE_2D, tex->id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
+    if (!img && s_gc_callback) {
+        s_gc_callback();
+        img = (ZenImage*)calloc(1, sizeof(ZenImage));
+    }
+    if (!img) {
+        zen_texture_release(tex);
+        return NULL;
+    }
+
+    img->texture = tex;
+    img->x = 0;
+    img->y = 0;
+    img->width = width;
+    img->height = height;
+
+    return img;
+}
+
+ZenImage* zen_image_sub_image(ZenImage* parent, int x, int y, int width, int height) {
+    if (!parent || !parent->texture || width <= 0 || height <= 0) return NULL;
+
     ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
     if (!img && s_gc_callback) {
         s_gc_callback();
@@ -183,21 +255,12 @@ ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pi
     }
     if (!img) return NULL;
 
+    img->texture = parent->texture;
+    img->texture->ref_count++;
+    img->x = parent->x + x;
+    img->y = parent->y + y;
     img->width = width;
     img->height = height;
-
-    glGenTextures(1, &img->texture_id);
-    if (!img->texture_id && s_gc_callback) {
-        s_gc_callback();
-        glGenTextures(1, &img->texture_id);
-    }
-
-    glBindTexture(GL_TEXTURE_2D, img->texture_id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
     return img;
 }
@@ -225,15 +288,13 @@ void zen_image_destroy(ZenImage* image) {
     if (s_current_render_target == image) {
         zen_set_render_target(NULL);
     }
-    if (s_active_texture == image->texture_id) {
-        s_active_texture = s_white_texture;
-    }
 
     if (image->has_fbo) {
         glDeleteFramebuffers(1, &image->fbo);
     }
-    if (image->texture_id) {
-        glDeleteTextures(1, &image->texture_id);
+    if (image->texture) {
+        zen_texture_release(image->texture);
+        image->texture = NULL;
     }
     free(image);
 }
@@ -248,21 +309,54 @@ void zen_image_get_size(const ZenImage* image, int* width, int* height) {
     if (height) *height = image->height;
 }
 
+void zen_image_get_bounds(const ZenImage* image, int* x, int* y, int* w, int* h) {
+    if (!image) {
+        if (x) *x = 0; if (y) *y = 0; if (w) *w = 0; if (h) *h = 0;
+        return;
+    }
+    if (x) *x = image->x;
+    if (y) *y = image->y;
+    if (w) *w = image->width;
+    if (h) *h = image->height;
+}
+
+void zen_image_get_texture_size(const ZenImage* image, int* tex_w, int* tex_h) {
+    if (!image || !image->texture) {
+        if (tex_w) *tex_w = 0; if (tex_h) *tex_h = 0;
+        return;
+    }
+    if (tex_w) *tex_w = image->texture->width;
+    if (tex_h) *tex_h = image->texture->height;
+}
+
+void zen_image_get_uv(const ZenImage* image, float* u, float* v, float* uw, float* vh) {
+    if (!image || !image->texture || image->texture->width <= 0 || image->texture->height <= 0) {
+        if (u) *u = 0.0f; if (v) *v = 0.0f; if (uw) *uw = 1.0f; if (vh) *vh = 1.0f;
+        return;
+    }
+    float tw = (float)image->texture->width;
+    float th = (float)image->texture->height;
+    if (u)  *u  = (float)image->x / tw;
+    if (v)  *v  = (float)image->y / th;
+    if (uw) *uw = (float)image->width / tw;
+    if (vh) *vh = (float)image->height / th;
+}
+
 void zen_set_render_target(ZenImage* target) {
     zen_gfx_flush();
 
     s_current_render_target = target;
 
-    if (target != NULL) {
+    if (target != NULL && target->texture != NULL) {
         if (!target->has_fbo) {
             glGenFramebuffers(1, &target->fbo);
             glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->texture_id, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->texture->id, 0);
             target->has_fbo = 1;
         } else {
             glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
         }
-        glViewport(0, 0, target->width, target->height);
+        glViewport(0, 0, target->texture->width, target->texture->height);
     } else {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         int win_w, win_h;
@@ -384,7 +478,7 @@ void zen_set_gc_trigger_callback(void (*callback)(void)) {
 }
 
 uint32_t zen_image_get_texture_id(const ZenImage* image) {
-    return image ? (uint32_t)image->texture_id : 0;
+    return (image && image->texture) ? (uint32_t)image->texture->id : 0;
 }
 
 void zen_flush(void) {
@@ -408,8 +502,8 @@ void zen_draw_buffer(int topology,
 
     int cur_w, cur_h;
     if (s_current_render_target) {
-        cur_w = s_current_render_target->width;
-        cur_h = s_current_render_target->height;
+        cur_w = (s_current_render_target->texture) ? s_current_render_target->texture->width : s_current_render_target->width;
+        cur_h = (s_current_render_target->texture) ? s_current_render_target->texture->height : s_current_render_target->height;
     } else {
         zen_get_window_size(&cur_w, &cur_h);
     }
@@ -417,9 +511,13 @@ void zen_draw_buffer(int topology,
     if (u_res >= 0) {
         glUniform2f(u_res, (float)cur_w, (float)cur_h);
     }
+    GLint u_flip = glGetUniformLocation(prog, "u_flip_y");
+    if (u_flip >= 0) {
+        glUniform1f(u_flip, s_current_render_target ? 1.0f : -1.0f);
+    }
 
     // 2. テクスチャの準備
-    GLuint tex_id = texture ? texture->texture_id : s_white_texture;
+    GLuint tex_id = (texture && texture->texture) ? texture->texture->id : s_white_texture;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex_id);
     s_active_texture = tex_id;
@@ -501,9 +599,7 @@ void zen_set_scissor(int x, int y, int w, int h) {
     glEnable(GL_SCISSOR_TEST);
 
     if (s_current_render_target) {
-        int th = s_current_render_target->height;
-        int sy = th - (y + h);
-        glScissor(x, sy, w, h);
+        glScissor(x, y, w, h);
     } else {
         int vp_x = 0, vp_y = 0, vp_w = 0, vp_h = 0, base_h = 0;
         float vp_scale = 1.0f;

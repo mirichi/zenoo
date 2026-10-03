@@ -92,6 +92,63 @@ static VALUE image_s_reset_render_target(VALUE klass) {
     return Qnil;
 }
 
+static VALUE image_sub_image(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_w, VALUE rb_h) {
+    ZenImage* parent;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, parent);
+    int x = NUM2INT(rb_x);
+    int y = NUM2INT(rb_y);
+    int w = NUM2INT(rb_w);
+    int h = NUM2INT(rb_h);
+
+    ZenImage* sub = zen_image_sub_image(parent, x, y, w, h);
+    if (!sub) {
+        rb_raise(rb_eRuntimeError, "Failed to create SubImage (%d, %d, %dx%d)", x, y, w, h);
+    }
+    return TypedData_Wrap_Struct(rb_obj_class(self), &zenoo_image_data_type, sub);
+}
+
+static VALUE image_get_x(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    return INT2NUM(img ? img->x : 0);
+}
+
+static VALUE image_get_y(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    return INT2NUM(img ? img->y : 0);
+}
+
+static VALUE image_get_texture_width(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    int tw = 0, th = 0;
+    zen_image_get_texture_size(img, &tw, &th);
+    return INT2NUM(tw);
+}
+
+static VALUE image_get_texture_height(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    int tw = 0, th = 0;
+    zen_image_get_texture_size(img, &tw, &th);
+    return INT2NUM(th);
+}
+
+static VALUE image_get_texture_id(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    return UINT2NUM(zen_image_get_texture_id(img));
+}
+
+static VALUE image_get_uv(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    float u = 0.0f, v = 0.0f, uw = 1.0f, vh = 1.0f;
+    zen_image_get_uv(img, &u, &v, &uw, &vh);
+    return rb_ary_new_from_args(4, DBL2NUM(u), DBL2NUM(v), DBL2NUM(uw), DBL2NUM(vh));
+}
+
 // ==========================================
 // Zenoo::Native::Shader (TypedData)
 // ==========================================
@@ -601,6 +658,13 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "height", image_get_height, 0);
     rb_define_method(rb_cNativeImage, "set_as_render_target", image_set_as_render_target, 0);
     rb_define_singleton_method(rb_cNativeImage, "reset_render_target", image_s_reset_render_target, 0);
+    rb_define_method(rb_cNativeImage, "sub_image", image_sub_image, 4);
+    rb_define_method(rb_cNativeImage, "x", image_get_x, 0);
+    rb_define_method(rb_cNativeImage, "y", image_get_y, 0);
+    rb_define_method(rb_cNativeImage, "texture_width", image_get_texture_width, 0);
+    rb_define_method(rb_cNativeImage, "texture_height", image_get_texture_height, 0);
+    rb_define_method(rb_cNativeImage, "texture_id", image_get_texture_id, 0);
+    rb_define_method(rb_cNativeImage, "uv", image_get_uv, 0);
 
     // 4. NativeShader (Zenoo::Native::NativeShader)
     rb_cNativeShader = rb_define_class_under(rb_mNative, "NativeShader", rb_cObject);
