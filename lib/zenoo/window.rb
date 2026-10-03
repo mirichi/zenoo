@@ -249,6 +249,27 @@ module Zenoo
       )
     end
 
+    def self.draw_circle(x, y, r,
+                        color: nil,
+                        border_color: nil,
+                        border_width: nil,
+                        shadow_blur: 0.0,
+                        shadow_color: [0, 0, 0, 180],
+                        image: nil,
+                        z: 0.0)
+      rf = r.to_f
+      d = rf * 2.0
+      draw_rect(x.to_f - rf, y.to_f - rf, d, d,
+                radius: rf,
+                color: color,
+                border_color: border_color,
+                border_width: border_width,
+                shadow_blur: shadow_blur,
+                shadow_color: shadow_color,
+                image: image,
+                z: z)
+    end
+
     def self.draw_image(x, y, image,
                         color_or_opt = :white,
                         color: nil,
