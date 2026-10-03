@@ -33,6 +33,7 @@ sp_int sp_ZenImage_y(sp_ZenImage* s);
 sp_int sp_ZenImage_texture_width(sp_ZenImage* s);
 sp_int sp_ZenImage_texture_height(sp_ZenImage* s);
 sp_int sp_ZenImage_texture_id(sp_ZenImage* s);
+sp_bool sp_ZenImage_is_sub_image(sp_ZenImage* s);
 sp_int sp_zen_get_image_free_count(void);
 
 // Shader メソッド

@@ -25,8 +25,11 @@ sp_int sp_zen_get_image_free_count(void) {
     return (sp_int)s_image_free_count;
 }
 
+static sp_int s_image_cls_id = 7;
+
 sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
+    s_image_cls_id = cls_id;
     sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(s, 0, sizeof(*s));
     s->cls_id = cls_id;
@@ -36,6 +39,7 @@ sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h) {
 
 sp_ZenImage* sp_ZenImage_load(sp_int cls_id, const char* path) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
+    s_image_cls_id = cls_id;
     sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(s, 0, sizeof(*s));
     s->cls_id = cls_id;
@@ -97,6 +101,17 @@ sp_int sp_ZenImage_texture_height(sp_ZenImage* s) {
 
 sp_int sp_ZenImage_texture_id(sp_ZenImage* s) {
     return (s && s->image) ? (sp_int)zen_image_get_texture_id(s->image) : 0;
+}
+
+sp_bool sp_ZenImage_is_sub_image(sp_ZenImage* s) {
+    if (!s || !s->image || !s->image->texture) return false;
+    ZenImage* img = s->image;
+    if (img->x != 0 || img->y != 0 ||
+        img->width != img->texture->width ||
+        img->height != img->texture->height) {
+        return true;
+    }
+    return false;
 }
 
 // ==========================================
@@ -369,13 +384,18 @@ sp_RbVal sp_zen_font_atlas_image(sp_int image_cls_id) {
     ZenImage* img = zen_font_get_atlas_image();
     if (!img) return sp_box_nil();
 
+    sp_int cid = (image_cls_id > 0) ? image_cls_id : s_image_cls_id;
+    if (cid <= 0) cid = 7;
+
     if (!s_atlas_zen_image) {
         s_atlas_zen_image = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenAtlasImage_noop_free, NULL);
         memset(s_atlas_zen_image, 0, sizeof(*s_atlas_zen_image));
-        s_atlas_zen_image->cls_id = image_cls_id;
+        s_atlas_zen_image->cls_id = cid;
         s_atlas_zen_image->image = img;
+    } else {
+        s_atlas_zen_image->cls_id = cid;
     }
-    return sp_box_obj(s_atlas_zen_image, (int)image_cls_id);
+    return sp_box_obj(s_atlas_zen_image, (int)cid);
 }
 
 sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size) {

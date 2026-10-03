@@ -12,12 +12,13 @@ module Zenoo
   native_method :width,  [], :int, "sp_ZenImage_width"
   native_method :height, [], :int, "sp_ZenImage_height"
   native_method :set_as_render_target, [], :nil, "sp_ZenImage_set_as_render_target"
-  native_method :sub_image, [:int, :int, :int, :int], "Zenoo::Image", "sp_ZenImage_sub_image"
+  native_method :sub_image, [:int, :int, :int, :int], :self, "sp_ZenImage_sub_image"
   native_method :x, [], :int, "sp_ZenImage_x"
   native_method :y, [], :int, "sp_ZenImage_y"
   native_method :texture_width, [], :int, "sp_ZenImage_texture_width"
   native_method :texture_height, [], :int, "sp_ZenImage_texture_height"
   native_method :texture_id, [], :int, "sp_ZenImage_texture_id"
+  native_method :sub_image?, [], :bool, "sp_ZenImage_is_sub_image"
 
   # ==========================================
   # 2. Native::NativeShader (Spinel native_struct)
@@ -100,7 +101,7 @@ module Zenoo
       ], :nil, "sp_zen_renderer_draw_buffer"
 
       def self.set_scissor(x, y, w, h)
-        raw_set_scissor(x.to_i, y.to_i, w.to_i, h.to_i)
+        Zenoo::Native::Renderer.raw_set_scissor(x.to_i, y.to_i, w.to_i, h.to_i)
       end
 
       def self.draw_buffer(topology, layout, divisors, base_vertex_count, data, count, img, sh)
@@ -162,14 +163,6 @@ class Zenoo::Image
   def self.load(path)
     new(path)
   end
-
-  def uv
-    tw = texture_width.to_f
-    th = texture_height.to_f
-    return [0.0, 0.0, 1.0, 1.0] if tw <= 0.0 || th <= 0.0
-
-    [x.to_f / tw, y.to_f / th, width.to_f / tw, height.to_f / th]
-  end
 end
 
 class Zenoo::Native::Font
@@ -178,7 +171,7 @@ class Zenoo::Native::Font
   end
 
   def self.atlas_image
-    @atlas ||= Zenoo::Native::FontHelper.atlas_image_raw(0)
+    Zenoo::Native::FontHelper.atlas_image_raw(7)
   end
 
   def metrics(size)

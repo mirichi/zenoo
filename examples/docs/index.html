@@ -96,6 +96,15 @@
     .card.image::before {
       background: linear-gradient(90deg, #ec4899, #8b5cf6);
     }
+    .card.atlas::before {
+      background: linear-gradient(90deg, #38bdf8, #f59e0b);
+    }
+    .card.window::before {
+      background: linear-gradient(90deg, #6366f1, #a855f7);
+    }
+    .card.clip::before {
+      background: linear-gradient(90deg, #14b8a6, #3b82f6);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -113,6 +122,9 @@
     .card.font .card-tag { color: #fbbf24; }
     .card.vector .card-tag { color: #34d399; }
     .card.image .card-tag { color: #f472b6; }
+    .card.atlas .card-tag { color: #38bdf8; }
+    .card.window .card-tag { color: #818cf8; }
+    .card.clip .card-tag { color: #2dd4bf; }
 
     .card h2 {
       font-size: 22px;
@@ -192,6 +204,32 @@
     .card.image .btn-launch:hover {
       background: #f43f5e;
       box-shadow: 0 0 20px rgba(244, 63, 94, 0.4);
+    }
+    .card.atlas .btn-launch {
+      background: #0284c7;
+      color: #fff;
+    }
+    .card.atlas .btn-launch:hover {
+      background: #38bdf8;
+      color: #0b0d14;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    }
+    .card.window .btn-launch {
+      background: #6366f1;
+      color: #fff;
+    }
+    .card.window .btn-launch:hover {
+      background: #818cf8;
+      box-shadow: 0 0 20px rgba(129, 140, 248, 0.4);
+    }
+    .card.clip .btn-launch {
+      background: #0d9488;
+      color: #fff;
+    }
+    .card.clip .btn-launch:hover {
+      background: #2dd4bf;
+      color: #0b0d14;
+      box-shadow: 0 0 20px rgba(45, 212, 191, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -302,6 +340,60 @@
         </ul>
       </div>
       <a href="image/" class="btn-launch">画像・合成デモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Texture Atlas & sub_image Demo Card -->
+    <div class="card atlas">
+      <div>
+        <div class="card-tag">Texture Atlas</div>
+        <h2>Texture Atlas &amp; sub_image</h2>
+        <p class="desc">
+          1枚のテクスチャ (256x256) から切り出した sub_image 群を、自動バッチ結合により単一ドローコールで超高速描画。FBO への動的ベイクやリアルタイムテクスチャインスペクターを体験できます。
+        </p>
+        <ul class="features">
+          <li>Image#sub_image (ゼロアロケーション部分参照)</li>
+          <li>Image.render_to (スロット領域への自動クリッピング描画)</li>
+          <li>同一テクスチャIDによる自動バッチ結合 (1 ドローコール)</li>
+          <li>Window.draw_image の src_rect サンプリング</li>
+        </ul>
+      </div>
+      <a href="atlas/" class="btn-launch">アトラスデモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Multi-Window & Occlusion Demo Card -->
+    <div class="card window">
+      <div>
+        <div class="card-tag">Window System</div>
+        <h2>Multi-Window &amp; Occlusion</h2>
+        <p class="desc">
+          ドラッグ移動可能なフローティングウィンドウと前面化 (Bring to Front)。ウィンドウ背面へのクリック貫通防止や、内部コンテンツのハードウェアクリッピングを体験できます。
+        </p>
+        <ul class="features">
+          <li>GUI.window (タイトルカードラッグ移動・前面化)</li>
+          <li>クリック遮断 &amp; イベント透過防止 (Occlusion)</li>
+          <li>Window.clip によるウィンドウ内部コンテンツの保護</li>
+          <li>独立したローカル Z ソート階層管理</li>
+        </ul>
+      </div>
+      <a href="window/" class="btn-launch">ウィンドウデモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Hardware Clipping Demo Card -->
+    <div class="card clip">
+      <div>
+        <div class="card-tag">Clipping Engine</div>
+        <h2>Hardware Clipping &amp; Dual Coordinates</h2>
+        <p class="desc">
+          glScissor を用いたハードウェアクリッピング機能。画面全体の座標系を維持するグローバルマスクと、左上 (0, 0) を原点とするローカルビューポートの2系統座標系を体験できます。
+        </p>
+        <ul class="features">
+          <li>Window.clip(local: false) - Ebitengine風親座標マスク</li>
+          <li>Window.clip(local: true) - UI/スクロール用ローカル相対座標系</li>
+          <li>入れ子クリップ (Nested Clip) の交差判定自動算出</li>
+          <li>GPU レベルのピクセル単位ハードウェア切り抜き</li>
+        </ul>
+      </div>
+      <a href="clip/" class="btn-launch">クリップデモを起動 (Launch Demo) →</a>
     </div>
   </main>
 

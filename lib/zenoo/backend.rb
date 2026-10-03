@@ -315,6 +315,7 @@ module Zenoo
             Native::Image.reset_render_target
           end
           Backend.active_gl_target = old_target
+          Backend.cleanup_empty_queues
         else
           # 画面への描画
           Backend.execute_commands(@command_pool, @queue_count)
@@ -407,6 +408,10 @@ module Zenoo
       @current_target
     end
 
+    def self.current_target=(target)
+      @current_target = target
+    end
+
     def self.active_gl_target
       @active_gl_target
     end
@@ -423,18 +428,46 @@ module Zenoo
       @current_target = old_target
     end
 
+    @target_images = []
+    @target_queues = []
+
     def self.queue_for(image)
-      image.__draw_queue ||= DrawQueue.new(image)
+      idx = @target_images.index(image)
+      if idx
+        @target_queues[idx]
+      else
+        q = DrawQueue.new(image)
+        @target_images << image
+        @target_queues << q
+        q
+      end
     end
 
     def self.has_pending_draws?(image)
-      q = image.__draw_queue
-      q ? q.has_pending_draws? : false
+      idx = @target_images.index(image)
+      if idx
+        @target_queues[idx].has_pending_draws?
+      else
+        false
+      end
     end
 
     def self.flush_image(image)
-      q = image.__draw_queue
-      q.flush if q
+      idx = @target_images.index(image)
+      if idx
+        @target_queues[idx].flush
+      end
+    end
+
+    def self.cleanup_empty_queues
+      i = @target_images.length - 1
+      while i >= 0
+        unless @target_queues[i].has_pending_draws?
+          @target_images.delete_at(i)
+          @target_queues.delete_at(i)
+        end
+        i -= 1
+      end
     end
 
     def self.register_pending_image(img)
@@ -449,6 +482,7 @@ module Zenoo
       images.each do |img|
         flush_image(img)
       end
+      cleanup_empty_queues
     end
 
     def self.enqueue_draw(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0)

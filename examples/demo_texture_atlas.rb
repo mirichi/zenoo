@@ -12,26 +12,11 @@ GUI.theme.font_size = 16
 ATLAS_SIZE = 256
 SLOT_SIZE  = 64 # 4x4 = 計 16 スロット
 
-def build_texture_atlas
-  atlas = Image.new(ATLAS_SIZE, ATLAS_SIZE)
+# 各サブ画像に対して Image.render_to でグラフィックスをベイク！
+# ※ sub_image に対して render_to を呼ぶと、自動的にローカル (0, 0) 〜 (64, 64) にクリッピングされます。
 
-  # 各スロットを sub_image で切り出す
-  # [行 0]: コインの回転アニメーション (4フレーム)
-  # [行 1]: クリスタルの浮遊アニメーション (4フレーム)
-  # [行 2]: ゲームアイテム (ハート、スター、シールド、ポーション)
-  # [行 3]: キャラクター (プレイヤーの 4 フレーム)
-  slots = {}
-  4.times do |row|
-    4.times do |col|
-      idx = row * 4 + col
-      slots[idx] = atlas.sub_image(col * SLOT_SIZE, row * SLOT_SIZE, SLOT_SIZE, SLOT_SIZE)
-    end
-  end
-
-  # 各サブ画像に対して Image.render_to でグラフィックスをベイク！
-  # ※ sub_image に対して render_to を呼ぶと、自動的にローカル (0, 0) 〜 (64, 64) にクリッピングされます。
-
-  # [行 0]: コイン回転 (4 フレーム: 幅を変えて回転を表現)
+# [行 0]: コイン回転 (4 フレーム: 幅を変えて回転を表現)
+def bake_coins(slots)
   4.times do |i|
     slot = slots[i]
     Image.render_to(slot) do
@@ -54,8 +39,10 @@ def build_texture_atlas
       end
     end
   end
+end
 
-  # [行 1]: クリスタル (4 フレーム: 輝きと脈動)
+# [行 1]: クリスタル (4 フレーム: 輝きと脈動)
+def bake_crystals(slots)
   4.times do |i|
     slot = slots[4 + i]
     Image.render_to(slot) do
@@ -71,39 +58,52 @@ def build_texture_atlas
       Window.draw_triangle(cx, cy + size, cx - size * 0.6, cy, cx + size * 0.6, cy, c_bot)
     end
   end
+end
 
-  # [行 2]: アイテム (ハート、スター、シールド、ポーション)
-  # ハート
-  Image.render_to(slots[8]) do
+# [行 2]: アイテム (ハート、スター、シールド、ポーション)
+def bake_heart(slot)
+  Image.render_to(slot) do
     Window.clear(Color.new(0, 0, 0, 0))
     Window.draw_card(14, 16, 20, 20, radius: 10.0, color: Color.new(255, 60, 100))
     Window.draw_card(30, 16, 20, 20, radius: 10.0, color: Color.new(255, 60, 100))
     Window.draw_triangle(14, 26, 50, 26, 32, 52, Color.new(255, 60, 100))
   end
+end
 
-  # スター
-  Image.render_to(slots[9]) do
+def bake_star(slot)
+  Image.render_to(slot) do
     Window.clear(Color.new(0, 0, 0, 0))
     Window.draw_triangle(32, 10, 14, 48, 50, 48, Color.new(255, 230, 50))
     Window.draw_triangle(32, 54, 14, 20, 50, 20, Color.new(255, 230, 50))
   end
+end
 
-  # シールド
-  Image.render_to(slots[10]) do
+def bake_shield(slot)
+  Image.render_to(slot) do
     Window.clear(Color.new(0, 0, 0, 0))
     Window.draw_card(16, 12, 32, 38, radius: 12.0, color: Color.new(70, 180, 100),
                                     border_width: 3.0, border_color: Color.new(230, 255, 230))
   end
+end
 
-  # ポーション
-  Image.render_to(slots[11]) do
+def bake_potion(slot)
+  Image.render_to(slot) do
     Window.clear(Color.new(0, 0, 0, 0))
     Window.draw_card(26, 10, 12, 8, radius: 2.0, color: Color.new(200, 200, 220))
     Window.draw_card(18, 18, 28, 36, radius: 14.0, color: Color.new(180, 70, 240, 220),
                                     border_width: 2.0, border_color: Color.new(240, 200, 255))
   end
+end
 
-  # [行 3]: キャラクター (プレイヤーの 4 フレーム歩行)
+def bake_items(slots)
+  bake_heart(slots[8])
+  bake_star(slots[9])
+  bake_shield(slots[10])
+  bake_potion(slots[11])
+end
+
+# [行 3]: キャラクター (プレイヤーの 4 フレーム歩行)
+def bake_players(slots)
   4.times do |i|
     slot = slots[12 + i]
     Image.render_to(slot) do
@@ -116,13 +116,32 @@ def build_texture_atlas
       Window.draw_card(36 - leg_offset, 50 - bob, 8, 10, radius: 2.0, color: Color.new(40, 50, 80))
     end
   end
+end
+
+def build_texture_atlas
+  atlas = Image.new(ATLAS_SIZE, ATLAS_SIZE)
+
+  # 各スロットを sub_image で切り出す
+  # [行 0]: コインの回転アニメーション (4フレーム)
+  # [行 1]: クリスタルの浮遊アニメーション (4フレーム)
+  # [行 2]: ゲームアイテム (ハート、スター、シールド、ポーション)
+  # [行 3]: キャラクター (プレイヤーの 4 フレーム)
+  slots = {}
+  4.times do |row|
+    4.times do |col|
+      idx = row * 4 + col
+      slots[idx] = atlas.sub_image(col * SLOT_SIZE, row * SLOT_SIZE, SLOT_SIZE, SLOT_SIZE)
+    end
+  end
+
+  bake_coins(slots)
+  bake_crystals(slots)
+  bake_items(slots)
+  bake_players(slots)
 
   [atlas, slots]
 end
 
-# ----------------------------------------------------
-# 2. パーティクル & スプライト管理
-# ----------------------------------------------------
 # ----------------------------------------------------
 # 2. パーティクル & スプライト管理 (穏やかに浮遊)
 # ----------------------------------------------------
@@ -177,51 +196,29 @@ class FloatingSprite
   end
 end
 
-# 45 個の穏やかな浮遊スプライト (すべて同一アトラス)
-particles = Array.new(45) do
-  FloatingSprite.new(rand(0..3))
+# ----------------------------------------------------
+# 描画サブコンポーネント (Spinel 最適化 & C関数分割)
+# ----------------------------------------------------
+
+# 単一ギャラリーアイテムの描画
+def draw_gallery_item(bx, by, cat, sprite)
+  Window.draw_card(bx, by, 150.0, 170.0,
+                   radius: 8.0,
+                   color: Color.new(18, 22, 32),
+                   border_width: 1.0,
+                   border_color: Color.new(45, 60, 85),
+                   z: 6.0)
+
+  Window.draw_image(bx + 43.0, by + 30.0, sprite, z: 7.0)
+
+  Window.draw_text(bx + 20.0, by + 115.0, cat[:title],
+                   font: Font::MPLUS, size: 13, color: Color::WHITE, z: 7.0)
+  Window.draw_text(bx + 20.0, by + 138.0, "Slot ##{cat[:slot]} (64x64)",
+                   font: Font::MPLUS, size: 12, color: Color.new(130, 150, 180), z: 7.0)
 end
 
-# ギャラリー用のアニメーションタイマー (0.4 秒周期)
-gallery_timer = 0.0
-gallery_frame = 0
-
-test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
-frame_count = 0
-
-atlas = nil
-slots = nil
-
-# ----------------------------------------------------
-# 3. メインループ
-# ----------------------------------------------------
-Window.loop(1280, 720, "Zenoo Texture Atlas & sub_image Showcase") do
-  atlas, slots = build_texture_atlas if atlas.nil?
-
-  dt = [Window.delta_time, 0.05].min
-
-  # ギャラリーのアニメーション更新 (ゆっくり 0.4 秒周期)
-  gallery_timer += dt
-  if gallery_timer >= 0.4
-    gallery_timer = 0.0
-    gallery_frame = (gallery_frame + 1) % 4
-  end
-
-  # 背景描画 (落ち着いたダークネイビー)
-  Window.clear(Color.new(16, 20, 30))
-
-  # ----------------------------------------------------
-  # A. ヘッダー & 説明UI
-  # ----------------------------------------------------
-  GUI.cursor(30.0, 20.0)
-  GUI.label("=== Zenoo Texture Atlas & sub_image Showcase ===", size: 22, color: Color::WHITE)
-  GUI.label("1枚のテクスチャ (256x256) から切り出した sub_image 群を、自動バッチ結合により単一ドローコールで高速描画しています。", size: 14, color: Color.new(160, 180, 210))
-
-  # ----------------------------------------------------
-  # B. スプライトギャラリー展示台 (落ち着いて細部を観察できるエリア)
-  # ----------------------------------------------------
-  gallery_x = 30.0
-  gallery_y = 85.0
+# B. スプライトギャラリー展示台 (落ち着いて細部を観察できるエリア)
+def draw_gallery_slots(gallery_x, gallery_y, slots, gallery_frame)
   gallery_w = 720.0
   gallery_h = 240.0
 
@@ -246,34 +243,12 @@ Window.loop(1280, 720, "Zenoo Texture Atlas & sub_image Showcase") do
   categories.each_with_index do |cat, i|
     bx = gallery_x + 25.0 + i * 170.0
     by = gallery_y + 45.0
-
-    # スロット台座カード
-    Window.draw_card(bx, by, 150.0, 170.0,
-                     radius: 8.0,
-                     color: Color.new(18, 22, 32),
-                     border_width: 1.0,
-                     border_color: Color.new(45, 60, 85),
-                     z: 6.0)
-
-    # スプライト描画
-    sprite = slots[cat[:slot]]
-    Window.draw_image(bx + 43.0, by + 30.0, sprite, z: 7.0)
-
-    # ラベル
-    Window.draw_text(bx + 20.0, by + 115.0, cat[:title],
-                     font: Font::MPLUS, size: 13, color: Color::WHITE, z: 7.0)
-    Window.draw_text(bx + 20.0, by + 138.0, "Slot ##{cat[:slot]} (64x64)",
-                     font: Font::MPLUS, size: 12, color: Color.new(130, 150, 180), z: 7.0)
+    draw_gallery_item(bx, by, cat, slots[cat[:slot]])
   end
+end
 
-  # ----------------------------------------------------
-  # C. 下部エリア: 穏やかな浮遊スプライト (同一アトラスによる自動バッチ)
-  # ----------------------------------------------------
-  field_x = 30.0
-  field_y = 340.0
-  field_w = 720.0
-  field_h = 350.0
-
+# C. 下部エリア: 穏やかな浮遊スプライト (同一アトラスによる自動バッチ)
+def draw_ambient_field(field_x, field_y, field_w, field_h, particles, slots, dt)
   Window.draw_card(field_x, field_y, field_w, field_h,
                    radius: 10.0,
                    color: Color.new(20, 25, 36, 200),
@@ -294,39 +269,15 @@ Window.loop(1280, 720, "Zenoo Texture Atlas & sub_image Showcase") do
       z: 10.0
     )
   end
+end
 
-  # ----------------------------------------------------
-  # D. 右側サイドパネル: テクスチャアトラスインスペクター
-  # ----------------------------------------------------
-  panel_x = 770.0
-  panel_y = 20.0
-  panel_w = 480.0
-  panel_h = 670.0
+# D-0. パネル内テキスト描画ヘルパー (Spinel AOT インライン展開の局所化)
+def draw_panel_text(x, y, text, size = 14, color = Color::WHITE)
+  Window.draw_text(x, y, text, font: Font::MPLUS, size: size, color: color, z: 52.0)
+end
 
-  # パネル背景カード
-  Window.draw_card(panel_x, panel_y, panel_w, panel_h,
-                   radius: 12.0,
-                   color: Color.new(24, 30, 42, 245),
-                   border_width: 1.5,
-                   border_color: Color.new(50, 70, 100),
-                   shadow_blur: 15.0,
-                   z: 50.0)
-
-  # パネル内テキスト
-  Window.draw_text(panel_x + 20.0, panel_y + 18.0, "Texture Atlas Inspector",
-                   font: Font::MPLUS, size: 18, color: Color::CYAN, z: 51.0)
-  Window.draw_text(panel_x + 20.0, panel_y + 44.0, "Atlas: #{atlas.width}x#{atlas.height} px | Texture ID: #{atlas.texture_id}",
-                   font: Font::MPLUS, size: 13, color: Color.new(160, 180, 210), z: 51.0)
-
-  # 元のアトラス全体 (256x256) を描画
-  atlas_draw_x = panel_x + 20.0
-  atlas_draw_y = panel_y + 75.0
-  Window.draw_card(atlas_draw_x - 2.0, atlas_draw_y - 2.0, ATLAS_SIZE + 4.0, ATLAS_SIZE + 4.0,
-                   radius: 4.0, color: Color.new(10, 12, 18),
-                   border_width: 1.5, border_color: Color.new(70, 90, 125), z: 51.0)
-  Window.draw_image(atlas_draw_x, atlas_draw_y, atlas, z: 52.0)
-
-  # 各スロットのグリッド枠線 (落ち着いた半透明の線)
+# D-1. アトラスグリッド枠線の描画
+def draw_atlas_grid(atlas_draw_x, atlas_draw_y)
   4.times do |r|
     4.times do |c|
       gx = atlas_draw_x + c * SLOT_SIZE
@@ -336,52 +287,124 @@ Window.loop(1280, 720, "Zenoo Texture Atlas & sub_image Showcase") do
                        border_width: 1.0, border_color: Color.new(255, 255, 255, 35), z: 53.0)
     end
   end
+end
 
-  # 現在のフレームを src_rect で直接アトラスからサンプリングして表示
-  prev_x = atlas_draw_x + ATLAS_SIZE + 20.0
-  prev_y = atlas_draw_y + 20.0
-  Window.draw_text(prev_x, prev_y, "src_rect Direct:", font: Font::MPLUS, size: 13, color: Color.new(255, 215, 0), z: 52.0)
+# D-2. src_rect による直接切り出しプレビュー
+def draw_atlas_preview(prev_x, prev_y, atlas, gallery_frame)
+  draw_panel_text(prev_x, prev_y, "src_rect Direct:", 13, Color.new(255, 215, 0))
   Window.draw_card(prev_x, prev_y + 22.0, 140.0, 140.0,
                    radius: 6.0, color: Color.new(14, 17, 24),
                    border_width: 1.0, border_color: Color.new(70, 90, 125), z: 51.0)
 
-  # atlas 画像から直接 src_rect で切り出して描画
   Window.draw_image(
     prev_x + 38.0, prev_y + 50.0, atlas,
     src_rect: [gallery_frame * SLOT_SIZE, 3 * SLOT_SIZE, SLOT_SIZE, SLOT_SIZE],
     scale: 1.0,
     z: 52.0
   )
-  Window.draw_text(prev_x + 15.0, prev_y + 125.0, "Player Frame #{gallery_frame}",
-                   font: Font::MPLUS, size: 12, color: Color.new(160, 180, 210), z: 52.0)
+  draw_panel_text(prev_x + 15.0, prev_y + 125.0, "Player Frame #{gallery_frame}", 12, Color.new(160, 180, 210))
+end
 
-  # パフォーマンス & バッチ統計情報
-  Window.draw_card(panel_x + 20.0, panel_y + 360.0, panel_w - 40.0, 280.0,
+# D-3. パフォーマンス & バッチ統計情報
+def draw_batch_stats(panel_x, stats_y, panel_w, sprite_count)
+  Window.draw_card(panel_x + 20.0, stats_y - 20.0, panel_w - 40.0, 280.0,
                    radius: 8.0, color: Color.new(18, 22, 32, 230),
                    border_width: 1.0, border_color: Color.new(45, 60, 85), z: 51.0)
 
-  stats_y = panel_y + 380.0
-  Window.draw_text(panel_x + 35.0, stats_y, "Batching & Architecture",
-                   font: Font::MPLUS, size: 16, color: Color::WHITE, z: 52.0)
-  Window.draw_text(panel_x + 35.0, stats_y + 30.0, "FPS: #{Window.fps.round(1)}",
-                   font: Font::MPLUS, size: 14, color: Color.new(0, 255, 180), z: 52.0)
-  Window.draw_text(panel_x + 35.0, stats_y + 55.0, "Active Sprites: #{particles.size + 5}",
-                   font: Font::MPLUS, size: 14, color: Color.new(255, 200, 80), z: 52.0)
-  Window.draw_text(panel_x + 35.0, stats_y + 80.0, "Texture Binds: 1 (Atlas Shared)",
-                   font: Font::MPLUS, size: 14, color: Color.new(0, 220, 255), z: 52.0)
-  Window.draw_text(panel_x + 35.0, stats_y + 115.0, "Features Demonstrated:",
-                   font: Font::MPLUS, size: 14, color: Color::WHITE, z: 52.0)
-  Window.draw_text(panel_x + 45.0, stats_y + 140.0, "- Image#sub_image (Zero Allocation View)",
-                   font: Font::MPLUS, size: 13, color: Color.new(170, 190, 220), z: 52.0)
-  Window.draw_text(panel_x + 45.0, stats_y + 165.0, "- Image.render_to (Slot Local Clipping)",
-                   font: Font::MPLUS, size: 13, color: Color.new(170, 190, 220), z: 52.0)
-  Window.draw_text(panel_x + 45.0, stats_y + 190.0, "- DrawQueue Auto-Batching (1 Draw Call)",
-                   font: Font::MPLUS, size: 13, color: Color.new(170, 190, 220), z: 52.0)
-  Window.draw_text(panel_x + 45.0, stats_y + 215.0, "- Window.draw_image(..., src_rect: [...])",
-                   font: Font::MPLUS, size: 13, color: Color.new(170, 190, 220), z: 52.0)
+  draw_panel_text(panel_x + 35.0, stats_y, "Batching & Architecture", 16, Color::WHITE)
+  draw_panel_text(panel_x + 35.0, stats_y + 30.0, "FPS: #{Window.fps.round(1)}", 14, Color.new(0, 255, 180))
+  draw_panel_text(panel_x + 35.0, stats_y + 55.0, "Active Sprites: #{sprite_count}", 14, Color.new(255, 200, 80))
+  draw_panel_text(panel_x + 35.0, stats_y + 80.0, "Texture Binds: 1 (Atlas Shared)", 14, Color.new(0, 220, 255))
+  draw_panel_text(panel_x + 35.0, stats_y + 115.0, "Features Demonstrated:", 14, Color::WHITE)
+  draw_panel_text(panel_x + 45.0, stats_y + 140.0, "- Image#sub_image (Zero Allocation View)", 13, Color.new(170, 190, 220))
+  draw_panel_text(panel_x + 45.0, stats_y + 165.0, "- Image.render_to (Slot Local Clipping)", 13, Color.new(170, 190, 220))
+  draw_panel_text(panel_x + 45.0, stats_y + 190.0, "- DrawQueue Auto-Batching (1 Draw Call)", 13, Color.new(170, 190, 220))
+  draw_panel_text(panel_x + 45.0, stats_y + 215.0, "- Window.draw_image(..., src_rect: [...])", 13, Color.new(170, 190, 220))
+end
+
+# D. 右側サイドパネル: テクスチャアトラスインスペクター
+def draw_inspector_panel(panel_x, panel_y, panel_w, panel_h, atlas, gallery_frame, sprite_count)
+  Window.draw_card(panel_x, panel_y, panel_w, panel_h,
+                   radius: 12.0,
+                   color: Color.new(24, 30, 42, 245),
+                   border_width: 1.5,
+                   border_color: Color.new(50, 70, 100),
+                   shadow_blur: 15.0,
+                   z: 50.0)
+
+  draw_panel_text(panel_x + 20.0, panel_y + 18.0, "Texture Atlas Inspector", 18, Color::CYAN)
+  draw_panel_text(panel_x + 20.0, panel_y + 44.0, "Atlas: #{atlas.width}x#{atlas.height} px | Texture ID: #{atlas.texture_id}", 13, Color.new(160, 180, 210))
+
+  # 元のアトラス全体 (256x256) を描画
+  atlas_draw_x = panel_x + 20.0
+  atlas_draw_y = panel_y + 75.0
+  Window.draw_card(atlas_draw_x - 2.0, atlas_draw_y - 2.0, ATLAS_SIZE + 4.0, ATLAS_SIZE + 4.0,
+                   radius: 4.0, color: Color.new(10, 12, 18),
+                   border_width: 1.5, border_color: Color.new(70, 90, 125), z: 51.0)
+  Window.draw_image(atlas_draw_x, atlas_draw_y, atlas, z: 52.0)
+
+  draw_atlas_grid(atlas_draw_x, atlas_draw_y)
+  draw_atlas_preview(atlas_draw_x + ATLAS_SIZE + 20.0, atlas_draw_y + 20.0, atlas, gallery_frame)
+  draw_batch_stats(panel_x, panel_y + 380.0, panel_w, sprite_count)
+end
+
+# ----------------------------------------------------
+# 3. メインループ
+# ----------------------------------------------------
+# 45 個の穏やかな浮遊スプライト (すべて同一アトラス)
+particles = Array.new(45) do
+  FloatingSprite.new(rand(0..3))
+end
+
+# ギャラリー用のアニメーションタイマー (0.4 秒周期)
+gallery_timer = 0.0
+gallery_frame = 0
+
+test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
+frame_count = 0
+
+atlas = nil
+slots = nil
+
+Window.loop(1280, 720, "Zenoo Texture Atlas & sub_image Showcase") do
+  atlas, slots = build_texture_atlas if atlas.nil?
+
+  dt = [Window.delta_time, 0.05].min
+
+  # ギャラリーのアニメーション更新 (ゆっくり 0.4 秒周期)
+  gallery_timer += dt
+  if gallery_timer >= 0.4
+    gallery_timer = 0.0
+    gallery_frame = (gallery_frame + 1) % 4
+  end
+
+  # 背景描画 (落ち着いたダークネイビー)
+  Window.clear(Color.new(16, 20, 30))
+
+  # ----------------------------------------------------
+  # A. ヘッダー & 説明UI
+  # ----------------------------------------------------
+  GUI.cursor(30.0, 20.0)
+  GUI.label("=== Zenoo Texture Atlas & sub_image Showcase ===", size: 22, color: Color::WHITE)
+  GUI.label("1枚のテクスチャ (256x256) から切り出した sub_image 群を、自動バッチ結合により単一ドローコールで高速描画しています。", size: 14, color: Color.new(160, 180, 210))
+
+  # ----------------------------------------------------
+  # B. スプライトギャラリー展示台
+  # ----------------------------------------------------
+  draw_gallery_slots(30.0, 85.0, slots, gallery_frame)
+
+  # ----------------------------------------------------
+  # C. 下部エリア: 穏やかな浮遊スプライト
+  # ----------------------------------------------------
+  draw_ambient_field(30.0, 340.0, 720.0, 350.0, particles, slots, dt)
+
+  # ----------------------------------------------------
+  # D. 右側サイドパネル: テクスチャアトラスインスペクター
+  # ----------------------------------------------------
+  draw_inspector_panel(770.0, 20.0, 480.0, 670.0, atlas, gallery_frame, particles.size + 5)
 
   # マウスクリックで穏やかに追加
-  if Input.mouse_pressed?(:left) && Input.mouse_x < panel_x && Input.mouse_y > field_y
+  if Input.mouse_pressed?(:left) && Input.mouse_x < 770.0 && Input.mouse_y > 340.0
     p = FloatingSprite.new(rand(0..3))
     p.x = Input.mouse_x
     p.y = Input.mouse_y
