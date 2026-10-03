@@ -149,6 +149,18 @@ static VALUE image_get_uv(VALUE self) {
     return rb_ary_new_from_args(4, DBL2NUM(u), DBL2NUM(v), DBL2NUM(uw), DBL2NUM(vh));
 }
 
+static VALUE image_is_sub_image(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    if (!img || !img->texture) return Qfalse;
+    if (img->x != 0 || img->y != 0 ||
+        img->width != img->texture->width ||
+        img->height != img->texture->height) {
+        return Qtrue;
+    }
+    return Qfalse;
+}
+
 // ==========================================
 // Zenoo::Native::Shader (TypedData)
 // ==========================================
@@ -665,6 +677,7 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "texture_height", image_get_texture_height, 0);
     rb_define_method(rb_cNativeImage, "texture_id", image_get_texture_id, 0);
     rb_define_method(rb_cNativeImage, "uv", image_get_uv, 0);
+    rb_define_method(rb_cNativeImage, "sub_image?", image_is_sub_image, 0);
 
     // 4. NativeShader (Zenoo::Native::NativeShader)
     rb_cNativeShader = rb_define_class_under(rb_mNative, "NativeShader", rb_cObject);

@@ -9,6 +9,10 @@ module Zenoo
       Backend.current_target
     end
 
+    def self.current_target=(target)
+      Backend.current_target = target
+    end
+
     @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
     @main_loop_block = nil
     @step_proc = nil
@@ -138,8 +142,16 @@ module Zenoo
       @offset_x
     end
 
+    def self.offset_x=(val)
+      @offset_x = val.to_f
+    end
+
     def self.offset_y
       @offset_y
+    end
+
+    def self.offset_y=(val)
+      @offset_y = val.to_f
     end
 
     def self.current_clip
@@ -319,11 +331,12 @@ module Zenoo
       else
         draw_w = image.width.to_f
         draw_h = image.height.to_f
-        uv = image.uv
-        uv0 = uv[0].to_f
-        uv1 = uv[1].to_f
-        uv2 = uv[2].to_f
-        uv3 = uv[3].to_f
+        tw = image.texture_width.to_f
+        th = image.texture_height.to_f
+        uv0 = tw > 0.0 ? image.x.to_f / tw : 0.0
+        uv1 = th > 0.0 ? image.y.to_f / th : 0.0
+        uv2 = tw > 0.0 ? draw_w / tw : 1.0
+        uv3 = th > 0.0 ? draw_h / th : 1.0
       end
 
       data = [
@@ -468,8 +481,8 @@ module Zenoo
       target_font = font || Font.default
       return unless target_font
 
-      atlas = Font.atlas_image
-      return unless atlas
+      font_atlas = Font.atlas_image
+      return unless font_atlas
 
       f_size = size.to_f
       f_size = 24.0 if f_size <= 0.0
@@ -621,7 +634,7 @@ module Zenoo
           Backend::Pipelines::FONT,
           batch.pack("f*"),
           glyph_count,
-          image: atlas,
+          image: font_atlas,
           shader: shader,
           z: z
         )

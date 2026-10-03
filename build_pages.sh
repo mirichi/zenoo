@@ -24,6 +24,11 @@ CACHE_DIR="build/wasm_cache"
 mkdir -p "${DOCS_DIR}/game"
 mkdir -p "${DOCS_DIR}/gui"
 mkdir -p "${DOCS_DIR}/image"
+mkdir -p "${DOCS_DIR}/font"
+mkdir -p "${DOCS_DIR}/vector"
+mkdir -p "${DOCS_DIR}/atlas"
+mkdir -p "${DOCS_DIR}/window"
+mkdir -p "${DOCS_DIR}/clip"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -53,13 +58,24 @@ done
 emar rcs "${CACHE_DIR}/libspinel_rt.a" "${CACHE_DIR}/rt"/*.o "${CACHE_DIR}/regexp"/*.o
 
 echo "=== [3/5] Building Common Zenoo C Kernel ==="
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_core.c -o "${CACHE_DIR}/zenoo_core.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${CACHE_DIR}/zenoo_gfx.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${CACHE_DIR}/zenoo_font.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" ext/spinel/zenoo_spinel.c -o "${CACHE_DIR}/zenoo_spinel.o"
+build_c_kernel_obj() {
+    src="$1"
+    obj="$2"
+    if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ]; then
+        emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj"
+    fi
+}
+build_c_kernel_obj "src/zenoo_core.c" "${CACHE_DIR}/zenoo_core.o"
+build_c_kernel_obj "src/zenoo_gfx.c" "${CACHE_DIR}/zenoo_gfx.o"
+build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
+build_c_kernel_obj "ext/spinel/zenoo_spinel.c" "${CACHE_DIR}/zenoo_spinel.o"
+
+OPT_LEVEL="${OPT_LEVEL:--O1}"
+DEBUG_FLAGS="${DEBUG_FLAGS:--g0}"
 
 COMMON_EMCC_FLAGS=(
-    -O2
+    "${OPT_LEVEL}"
+    ${DEBUG_FLAGS}
     -s USE_GLFW=3
     -s MAX_WEBGL_VERSION=2
     -s MIN_WEBGL_VERSION=2
@@ -167,22 +183,76 @@ build_image() {
     echo "-> Image build done!"
 }
 
+build_atlas() {
+    echo "=== Building Texture Atlas Demo (${DOCS_DIR}/atlas) ==="
+    mkdir -p "${DOCS_DIR}/atlas"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_texture_atlas.rb -c -o "${DOCS_DIR}/atlas/app.c"
+    strip_always_inline "${DOCS_DIR}/atlas/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/atlas/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/atlas/index.html" \
+        --shell-file examples/web/shell_atlas.html
+
+    rm -f "${DOCS_DIR}/atlas/app.c"
+    echo "-> Atlas build done!"
+}
+
+build_window() {
+    echo "=== Building Multi-Window & Occlusion Demo (${DOCS_DIR}/window) ==="
+    mkdir -p "${DOCS_DIR}/window"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_window_drag.rb -c -o "${DOCS_DIR}/window/app.c"
+    strip_always_inline "${DOCS_DIR}/window/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/window/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/window/index.html" \
+        --shell-file examples/web/shell_window.html
+
+    rm -f "${DOCS_DIR}/window/app.c"
+    echo "-> Window build done!"
+}
+
+build_clip() {
+    echo "=== Building Hardware Clipping Demo (${DOCS_DIR}/clip) ==="
+    mkdir -p "${DOCS_DIR}/clip"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_window_clip.rb -c -o "${DOCS_DIR}/clip/app.c"
+    strip_always_inline "${DOCS_DIR}/clip/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/clip/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/clip/index.html" \
+        --shell-file examples/web/shell_clip.html
+
+    rm -f "${DOCS_DIR}/clip/app.c"
+    echo "-> Clip build done!"
+}
+
 case "$TARGET" in
     game)   build_game ;;
     gui)    build_gui ;;
     font)   build_font ;;
     vector) build_vector ;;
     image)  build_image ;;
+    atlas)  build_atlas ;;
+    window) build_window ;;
+    clip)   build_clip ;;
     all)
         build_game
         build_gui
         build_font
         build_vector
         build_image
+        build_atlas
+        build_window
+        build_clip
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|all]"
         exit 1
         ;;
 esac
@@ -196,4 +266,7 @@ echo " GUI   : ${DOCS_DIR}/gui/index.html"
 echo " Font  : ${DOCS_DIR}/font/index.html"
 echo " Vector: ${DOCS_DIR}/vector/index.html"
 echo " Image : ${DOCS_DIR}/image/index.html"
+echo " Atlas : ${DOCS_DIR}/atlas/index.html"
+echo " Window: ${DOCS_DIR}/window/index.html"
+echo " Clip  : ${DOCS_DIR}/clip/index.html"
 echo "=========================================================="
