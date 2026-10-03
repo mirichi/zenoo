@@ -142,6 +142,16 @@ module Zenoo
       native_func :glyph_is_bitmap, [], :bool,  "sp_zen_font_glyph_is_bitmap"
       native_func :atlas_image_raw, [:int], :any, "sp_zen_font_atlas_image"
     end
+
+    # ==========================================
+    # 8. Native::Audio
+    # ==========================================
+    module Audio
+      native_func :init, [], :bool, "sp_zen_audio_init"
+      native_func :shutdown, [], :nil, "sp_zen_audio_shutdown"
+      native_func :master_volume=, [:float], :nil, "sp_zen_audio_set_master_volume"
+      native_func :master_volume, [], :float, "sp_zen_audio_get_master_volume"
+    end
   end
 
   # ==========================================
@@ -153,6 +163,30 @@ module Zenoo
   native_method :metrics_descent,  [:float], :float, "sp_zen_font_metrics_descent"
   native_method :metrics_line_gap, [:float], :float, "sp_zen_font_metrics_line_gap"
   native_method :query_glyph,      [:int, :float], :bool, "sp_zen_font_query_glyph"
+
+  # ==========================================
+  # 9. Native::Sound (Spinel native_struct)
+  # ==========================================
+  native_struct "Zenoo::Native::Sound", "sp_ZenSound", "sp_ZenSound_free"
+  native_new [:string], "sp_ZenSound_load"
+  native_new [:string, :int, :int, :int], "sp_ZenSound_load_pcm"
+  native_method :play, [], :nil, "sp_ZenSound_play"
+  native_method :stop, [], :nil, "sp_ZenSound_stop"
+  native_method :pause, [], :nil, "sp_ZenSound_pause"
+  native_method :playing?, [], :bool, "sp_ZenSound_is_playing"
+  native_method :volume=, [:float], :nil, "sp_ZenSound_set_volume"
+  native_method :volume, [], :float, "sp_ZenSound_get_volume"
+  native_method :looping=, [:bool], :nil, "sp_ZenSound_set_looping"
+  native_method :looping?, [], :bool, "sp_ZenSound_is_looping"
+  native_method :pitch=, [:float], :nil, "sp_ZenSound_set_pitch"
+  native_method :pitch, [], :float, "sp_ZenSound_get_pitch"
+  native_method :pan=, [:float], :nil, "sp_ZenSound_set_pan"
+  native_method :pan, [], :float, "sp_ZenSound_get_pan"
+  native_method :seek, [:float], :nil, "sp_ZenSound_seek"
+  native_method :cursor, [], :float, "sp_ZenSound_get_cursor"
+  native_method :time, [], :float, "sp_ZenSound_get_cursor"
+  native_method :time=, [:float], :nil, "sp_ZenSound_seek"
+  native_method :length, [], :float, "sp_ZenSound_get_length"
 end
 
 class Zenoo::Image
@@ -198,3 +232,16 @@ class Zenoo::Native::Font
     ]
   end
 end
+
+class Zenoo::Native::Sound
+  def self.load(path)
+    new(path.to_s)
+  end
+
+  def self.load_pcm(samples_binary, channels, sample_rate)
+    bytes = samples_binary.bytesize
+    frame_count = bytes / 4 / channels
+    new(samples_binary, frame_count, channels, sample_rate)
+  end
+end
+

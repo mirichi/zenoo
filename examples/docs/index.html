@@ -105,6 +105,9 @@
     .card.clip::before {
       background: linear-gradient(90deg, #14b8a6, #3b82f6);
     }
+    .card.sound::before {
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -125,6 +128,7 @@
     .card.atlas .card-tag { color: #38bdf8; }
     .card.window .card-tag { color: #818cf8; }
     .card.clip .card-tag { color: #2dd4bf; }
+    .card.sound .card-tag { color: #38bdf8; }
 
     .card h2 {
       font-size: 22px;
@@ -394,6 +398,24 @@
         </ul>
       </div>
       <a href="clip/" class="btn-launch">クリップデモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Audio & Sound Demo Card -->
+    <div class="card sound">
+      <div>
+        <div class="card-tag">Audio Engine</div>
+        <h2>Audio &amp; Sound Synthesis</h2>
+        <p class="desc">
+          miniaudio &amp; stb_vorbis によるオーディオエンジン。Ogg Vorbis 音楽再生や、DXRuby 風のリアルタイム動的波形生成 (SoundEffect / PCM 合成) をブラウザ上で体験できます。
+        </p>
+        <ul class="features">
+          <li>miniaudio &amp; Web Audio API による低遅延再生</li>
+          <li>stb_vorbis による Ogg Vorbis 透過デコード &amp; ストリーミング</li>
+          <li>SoundEffect による動的波形生成 (サイン波・矩形波・スイープ・ノイズ)</li>
+          <li>音量・ピッチ・パン・ループのリアルタイムコントロール</li>
+        </ul>
+      </div>
+      <a href="sound/" class="btn-launch">サウンドデモを起動 (Launch Demo) →</a>
     </div>
   </main>
 

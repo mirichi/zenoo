@@ -54,6 +54,7 @@ echo "=== [3/4] Building Zenoo C Kernel for Wasm ==="
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_core.c -o "${CACHE_DIR}/zenoo_core.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${CACHE_DIR}/zenoo_gfx.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${CACHE_DIR}/zenoo_font.o"
+emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_audio.c -o "${CACHE_DIR}/zenoo_audio.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" ext/spinel/zenoo_spinel.c -o "${CACHE_DIR}/zenoo_spinel.o"
 
 echo "=== [4/4] Linking Wasm + WebGL Application ==="
@@ -72,6 +73,7 @@ emcc -O2 \
     "${CACHE_DIR}/zenoo_core.o" \
     "${CACHE_DIR}/zenoo_gfx.o" \
     "${CACHE_DIR}/zenoo_font.o" \
+    "${CACHE_DIR}/zenoo_audio.o" \
     "${CACHE_DIR}/zenoo_spinel.o" \
     "${CACHE_DIR}/libspinel_rt.a" \
     -o "${OUTPUT_DIR}/index.html" \

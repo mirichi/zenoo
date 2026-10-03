@@ -124,4 +124,40 @@ double sp_zen_font_metrics_ascent(sp_ZenFont* s, double size);
 double sp_zen_font_metrics_descent(sp_ZenFont* s, double size);
 double sp_zen_font_metrics_line_gap(sp_ZenFont* s, double size);
 
+// ==========================================
+// Audio & Sound (sp_ZenSound)
+// ==========================================
+typedef struct sp_ZenSound_s {
+    sp_int cls_id;
+    ZenSound* sound;
+} sp_ZenSound;
+
+void sp_ZenSound_free(void* p);
+sp_ZenSound* sp_ZenSound_load(sp_int cls_id, const char* path);
+sp_ZenSound* sp_ZenSound_load_pcm(sp_int cls_id, const char* pcm_data, sp_int frame_count, sp_int channels, sp_int sample_rate);
+
+void sp_ZenSound_play(sp_ZenSound* s);
+void sp_ZenSound_stop(sp_ZenSound* s);
+void sp_ZenSound_pause(sp_ZenSound* s);
+sp_bool sp_ZenSound_is_playing(sp_ZenSound* s);
+
+void sp_ZenSound_set_volume(sp_ZenSound* s, double vol);
+double sp_ZenSound_get_volume(sp_ZenSound* s);
+void sp_ZenSound_set_looping(sp_ZenSound* s, sp_bool loop);
+sp_bool sp_ZenSound_is_looping(sp_ZenSound* s);
+void sp_ZenSound_set_pitch(sp_ZenSound* s, double pitch);
+double sp_ZenSound_get_pitch(sp_ZenSound* s);
+void sp_ZenSound_set_pan(sp_ZenSound* s, double pan);
+double sp_ZenSound_get_pan(sp_ZenSound* s);
+
+void sp_ZenSound_seek(sp_ZenSound* s, double sec);
+double sp_ZenSound_get_cursor(sp_ZenSound* s);
+double sp_ZenSound_get_length(sp_ZenSound* s);
+
+// Audio モジュール用
+sp_bool sp_zen_audio_init(void);
+void sp_zen_audio_shutdown(void);
+void sp_zen_audio_set_master_volume(double vol);
+double sp_zen_audio_get_master_volume(void);
+
 #endif // ZENOO_SPINEL_H

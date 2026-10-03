@@ -36,6 +36,10 @@ int zen_audio_init(void) {
     ma_resource_manager_config rm_config = ma_resource_manager_config_init();
     rm_config.ppCustomDecodingBackendVTables = custom_backends;
     rm_config.customDecodingBackendCount = (ma_uint32)(sizeof(custom_backends) / sizeof(custom_backends[0]));
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+    rm_config.jobThreadCount = 0;
+    rm_config.flags |= MA_RESOURCE_MANAGER_FLAG_NO_THREADING;
+#endif
 
     ma_result res = ma_resource_manager_init(&rm_config, &s_resource_manager);
     if (res != MA_SUCCESS) {

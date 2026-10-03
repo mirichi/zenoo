@@ -103,7 +103,7 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
 
     if bgm_ogg
       ogg_state = bgm_ogg.playing? ? "Playing" : "Stopped"
-      GUI.label("Sample OGG: #{ogg_state} (#{bgm_ogg.time.round(1)}s / #{bgm_ogg.length.round(1)}s)", size: 14, color: Color.new(240, 180, 100))
+      GUI.label("Sample OGG: #{ogg_state} (#{bgm_ogg.time.to_f.round(1)}s / #{bgm_ogg.length.to_f.round(1)}s)", size: 14, color: Color.new(240, 180, 100))
 
       GUI.row(spacing: 10) do
         if GUI.button("Play OGG", w: 140.0, h: 40.0)
@@ -125,23 +125,23 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
 
     GUI.label("Master Volume: #{(master_vol * 100).to_i}%", size: 13, color: Color.new(200, 210, 225))
     new_vol = GUI.slider("Master Vol", master_vol, 0.0, 1.0, w: 452.0)
-    if (new_vol - master_vol).abs > 0.01
-      master_vol = new_vol
+    if (new_vol.to_f - master_vol).abs > 0.01
+      master_vol = new_vol.to_f
       Audio.master_volume = master_vol
     end
 
     if bgm_ogg
       GUI.label("BGM Pitch: #{bgm_pitch.round(2)}x", size: 13, color: Color.new(200, 210, 225))
       new_pitch = GUI.slider("Pitch", bgm_pitch, 0.5, 2.0, w: 452.0)
-      if (new_pitch - bgm_pitch).abs > 0.01
-        bgm_pitch = new_pitch
+      if (new_pitch.to_f - bgm_pitch).abs > 0.01
+        bgm_pitch = new_pitch.to_f
         bgm_ogg.pitch = bgm_pitch
       end
 
       GUI.label("BGM Pan: #{bgm_pan.round(2)} (Left: -1.0, Right: +1.0)", size: 13, color: Color.new(200, 210, 225))
       new_pan = GUI.slider("Pan", bgm_pan, -1.0, 1.0, w: 452.0)
-      if (new_pan - bgm_pan).abs > 0.01
-        bgm_pan = new_pan
+      if (new_pan.to_f - bgm_pan).abs > 0.01
+        bgm_pan = new_pan.to_f
         bgm_ogg.pan = bgm_pan
       end
 

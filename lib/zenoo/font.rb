@@ -120,7 +120,7 @@ module Zenoo
 
 
     def self.atlas_image
-      Native::Font.atlas_image
+      @atlas_image ||= Native::Font.atlas_image
     end
   end
 end
