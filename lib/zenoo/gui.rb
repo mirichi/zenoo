@@ -411,7 +411,7 @@ module Zenoo
         shadow_color = is_active ? Color.new(0, 0, 0, 180) : Color.new(0, 0, 0, 120)
 
         # 背景カード
-        Window.draw_card(
+        Window.draw_rect(
           wx, wy, ww, wh,
           radius: 12.0,
           color: Color.new(22, 26, 36, 245),
@@ -424,7 +424,7 @@ module Zenoo
 
         # タイトルバー帯
         title_bg = is_active ? Color.new(35, 45, 65, 230) : Color.new(28, 32, 44, 230)
-        Window.draw_card(
+        Window.draw_rect(
           wx + 2.0, wy + 2.0, ww - 4.0, title_bar_h,
           radius: 10.0,
           color: title_bg,

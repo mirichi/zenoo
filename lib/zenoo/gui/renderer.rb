@@ -34,13 +34,7 @@ module Zenoo
         border_col = opts[:border_color] || Color.new(60, 70, 90, 200)
         border_w = (opts[:border_width] || 1.5).to_f
 
-        Window.draw_rect(x, y, w, h, bg_col)
-        if border_w > 0.0
-          Window.draw_rect(x, y, w, border_w, border_col)
-          Window.draw_rect(x, y + h - border_w, w, border_w, border_col)
-          Window.draw_rect(x, y, border_w, h, border_col)
-          Window.draw_rect(x + w - border_w, y, border_w, h, border_col)
-        end
+        Window.draw_rect(x, y, w, h, color: bg_col, border_color: (border_w > 0.0 ? border_col : nil), border_width: border_w)
 
         if title && !title.to_s.empty?
           f_font = opts[:font] || theme.font || Font.default

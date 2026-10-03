@@ -18,7 +18,7 @@ require_relative '../lib/zenoo'
 # ヘルパー: SDF による高品質円描画
 # ----------------------------------------------------
 def draw_circle(cx, cy, r, color = :white)
-  Zenoo::Window.draw_rounded_rect(cx - r, cy - r, r * 2.0, r * 2.0, r, color)
+  Zenoo::Window.draw_rect(cx - r, cy - r, r * 2.0, r * 2.0, radius: r, color: color)
 end
 
 # ----------------------------------------------------
@@ -43,7 +43,7 @@ def create_spaceship_sprite
     Zenoo::Window.draw_triangle(40, 54, 20, 52, 12, 72, [255, 70, 70, 255])
 
     # エンジン噴射口 (後部)
-    Zenoo::Window.draw_rect(10, 34, 6, 12, [255, 140, 0, 255])
+    Zenoo::Window.draw_rect(10, 34, 6, 12, color: [255, 140, 0, 255])
 
     # 船体中央のコア
     draw_circle(36, 40, 5, [255, 255, 255, 255])
@@ -104,7 +104,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   Window.clear([16, 20, 32, 255])
 
   # タイトルヘッダー
-  Window.draw_rounded_rect(24, 16, 1232, 54, 10, [26, 32, 48, 255], border_width: 1, border_color: [60, 75, 110, 255])
+  Window.draw_rect(24, 16, 1232, 54, radius: 10, color: [26, 32, 48, 255], border_width: 1, border_color: [60, 75, 110, 255])
   Window.draw_text(44, 28, "Zenoo: Window.draw_image Showcase", size: 22, color: :white)
   Window.draw_text(600, 34, "GPU Instanced: Rotation / Scale / Flip / Pivot / offset_mode / Alpha / Blend", size: 14, color: [160, 180, 210, 255])
 
@@ -112,7 +112,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # パネル 1: 回転 (Rotation)
   # ----------------------------------------------------
   p1_x, p1_y, p1_w, p1_h = 24, 86, 396, 290
-  Window.draw_rounded_rect(p1_x, p1_y, p1_w, p1_h, 12, [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
+  Window.draw_rect(p1_x, p1_y, p1_w, p1_h, radius: 12, color: [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
   Window.draw_text(p1_x + 18, p1_y + 14, "1. 回転 (Rotation)", size: 17, color: :cyan)
   Window.draw_text(p1_x + 18, p1_y + 36, "angle: 0..360 (度数法) / 中心軸回転", size: 13, color: [150, 165, 190, 255])
 
@@ -137,7 +137,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # パネル 2: 拡大縮小 ＆ 反転 (Scale & Flip)
   # ----------------------------------------------------
   p2_x, p2_y, p2_w, p2_h = 442, 86, 396, 290
-  Window.draw_rounded_rect(p2_x, p2_y, p2_w, p2_h, 12, [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
+  Window.draw_rect(p2_x, p2_y, p2_w, p2_h, radius: 12, color: [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
   Window.draw_text(p2_x + 18, p2_y + 14, "2. 拡大縮小 & 反転 (Scale & Flip)", size: 17, color: :cyan)
   Window.draw_text(p2_x + 18, p2_y + 36, "scale:, scale_x:, scale_y: (負値で反転)", size: 13, color: [150, 165, 190, 255])
 
@@ -165,7 +165,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # パネル 3: offset_mode と ピボット (Pivot)
   # ----------------------------------------------------
   p3_x, p3_y, p3_w, p3_h = 860, 86, 396, 290
-  Window.draw_rounded_rect(p3_x, p3_y, p3_w, p3_h, 12, [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
+  Window.draw_rect(p3_x, p3_y, p3_w, p3_h, radius: 12, color: [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
   Window.draw_text(p3_x + 18, p3_y + 14, "3. 基準点モード (offset_mode)", size: 17, color: :cyan)
   Window.draw_text(p3_x + 18, p3_y + 36, "赤十字 (+) が指定した描画座標 (x, y)", size: 13, color: [150, 165, 190, 255])
 
@@ -173,7 +173,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # (x, y) が矩形の左上。回転はその中心を軸に行う
   c1_x, c1_y = p3_x + 50, p3_y + 80
   # ガイド枠 & 十字線 (x, y)
-  Window.draw_rect(c1_x, c1_y, 80, 80, [40, 50, 75, 120])
+  Window.draw_rect(c1_x, c1_y, 80, 80, color: [40, 50, 75, 120])
   Window.draw_line(c1_x - 8, c1_y, c1_x + 8, c1_y, :red)
   Window.draw_line(c1_x, c1_y - 8, c1_x, c1_y + 8, :red)
   Window.draw_image(c1_x, c1_y, @ship_img, angle: rot_angle, offset_mode: :top_left)
@@ -200,7 +200,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # パネル 4: 不透明度 (Alpha)
   # ----------------------------------------------------
   p4_x, p4_y, p4_w, p4_h = 24, 396, 500, 304
-  Window.draw_rounded_rect(p4_x, p4_y, p4_w, p4_h, 12, [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
+  Window.draw_rect(p4_x, p4_y, p4_w, p4_h, radius: 12, color: [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
   Window.draw_text(p4_x + 18, p4_y + 14, "4. 不透明度 (Alpha)", size: 17, color: :cyan)
   Window.draw_text(p4_x + 18, p4_y + 36, "alpha: 0..255 (DXRuby準拠) / 色ブレンドと連動", size: 13, color: [150, 165, 190, 255])
 
@@ -208,7 +208,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   12.times do |i|
     bx = p4_x + 20 + i * 38
     col = (i.even? ? [40, 50, 70, 255] : [20, 26, 40, 255])
-    Window.draw_rect(bx, p4_y + 60, 38, 120, col)
+    Window.draw_rect(bx, p4_y + 60, 38, 120, color: col)
   end
 
   # 4段階の固定アルファ
@@ -229,7 +229,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # パネル 5: ブレンドモード (Blend Modes)
   # ----------------------------------------------------
   p5_x, p5_y, p5_w, p5_h = 544, 396, 712, 304
-  Window.draw_rounded_rect(p5_x, p5_y, p5_w, p5_h, 12, [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
+  Window.draw_rect(p5_x, p5_y, p5_w, p5_h, radius: 12, color: [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
   Window.draw_text(p5_x + 18, p5_y + 14, "5. ブレンドモード (Blend Modes: :alpha / :add / :multiply)", size: 17, color: :cyan)
   Window.draw_text(p5_x + 18, p5_y + 36, "加算は暗い背景で発光し、乗算は明るい背景で色が重なり影になります", size: 13, color: [150, 165, 190, 255])
 
@@ -237,7 +237,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
 
   # 1. :alpha (標準アルファブレンド)
   b1_x, b1_y = p5_x + 25, p5_y + 65
-  Window.draw_rounded_rect(b1_x, b1_y, 210, 175, 8, [16, 22, 34, 255], border_width: 1, border_color: [45, 55, 75, 255])
+  Window.draw_rect(b1_x, b1_y, 210, 175, radius: 8, color: [16, 22, 34, 255], border_width: 1, border_color: [45, 55, 75, 255])
   Window.draw_image(b1_x + 25 - osc * 0.5, b1_y + 20, @disc_img, color: [0, 200, 255, 200], blend: :alpha, scale: 0.9)
   Window.draw_image(b1_x + 65 + osc * 0.5, b1_y + 20, @disc_img, color: [255, 60, 140, 200], blend: :alpha, scale: 0.9)
   Window.draw_text(b1_x + 16, b1_y + 125, "1. :alpha (標準透過)", size: 14, color: :white)
@@ -245,7 +245,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
 
   # 2. :add (加算合成: 暗い背景で光輝く)
   b2_x, b2_y = p5_x + 255, p5_y + 65
-  Window.draw_rounded_rect(b2_x, b2_y, 210, 175, 8, [10, 12, 18, 255], border_width: 1, border_color: [45, 55, 75, 255])
+  Window.draw_rect(b2_x, b2_y, 210, 175, radius: 8, color: [10, 12, 18, 255], border_width: 1, border_color: [45, 55, 75, 255])
   Window.draw_image(b2_x + 25 - osc * 0.5, b2_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :add, scale: 0.9)
   Window.draw_image(b2_x + 65 + osc * 0.5, b2_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :add, scale: 0.9)
   Window.draw_text(b2_x + 16, b2_y + 125, "2. :add (加算合成)", size: 14, color: :yellow)
@@ -254,9 +254,9 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # 3. :multiply (乗算合成: 明るい背景で色が重なり影になる)
   b3_x, b3_y = p5_x + 485, p5_y + 65
   # 明るいキャンバス背景 (オフホワイト)
-  Window.draw_rounded_rect(b3_x, b3_y, 210, 175, 8, [235, 240, 248, 255], border_width: 1, border_color: [180, 195, 220, 255])
+  Window.draw_rect(b3_x, b3_y, 210, 175, radius: 8, color: [235, 240, 248, 255], border_width: 1, border_color: [180, 195, 220, 255])
   # 市松模様のガイド線
-  Window.draw_rect(b3_x + 10, b3_y + 10, 190, 100, [215, 222, 235, 255])
+  Window.draw_rect(b3_x + 10, b3_y + 10, 190, 100, color: [215, 222, 235, 255])
   # 2つのカラーフィルターを乗算合成 (シアン x マゼンタ -> 重なりが濃い青紫に！)
   Window.draw_image(b3_x + 25 - osc * 0.5, b3_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :multiply, scale: 0.9)
   Window.draw_image(b3_x + 65 + osc * 0.5, b3_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :multiply, scale: 0.9)

@@ -4,7 +4,7 @@ require_relative 'renderer'
 
 module Zenoo
   module GUI
-    # draw_card を活用した標準のモダン・カード描画レンダラー
+    # draw_rect を活用した標準のモダン・カード描画レンダラー
     class CardRenderer < Renderer
       # ----------------------------------------------------
       # ボタン描画
@@ -36,7 +36,7 @@ module Zenoo
         s_c = shadow_cfg ? shadow_cfg[1] : [0, 0, 0, 180]
 
         # 背景カード描画 (SDF角丸 + ボーダー + シャドウ)
-        Window.draw_card(
+        Window.draw_rect(
           rx, ry, rw, rh,
           radius: theme.corner_radius,
           color: bg_col,
@@ -125,7 +125,7 @@ module Zenoo
         # トラック溝 (背景)
         tb_w = theme.track_border ? theme.track_border[0].to_f : 0.0
         tb_c = theme.track_border ? theme.track_border[1] : :cyan
-        Window.draw_card(
+        Window.draw_rect(
           rx, track_y, rw, track_h,
           radius: 4.0,
           color: theme.track_bg,
@@ -137,7 +137,7 @@ module Zenoo
         fill_w = rw * ratio
         if fill_w > 4.0
           fill_color = (state == :hover || state == :active) ? theme.accent_hover : theme.accent_color
-          Window.draw_card(
+          Window.draw_rect(
             rx, track_y, fill_w, track_h,
             radius: 4.0,
             color: fill_color
@@ -154,7 +154,7 @@ module Zenoo
         kb_border = [2.0, (state == :active ? theme.accent_hover : theme.accent_color)]
         kb_shadow = (state == :active ? theme.shadow_active : theme.shadow_normal)
 
-        Window.draw_card(
+        Window.draw_rect(
           knob_x, knob_y, knob_size, knob_size,
           radius: knob_radius,
           color: knob_color,
@@ -249,7 +249,7 @@ module Zenoo
         s_b = shadow_cfg ? shadow_cfg[0] : 0.0
         s_c = shadow_cfg ? shadow_cfg[1] : [0, 0, 0, 180]
 
-        Window.draw_card(
+        Window.draw_rect(
           rx, ry, rw, rh,
           radius: theme.corner_radius,
           color: bg_col,
@@ -306,7 +306,7 @@ module Zenoo
         card_image = opts[:image]
         card_z     = (opts[:z] || 0.0).to_f
 
-        Window.draw_card(
+        Window.draw_rect(
           rx, ry, rw, rh,
           radius: radius,
           color: bg_col,

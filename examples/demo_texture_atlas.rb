@@ -28,12 +28,12 @@ def bake_coins(slots)
       cx = (SLOT_SIZE - cw) / 2.0
       cy = (SLOT_SIZE - ch) / 2.0
 
-      Window.draw_card(cx, cy, cw, ch, radius: [cw, ch].min / 2.0,
+      Window.draw_rect(cx, cy, cw, ch, radius: [cw, ch].min / 2.0,
                                        color: Color.new(255, 215, 0),
                                        border_width: 2.0,
                                        border_color: Color.new(200, 150, 0))
       if cw > 14.0
-        Window.draw_card(cx + 4.0, cy + 4.0, cw - 8.0, ch - 8.0,
+        Window.draw_rect(cx + 4.0, cy + 4.0, cw - 8.0, ch - 8.0,
                          radius: [cw - 8.0, ch - 8.0].min / 2.0,
                          color: Color.new(255, 235, 120))
       end
@@ -64,8 +64,8 @@ end
 def bake_heart(slot)
   Image.render_to(slot) do
     Window.clear(Color.new(0, 0, 0, 0))
-    Window.draw_card(14, 16, 20, 20, radius: 10.0, color: Color.new(255, 60, 100))
-    Window.draw_card(30, 16, 20, 20, radius: 10.0, color: Color.new(255, 60, 100))
+    Window.draw_rect(14, 16, 20, 20, radius: 10.0, color: Color.new(255, 60, 100))
+    Window.draw_rect(30, 16, 20, 20, radius: 10.0, color: Color.new(255, 60, 100))
     Window.draw_triangle(14, 26, 50, 26, 32, 52, Color.new(255, 60, 100))
   end
 end
@@ -81,7 +81,7 @@ end
 def bake_shield(slot)
   Image.render_to(slot) do
     Window.clear(Color.new(0, 0, 0, 0))
-    Window.draw_card(16, 12, 32, 38, radius: 12.0, color: Color.new(70, 180, 100),
+    Window.draw_rect(16, 12, 32, 38, radius: 12.0, color: Color.new(70, 180, 100),
                                     border_width: 3.0, border_color: Color.new(230, 255, 230))
   end
 end
@@ -89,8 +89,8 @@ end
 def bake_potion(slot)
   Image.render_to(slot) do
     Window.clear(Color.new(0, 0, 0, 0))
-    Window.draw_card(26, 10, 12, 8, radius: 2.0, color: Color.new(200, 200, 220))
-    Window.draw_card(18, 18, 28, 36, radius: 14.0, color: Color.new(180, 70, 240, 220),
+    Window.draw_rect(26, 10, 12, 8, radius: 2.0, color: Color.new(200, 200, 220))
+    Window.draw_rect(18, 18, 28, 36, radius: 14.0, color: Color.new(180, 70, 240, 220),
                                     border_width: 2.0, border_color: Color.new(240, 200, 255))
   end
 end
@@ -109,11 +109,11 @@ def bake_players(slots)
     Image.render_to(slot) do
       Window.clear(Color.new(0, 0, 0, 0))
       bob = (i.even? ? 0.0 : 2.0)
-      Window.draw_card(20, 12 - bob, 24, 24, radius: 12.0, color: Color.new(255, 210, 170))
-      Window.draw_card(18, 32 - bob, 28, 22, radius: 6.0, color: Color.new(40, 130, 255))
+      Window.draw_rect(20, 12 - bob, 24, 24, radius: 12.0, color: Color.new(255, 210, 170))
+      Window.draw_rect(18, 32 - bob, 28, 22, radius: 6.0, color: Color.new(40, 130, 255))
       leg_offset = (i == 1 ? 4.0 : (i == 3 ? -4.0 : 0.0))
-      Window.draw_card(20 + leg_offset, 50 - bob, 8, 10, radius: 2.0, color: Color.new(40, 50, 80))
-      Window.draw_card(36 - leg_offset, 50 - bob, 8, 10, radius: 2.0, color: Color.new(40, 50, 80))
+      Window.draw_rect(20 + leg_offset, 50 - bob, 8, 10, radius: 2.0, color: Color.new(40, 50, 80))
+      Window.draw_rect(36 - leg_offset, 50 - bob, 8, 10, radius: 2.0, color: Color.new(40, 50, 80))
     end
   end
 end
@@ -202,7 +202,7 @@ end
 
 # 単一ギャラリーアイテムの描画
 def draw_gallery_item(bx, by, cat, sprite)
-  Window.draw_card(bx, by, 150.0, 170.0,
+  Window.draw_rect(bx, by, 150.0, 170.0,
                    radius: 8.0,
                    color: Color.new(18, 22, 32),
                    border_width: 1.0,
@@ -222,7 +222,7 @@ def draw_gallery_slots(gallery_x, gallery_y, slots, gallery_frame)
   gallery_w = 720.0
   gallery_h = 240.0
 
-  Window.draw_card(gallery_x, gallery_y, gallery_w, gallery_h,
+  Window.draw_rect(gallery_x, gallery_y, gallery_w, gallery_h,
                    radius: 10.0,
                    color: Color.new(24, 30, 42, 230),
                    border_width: 1.0,
@@ -249,7 +249,7 @@ end
 
 # C. 下部エリア: 穏やかな浮遊スプライト (同一アトラスによる自動バッチ)
 def draw_ambient_field(field_x, field_y, field_w, field_h, particles, slots, dt)
-  Window.draw_card(field_x, field_y, field_w, field_h,
+  Window.draw_rect(field_x, field_y, field_w, field_h,
                    radius: 10.0,
                    color: Color.new(20, 25, 36, 200),
                    border_width: 1.0,
@@ -282,7 +282,7 @@ def draw_atlas_grid(atlas_draw_x, atlas_draw_y)
     4.times do |c|
       gx = atlas_draw_x + c * SLOT_SIZE
       gy = atlas_draw_y + r * SLOT_SIZE
-      Window.draw_card(gx, gy, SLOT_SIZE, SLOT_SIZE,
+      Window.draw_rect(gx, gy, SLOT_SIZE, SLOT_SIZE,
                        radius: 0.0, color: Color.new(0, 0, 0, 0),
                        border_width: 1.0, border_color: Color.new(255, 255, 255, 35), z: 53.0)
     end
@@ -292,7 +292,7 @@ end
 # D-2. src_rect による直接切り出しプレビュー
 def draw_atlas_preview(prev_x, prev_y, atlas, gallery_frame)
   draw_panel_text(prev_x, prev_y, "src_rect Direct:", 13, Color.new(255, 215, 0))
-  Window.draw_card(prev_x, prev_y + 22.0, 140.0, 140.0,
+  Window.draw_rect(prev_x, prev_y + 22.0, 140.0, 140.0,
                    radius: 6.0, color: Color.new(14, 17, 24),
                    border_width: 1.0, border_color: Color.new(70, 90, 125), z: 51.0)
 
@@ -307,7 +307,7 @@ end
 
 # D-3. パフォーマンス & バッチ統計情報
 def draw_batch_stats(panel_x, stats_y, panel_w, sprite_count)
-  Window.draw_card(panel_x + 20.0, stats_y - 20.0, panel_w - 40.0, 280.0,
+  Window.draw_rect(panel_x + 20.0, stats_y - 20.0, panel_w - 40.0, 280.0,
                    radius: 8.0, color: Color.new(18, 22, 32, 230),
                    border_width: 1.0, border_color: Color.new(45, 60, 85), z: 51.0)
 
@@ -324,7 +324,7 @@ end
 
 # D. 右側サイドパネル: テクスチャアトラスインスペクター
 def draw_inspector_panel(panel_x, panel_y, panel_w, panel_h, atlas, gallery_frame, sprite_count)
-  Window.draw_card(panel_x, panel_y, panel_w, panel_h,
+  Window.draw_rect(panel_x, panel_y, panel_w, panel_h,
                    radius: 12.0,
                    color: Color.new(24, 30, 42, 245),
                    border_width: 1.5,
@@ -338,7 +338,7 @@ def draw_inspector_panel(panel_x, panel_y, panel_w, panel_h, atlas, gallery_fram
   # 元のアトラス全体 (256x256) を描画
   atlas_draw_x = panel_x + 20.0
   atlas_draw_y = panel_y + 75.0
-  Window.draw_card(atlas_draw_x - 2.0, atlas_draw_y - 2.0, ATLAS_SIZE + 4.0, ATLAS_SIZE + 4.0,
+  Window.draw_rect(atlas_draw_x - 2.0, atlas_draw_y - 2.0, ATLAS_SIZE + 4.0, ATLAS_SIZE + 4.0,
                    radius: 4.0, color: Color.new(10, 12, 18),
                    border_width: 1.5, border_color: Color.new(70, 90, 125), z: 51.0)
   Window.draw_image(atlas_draw_x, atlas_draw_y, atlas, z: 52.0)
