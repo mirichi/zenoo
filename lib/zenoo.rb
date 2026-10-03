@@ -32,6 +32,7 @@ require_relative 'zenoo/canvas'
 require_relative 'zenoo/gui'
 require_relative 'zenoo/sound'
 require_relative 'zenoo/sound_effect'
+require_relative 'zenoo/collision'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
 Window      = Zenoo::Window      unless defined?(Window)
@@ -45,4 +46,5 @@ GUI         = Zenoo::GUI         unless defined?(GUI)
 Audio       = Zenoo::Audio       unless defined?(Audio)
 Sound       = Zenoo::Sound       unless defined?(Sound)
 SoundEffect = Zenoo::SoundEffect unless defined?(SoundEffect)
+Collision   = Zenoo::Collision   unless defined?(Collision)
 
