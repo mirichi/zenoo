@@ -273,6 +273,43 @@ int       zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenG
 void      zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* descent, float* line_gap);
 ZenImage* zen_font_get_atlas_image(void);
 
+// ==========================================
+// 6. オーディオ (Audio & Sound) API
+// ==========================================
+typedef struct ZenSound ZenSound;
+
+// オーディオシステム初期化・終了
+int   zen_audio_init(void);
+void  zen_audio_shutdown(void);
+void  zen_audio_set_master_volume(float volume);
+float zen_audio_get_master_volume(void);
+
+// サウンドの生成・破棄
+ZenSound* zen_sound_load_file(const char* filepath);
+ZenSound* zen_sound_load_memory_pcm(const float* frames, int frame_count, int channels, int sample_rate);
+void      zen_sound_destroy(ZenSound* sound);
+
+// 再生制御
+void  zen_sound_play(ZenSound* sound);
+void  zen_sound_stop(ZenSound* sound);
+void  zen_sound_pause(ZenSound* sound);
+int   zen_sound_is_playing(const ZenSound* sound);
+
+// パラメータ制御
+void  zen_sound_set_volume(ZenSound* sound, float volume);
+float zen_sound_get_volume(const ZenSound* sound);
+void  zen_sound_set_looping(ZenSound* sound, int looping);
+int   zen_sound_is_looping(const ZenSound* sound);
+void  zen_sound_set_pitch(ZenSound* sound, float pitch);
+float zen_sound_get_pitch(const ZenSound* sound);
+void  zen_sound_set_pan(ZenSound* sound, float pan);
+float zen_sound_get_pan(const ZenSound* sound);
+
+// シーク & 時間情報
+void  zen_sound_seek(ZenSound* sound, float seconds);
+float zen_sound_get_cursor(const ZenSound* sound);
+float zen_sound_get_length(const ZenSound* sound);
+
 #ifdef __cplusplus
 }
 #endif

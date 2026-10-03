@@ -6,6 +6,7 @@ static VALUE rb_mNative;
 static VALUE rb_cNativeImage;
 static VALUE rb_cNativeShader;
 static VALUE rb_cNativeFont;
+static VALUE rb_cNativeSound;
 
 
 // ==========================================
@@ -616,6 +617,208 @@ static VALUE renderer_reset_scissor(VALUE self) {
 }
 
 // ==========================================
+// Zenoo::Native::Sound (TypedData)
+// ==========================================
+static void sound_free(void* ptr) {
+    ZenSound* sound = (ZenSound*)ptr;
+    if (sound) {
+        zen_sound_destroy(sound);
+    }
+}
+
+static size_t sound_memsize(const void* ptr) {
+    return ptr ? sizeof(ZenSound) : 0;
+}
+
+static const rb_data_type_t zenoo_sound_data_type = {
+    .wrap_struct_name = "Zenoo::Native::Sound",
+    .function = {
+        .dmark = NULL,
+        .dfree = sound_free,
+        .dsize = sound_memsize,
+    },
+    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
+};
+
+static VALUE sound_allocate(VALUE klass) {
+    return TypedData_Wrap_Struct(klass, &zenoo_sound_data_type, NULL);
+}
+
+static VALUE sound_s_load(VALUE klass, VALUE rb_path) {
+    const char* path = StringValueCStr(rb_path);
+    ZenSound* sound = zen_sound_load_file(path);
+    if (!sound) {
+        rb_raise(rb_eRuntimeError, "Failed to load sound from file: %s", path);
+    }
+    return TypedData_Wrap_Struct(klass, &zenoo_sound_data_type, sound);
+}
+
+static VALUE sound_s_load_pcm(VALUE klass, VALUE rb_samples, VALUE rb_channels, VALUE rb_sample_rate) {
+    int channels = NUM2INT(rb_channels);
+    int sample_rate = NUM2INT(rb_sample_rate);
+    if (channels <= 0 || sample_rate <= 0) {
+        rb_raise(rb_eArgError, "Invalid channels or sample_rate");
+    }
+
+    ZenSound* sound = NULL;
+    if (RB_TYPE_P(rb_samples, T_STRING)) {
+        long bytes = RSTRING_LEN(rb_samples);
+        long sample_count = bytes / (long)sizeof(float);
+        int frame_count = (int)(sample_count / channels);
+        if (frame_count <= 0) {
+            rb_raise(rb_eArgError, "Empty samples data");
+        }
+        const float* ptr = (const float*)RSTRING_PTR(rb_samples);
+        sound = zen_sound_load_memory_pcm(ptr, frame_count, channels, sample_rate);
+    } else if (RB_TYPE_P(rb_samples, T_ARRAY)) {
+        long sample_count = RARRAY_LEN(rb_samples);
+        int frame_count = (int)(sample_count / channels);
+        if (frame_count <= 0) {
+            rb_raise(rb_eArgError, "Empty samples array");
+        }
+        float* buffer = (float*)malloc(sizeof(float) * sample_count);
+        if (!buffer) {
+            rb_raise(rb_eNoMemError, "Failed to allocate memory for PCM samples");
+        }
+        for (long i = 0; i < sample_count; i++) {
+            buffer[i] = (float)NUM2DBL(RARRAY_AREF(rb_samples, i));
+        }
+        sound = zen_sound_load_memory_pcm(buffer, frame_count, channels, sample_rate);
+        free(buffer);
+    } else {
+        rb_raise(rb_eTypeError, "Expected Array or binary String for samples");
+    }
+
+    if (!sound) {
+        rb_raise(rb_eRuntimeError, "Failed to create sound from PCM data");
+    }
+    return TypedData_Wrap_Struct(klass, &zenoo_sound_data_type, sound);
+}
+
+static VALUE sound_play(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_play(sound);
+    return self;
+}
+
+static VALUE sound_stop(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_stop(sound);
+    return self;
+}
+
+static VALUE sound_pause(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_pause(sound);
+    return self;
+}
+
+static VALUE sound_is_playing(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return zen_sound_is_playing(sound) ? Qtrue : Qfalse;
+}
+
+static VALUE sound_set_volume(VALUE self, VALUE rb_vol) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_set_volume(sound, (float)NUM2DBL(rb_vol));
+    return rb_vol;
+}
+
+static VALUE sound_get_volume(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return DBL2NUM((double)zen_sound_get_volume(sound));
+}
+
+static VALUE sound_set_looping(VALUE self, VALUE rb_loop) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_set_looping(sound, RTEST(rb_loop) ? 1 : 0);
+    return rb_loop;
+}
+
+static VALUE sound_is_looping(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return zen_sound_is_looping(sound) ? Qtrue : Qfalse;
+}
+
+static VALUE sound_set_pitch(VALUE self, VALUE rb_pitch) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_set_pitch(sound, (float)NUM2DBL(rb_pitch));
+    return rb_pitch;
+}
+
+static VALUE sound_get_pitch(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return DBL2NUM((double)zen_sound_get_pitch(sound));
+}
+
+static VALUE sound_set_pan(VALUE self, VALUE rb_pan) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_set_pan(sound, (float)NUM2DBL(rb_pan));
+    return rb_pan;
+}
+
+static VALUE sound_get_pan(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return DBL2NUM((double)zen_sound_get_pan(sound));
+}
+
+static VALUE sound_seek(VALUE self, VALUE rb_sec) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_seek(sound, (float)NUM2DBL(rb_sec));
+    return rb_sec;
+}
+
+static VALUE sound_get_cursor(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return DBL2NUM((double)zen_sound_get_cursor(sound));
+}
+
+static VALUE sound_get_length(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return DBL2NUM((double)zen_sound_get_length(sound));
+}
+
+// ==========================================
+// Zenoo::Native::Audio
+// ==========================================
+static VALUE audio_s_init(VALUE klass) {
+    (void)klass;
+    return zen_audio_init() ? Qtrue : Qfalse;
+}
+
+static VALUE audio_s_shutdown(VALUE klass) {
+    (void)klass;
+    zen_audio_shutdown();
+    return Qnil;
+}
+
+static VALUE audio_s_set_master_volume(VALUE klass, VALUE rb_vol) {
+    (void)klass;
+    zen_audio_set_master_volume((float)NUM2DBL(rb_vol));
+    return rb_vol;
+}
+
+static VALUE audio_s_get_master_volume(VALUE klass) {
+    (void)klass;
+    return DBL2NUM((double)zen_audio_get_master_volume());
+}
+
+// ==========================================
 // C拡張初期化エントリポイント
 // ==========================================
 void Init_zenoo(void) {
@@ -706,4 +909,32 @@ void Init_zenoo(void) {
     rb_define_singleton_method(rb_cNativeFont, "atlas_image", font_s_atlas_image, 0);
     rb_define_method(rb_cNativeFont, "get_glyph", font_get_glyph, 2);
     rb_define_method(rb_cNativeFont, "metrics", font_get_metrics, 1);
+
+    // 7. Sound (Zenoo::Native::Sound)
+    rb_cNativeSound = rb_define_class_under(rb_mNative, "Sound", rb_cObject);
+    rb_define_alloc_func(rb_cNativeSound, sound_allocate);
+    rb_define_singleton_method(rb_cNativeSound, "load", sound_s_load, 1);
+    rb_define_singleton_method(rb_cNativeSound, "load_pcm", sound_s_load_pcm, 3);
+    rb_define_method(rb_cNativeSound, "play", sound_play, 0);
+    rb_define_method(rb_cNativeSound, "stop", sound_stop, 0);
+    rb_define_method(rb_cNativeSound, "pause", sound_pause, 0);
+    rb_define_method(rb_cNativeSound, "playing?", sound_is_playing, 0);
+    rb_define_method(rb_cNativeSound, "volume=", sound_set_volume, 1);
+    rb_define_method(rb_cNativeSound, "volume", sound_get_volume, 0);
+    rb_define_method(rb_cNativeSound, "looping=", sound_set_looping, 1);
+    rb_define_method(rb_cNativeSound, "looping?", sound_is_looping, 0);
+    rb_define_method(rb_cNativeSound, "pitch=", sound_set_pitch, 1);
+    rb_define_method(rb_cNativeSound, "pitch", sound_get_pitch, 0);
+    rb_define_method(rb_cNativeSound, "pan=", sound_set_pan, 1);
+    rb_define_method(rb_cNativeSound, "pan", sound_get_pan, 0);
+    rb_define_method(rb_cNativeSound, "seek", sound_seek, 1);
+    rb_define_method(rb_cNativeSound, "cursor", sound_get_cursor, 0);
+    rb_define_method(rb_cNativeSound, "length", sound_get_length, 0);
+
+    // 8. Audio (Zenoo::Native::Audio)
+    VALUE mAudio = rb_define_module_under(rb_mNative, "Audio");
+    rb_define_singleton_method(mAudio, "init", audio_s_init, 0);
+    rb_define_singleton_method(mAudio, "shutdown", audio_s_shutdown, 0);
+    rb_define_singleton_method(mAudio, "master_volume=", audio_s_set_master_volume, 1);
+    rb_define_singleton_method(mAudio, "master_volume", audio_s_get_master_volume, 0);
 }

@@ -37,6 +37,13 @@ DXRuby や Raylib に着想を得た直感的な API を備え、デスクトッ
    - 画面の **2本指タップで右クリック（メニュー開閉など）** を直感的にエミュレート。
    - ワンタップでアドレスバーを消す全画面（イマーシブ）モード対応。
 
+7. **miniaudio & stb_vorbis 統合オーディオエンジン**
+   - WAV, MP3, Ogg Vorbis の透過的デコード＆ストリーミング再生。
+   - DXRuby 風の動的波形生成（`SoundEffect.tone`, `sweep`, `noise`, `create`）。
+   - 音量・ピッチ・パン・ループ・シーク・一時停止などのフルコントロール。
+   - ファイル音と動的生成音を共通の `Sound` インスタンスとして透過操作可能。
+
+
 ---
 
 ## 🎮 WebAssembly ショーケース (デモ一覧)
@@ -104,6 +111,28 @@ Window.draw_path do |c|
 
   c.restore
 end
+```
+
+### 3. サウンド再生 & 動的効果音生成 (DXRuby スタイル)
+
+```ruby
+# ファイルから再生 (WAV, MP3, Ogg Vorbis 対応)
+bgm = Sound.load("assets/sounds/bgm.ogg")
+bgm.looping = true
+bgm.volume = 0.7
+bgm.play
+
+# 動的波形生成 (DXRuby 風 SoundEffect)
+jump_sound = SoundEffect.sweep(250, 700, 0.2, type: :square) # ジャンプ音
+boom_sound = SoundEffect.noise(0.4, volume: 0.8)             # 爆発音
+sine_sound = SoundEffect.tone(440, 0.3)                       # 単音サイン波
+
+# 再生・ピッチ変更
+jump_sound.pitch = 1.2
+jump_sound.play
+
+# マスター音量調整
+Audio.master_volume = 0.8
 ```
 
 ---
