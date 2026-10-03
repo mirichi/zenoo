@@ -78,7 +78,7 @@ Window.loop(1280, 720, "Zenoo Quickstart") do
   # マウス入力
   mx, my = Input.mouse_pos
   if Input.mouse_pressed?(:left)
-    Window.draw_circle(mx, my, 20, :yellow)
+    Window.draw_circle(mx, my, 20, color: :yellow)
   end
 end
 ```

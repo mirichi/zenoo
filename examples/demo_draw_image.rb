@@ -15,13 +15,6 @@ require_relative '../lib/zenoo'
 # ==============================================================================
 
 # ----------------------------------------------------
-# ヘルパー: SDF による高品質円描画
-# ----------------------------------------------------
-def draw_circle(cx, cy, r, color = :white)
-  Zenoo::Window.draw_rect(cx - r, cy - r, r * 2.0, r * 2.0, radius: r, color: color)
-end
-
-# ----------------------------------------------------
 # 1. デモ用スプライト画像の生成 (外部画像不要で自立起動)
 # ----------------------------------------------------
 def create_spaceship_sprite
@@ -46,7 +39,7 @@ def create_spaceship_sprite
     Zenoo::Window.draw_rect(10, 34, 6, 12, color: [255, 140, 0, 255])
 
     # 船体中央のコア
-    draw_circle(36, 40, 5, [255, 255, 255, 255])
+    Zenoo::Window.draw_circle(36, 40, 5, color: [255, 255, 255, 255])
 
     #Zenoo::Window.flush_draw_queue
   end
@@ -70,11 +63,11 @@ def create_orb_sprite
         255,
         alpha
       ]
-      draw_circle(48, 48, r, color)
+      Zenoo::Window.draw_circle(48, 48, r, color: color)
       r -= 2.0
     end
     # コアの白光
-    draw_circle(48, 48, 6, [255, 255, 255, 255])
+    Zenoo::Window.draw_circle(48, 48, 6, color: [255, 255, 255, 255])
   end
   img
 end
@@ -84,7 +77,7 @@ def create_disc_sprite
   img = Zenoo::Image.new(80, 80)
   Zenoo::Image.render_to(img) do
     Zenoo::Window.clear([0, 0, 0, 0])
-    draw_circle(40, 40, 38, [255, 255, 255, 255])
+    Zenoo::Window.draw_circle(40, 40, 38, color: [255, 255, 255, 255])
   end
   img
 end
@@ -185,13 +178,13 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # 十字線 (x, y)
   Window.draw_line(c2_x - 14, c2_y, c2_x + 14, c2_y, :red)
   Window.draw_line(c2_x, c2_y - 14, c2_x, c2_y + 14, :red)
-  draw_circle(c2_x, c2_y, 40, [40, 50, 75, 100])
+  Window.draw_circle(c2_x, c2_y, 40, color: [40, 50, 75, 100])
   Window.draw_image(c2_x, c2_y, @ship_img, angle: rot_angle, offset_mode: :center)
   Window.draw_text(c2_x - 45, p3_y + 175, ":center (中心配置)", size: 13, color: :white)
 
   # ピボット変更デモ (先端回転 vs 根元回転)
   tip_x, tip_y = p3_x + 90, p3_y + 225
-  draw_circle(tip_x, tip_y, 4, :yellow) # ピボット位置
+  Window.draw_circle(tip_x, tip_y, 4, color: :yellow) # ピボット位置
   Window.draw_image(tip_x, tip_y, @ship_img, angle: rot_angle * 1.5, scale: 0.6, pivot: [0.85, 0.5], offset_mode: :center)
   Window.draw_text(p3_x + 150, p3_y + 220, "先端ピボット [0.85, 0.5]", size: 13, color: :yellow)
   Window.draw_text(p3_x + 150, p3_y + 238, "剣先を振るような動き", size: 11, color: [140, 160, 190, 255])
