@@ -58,6 +58,7 @@ DXRuby や Raylib に着想を得た直感的な API を備え、デスクトッ
 | **SDF Font & Sinclair** | `examples/docs/font/` | ハイブリッドSDF/ビットマップ動的アトラス、高品質日本語・袋文字・8x8 レトロ文字 |
 | **Vector Graphics** | `examples/docs/vector/` | Canvas 2D 互換 API、ベジエ曲線、多角形分割、グラデーション |
 | **Sprite & Blend Modes** | `examples/docs/image/` | GPU Instanced な回転・拡縮・反転・ピボット・加算/乗算ブレンド合成 |
+| **Audio & Synthesis** | `examples/docs/sound/` | miniaudio & Ogg Vorbis、DXRuby風動的波形合成 (SoundEffect) |
 
 ---
 

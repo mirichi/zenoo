@@ -51,16 +51,18 @@ module Zenoo
           native_sound = Native::Sound.load_pcm(samples, channels, sample_rate)
         end
 
-        sound = allocate
-        sound.instance_variable_set(:@native, native_sound)
-        sound.instance_variable_set(:@path, nil)
-        sound
+        new(native_sound)
       end
     end
 
-    def initialize(path)
-      @path = path.to_s
-      @native = Native::Sound.load(@path)
+    def initialize(source)
+      if source.is_a?(String)
+        @path = source.to_s
+        @native = Native::Sound.load(@path)
+      else
+        @path = nil
+        @native = source
+      end
     end
 
     # 再生開始 (再生中なら先頭からリトリガー再生)

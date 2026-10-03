@@ -355,7 +355,6 @@ void sp_zen_renderer_reset_scissor(void) {
 // Font (sp_ZenFont)
 // ==========================================
 static ZenGlyph s_query_glyph_cache;
-static sp_ZenImage* s_atlas_zen_image = NULL;
 
 static void sp_ZenAtlasImage_noop_free(void* p) {
     (void)p;
@@ -387,15 +386,11 @@ sp_RbVal sp_zen_font_atlas_image(sp_int image_cls_id) {
     sp_int cid = (image_cls_id > 0) ? image_cls_id : s_image_cls_id;
     if (cid <= 0) cid = 7;
 
-    if (!s_atlas_zen_image) {
-        s_atlas_zen_image = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenAtlasImage_noop_free, NULL);
-        memset(s_atlas_zen_image, 0, sizeof(*s_atlas_zen_image));
-        s_atlas_zen_image->cls_id = cid;
-        s_atlas_zen_image->image = img;
-    } else {
-        s_atlas_zen_image->cls_id = cid;
-    }
-    return sp_box_obj(s_atlas_zen_image, (int)cid);
+    sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenAtlasImage_noop_free, NULL);
+    memset(s, 0, sizeof(*s));
+    s->cls_id = cid;
+    s->image = img;
+    return sp_box_obj(s, (int)cid);
 }
 
 sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size) {
@@ -436,4 +431,124 @@ double sp_zen_font_metrics_line_gap(sp_ZenFont* s, double size) {
     zen_font_get_metrics(s->font, (float)size, NULL, NULL, &line_gap);
     return (double)line_gap;
 }
+
+// ==========================================
+// Audio & Sound (sp_ZenSound)
+// ==========================================
+void sp_ZenSound_free(void* p) {
+    sp_ZenSound* s = (sp_ZenSound*)p;
+    if (s && s->sound) {
+        zen_sound_destroy(s->sound);
+        s->sound = NULL;
+    }
+}
+
+sp_ZenSound* sp_ZenSound_load(sp_int cls_id, const char* path) {
+    ZenSound* snd = zen_sound_load_file(path);
+    if (!snd) return NULL;
+
+    sp_ZenSound* s = (sp_ZenSound*)sp_gc_alloc(sizeof(sp_ZenSound), sp_ZenSound_free, NULL);
+    memset(s, 0, sizeof(*s));
+    s->cls_id = cls_id;
+    s->sound = snd;
+    return s;
+}
+
+sp_ZenSound* sp_ZenSound_load_pcm(sp_int cls_id, const char* pcm_data, sp_int frame_count, sp_int channels, sp_int sample_rate) {
+    if (!pcm_data || frame_count <= 0 || channels <= 0 || sample_rate <= 0) return NULL;
+
+    const float* ptr = (const float*)pcm_data;
+    ZenSound* snd = zen_sound_load_memory_pcm(ptr, (int)frame_count, (int)channels, (int)sample_rate);
+    if (!snd) return NULL;
+
+    sp_ZenSound* s = (sp_ZenSound*)sp_gc_alloc(sizeof(sp_ZenSound), sp_ZenSound_free, NULL);
+    memset(s, 0, sizeof(*s));
+    s->cls_id = cls_id;
+    s->sound = snd;
+    return s;
+}
+
+void sp_ZenSound_play(sp_ZenSound* s) {
+    if (s && s->sound) zen_sound_play(s->sound);
+}
+
+void sp_ZenSound_stop(sp_ZenSound* s) {
+    if (s && s->sound) zen_sound_stop(s->sound);
+}
+
+void sp_ZenSound_pause(sp_ZenSound* s) {
+    if (s && s->sound) zen_sound_pause(s->sound);
+}
+
+sp_bool sp_ZenSound_is_playing(sp_ZenSound* s) {
+    if (!s || !s->sound) return false;
+    return zen_sound_is_playing(s->sound) ? true : false;
+}
+
+void sp_ZenSound_set_volume(sp_ZenSound* s, double vol) {
+    if (s && s->sound) zen_sound_set_volume(s->sound, (float)vol);
+}
+
+double sp_ZenSound_get_volume(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0.0;
+    return (double)zen_sound_get_volume(s->sound);
+}
+
+void sp_ZenSound_set_looping(sp_ZenSound* s, sp_bool loop) {
+    if (s && s->sound) zen_sound_set_looping(s->sound, loop ? 1 : 0);
+}
+
+sp_bool sp_ZenSound_is_looping(sp_ZenSound* s) {
+    if (!s || !s->sound) return false;
+    return zen_sound_is_looping(s->sound) ? true : false;
+}
+
+void sp_ZenSound_set_pitch(sp_ZenSound* s, double pitch) {
+    if (s && s->sound) zen_sound_set_pitch(s->sound, (float)pitch);
+}
+
+double sp_ZenSound_get_pitch(sp_ZenSound* s) {
+    if (!s || !s->sound) return 1.0;
+    return (double)zen_sound_get_pitch(s->sound);
+}
+
+void sp_ZenSound_set_pan(sp_ZenSound* s, double pan) {
+    if (s && s->sound) zen_sound_set_pan(s->sound, (float)pan);
+}
+
+double sp_ZenSound_get_pan(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0.0;
+    return (double)zen_sound_get_pan(s->sound);
+}
+
+void sp_ZenSound_seek(sp_ZenSound* s, double sec) {
+    if (s && s->sound) zen_sound_seek(s->sound, (float)sec);
+}
+
+double sp_ZenSound_get_cursor(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0.0;
+    return (double)zen_sound_get_cursor(s->sound);
+}
+
+double sp_ZenSound_get_length(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0.0;
+    return (double)zen_sound_get_length(s->sound);
+}
+
+sp_bool sp_zen_audio_init(void) {
+    return zen_audio_init() ? true : false;
+}
+
+void sp_zen_audio_shutdown(void) {
+    zen_audio_shutdown();
+}
+
+void sp_zen_audio_set_master_volume(double vol) {
+    zen_audio_set_master_volume((float)vol);
+}
+
+double sp_zen_audio_get_master_volume(void) {
+    return (double)zen_audio_get_master_volume();
+}
+
 

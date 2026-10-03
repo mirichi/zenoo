@@ -29,6 +29,7 @@ mkdir -p "${DOCS_DIR}/vector"
 mkdir -p "${DOCS_DIR}/atlas"
 mkdir -p "${DOCS_DIR}/window"
 mkdir -p "${DOCS_DIR}/clip"
+mkdir -p "${DOCS_DIR}/sound"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -68,6 +69,7 @@ build_c_kernel_obj() {
 build_c_kernel_obj "src/zenoo_core.c" "${CACHE_DIR}/zenoo_core.o"
 build_c_kernel_obj "src/zenoo_gfx.c" "${CACHE_DIR}/zenoo_gfx.o"
 build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
+build_c_kernel_obj "src/zenoo_audio.c" "${CACHE_DIR}/zenoo_audio.o"
 build_c_kernel_obj "ext/spinel/zenoo_spinel.c" "${CACHE_DIR}/zenoo_spinel.o"
 
 OPT_LEVEL="${OPT_LEVEL:--O1}"
@@ -93,6 +95,7 @@ COMMON_OBJS=(
     "${CACHE_DIR}/zenoo_core.o"
     "${CACHE_DIR}/zenoo_gfx.o"
     "${CACHE_DIR}/zenoo_font.o"
+    "${CACHE_DIR}/zenoo_audio.o"
     "${CACHE_DIR}/zenoo_spinel.o"
     "${CACHE_DIR}/libspinel_rt.a"
 )
@@ -231,6 +234,22 @@ build_clip() {
     echo "-> Clip build done!"
 }
 
+build_sound() {
+    echo "=== Building Audio & Sound Demo (${DOCS_DIR}/sound) ==="
+    mkdir -p "${DOCS_DIR}/sound"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_sound.rb -c -o "${DOCS_DIR}/sound/app.c"
+    strip_always_inline "${DOCS_DIR}/sound/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/sound/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/sound/index.html" \
+        --shell-file examples/web/shell_sound.html
+
+    rm -f "${DOCS_DIR}/sound/app.c"
+    echo "-> Sound build done!"
+}
+
 case "$TARGET" in
     game)   build_game ;;
     gui)    build_gui ;;
@@ -240,6 +259,7 @@ case "$TARGET" in
     atlas)  build_atlas ;;
     window) build_window ;;
     clip)   build_clip ;;
+    sound)  build_sound ;;
     all)
         build_game
         build_gui
@@ -249,10 +269,11 @@ case "$TARGET" in
         build_atlas
         build_window
         build_clip
+        build_sound
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|all]"
         exit 1
         ;;
 esac
@@ -269,4 +290,5 @@ echo " Image : ${DOCS_DIR}/image/index.html"
 echo " Atlas : ${DOCS_DIR}/atlas/index.html"
 echo " Window: ${DOCS_DIR}/window/index.html"
 echo " Clip  : ${DOCS_DIR}/clip/index.html"
+echo " Sound : ${DOCS_DIR}/sound/index.html"
 echo "=========================================================="

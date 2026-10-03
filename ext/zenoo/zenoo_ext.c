@@ -929,6 +929,8 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeSound, "pan", sound_get_pan, 0);
     rb_define_method(rb_cNativeSound, "seek", sound_seek, 1);
     rb_define_method(rb_cNativeSound, "cursor", sound_get_cursor, 0);
+    rb_define_method(rb_cNativeSound, "time", sound_get_cursor, 0);
+    rb_define_method(rb_cNativeSound, "time=", sound_seek, 1);
     rb_define_method(rb_cNativeSound, "length", sound_get_length, 0);
 
     // 8. Audio (Zenoo::Native::Audio)
