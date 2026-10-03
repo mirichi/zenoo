@@ -271,6 +271,9 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
     zen_gfx_init(width, height);
     s_is_in_update_loop = 0;
 
+    // オーディオシステムの初期化
+    zen_audio_init();
+
     return 1;
 }
 
