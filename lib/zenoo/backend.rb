@@ -108,7 +108,7 @@ module Zenoo
     }.freeze
 
     def self.normalize_color(col)
-      return [1.0, 1.0, 1.0, 1.0] if col.nil?
+      return [0.0, 0.0, 0.0, 0.0] if col.nil?
       return COLOR_MAP[col] if COLOR_MAP.key?(col)
 
       if col.is_a?(Color)

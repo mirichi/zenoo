@@ -218,9 +218,10 @@ module Zenoo
                        shadow_color: [0, 0, 0, 180],
                        image: nil,
                        z: 0.0)
-      c_color = color ? Backend.normalize_color(color) : [0.0, 0.0, 0.0, 0.0]
+      actual_color = color || (border_color ? nil : :white)
+      c_color = Backend.normalize_color(actual_color)
       b_width = border_color ? (border_width || 1.0).to_f : 0.0
-      b_color = (b_width > 0.0) ? Backend.normalize_color(border_color) : [0.0, 0.0, 0.0, 0.0]
+      b_color = Backend.normalize_color(border_color)
 
       s_blur = shadow_blur.to_f
       s_color = (s_blur > 0.0) ? Backend.normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
