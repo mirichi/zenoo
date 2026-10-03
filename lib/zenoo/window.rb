@@ -209,17 +209,17 @@ module Zenoo
     # ----------------------------------------------------
     # 描画 API 
     # ----------------------------------------------------
-    def self.draw_card(x, y, w, h,
+    def self.draw_rect(x, y, w, h,
+                       color: nil,
                        radius: 0.0,
-                       color: :white,
-                       border_width: 0.0,
-                       border_color: :cyan,
+                       border_color: nil,
+                       border_width: nil,
                        shadow_blur: 0.0,
                        shadow_color: [0, 0, 0, 180],
                        image: nil,
                        z: 0.0)
-      c_color = Backend.normalize_color(color)
-      b_width = border_width.to_f
+      c_color = color ? Backend.normalize_color(color) : [0.0, 0.0, 0.0, 0.0]
+      b_width = border_color ? (border_width || 1.0).to_f : 0.0
       b_color = (b_width > 0.0) ? Backend.normalize_color(border_color) : [0.0, 0.0, 0.0, 0.0]
 
       s_blur = shadow_blur.to_f
@@ -246,14 +246,6 @@ module Zenoo
         shader: card_shader,
         z: z
       )
-    end
-
-    def self.draw_rect(x, y, w, h, color = :white, z: 0.0, **opts)
-      draw_card(x, y, w, h, color: color, z: z, **opts)
-    end
-
-    def self.draw_rounded_rect(x, y, w, h, radius, color = :white, z: 0.0, **opts)
-      draw_card(x, y, w, h, radius: radius, color: color, z: z, **opts)
     end
 
     def self.draw_image(x, y, image,

@@ -22,11 +22,7 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     bg = @col_active if state == :active
 
     # シンプルな矩形と枠線 (フラット・レトロ調)
-    Window.draw_rect(x, y, w, h, bg)
-    Window.draw_rect(x, y, w, 2.0, @col_border)
-    Window.draw_rect(x, y + h - 2.0, w, 2.0, @col_border)
-    Window.draw_rect(x, y, 2.0, h, @col_border)
-    Window.draw_rect(x + w - 2.0, y, 2.0, h, @col_border)
+    Window.draw_rect(x, y, w, h, color: bg, border_color: @col_border, border_width: 2.0)
 
     if label
       text_str = label.to_s
@@ -65,12 +61,12 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     track_y = y + 20.0
     track_h = 10.0
     # 背景
-    Window.draw_rect(x, track_y, w, track_h, @col_dark)
+    Window.draw_rect(x, track_y, w, track_h, color: @col_dark)
     # 進行度
-    Window.draw_rect(x, track_y, w * ratio, track_h, @col_accent)
+    Window.draw_rect(x, track_y, w * ratio, track_h, color: @col_accent)
     # つまみ
     knob_x = x + w * ratio - 5.0
-    Window.draw_rect(knob_x, track_y - 3.0, 10.0, track_h + 6.0, @col_white)
+    Window.draw_rect(knob_x, track_y - 3.0, 10.0, track_h + 6.0, color: @col_white)
   end
 
   def draw_label(x, y, text, size, color, theme)
@@ -82,11 +78,7 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     bg = focused ? @col_active : @col_normal
     border = focused ? @col_accent : @col_border
 
-    Window.draw_rect(x, y, w, h, bg)
-    Window.draw_rect(x, y, w, 2.0, border)
-    Window.draw_rect(x, y + h - 2.0, w, 2.0, border)
-    Window.draw_rect(x, y, 2.0, h, border)
-    Window.draw_rect(x + w - 2.0, y, 2.0, h, border)
+    Window.draw_rect(x, y, w, h, color: bg, border_color: border, border_width: 2.0)
 
     f_size = 14
     pad_x = 8.0
@@ -98,7 +90,7 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     if focused && blink_on
       sub_str = str[0...cursor_pos] || ""
       caret_x = x + pad_x + font.text_width(sub_str, f_size)
-      Window.draw_rect(caret_x, ty, 2.0, f_size, @col_accent)
+      Window.draw_rect(caret_x, ty, 2.0, f_size, color: @col_accent)
     end
   end
 
@@ -175,7 +167,7 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
       end
 
       # タイトルバー下のアクセント境界線
-      Window.draw_rect(rx, ry + bar_h, rw, 1.5, border_col)
+      Window.draw_rect(rx, ry + bar_h, rw, 1.5, color: border_col)
 
       # タイトル文字 (左上のカットに被らないよう配置)
       title_x = rx + [cut + 6.0, pad].max

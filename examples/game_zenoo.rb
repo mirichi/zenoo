@@ -34,7 +34,7 @@ class Bullet
     if @active
       sx = @x - cx
       sy = @y - cy
-      Window.draw_rect(sx.to_f - 2.0, sy.to_f - 2.0, 4.0, 4.0, Color::RED)
+      Window.draw_rect(sx.to_f - 2.0, sy.to_f - 2.0, 4.0, 4.0, color: Color::RED)
     end
   end
 end
@@ -120,7 +120,7 @@ class Item
 
       sx = @x - cx
       sy = @y - cy
-      Window.draw_rect(sx.to_f - 5.0, sy.to_f - 5.0, 10.0, 10.0, Color::YELLOW)
+      Window.draw_rect(sx.to_f - 5.0, sy.to_f - 5.0, 10.0, 10.0, color: Color::YELLOW)
     end
   end
 end
@@ -194,7 +194,7 @@ class Particle
       sx = @x - cx
       sy = @y - cy
       size = (@life.to_f / @max_life) * 10.0
-      Window.draw_rect(sx.to_f - size / 2.0, sy.to_f - size / 2.0, size, size, COLOR_ORANGE)
+      Window.draw_rect(sx.to_f - size / 2.0, sy.to_f - size / 2.0, size, size, color: COLOR_ORANGE)
     end
   end
 end
@@ -297,14 +297,14 @@ class Enemy
       size = @radius * 2.0
       
       if @max_hp > 1
-        Window.draw_rect(sx - size / 2.0, sy - size / 2.0, size, size, Color::RED)
+        Window.draw_rect(sx - size / 2.0, sy - size / 2.0, size, size, color: Color::RED)
         
         bar_width = size
         hp_ratio = @hp.to_f / @max_hp
-        Window.draw_rect(sx - size / 2.0, sy - size / 2.0 - 10.0, bar_width, 5.0, COLOR_HP_GRAY)
-        Window.draw_rect(sx - size / 2.0, sy - size / 2.0 - 10.0, bar_width * hp_ratio, 5.0, Color::GREEN)
+        Window.draw_rect(sx - size / 2.0, sy - size / 2.0 - 10.0, bar_width, 5.0, color: COLOR_HP_GRAY)
+        Window.draw_rect(sx - size / 2.0, sy - size / 2.0 - 10.0, bar_width * hp_ratio, 5.0, color: Color::GREEN)
       else
-        Window.draw_rect(sx - size / 2.0, sy - size / 2.0, size, size, Color::BLUE)
+        Window.draw_rect(sx - size / 2.0, sy - size / 2.0, size, size, color: Color::BLUE)
       end
     end
   end
@@ -434,7 +434,7 @@ class Player
 
       Window.draw_triangle(sx, sy, vx2, vy2, vx1, vy1, Color::GREEN)
       Window.draw_line(vx1, vy1, vx2, vy2, Color::WHITE)
-      Window.draw_rect(vx1 - 2.0, vy1 - 2.0, 4.0, 4.0, Color::WHITE)
+      Window.draw_rect(vx1 - 2.0, vy1 - 2.0, 4.0, 4.0, color: Color::WHITE)
     end
   end
 end
@@ -589,7 +589,7 @@ class Game
 
     if @game_state == 1
       # 半透明暗幕 (58% 黒)
-      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, COLOR_MENU_BG)
+      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG)
       
       # タイトル (18文字 * 32px = 576px -> (1280 - 576) / 2 = 352)
       Window.draw_text(352.0, 150.0, "--- SKILL MENU ---", font: Font::SINCLAIR, size: 32, color: Color::WHITE)
@@ -601,10 +601,10 @@ class Game
       hover3 = mx >= 140.0 && mx <= 1140.0 && my >= 345.0 && my <= 390.0
       hover4 = mx >= 140.0 && mx <= 1140.0 && my >= 395.0 && my <= 440.0
 
-      Window.draw_rect(140.0, 245.0, 1000.0, 45.0, COLOR_BUTTON_HOVER) if hover1
-      Window.draw_rect(140.0, 295.0, 1000.0, 45.0, COLOR_BUTTON_HOVER) if hover2
-      Window.draw_rect(140.0, 345.0, 1000.0, 45.0, COLOR_BUTTON_HOVER) if hover3
-      Window.draw_rect(140.0, 395.0, 1000.0, 45.0, COLOR_BUTTON_HOVER) if hover4
+      Window.draw_rect(140.0, 245.0, 1000.0, 45.0, color: COLOR_BUTTON_HOVER) if hover1
+      Window.draw_rect(140.0, 295.0, 1000.0, 45.0, color: COLOR_BUTTON_HOVER) if hover2
+      Window.draw_rect(140.0, 345.0, 1000.0, 45.0, color: COLOR_BUTTON_HOVER) if hover3
+      Window.draw_rect(140.0, 395.0, 1000.0, 45.0, color: COLOR_BUTTON_HOVER) if hover4
 
       shape_cost = (@player.sides - 2) * 100
       t1 = "[1/A]  Upgrade Shape (Cost: #{shape_cost}) -> Sides: #{@player.sides + 1}"

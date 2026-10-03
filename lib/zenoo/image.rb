@@ -19,7 +19,7 @@ class Zenoo::Image
 
   # オフスクリーンFBO描画ブロック
   # Image.render_to(canvas) do
-  #   Window.draw_card(...)
+  #   Window.draw_rect(...)
   # end
   # ※ sub_image に対して呼び出された場合は、自動的に該当領域へクリッピングされます。
   def self.render_to(target)

@@ -68,8 +68,8 @@ Window.loop(1280, 720, "Zenoo Quickstart") do
   # 画面クリア
   Window.clear([15, 23, 42, 255])
 
-  # SDF 角丸カード (x, y, w, h, radius, color, border_width, border_color, shadow_blur)
-  Window.draw_rounded_rect(100, 100, 300, 180, 16, [30, 41, 59, 255], border_width: 2, border_color: :cyan, shadow_blur: 20)
+  # SDF 矩形・カード描画 (角丸・ボーダー・ドロップシャドウを統合)
+  Window.draw_rect(100, 100, 300, 180, radius: 16, color: [30, 41, 59, 255], border_width: 2, border_color: :cyan, shadow_blur: 20)
 
   # SDF 日本語テキスト描画
   Window.draw_text(130, 140, "こんにちは、Zenoo！", size: 24, color: :white)

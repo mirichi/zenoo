@@ -91,7 +91,7 @@ Window.loop(1280, 720, "Zenoo GUI.window - Multi-Window Drag & Occlusion Demo") 
 
     # 相対座標系 (0, 0) からの直接描画
     # ウィンドウ枠 (w: 360, h: 360) をあえて大きくはみ出すカードを描画
-    Window.draw_card(
+    Window.draw_rect(
       10.0, 60.0, 450.0, 240.0,
       radius: 16.0,
       color: Color.new(50, 40, 70, 220),
