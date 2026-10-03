@@ -99,14 +99,10 @@ static void init_atlas_if_needed(void) {
 
     load_gl_font_procs();
 
-    s_atlas_image = (ZenImage*)calloc(1, sizeof(ZenImage));
-    if (!s_atlas_image) return;
+    ZenTexture* tex = zen_texture_create(ATLAS_WIDTH, ATLAS_HEIGHT);
+    if (!tex) return;
 
-    s_atlas_image->width = ATLAS_WIDTH;
-    s_atlas_image->height = ATLAS_HEIGHT;
-
-    glGenTextures(1, &s_atlas_image->texture_id);
-    glBindTexture(GL_TEXTURE_2D, s_atlas_image->texture_id);
+    glBindTexture(GL_TEXTURE_2D, tex->id);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -121,6 +117,18 @@ static void init_atlas_if_needed(void) {
         zen_font_gl_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, ATLAS_WIDTH, ATLAS_HEIGHT, GL_RED, GL_UNSIGNED_BYTE, clear_buf);
         free(clear_buf);
     }
+
+    s_atlas_image = (ZenImage*)calloc(1, sizeof(ZenImage));
+    if (!s_atlas_image) {
+        zen_texture_release(tex);
+        return;
+    }
+
+    s_atlas_image->texture = tex;
+    s_atlas_image->x = 0;
+    s_atlas_image->y = 0;
+    s_atlas_image->width = ATLAS_WIDTH;
+    s_atlas_image->height = ATLAS_HEIGHT;
 
 
     s_atlas_x = 1;
@@ -342,7 +350,7 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
             int dest_y = s_atlas_y;
 
             // OpenGL テクスチャへ部分転送
-            glBindTexture(GL_TEXTURE_2D, s_atlas_image->texture_id);
+            glBindTexture(GL_TEXTURE_2D, s_atlas_image->texture ? s_atlas_image->texture->id : 0);
             zen_font_gl_pixel_storei(GL_UNPACK_ALIGNMENT, 1);
             zen_font_gl_tex_sub_image_2d(GL_TEXTURE_2D, 0, dest_x, dest_y, w, h_out, GL_RED, GL_UNSIGNED_BYTE, pixels);
             zen_font_gl_pixel_storei(GL_UNPACK_ALIGNMENT, 4);

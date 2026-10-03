@@ -258,6 +258,7 @@ module Zenoo
                         alpha: 255,
                         blend: :alpha,
                         shader: nil,
+                        src_rect: nil,
                         z: 0.0)
       return unless image
       effective_shader = shader || @current_shader || default_sprite_shader
@@ -304,10 +305,31 @@ module Zenoo
       ax = x.to_f + @offset_x
       ay = y.to_f + @offset_y
 
+      if src_rect
+        tw = image.texture_width.to_f
+        th = image.texture_height.to_f
+        s_rx = image.x + src_rect[0].to_f
+        s_ry = image.y + src_rect[1].to_f
+        draw_w = src_rect[2].to_f
+        draw_h = src_rect[3].to_f
+        uv0 = tw > 0.0 ? s_rx / tw : 0.0
+        uv1 = th > 0.0 ? s_ry / th : 0.0
+        uv2 = tw > 0.0 ? draw_w / tw : 1.0
+        uv3 = th > 0.0 ? draw_h / th : 1.0
+      else
+        draw_w = image.width.to_f
+        draw_h = image.height.to_f
+        uv = image.uv
+        uv0 = uv[0].to_f
+        uv1 = uv[1].to_f
+        uv2 = uv[2].to_f
+        uv3 = uv[3].to_f
+      end
+
       data = [
-        ax, ay, image.width.to_f, image.height.to_f,
+        ax, ay, draw_w, draw_h,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        0.0, 0.0, 1.0, 1.0,
+        uv0, uv1, uv2, uv3,
         rad, sx, sy, off_mode,
         cx, cy, 0.0, 0.0
       ].pack("f*")

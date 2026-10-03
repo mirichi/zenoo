@@ -12,6 +12,12 @@ module Zenoo
   native_method :width,  [], :int, "sp_ZenImage_width"
   native_method :height, [], :int, "sp_ZenImage_height"
   native_method :set_as_render_target, [], :nil, "sp_ZenImage_set_as_render_target"
+  native_method :sub_image, [:int, :int, :int, :int], "Zenoo::Image", "sp_ZenImage_sub_image"
+  native_method :x, [], :int, "sp_ZenImage_x"
+  native_method :y, [], :int, "sp_ZenImage_y"
+  native_method :texture_width, [], :int, "sp_ZenImage_texture_width"
+  native_method :texture_height, [], :int, "sp_ZenImage_texture_height"
+  native_method :texture_id, [], :int, "sp_ZenImage_texture_id"
 
   # ==========================================
   # 2. Native::NativeShader (Spinel native_struct)
@@ -155,6 +161,14 @@ class Zenoo::Image
 
   def self.load(path)
     new(path)
+  end
+
+  def uv
+    tw = texture_width.to_f
+    th = texture_height.to_f
+    return [0.0, 0.0, 1.0, 1.0] if tw <= 0.0 || th <= 0.0
+
+    [x.to_f / tw, y.to_f / th, width.to_f / tw, height.to_f / th]
   end
 end
 

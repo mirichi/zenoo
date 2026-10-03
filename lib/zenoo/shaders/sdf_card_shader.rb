@@ -9,6 +9,7 @@ module Zenoo
       layout (location = 4) in vec4 in_param2;       // shadow_color (r, g, b, a)
       layout (location = 5) in vec4 in_uv;
       uniform vec2 u_resolution;
+      uniform float u_flip_y;
       out vec2 v_local_pos;
       out vec2 v_half_size;
       out vec4 v_color;
@@ -26,7 +27,8 @@ module Zenoo
           float pad = shadow_blur * 2.0;
           vec2 pos = vec2(x - pad, y - pad) + in_unit_pos * vec2(w + pad * 2.0, h + pad * 2.0);
           vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
-          ndc.y = -ndc.y;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
           gl_Position = vec4(ndc, 0.0, 1.0);
           v_half_size = vec2(w * 0.5, h * 0.5);
           vec2 center = vec2(x + w * 0.5, y + h * 0.5);

@@ -12,6 +12,7 @@ module Zenoo
       layout (location = 3) in vec4 in_transform; // rot_rad, scale_x, scale_y, offset_mode (0: top_left, 1: center)
       layout (location = 4) in vec4 in_pivot;     // pivot_x, pivot_y, unused, unused
       uniform vec2 u_resolution;
+      uniform float u_flip_y;
       out vec4 v_color;
       out vec2 v_uv;
       void main() {
@@ -35,7 +36,8 @@ module Zenoo
           vec2 pos = base_pos + rot;
 
           vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
-          ndc.y = -ndc.y;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
           gl_Position = vec4(ndc, 0.0, 1.0);
           v_color = in_color;
           v_uv = in_uv.xy + in_unit_pos * in_uv.zw;
@@ -64,10 +66,12 @@ module Zenoo
       layout (location = 0) in vec2 in_pos;
       layout (location = 1) in vec4 in_color;
       uniform vec2 u_resolution;
+      uniform float u_flip_y;
       out vec4 v_color;
       void main() {
           vec2 ndc = (in_pos / u_resolution) * 2.0 - 1.0;
-          ndc.y = -ndc.y;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
           gl_Position = vec4(ndc, 0.0, 1.0);
           v_color = in_color;
       }
@@ -89,11 +93,13 @@ module Zenoo
       layout (location = 0) in vec2 in_pos;
       layout (location = 1) in vec4 in_color;
       uniform vec2 u_resolution;
+      uniform float u_flip_y;
       out vec4 v_color;
       out vec2 v_pos;
       void main() {
           vec2 ndc = (in_pos / u_resolution) * 2.0 - 1.0;
-          ndc.y = -ndc.y;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
           gl_Position = vec4(ndc, 0.0, 1.0);
           v_color = in_color;
           v_pos = in_pos;

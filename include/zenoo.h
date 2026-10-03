@@ -153,23 +153,41 @@ int    zen_is_gamepad_button_push(int id, int button);
 int    zen_is_gamepad_button_release(int id, int button);
 
 // ==========================================
-// 2. 画像 (Image) & オフスクリーン描画 API
+// 2. テクスチャ (Texture) & 画像 (Image) API
 // ==========================================
+struct ZenTexture {
+    uint32_t id;         // OpenGL テクスチャ ID
+    int width;           // 物理テクスチャ幅
+    int height;          // 物理テクスチャ高さ
+    int ref_count;       // 参照カウンタ (共有している ZenImage の数)
+};
+typedef struct ZenTexture ZenTexture;
+
 struct ZenImage {
-    uint32_t texture_id;
-    uint32_t fbo;
-    int width;
-    int height;
+    ZenTexture* texture; // GPU テクスチャ実体への参照
+    int x;               // テクスチャ内の切り出し開始 X
+    int y;               // テクスチャ内の切り出し開始 Y
+    int width;           // この Image の論理幅 (切り出し幅)
+    int height;          // この Image の論理高さ (切り出し高さ)
+    uint32_t fbo;        // オフスクリーン描画用 FBO
     int has_fbo;
 };
 typedef struct ZenImage ZenImage;
 
-// 画像生成 & ロード
+// テクスチャ実体操作
+ZenTexture* zen_texture_create(int width, int height);
+void        zen_texture_release(ZenTexture* texture);
+
+// 画像生成 & ロード & サブ画像切り出し
 ZenImage* zen_image_create(int width, int height);
 ZenImage* zen_image_load(const char* filepath);
 ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pixels);
+ZenImage* zen_image_sub_image(ZenImage* parent, int x, int y, int width, int height);
 void      zen_image_destroy(ZenImage* image);
 void      zen_image_get_size(const ZenImage* image, int* width, int* height);
+void      zen_image_get_bounds(const ZenImage* image, int* x, int* y, int* w, int* h);
+void      zen_image_get_texture_size(const ZenImage* image, int* tex_w, int* tex_h);
+void      zen_image_get_uv(const ZenImage* image, float* u, float* v, float* uw, float* vh);
 uint32_t  zen_image_get_texture_id(const ZenImage* image);
 
 // 描画先ターゲットの切り替え (NULL でメイン画面に戻る)

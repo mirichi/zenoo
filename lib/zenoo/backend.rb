@@ -528,8 +528,10 @@ module Zenoo
             end
 
             n_shader = ncmd.shader || ncmd.pipeline.default_shader
+            same_image = (ncmd.image == cur_image) ||
+                         (ncmd.image && cur_image && ncmd.image.texture_id == cur_image.texture_id)
             if ncmd.pipeline == cur_pipeline &&
-               ncmd.image == cur_image &&
+               same_image &&
                n_shader == cur_shader &&
                ncmd.uniforms == cur_uniforms &&
                ncmd.blend == cur_blend &&

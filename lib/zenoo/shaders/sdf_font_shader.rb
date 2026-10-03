@@ -12,6 +12,7 @@ module Zenoo
       layout (location = 5) in vec4 in_param3;       // weight, unused, unused, unused
       layout (location = 6) in vec4 in_uv;
       uniform vec2 u_resolution;
+      uniform float u_flip_y;
 
       out vec4 v_color;
       out vec4 v_param0;
@@ -24,7 +25,8 @@ module Zenoo
           vec2 in_unit_pos = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
           vec2 pos = in_bounds.xy + in_unit_pos * in_bounds.zw;
           vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
-          ndc.y = -ndc.y;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
           gl_Position = vec4(ndc, 0.0, 1.0);
           v_color = in_color;
           v_param0 = in_param0;
