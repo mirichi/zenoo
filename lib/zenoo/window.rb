@@ -271,8 +271,7 @@ module Zenoo
     end
 
     def self.draw_image(x, y, image,
-                        color_or_opt = :white,
-                        color: nil,
+                        color: :white,
                         angle: 0.0,
                         scale: nil,
                         scale_x: 1.0,
@@ -289,9 +288,7 @@ module Zenoo
       return unless image
       effective_shader = shader || @current_shader || default_sprite_shader
 
-      # 第4引数 color_or_opt が指定され、かつキーワード color: がない場合
-      actual_color = color || color_or_opt || :white
-      c_color = Backend.normalize_color(actual_color)
+      c_color = Backend.normalize_color(color || :white)
 
       # alpha の適用 (0..255)
       if alpha
@@ -373,7 +370,7 @@ module Zenoo
     end
 
 
-    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color = :white, z: 0.0)
+    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color: :white, z: 0.0)
       ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
       ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
       ax3 = x3.to_f + @offset_x; ay3 = y3.to_f + @offset_y
@@ -407,34 +404,75 @@ module Zenoo
       )
     end
 
-    def self.draw_line(x1, y1, x2, y2, color = :white, z: 0.0)
+    def self.draw_line(x1, y1, x2, y2, color: :white, width: 1.0, z: 0.0)
+      actual_color = color || :white
       ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
       ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
+      w = width.to_f
 
-      if color.is_a?(Array) && color.length == 2 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
-        # 始点・終点の色指定 [c1, c2]
-        c1 = Backend.normalize_color(color[0])
-        c2 = Backend.normalize_color(color[1])
-        data = [
-          ax1, ay1, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
-          ax2, ay2, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f
-        ].pack("f*")
+      dx = ax2 - ax1
+      dy = ay2 - ay1
+      len = Math.sqrt(dx * dx + dy * dy)
+
+      is_grad = actual_color.is_a?(Array) && actual_color.length == 2 && (actual_color[0].is_a?(Color) || actual_color[0].is_a?(Symbol) || actual_color[0].is_a?(Array))
+      if is_grad
+        c1 = Backend.normalize_color(actual_color[0])
+        c2 = Backend.normalize_color(actual_color[1])
+        c1_r = c1[0].to_f; c1_g = c1[1].to_f; c1_b = c1[2].to_f; c1_a = c1[3].to_f
+        c2_r = c2[0].to_f; c2_g = c2[1].to_f; c2_b = c2[2].to_f; c2_a = c2[3].to_f
       else
-        c = Backend.normalize_color(color)
+        c = Backend.normalize_color(actual_color)
         cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
-        data = [
-          ax1, ay1, cr, cg, cb, ca,
-          ax2, ay2, cr, cg, cb, ca
-        ].pack("f*")
+        c1_r = c2_r = cr
+        c1_g = c2_g = cg
+        c1_b = c2_b = cb
+        c1_a = c2_a = ca
       end
 
-      Backend.enqueue_draw(
-        Backend::Pipelines::LINES,
-        data,
-        2,
-        shader: flat_primitive_shader,
-        z: z
-      )
+      if w > 1.0 && len > 0.0001
+        inv_len = 1.0 / len
+        nx = -dy * inv_len
+        ny = dx * inv_len
+        hw = w * 0.5
+        ox = nx * hw
+        oy = ny * hw
+
+        px1 = ax1 + ox; py1 = ay1 + oy
+        px2 = ax1 - ox; py2 = ay1 - oy
+        px3 = ax2 - ox; py3 = ay2 - oy
+        px4 = ax2 + ox; py4 = ay2 + oy
+
+        data = [
+          px1, py1, c1_r, c1_g, c1_b, c1_a,
+          px2, py2, c1_r, c1_g, c1_b, c1_a,
+          px3, py3, c2_r, c2_g, c2_b, c2_a,
+
+          px1, py1, c1_r, c1_g, c1_b, c1_a,
+          px3, py3, c2_r, c2_g, c2_b, c2_a,
+          px4, py4, c2_r, c2_g, c2_b, c2_a
+        ].pack("f*")
+
+        Backend.enqueue_draw(
+          Backend::Pipelines::TRIANGLES,
+          data,
+          6,
+          shader: flat_primitive_shader,
+          z: z
+        )
+      else
+        data = [
+          ax1, ay1, c1_r, c1_g, c1_b, c1_a,
+          ax2, ay2, c2_r, c2_g, c2_b, c2_a
+        ].pack("f*")
+
+        Backend.enqueue_draw(
+          Backend::Pipelines::LINES,
+          data,
+          2,
+          shader: flat_primitive_shader,
+          z: z
+        )
+      end
     end
 
     @sdf_font_shader = nil

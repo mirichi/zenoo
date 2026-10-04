@@ -3,69 +3,95 @@
 require_relative '../lib/zenoo'
 
 # ==============================================================================
-# Zenoo GJK Collision Demo
-# GJK アルゴリズムによる任意凸形状 (円, 回転矩形, 角丸矩形, 回転楕円, 凸多角形) のリアルタイム衝突判定
-# すべての形状が【回転 (angle)】および【不等スケーリング (scale_x, scale_y)】に完全対応！
+# Zenoo GJK Collision Demo (DXRuby Style Interactive Playground)
+# - 左ボタンドラッグ: 図形を掴んで自由に移動
+# - 右ボタンドラッグ: 図形を中心軸で直感的に回転
+# - [R] キー: 全図形の配置と角度を初期状態にリセット
 # ==============================================================================
 
-player_type = 0 # 0: 回転矩形, 1: 円, 2: 回転楕円, 3: 不等スケール角丸矩形, 4: 三角形
-player_angle = 0.0
+class ShapeItem
+  attr_accessor :name, :shape, :type, :init_x, :init_y, :init_angle, :hit
 
-# ターゲット形状一覧
-class Target
-  attr_accessor :name, :shape, :type, :color_idle, :color_hit, :hit
-
-  def initialize(name, shape, type, color_idle = [70, 160, 240, 220])
+  def initialize(name, shape, type)
     @name = name
     @shape = shape
     @type = type
-    @color_idle = color_idle
-    @color_hit = [240, 70, 90, 240]
+    @init_x = shape.x
+    @init_y = shape.y
+    @init_angle = shape.angle
     @hit = false
   end
 
-  def current_color
-    @hit ? @color_hit : @color_idle
+  def reset!
+    @shape.x = @init_x
+    @shape.y = @init_y
+    @shape.angle = @init_angle
+    @hit = false
   end
 end
 
-targets = [
-  # 1. 回転矩形 (OBB)
-  Target.new("OBB (Rotated Rect)", Collision.rect(260, 360, 140, 90, angle: 25), :rect),
-  # 2. 円
-  Target.new("Circle", Collision.circle(520, 180, 55), :circle),
-  # 3. 楕円状の円 (Rotated Circle: rx != ry)
-  Target.new("Circle (Rotated rx != ry)", Collision.circle(800, 180, 75, 35, angle: 30), :ellipse),
-  # 4. 不等スケール角丸矩形 (Scaled Rounded Rect)
-  Target.new("Scaled Rounded Rect", Collision.rect(520, 420, 120, 80, radius: 20, angle: 15, scale_x: 1.4, scale_y: 0.8), :rounded_rect),
-  # 5. セグメント (Segment: 端が半円)
-  Target.new("Segment", Collision.segment(780, 440, 920, 520, 30), :segment),
-  # 6. 太線 (Line: 端面が直角の OBB)
-  Target.new("Line (Flat Ends)", Collision.line(980, 460, 1160, 530, 40), :rect),
-  # 7. 凸多角形 (五角形)
-  Target.new(
-    "Polygon (Pentagon)",
-    Collision.polygon([
-      [1080.0, 180.0],
-      [1160.0, 230.0],
-      [1130.0, 320.0],
-      [1030.0, 320.0],
-      [1000.0, 230.0]
-    ]),
-    :polygon
-  )
-]
+def create_items
+  [
+    # 1. 回転矩形 (OBB)
+    ShapeItem.new("OBB (Rotated Rect)", Collision.rect(220, 220, 140, 80, angle: 25), :rect),
 
-# プレイヤー形状の事前生成 (ループ内アロケーション完全ゼロ化)
-player_shapes = [
-  Collision.rect(0, 0, 100, 60, pivot: :center),                                          # 0: 回転矩形
-  Collision.circle(0, 0, 40),                                                             # 1: 円
-  Collision.circle(0, 0, 65, 28, pivot: :center),                                         # 2: 楕円状の円 (rx != ry)
-  Collision.rect(0, 0, 90, 50, radius: 15, scale_x: 1.5, scale_y: 0.8, pivot: :center),      # 3: 不等スケール角丸矩形
-  Collision.polygon([[0.0, -50.0], [45.0, 35.0], [-45.0, 35.0]])                        # 4: 三角形
-]
+    # 2. 真円 (Circle)
+    ShapeItem.new("Circle", Collision.circle(470, 220, 50), :circle),
 
-Window.loop(1280, 720, "Zenoo GJK Collision System Demo") do
+    # 3. 楕円状の円 (Rotated Circle: rx != ry)
+    ShapeItem.new("Ellipse", Collision.circle(730, 220, 75, 35, angle: 30), :ellipse),
+
+    # 4. 角丸矩形 (Rounded Rect)
+    ShapeItem.new("Rounded Rect", Collision.rect(1000, 220, 130, 80, radius: 20, angle: 10), :rounded_rect),
+
+    # 5. 不等スケール角丸矩形 (Scaled Rounded Rect)
+    ShapeItem.new("Scaled Rounded Rect", Collision.rect(220, 470, 110, 70, radius: 18, angle: -15, scale_x: 1.4, scale_y: 0.8), :rounded_rect),
+
+    # 6. セグメント (Segment: 両端が半円)
+    ShapeItem.new("Segment (Round Ends)", Collision.segment(420, 440, 560, 520, 25), :rounded_rect),
+
+    # 7. 太線 (Line: 端面が直角の OBB)
+    ShapeItem.new("Line (Flat Ends)", Collision.line(690, 460, 850, 510, 36), :rect),
+
+    # 8. 凸五角形 (Polygon)
+    ShapeItem.new(
+      "Pentagon",
+      Collision.polygon([
+        [0.0, -50.0],
+        [48.0, -15.0],
+        [30.0, 42.0],
+        [-30.0, 42.0],
+        [-48.0, -15.0]
+      ], x: 1020, y: 470, angle: 15),
+      :polygon
+    ),
+
+    # 9. 三角形 (Polygon)
+    ShapeItem.new(
+      "Triangle",
+      Collision.polygon([
+        [0.0, -50.0],
+        [45.0, 35.0],
+        [-45.0, 35.0]
+      ], x: 600, y: 340, angle: 45),
+      :polygon
+    )
+  ]
+end
+
+items = create_items
+
+# マウス判定用の点コライダー (ループ外で事前生成してゼロアロケーション)
+mouse_pt = Collision.point(0.0, 0.0)
+
+# ドラッグ操作状態
+active_item = nil
+drag_mode = nil # :move or :rotate
+drag_offset_x = 0.0
+drag_offset_y = 0.0
+rotate_base_angle = 0.0
+
+Window.loop(1280, 720, "Zenoo GJK Collision Playground") do
   test_frames = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
   if test_frames > 0
     @test_frame_counter ||= 0
@@ -73,59 +99,162 @@ Window.loop(1280, 720, "Zenoo GJK Collision System Demo") do
     break if @test_frame_counter >= test_frames
   end
 
-  t = Window.time
-  dt = Window.delta_time
-
-  # 画面クリア
-  Window.clear([18, 22, 32, 255])
-
-  # タイトルと操作説明
-  Window.draw_text(40, 25, "Zenoo GJK Collision System", size: 26, color: :white)
-  Window.draw_text(40, 58, "Pure Ruby GJK - Zero Allocations - Rotated Ellipse, Scaled Rounded Rect & Polygon", size: 15, color: [160, 180, 210, 255])
-  Window.draw_text(40, 85, "[Space]: プレイヤー形状切替 (#{player_type}/4)  |  [Q / E]: 回転  |  マウスで移動", size: 14, color: [255, 215, 80, 255])
-
-  # 入力処理
-  if Input.key_push?(:space)
-    player_type = (player_type + 1) % 5
-  end
-
-  if Input.key_pressed?(:q)
-    player_angle -= 120.0 * dt
-  elsif Input.key_pressed?(:e)
-    player_angle += 120.0 * dt
-  else
-    player_angle += 20.0 * dt # 自動微回転
-  end
-
   mx, my = Input.mouse_pos
   mx = 640.0 if mx < 0 || mx > 1280
   my = 360.0 if my < 0 || my > 720
+  mouse_pt.x = mx
+  mouse_pt.y = my
 
-  # ターゲット 1 (矩形) と ターゲット 3 (楕円状の円) をゆっくり回転
-  targets[0].shape.angle = t * 30.0
-  targets[2].shape.angle = -t * 25.0
-
-  # プレイヤー形状の更新 (セッター代入のみ。update_cache は Collision.check 時に自動遅延評価)
-  player_shape = player_shapes[player_type]
-  player_shape.x = mx
-  player_shape.y = my
-  player_shape.angle = player_angle
-
-  # 衝突判定実行
-  total_hits = 0
-  targets.each do |target|
-    target.hit = Collision.check(player_shape, target.shape)
-    total_hits += 1 if target.hit
+  # [R] キーで初期配置にリセット
+  if Input.key_push?(:r)
+    items.each(&:reset!)
+    active_item = nil
+    drag_mode = nil
   end
 
   # ----------------------------------------------------
-  # ターゲットの描画
+  # マウス入力処理 (左ドラッグ: 移動 / 右ドラッグ: 回転)
   # ----------------------------------------------------
-  targets.each do |target|
-    col = target.current_color
-    case target.type
+  if Input.mouse_push?(:left)
+    # 最前面（末尾）の図形から逆順にヒットテスト
+    found = items.reverse.find { |it| Collision.check(mouse_pt, it.shape) }
+    if found
+      active_item = found
+      drag_mode = :move
+      drag_offset_x = mx - active_item.shape.center_x
+      drag_offset_y = my - active_item.shape.center_y
+      # 掴んだ図形を最前面に移動
+      items.delete(active_item)
+      items << active_item
+    else
+      active_item = nil
+      drag_mode = nil
+    end
+  end
+
+  if Input.mouse_push?(:right)
+    found = items.reverse.find { |it| Collision.check(mouse_pt, it.shape) } || active_item
+    if found
+      active_item = found
+      drag_mode = :rotate
+      dx = mx - active_item.shape.center_x
+      dy = my - active_item.shape.center_y
+      mouse_ang = Math.atan2(dy, dx) * (180.0 / Math::PI)
+      rotate_base_angle = mouse_ang - active_item.shape.angle
+      items.delete(active_item)
+      items << active_item
+    end
+  end
+
+  # ドラッグ中の更新
+  if drag_mode == :move && active_item
+    if Input.mouse_pressed?(:left)
+      target_cx = mx - drag_offset_x
+      target_cy = my - drag_offset_y
+      diff_x = target_cx - active_item.shape.center_x
+      diff_y = target_cy - active_item.shape.center_y
+      active_item.shape.x += diff_x
+      active_item.shape.y += diff_y
+    else
+      drag_mode = nil
+    end
+  elsif drag_mode == :rotate && active_item
+    if Input.mouse_pressed?(:right)
+      dx = mx - active_item.shape.center_x
+      dy = my - active_item.shape.center_y
+      # 中心に近すぎる場合の角度特異点を回避
+      if dx * dx + dy * dy > 25.0
+        mouse_ang = Math.atan2(dy, dx) * (180.0 / Math::PI)
+        active_item.shape.angle = mouse_ang - rotate_base_angle
+      end
+    else
+      drag_mode = nil
+    end
+  end
+
+  drag_mode = nil if Input.mouse_release?(:left) && drag_mode == :move
+  drag_mode = nil if Input.mouse_release?(:right) && drag_mode == :rotate
+
+  # ----------------------------------------------------
+  # 全図形ペアの総当たり衝突判定 (O(N^2 / 2))
+  # ----------------------------------------------------
+  items.each { |it| it.hit = false }
+  hit_count = 0
+  len = items.length
+  i = 0
+  while i < len
+    a = items[i]
+    j = i + 1
+    while j < len
+      b = items[j]
+      if Collision.check(a.shape, b.shape)
+        a.hit = true
+        b.hit = true
+        hit_count += 1
+      end
+      j += 1
+    end
+    i += 1
+  end
+
+  # ホバー中のアイテム判定
+  hover_item = items.reverse.find { |it| Collision.check(mouse_pt, it.shape) }
+
+  # ----------------------------------------------------
+  # 描画
+  # ----------------------------------------------------
+  Window.clear([18, 22, 32, 255])
+
+  # タイトルと操作ガイド
+  Window.draw_text(40, 22, "Zenoo GJK Collision Playground", size: 24, color: :white)
+  Window.draw_text(40, 52, "Pure Ruby GJK Engine - Zero Allocations - Infinite Shapes", size: 14, color: [140, 165, 195, 255])
+  Window.draw_text(40, 76, "[左ドラッグ]: 図形をつかんで移動   |   [右ドラッグ]: 図形を回転   |   [R]: 初期配置にリセット", size: 14, color: [255, 215, 80, 255])
+
+  # 図形描画
+  items.each do |item|
+    is_active = (item == active_item)
+    is_hover  = (item == hover_item)
+
+    # 状態に応じたカラー
+    body_col = if item.hit
+                 [240, 75, 95, 220] # 衝突中: レッド
+               elsif is_active
+                 [90, 185, 255, 230] # 操作中: 明るいシアン
+               elsif is_hover
+                 [75, 160, 235, 215] # ホバー: 青
+               else
+                 [55, 130, 210, 190] # 通常: ブルーグレー
+               end
+
+    border_col = if is_active
+                   [255, 240, 90, 255] # 選択枠: イエロー
+                 elsif is_hover
+                   [220, 240, 255, 255] # ホバー枠: ホワイト
+                 elsif item.hit
+                   [255, 180, 190, 255] # 衝突枠: 明るい赤
+                 else
+                   [150, 190, 230, 160] # 通常枠
+                 end
+
+    border_w = (is_active || item.hit) ? 3.0 : 1.5
+
+    case item.type
+    when :circle
+      c = item.shape
+      Window.draw_circle(c.center_x, c.center_y, c.effective_radius, color: body_col, border_color: border_col, border_width: border_w)
+
+    when :ellipse
+      el = item.shape
+      Window.draw_path do |c|
+        c.begin_path
+        c.ellipse(el.center_x, el.center_y, el.radius_x * el.scale_x, el.radius_y * el.scale_y, el.angle * Math::PI / 180.0)
+        c.close_path
+        c.fill(body_col)
+        c.stroke(border_col, border_w)
+      end
+
     when :rect
-      r = target.shape
+      r = item.shape
       Window.draw_path do |c|
         c.save
         c.translate(r.center_x, r.center_y)
@@ -133,30 +262,13 @@ Window.loop(1280, 720, "Zenoo GJK Collision System Demo") do
         c.scale(r.scale_x, r.scale_y)
         c.begin_path
         c.rect(-r.width * 0.5, -r.height * 0.5, r.width, r.height)
-        c.fill(col)
-        c.stroke(:white, 2)
+        c.fill(body_col)
+        c.stroke(border_col, border_w / [r.scale_x.abs, r.scale_y.abs].max)
         c.restore
       end
-      Window.draw_text(r.center_x - 60, r.center_y + 65, target.name, size: 14, color: [200, 215, 230, 255])
 
-    when :circle
-      c_shape = target.shape
-      Window.draw_circle(c_shape.x, c_shape.y, c_shape.bounding_radius, color: col, border_color: :white, border_width: 2)
-      Window.draw_text(c_shape.x - 20, c_shape.y + c_shape.bounding_radius + 15, target.name, size: 14, color: [200, 215, 230, 255])
-
-    when :ellipse
-      el = target.shape
-      Window.draw_path do |c|
-        c.begin_path
-        c.ellipse(el.center_x, el.center_y, el.radius_x * el.scale_x, el.radius_y * el.scale_y, el.angle * Math::PI / 180.0)
-        c.close_path
-        c.fill(col)
-        c.stroke(:white, 2)
-      end
-      Window.draw_text(el.center_x - 55, el.center_y + 55, target.name, size: 14, color: [200, 215, 230, 255])
-
-    when :rounded_rect, :segment
-      r = target.shape
+    when :rounded_rect
+      r = item.shape
       Window.draw_path do |c|
         c.save
         c.translate(r.center_x, r.center_y)
@@ -164,93 +276,47 @@ Window.loop(1280, 720, "Zenoo GJK Collision System Demo") do
         c.scale(r.scale_x, r.scale_y)
         c.begin_path
         c.round_rect(-r.width * 0.5, -r.height * 0.5, r.width, r.height, r.radius)
-        c.fill(col)
-        c.stroke(:white, 2.0 / [r.scale_x, r.scale_y].max)
+        c.fill(body_col)
+        c.stroke(border_col, border_w / [r.scale_x.abs, r.scale_y.abs].max)
         c.restore
       end
-      Window.draw_text(r.center_x - 50, r.center_y + 55, target.name, size: 14, color: [200, 215, 230, 255])
 
     when :polygon
-      poly = target.shape
+      poly = item.shape
       Window.draw_path do |c|
+        c.save
+        c.translate(poly.center_x, poly.center_y)
+        c.rotate(poly.angle * Math::PI / 180.0)
+        c.scale(poly.scale_x, poly.scale_y)
         c.begin_path
-        poly.vertices.each_with_index do |v, idx|
+        poly.local_vertices.each_with_index do |v, idx|
           idx == 0 ? c.move_to(v[0], v[1]) : c.line_to(v[0], v[1])
         end
         c.close_path
-        c.fill(col)
-        c.stroke(:white, 2)
+        c.fill(body_col)
+        c.stroke(border_col, border_w / [poly.scale_x.abs, poly.scale_y.abs].max)
+        c.restore
       end
-      Window.draw_text(poly.center_x - 65, poly.center_y + 80, target.name, size: 14, color: [200, 215, 230, 255])
     end
+
+    # 図形名ラベル
+    label_y = item.shape.center_y + item.shape.bounding_radius + 8
+    label_y = 705 if label_y > 705
+    Window.draw_text(item.shape.center_x - (item.name.length * 3.5), label_y, item.name, size: 12, color: is_active ? [255, 230, 100, 255] : [170, 190, 210, 200])
   end
 
-  # ----------------------------------------------------
-  # プレイヤー形状の描画
-  # ----------------------------------------------------
-  p_col = (total_hits > 0) ? [255, 100, 100, 230] : [100, 255, 140, 230]
-  case player_type
-  when 0 # 矩形
-    r = player_shape
-    Window.draw_path do |c|
-      c.save
-      c.translate(r.center_x, r.center_y)
-      c.rotate(r.angle * Math::PI / 180.0)
-      c.begin_path
-      c.rect(-r.width * 0.5, -r.height * 0.5, r.width, r.height)
-      c.fill(p_col)
-      c.stroke(:white, 3)
-      c.restore
-    end
-
-  when 1 # 円
-    c_shape = player_shape
-    Window.draw_circle(c_shape.x, c_shape.y, c_shape.radius, color: p_col, border_color: :white, border_width: 3)
-
-  when 2 # 楕円
-    el = player_shape
-    Window.draw_path do |c|
-      c.begin_path
-      c.ellipse(el.center_x, el.center_y, el.radius_x * el.scale_x, el.radius_y * el.scale_y, el.angle * Math::PI / 180.0)
-      c.close_path
-      c.fill(p_col)
-      c.stroke(:white, 3)
-    end
-
-  when 3 # 不等スケール角丸矩形
-    r = player_shape
-    Window.draw_path do |c|
-      c.save
-      c.translate(r.center_x, r.center_y)
-      c.rotate(r.angle * Math::PI / 180.0)
-      c.scale(r.scale_x, r.scale_y)
-      c.begin_path
-      c.round_rect(-r.width * 0.5, -r.height * 0.5, r.width, r.height, r.radius)
-      c.fill(p_col)
-      c.stroke(:white, 3.0 / [r.scale_x, r.scale_y].max)
-      c.restore
-    end
-
-  when 4 # 三角形
-    poly = player_shape
-    Window.draw_path do |c|
-      c.save
-      c.translate(poly.center_x, poly.center_y)
-      c.rotate(poly.angle * Math::PI / 180.0)
-      c.scale(poly.scale_x, poly.scale_y)
-      c.begin_path
-      poly.local_vertices.each_with_index do |v, idx|
-        idx == 0 ? c.move_to(v[0], v[1]) : c.line_to(v[0], v[1])
-      end
-      c.close_path
-      c.fill(p_col)
-      c.stroke(:white, 3)
-      c.restore
-    end
+  # 右ボタンドラッグ中の回転ハンドル線
+  if drag_mode == :rotate && active_item
+    cx = active_item.shape.center_x
+    cy = active_item.shape.center_y
+    Window.draw_line(cx, cy, mx, my, color: [255, 230, 80, 200], width: 2)
+    Window.draw_circle(cx, cy, 5, color: [255, 230, 80, 255])
+    Window.draw_circle(mx, my, 6, color: [255, 120, 80, 255])
   end
 
-  # 情報 HUD
-  Window.draw_rect(30, 640, 380, 55, radius: 8, color: [20, 28, 42, 220], border_width: 1, border_color: [60, 80, 110, 255])
-  Window.draw_text(45, 650, "Status: #{total_hits > 0 ? 'COLLISION DETECTED!' : 'No Collision'}", size: 16, color: total_hits > 0 ? [255, 90, 90, 255] : [100, 255, 150, 255])
-  Window.draw_text(45, 672, "FPS: #{Window.fps.round(1)}  |  Hits: #{total_hits}", size: 14, color: [180, 200, 220, 255])
+  # 画面下部ステータス HUD
+  status_color = (hit_count > 0) ? [255, 90, 90, 255] : [100, 255, 150, 255]
+  Window.draw_rect(30, 645, 420, 52, radius: 8, color: [20, 28, 42, 220], border_width: 1, border_color: [60, 80, 110, 255])
+  Window.draw_text(45, 653, "Status: #{hit_count > 0 ? "COLLISION DETECTED (#{hit_count} pairs)" : 'No Collision'}", size: 15, color: status_color)
+  Window.draw_text(45, 674, "FPS: #{Window.fps.round(1)}  |  Active: #{active_item ? active_item.name : 'None'} (#{drag_mode || 'idle'})", size: 13, color: [180, 200, 220, 255])
 end

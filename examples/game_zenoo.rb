@@ -432,8 +432,8 @@ class Player
       vx2 = sx + @radius * Math.cos(angle2)
       vy2 = sy + @radius * Math.sin(angle2)
 
-      Window.draw_triangle(sx, sy, vx2, vy2, vx1, vy1, Color::GREEN)
-      Window.draw_line(vx1, vy1, vx2, vy2, Color::WHITE)
+      Window.draw_triangle(sx, sy, vx2, vy2, vx1, vy1, color: Color::GREEN)
+      Window.draw_line(vx1, vy1, vx2, vy2, color: Color::WHITE)
       Window.draw_rect(vx1 - 2.0, vy1 - 2.0, 4.0, 4.0, color: Color::WHITE)
     end
   end
@@ -564,13 +564,13 @@ class Game
 
     x = offset_x
     while x < 1280.0
-      Window.draw_line(x, 0.0, x, 720.0, COLOR_GRID_DARK)
+      Window.draw_line(x, 0.0, x, 720.0, color: COLOR_GRID_DARK)
       x += grid_size
     end
 
     y = offset_y
     while y < 720.0
-      Window.draw_line(0.0, y, 1280.0, y, COLOR_GRID_DARK)
+      Window.draw_line(0.0, y, 1280.0, y, color: COLOR_GRID_DARK)
       y += grid_size
     end
 

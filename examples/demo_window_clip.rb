@@ -42,10 +42,10 @@ Window.loop(1280, 720, "Zenoo - Hardware Clipping Demo (Window.clip)") do
     cy = 410 + Math.sin(t * 1.2) * 150
 
     Window.draw_rect(cx - 120, cy - 120, 240, 240, radius: 24.0, color: [240, 80, 110, 200])
-    Window.draw_triangle(cx, cy - 150, cx - 140, cy + 120, cx + 140, cy + 120, [80, 200, 255, 180])
+    Window.draw_triangle(cx, cy - 150, cx - 140, cy + 120, cx + 140, cy + 120, color: [80, 200, 255, 180])
 
     # 画面全体を横断する対角線
-    Window.draw_line(0, 0, 1280, 720, :yellow)
+    Window.draw_line(0, 0, 1280, 720, color: :yellow)
 
     Window.draw_text(100, 230, "World Object at (#{cx.round}, #{cy.round})", size: 16, color: :white)
   end
@@ -78,7 +78,7 @@ Window.loop(1280, 720, "Zenoo - Hardware Clipping Demo (Window.clip)") do
       # ここでの (0, 0) はさらにネストされた領域の左上！
       Window.draw_rect(0, 0, 180, 100, radius: 6.0, color: [45, 30, 60, 255], border_width: 1.5, border_color: :yellow)
       Window.draw_text(10, 10, "Nested View", size: 14, color: :yellow)
-      Window.draw_triangle(20, 40, 160, 40, 90, 150, :cyan)
+      Window.draw_triangle(20, 40, 160, 40, 90, 150, color: :cyan)
     end
 
     # クリップ内の要素で、Z値が一番高い手前バッジ (z: 20.0)

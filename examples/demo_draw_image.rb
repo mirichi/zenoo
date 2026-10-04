@@ -24,16 +24,16 @@ def create_spaceship_sprite
     Zenoo::Window.clear([0, 0, 0, 0])
 
     # 船体メイン (シアンのくさび型)
-    Zenoo::Window.draw_triangle(68, 40, 16, 20, 16, 60, [30, 200, 255, 255])
+    Zenoo::Window.draw_triangle(68, 40, 16, 20, 16, 60, color: [30, 200, 255, 255])
 
     # コックピット (先端付近のイエロー)
-    Zenoo::Window.draw_triangle(62, 40, 35, 33, 35, 47, [255, 220, 50, 255])
+    Zenoo::Window.draw_triangle(62, 40, 35, 33, 35, 47, color: [255, 220, 50, 255])
 
     # 上翼 (濃いブルー)
-    Zenoo::Window.draw_triangle(40, 26, 12, 8, 20, 28, [15, 100, 220, 255])
+    Zenoo::Window.draw_triangle(40, 26, 12, 8, 20, 28, color: [15, 100, 220, 255])
 
     # 下翼 (アクセントのレッド)
-    Zenoo::Window.draw_triangle(40, 54, 20, 52, 12, 72, [255, 70, 70, 255])
+    Zenoo::Window.draw_triangle(40, 54, 20, 52, 12, 72, color: [255, 70, 70, 255])
 
     # エンジン噴射口 (後部)
     Zenoo::Window.draw_rect(10, 34, 6, 12, color: [255, 140, 0, 255])
@@ -167,8 +167,8 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   c1_x, c1_y = p3_x + 50, p3_y + 80
   # ガイド枠 & 十字線 (x, y)
   Window.draw_rect(c1_x, c1_y, 80, 80, color: [40, 50, 75, 120])
-  Window.draw_line(c1_x - 8, c1_y, c1_x + 8, c1_y, :red)
-  Window.draw_line(c1_x, c1_y - 8, c1_x, c1_y + 8, :red)
+  Window.draw_line(c1_x - 8, c1_y, c1_x + 8, c1_y, color: :red)
+  Window.draw_line(c1_x, c1_y - 8, c1_x, c1_y + 8, color: :red)
   Window.draw_image(c1_x, c1_y, @ship_img, angle: rot_angle, offset_mode: :top_left)
   Window.draw_text(c1_x - 5, p3_y + 175, ":top_left (左上配置)", size: 13, color: :white)
 
@@ -176,8 +176,8 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # (x, y) そのものが画像の中心点となる
   c2_x, c2_y = p3_x + 270, p3_y + 120
   # 十字線 (x, y)
-  Window.draw_line(c2_x - 14, c2_y, c2_x + 14, c2_y, :red)
-  Window.draw_line(c2_x, c2_y - 14, c2_x, c2_y + 14, :red)
+  Window.draw_line(c2_x - 14, c2_y, c2_x + 14, c2_y, color: :red)
+  Window.draw_line(c2_x, c2_y - 14, c2_x, c2_y + 14, color: :red)
   Window.draw_circle(c2_x, c2_y, 40, color: [40, 50, 75, 100])
   Window.draw_image(c2_x, c2_y, @ship_img, angle: rot_angle, offset_mode: :center)
   Window.draw_text(c2_x - 45, p3_y + 175, ":center (中心配置)", size: 13, color: :white)
