@@ -147,6 +147,8 @@ static void window_focus_callback(GLFWwindow* window, int focused) {
     }
 }
 
+static int s_scale_mode = ZEN_SCALE_FIT;
+
 static void update_viewport(int fb_w, int fb_h) {
     if (fb_w <= 0) fb_w = 1;
     if (fb_h <= 0) fb_h = 1;
@@ -157,8 +159,14 @@ static void update_viewport(int fb_w, int fb_h) {
 
     float scale_x = (float)fb_w / (float)s_base_width;
     float scale_y = (float)fb_h / (float)s_base_height;
-    s_vp_scale = (scale_x < scale_y) ? scale_x : scale_y;
-    if (s_vp_scale <= 0.0001f) s_vp_scale = 1.0f;
+    float min_scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+    if (s_scale_mode == ZEN_SCALE_INTEGER) {
+        int int_scale = (int)min_scale;
+        s_vp_scale = (float)(int_scale < 1 ? 1 : int_scale);
+    } else {
+        s_vp_scale = (min_scale <= 0.0001f) ? 1.0f : min_scale;
+    }
 
     s_vp_w = (int)(s_base_width * s_vp_scale);
     s_vp_h = (int)(s_base_height * s_vp_scale);
@@ -180,7 +188,7 @@ __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 #endif
 
-static int zen_init_internal(int width, int height, const char* title, GLFWmonitor* monitor) {
+static int zen_init_internal(int width, int height, const char* title, GLFWmonitor* monitor, int win_width, int win_height) {
     glfwSetErrorCallback(glfw_error_callback);
 
 #ifdef _WIN32
@@ -219,20 +227,36 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
 
     s_base_width = width;
     s_base_height = height;
-    s_fb_width = width;
-    s_fb_height = height;
-    update_viewport(width, height);
-    s_window = glfwCreateWindow(width, height, title, monitor, NULL);
+
+    int create_w = (win_width > 0) ? win_width : width;
+    int create_h = (win_height > 0) ? win_height : height;
+    if (monitor) {
+        create_w = width;
+        create_h = height;
+    }
+
+    s_fb_width = create_w;
+    s_fb_height = create_h;
+    update_viewport(create_w, create_h);
+    s_window = glfwCreateWindow(create_w, create_h, title, monitor, NULL);
     if (!s_window) {
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
-        s_window = glfwCreateWindow(width, height, title, monitor, NULL);
+        s_window = glfwCreateWindow(create_w, create_h, title, monitor, NULL);
         if (!s_window) {
             fprintf(stderr, "[Zenoo] Failed to create GLFW window\n");
             glfwTerminate();
             return 0;
         }
     }
+
+    if (!monitor) {
+        s_saved_win_w = create_w;
+        s_saved_win_h = create_h;
+    }
+
+    glfwGetFramebufferSize(s_window, &s_fb_width, &s_fb_height);
+    update_viewport(s_fb_width, s_fb_height);
 
     glfwSetWindowShouldClose(s_window, GLFW_FALSE);
     glfwShowWindow(s_window);
@@ -279,7 +303,12 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
 
 int zen_init(int width, int height, const char* title) {
     s_is_fullscreen = 0;
-    return zen_init_internal(width, height, title, NULL);
+    return zen_init_internal(width, height, title, NULL, width, height);
+}
+
+int zen_init_scaled(int base_width, int base_height, const char* title, int window_width, int window_height) {
+    s_is_fullscreen = 0;
+    return zen_init_internal(base_width, base_height, title, NULL, window_width, window_height);
 }
 
 int zen_init_fullscreen(const char* title) {
@@ -289,7 +318,7 @@ int zen_init_fullscreen(const char* title) {
     int w = mode ? mode->width : 1920;
     int h = mode ? mode->height : 1080;
     s_is_fullscreen = 1;
-    return zen_init_internal(w, h, title, monitor);
+    return zen_init_internal(w, h, title, monitor, w, h);
 }
 
 void zen_toggle_fullscreen(void) {
@@ -669,6 +698,34 @@ float zen_get_delta_time(void) {
 void zen_get_window_size(int* width, int* height) {
     if (width) *width = s_base_width;
     if (height) *height = s_base_height;
+}
+
+void zen_get_os_window_size(int* width, int* height) {
+    if (s_window) {
+        glfwGetWindowSize(s_window, width, height);
+    } else {
+        if (width) *width = s_base_width;
+        if (height) *height = s_base_height;
+    }
+}
+
+void zen_set_window_size(int width, int height) {
+    if (s_window && width > 0 && height > 0) {
+        glfwSetWindowSize(s_window, width, height);
+    }
+}
+
+void zen_set_scale_mode(int mode) {
+    s_scale_mode = mode;
+    update_viewport(s_fb_width, s_fb_height);
+}
+
+int zen_get_scale_mode(void) {
+    return s_scale_mode;
+}
+
+float zen_get_scale(void) {
+    return s_vp_scale;
 }
 
 void zen_get_mouse_pos(float* x, float* y) {

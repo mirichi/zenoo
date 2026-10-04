@@ -44,24 +44,75 @@ static VALUE image_allocate(VALUE klass) {
     return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, NULL);
 }
 
-static VALUE image_init(VALUE self, VALUE rb_w, VALUE rb_h) {
+static int parse_filter_value(VALUE val) {
+    if (SYMBOL_P(val)) {
+        ID id = SYM2ID(val);
+        if (id == rb_intern("nearest")) return ZEN_FILTER_NEAREST;
+        if (id == rb_intern("linear")) return ZEN_FILTER_LINEAR;
+    } else if (FIXNUM_P(val)) {
+        return FIX2INT(val);
+    }
+    return ZEN_FILTER_LINEAR;
+}
+
+static VALUE filter_to_sym(int filter) {
+    return (filter == ZEN_FILTER_NEAREST) ? ID2SYM(rb_intern("nearest")) : ID2SYM(rb_intern("linear"));
+}
+
+static VALUE image_init(int argc, VALUE* argv, VALUE self) {
+    VALUE rb_w, rb_h, rb_filter;
+    rb_scan_args(argc, argv, "21", &rb_w, &rb_h, &rb_filter);
+
     int w = NUM2INT(rb_w);
     int h = NUM2INT(rb_h);
     ZenImage* img = zen_image_create(w, h);
     if (!img) {
         rb_raise(rb_eRuntimeError, "Failed to create Image (%dx%d)", w, h);
     }
+    if (!NIL_P(rb_filter)) {
+        zen_image_set_filter(img, parse_filter_value(rb_filter));
+    }
     DATA_PTR(self) = img;
     return self;
 }
 
-static VALUE image_s_load(VALUE klass, VALUE rb_path) {
+static VALUE image_s_load(int argc, VALUE* argv, VALUE klass) {
+    VALUE rb_path, rb_filter;
+    rb_scan_args(argc, argv, "11", &rb_path, &rb_filter);
+
     const char* path = StringValueCStr(rb_path);
     ZenImage* img = zen_image_load(path);
     if (!img) {
         rb_raise(rb_eRuntimeError, "Failed to load image from file: %s", path);
     }
+    if (!NIL_P(rb_filter)) {
+        zen_image_set_filter(img, parse_filter_value(rb_filter));
+    }
     return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
+}
+
+static VALUE image_set_filter(VALUE self, VALUE rb_filter) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    zen_image_set_filter(img, parse_filter_value(rb_filter));
+    return rb_filter;
+}
+
+static VALUE image_get_filter(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    return filter_to_sym(zen_image_get_filter(img));
+}
+
+static VALUE image_s_set_default_filter(VALUE klass, VALUE rb_filter) {
+    (void)klass;
+    zen_set_default_texture_filter(parse_filter_value(rb_filter));
+    return rb_filter;
+}
+
+static VALUE image_s_get_default_filter(VALUE klass) {
+    (void)klass;
+    return filter_to_sym(zen_get_default_texture_filter());
 }
 
 static VALUE image_get_width(VALUE self) {
@@ -339,21 +390,82 @@ static VALUE font_s_atlas_image(VALUE klass) {
 // ==========================================
 // Zenoo::Native::Window
 // ==========================================
+static int parse_scale_mode(VALUE val) {
+    if (SYMBOL_P(val)) {
+        ID id = SYM2ID(val);
+        if (id == rb_intern("integer")) return ZEN_SCALE_INTEGER;
+        if (id == rb_intern("fit")) return ZEN_SCALE_FIT;
+    } else if (FIXNUM_P(val)) {
+        return FIX2INT(val);
+    }
+    return ZEN_SCALE_FIT;
+}
+
+static VALUE scale_mode_to_sym(int mode) {
+    return (mode == ZEN_SCALE_INTEGER) ? ID2SYM(rb_intern("integer")) : ID2SYM(rb_intern("fit"));
+}
+
 static VALUE win_init(int argc, VALUE* argv, VALUE self) {
     (void)self;
-    VALUE rb_w, rb_h, rb_title, rb_fullscreen;
-    rb_scan_args(argc, argv, "22", &rb_w, &rb_h, &rb_title, &rb_fullscreen);
+    VALUE rb_w, rb_h, rb_title, rb_fullscreen, rb_win_w, rb_win_h, rb_scale_mode;
+    rb_scan_args(argc, argv, "25", &rb_w, &rb_h, &rb_title, &rb_fullscreen, &rb_win_w, &rb_win_h, &rb_scale_mode);
 
     int w = NUM2INT(rb_w);
     int h = NUM2INT(rb_h);
     const char* title = NIL_P(rb_title) ? "Zenoo" : StringValueCStr(rb_title);
     int fullscreen = RTEST(rb_fullscreen);
+    int win_w = NIL_P(rb_win_w) ? w : NUM2INT(rb_win_w);
+    int win_h = NIL_P(rb_win_h) ? h : NUM2INT(rb_win_h);
 
-    int ok = fullscreen ? zen_init_fullscreen(title) : zen_init(w, h, title);
+    if (!NIL_P(rb_scale_mode)) {
+        zen_set_scale_mode(parse_scale_mode(rb_scale_mode));
+    }
+
+    int ok = fullscreen ? zen_init_fullscreen(title) : zen_init_scaled(w, h, title, win_w, win_h);
     if (!ok) {
         rb_raise(rb_eRuntimeError, "Failed to initialize Zenoo Window");
     }
     return Qtrue;
+}
+
+static VALUE win_set_scale_mode(VALUE self, VALUE rb_mode) {
+    (void)self;
+    zen_set_scale_mode(parse_scale_mode(rb_mode));
+    return rb_mode;
+}
+
+static VALUE win_get_scale_mode(VALUE self) {
+    (void)self;
+    return scale_mode_to_sym(zen_get_scale_mode());
+}
+
+static VALUE win_get_scale(VALUE self) {
+    (void)self;
+    return DBL2NUM((double)zen_get_scale());
+}
+
+static VALUE win_set_scale(VALUE self, VALUE rb_scale) {
+    (void)self;
+    double scale = NUM2DBL(rb_scale);
+    int base_w = 0, base_h = 0;
+    zen_get_window_size(&base_w, &base_h);
+    if (base_w > 0 && base_h > 0 && scale > 0.0) {
+        zen_set_window_size((int)(base_w * scale), (int)(base_h * scale));
+    }
+    return rb_scale;
+}
+
+static VALUE win_set_window_size(VALUE self, VALUE rb_w, VALUE rb_h) {
+    (void)self;
+    zen_set_window_size(NUM2INT(rb_w), NUM2INT(rb_h));
+    return Qnil;
+}
+
+static VALUE win_get_os_window_size(VALUE self) {
+    (void)self;
+    int w = 0, h = 0;
+    zen_get_os_window_size(&w, &h);
+    return rb_ary_new_from_args(2, INT2NUM(w), INT2NUM(h));
 }
 
 static VALUE win_update(VALUE self) {
@@ -836,6 +948,12 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "size", win_get_size, 0);
     rb_define_singleton_method(mWindow, "size_w", win_get_size_w, 0);
     rb_define_singleton_method(mWindow, "size_h", win_get_size_h, 0);
+    rb_define_singleton_method(mWindow, "scale_mode=", win_set_scale_mode, 1);
+    rb_define_singleton_method(mWindow, "scale_mode", win_get_scale_mode, 0);
+    rb_define_singleton_method(mWindow, "scale=", win_set_scale, 1);
+    rb_define_singleton_method(mWindow, "scale", win_get_scale, 0);
+    rb_define_singleton_method(mWindow, "set_window_size", win_set_window_size, 2);
+    rb_define_singleton_method(mWindow, "window_size", win_get_os_window_size, 0);
     rb_define_singleton_method(mWindow, "vsync=", win_set_vsync, 1);
     rb_define_singleton_method(mWindow, "target_fps=", win_set_target_fps, 1);
     rb_define_singleton_method(mWindow, "delta_time", win_get_delta_time, 0);
@@ -867,8 +985,8 @@ void Init_zenoo(void) {
     rb_cNativeImage = rb_define_class_under(rb_mZenoo, "Image", rb_cObject);
     rb_define_const(rb_mNative, "Image", rb_cNativeImage);
     rb_define_alloc_func(rb_cNativeImage, image_allocate);
-    rb_define_method(rb_cNativeImage, "initialize", image_init, 2);
-    rb_define_singleton_method(rb_cNativeImage, "load", image_s_load, 1);
+    rb_define_method(rb_cNativeImage, "initialize", image_init, -1);
+    rb_define_singleton_method(rb_cNativeImage, "load", image_s_load, -1);
     rb_define_method(rb_cNativeImage, "width", image_get_width, 0);
     rb_define_method(rb_cNativeImage, "height", image_get_height, 0);
     rb_define_method(rb_cNativeImage, "set_as_render_target", image_set_as_render_target, 0);
@@ -881,6 +999,10 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "texture_id", image_get_texture_id, 0);
     rb_define_method(rb_cNativeImage, "uv", image_get_uv, 0);
     rb_define_method(rb_cNativeImage, "sub_image?", image_is_sub_image, 0);
+    rb_define_method(rb_cNativeImage, "filter=", image_set_filter, 1);
+    rb_define_method(rb_cNativeImage, "filter", image_get_filter, 0);
+    rb_define_singleton_method(rb_cNativeImage, "default_filter=", image_s_set_default_filter, 1);
+    rb_define_singleton_method(rb_cNativeImage, "default_filter", image_s_get_default_filter, 0);
 
     // 4. NativeShader (Zenoo::Native::NativeShader)
     rb_cNativeShader = rb_define_class_under(rb_mNative, "NativeShader", rb_cObject);

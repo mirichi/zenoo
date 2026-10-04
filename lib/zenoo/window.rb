@@ -18,8 +18,11 @@ module Zenoo
     @step_proc = nil
 
     # DXRuby風メインループ
-    def self.loop(width = 1280, height = 720, title = "Zenoo", fullscreen: false, vsync: false, &block)
-      Native::Window.init(width, height, title, fullscreen)
+    def self.loop(width = 1280, height = 720, title = "Zenoo", scale: 1.0, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, &block)
+      win_w = (window_width || (width * scale)).to_i
+      win_h = (window_height || (height * scale)).to_i
+      Native::Window.init(width, height, title, fullscreen, win_w, win_h, scale_mode)
+      Native::Window.scale_mode = scale_mode if Native::Window.respond_to?(:scale_mode=)
       Native::Window.vsync = (vsync ? 1 : 0)
       Native::Window.target_fps = 60
 
@@ -76,6 +79,34 @@ module Zenoo
 
     def self.size
       [Native::Window.size_w, Native::Window.size_h]
+    end
+
+    def self.scale
+      Native::Window.scale
+    end
+
+    def self.scale=(val)
+      Native::Window.scale = val.to_f
+    end
+
+    def self.scale_mode
+      Native::Window.scale_mode
+    end
+
+    def self.scale_mode=(val)
+      Native::Window.scale_mode = val
+    end
+
+    def self.window_size
+      Native::Window.window_size
+    end
+
+    def self.window_size=(size)
+      Native::Window.set_window_size(size[0].to_i, size[1].to_i)
+    end
+
+    def self.resize(w, h)
+      Native::Window.set_window_size(w.to_i, h.to_i)
     end
 
     def self.delta_time

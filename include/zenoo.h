@@ -67,10 +67,23 @@ enum ZenMouseButton {
     ZEN_MOUSE_MIDDLE      = 2,
 };
 
+// スケーリングモード
+enum {
+    ZEN_SCALE_FIT     = 0, // アスペクト比維持の最大化 (余白黒帯)
+    ZEN_SCALE_INTEGER = 1, // 整数倍スケーリング (ドット絵用、余白黒帯)
+};
+
+// テクスチャフィルタ
+enum {
+    ZEN_FILTER_NEAREST = 0, // GL_NEAREST (ドット絵クッキリ)
+    ZEN_FILTER_LINEAR  = 1, // GL_LINEAR (滑らかバイリニア)
+};
+
 // ==========================================
 // 1. システム & ライフサイクル API
 // ==========================================
 int  zen_init(int width, int height, const char* title);
+int  zen_init_scaled(int base_width, int base_height, const char* title, int window_width, int window_height);
 int  zen_init_fullscreen(const char* title); // 全画面 (排他フルスクリーン) で初期化
 void zen_toggle_fullscreen(void);            // フルスクリーンとウィンドウの切り替え
 void zen_shutdown(void);
@@ -92,10 +105,15 @@ void zen_poll_events(void);                 // 純粋に入力・OSイベント�
 void zen_begin_frame(uint32_t clear_color); // 純粋に描画開始・クリアのみ
 void zen_end_frame(void);                   // 純粋に描画Flush・SwapBuffers(Present)のみ
 
-// 時間 & ウィンドウ情報 & フレームレート制御
+// 時間 & ウィンドウ情報 & フレームレート制御 & スケーリング
 double zen_get_time(void);
 float  zen_get_delta_time(void);
 void   zen_get_window_size(int* width, int* height);
+void   zen_get_os_window_size(int* width, int* height);
+void   zen_set_window_size(int width, int height);
+void   zen_set_scale_mode(int mode);
+int    zen_get_scale_mode(void);
+float  zen_get_scale(void);
 int    zen_is_window_active(void);
 void   zen_set_target_fps(int fps); // 目標FPS設定 (デフォルト60fps固定。0で無制限)
 int    zen_get_target_fps(void);
@@ -160,6 +178,7 @@ struct ZenTexture {
     int width;           // 物理テクスチャ幅
     int height;          // 物理テクスチャ高さ
     int ref_count;       // 参照カウンタ (共有している ZenImage の数)
+    int filter;          // テクスチャフィルタ (ZEN_FILTER_NEAREST / ZEN_FILTER_LINEAR)
 };
 typedef struct ZenTexture ZenTexture;
 
@@ -177,6 +196,12 @@ typedef struct ZenImage ZenImage;
 // テクスチャ実体操作
 ZenTexture* zen_texture_create(int width, int height);
 void        zen_texture_release(ZenTexture* texture);
+
+// テクスチャフィルタ設定
+void      zen_set_default_texture_filter(int filter);
+int       zen_get_default_texture_filter(void);
+void      zen_image_set_filter(ZenImage* image, int filter);
+int       zen_image_get_filter(const ZenImage* image);
 
 // 画像生成 & ロード & サブ画像切り出し
 ZenImage* zen_image_create(int width, int height);

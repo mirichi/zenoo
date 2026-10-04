@@ -181,15 +181,41 @@ void zen_texture_release(ZenTexture* texture) {
     }
 }
 
+static int s_default_texture_filter = ZEN_FILTER_LINEAR;
+
+void zen_set_default_texture_filter(int filter) {
+    s_default_texture_filter = filter;
+}
+
+int zen_get_default_texture_filter(void) {
+    return s_default_texture_filter;
+}
+
+void zen_image_set_filter(ZenImage* image, int filter) {
+    if (!image || !image->texture || !image->texture->id) return;
+    image->texture->filter = filter;
+    GLint gl_f = (filter == ZEN_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
+    glBindTexture(GL_TEXTURE_2D, image->texture->id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_f);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_f);
+}
+
+int zen_image_get_filter(const ZenImage* image) {
+    if (!image || !image->texture) return ZEN_FILTER_LINEAR;
+    return image->texture->filter;
+}
+
 ZenImage* zen_image_create(int width, int height) {
     if (width <= 0 || height <= 0) return NULL;
 
     ZenTexture* tex = zen_texture_create(width, height);
     if (!tex) return NULL;
+    tex->filter = s_default_texture_filter;
 
+    GLint gl_f = (s_default_texture_filter == ZEN_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
     glBindTexture(GL_TEXTURE_2D, tex->id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_f);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_f);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -218,10 +244,12 @@ ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pi
 
     ZenTexture* tex = zen_texture_create(width, height);
     if (!tex) return NULL;
+    tex->filter = s_default_texture_filter;
 
+    GLint gl_f = (s_default_texture_filter == ZEN_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
     glBindTexture(GL_TEXTURE_2D, tex->id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_f);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_f);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);

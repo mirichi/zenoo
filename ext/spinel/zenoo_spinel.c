@@ -114,6 +114,27 @@ sp_bool sp_ZenImage_is_sub_image(sp_ZenImage* s) {
     return false;
 }
 
+void sp_ZenImage_set_filter(sp_ZenImage* s, sp_int filter) {
+    if (s && s->image) {
+        zen_image_set_filter(s->image, (int)filter);
+    }
+}
+
+sp_int sp_ZenImage_get_filter(sp_ZenImage* s) {
+    if (s && s->image) {
+        return (sp_int)zen_image_get_filter(s->image);
+    }
+    return 1; // LINEAR
+}
+
+void sp_zen_image_set_default_filter(sp_int filter) {
+    zen_set_default_texture_filter((int)filter);
+}
+
+sp_int sp_zen_image_get_default_filter(void) {
+    return (sp_int)zen_get_default_texture_filter();
+}
+
 // ==========================================
 // Shader (sp_ZenShader)
 // ==========================================
@@ -168,6 +189,15 @@ sp_int sp_zen_win_init(sp_int w, sp_int h, const char* title, sp_int fullscreen)
         return (sp_int)zen_init_fullscreen(title);
     } else {
         return (sp_int)zen_init((int)w, (int)h, title);
+    }
+}
+
+sp_int sp_zen_win_init_scaled(sp_int base_w, sp_int base_h, const char* title, sp_int win_w, sp_int win_h, sp_int fullscreen) {
+    zen_set_gc_trigger_callback(spinel_gc_hook);
+    if (fullscreen) {
+        return (sp_int)zen_init_fullscreen(title);
+    } else {
+        return (sp_int)zen_init_scaled((int)base_w, (int)base_h, title, (int)win_w, (int)win_h);
     }
 }
 
@@ -232,6 +262,30 @@ double sp_zen_win_delta_time(void) {
 
 double sp_zen_win_time(void) {
     return zen_get_time();
+}
+
+void sp_zen_win_set_scale_mode(sp_int mode) {
+    zen_set_scale_mode((int)mode);
+}
+
+sp_int sp_zen_win_get_scale_mode(void) {
+    return (sp_int)zen_get_scale_mode();
+}
+
+void sp_zen_win_set_scale(double scale) {
+    int base_w = 0, base_h = 0;
+    zen_get_window_size(&base_w, &base_h);
+    if (base_w > 0 && base_h > 0 && scale > 0.0) {
+        zen_set_window_size((int)(base_w * scale), (int)(base_h * scale));
+    }
+}
+
+double sp_zen_win_get_scale(void) {
+    return (double)zen_get_scale();
+}
+
+void sp_zen_win_set_window_size(sp_int w, sp_int h) {
+    zen_set_window_size((int)w, (int)h);
 }
 
 sp_bool sp_zen_input_key_pressed(sp_int key) {

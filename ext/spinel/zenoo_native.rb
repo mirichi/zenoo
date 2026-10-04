@@ -19,6 +19,10 @@ module Zenoo
   native_method :texture_height, [], :int, "sp_ZenImage_texture_height"
   native_method :texture_id, [], :int, "sp_ZenImage_texture_id"
   native_method :sub_image?, [], :bool, "sp_ZenImage_is_sub_image"
+  native_method :raw_filter=, [:int], :nil, "sp_ZenImage_set_filter"
+  native_method :raw_filter, [], :int, "sp_ZenImage_get_filter"
+  native_class_method :raw_default_filter=, [:int], :nil, "sp_zen_image_set_default_filter"
+  native_class_method :raw_default_filter, [], :int, "sp_zen_image_get_default_filter"
 
   # ==========================================
   # 2. Native::NativeShader (Spinel native_struct)
@@ -38,10 +42,16 @@ module Zenoo
     # ==========================================
     module Window
       native_func :raw_init, [:int, :int, :string, :int], :int, "sp_zen_win_init"
+      native_func :raw_init_scaled, [:int, :int, :string, :int, :int, :int], :int, "sp_zen_win_init_scaled"
       native_func :update, [], :bool, "sp_zen_win_update"
       native_func :clear, [:int], :nil, "sp_zen_win_clear"
       native_func :size_w, [], :int, "sp_zen_win_size_w"
       native_func :size_h, [], :int, "sp_zen_win_size_h"
+      native_func :raw_scale_mode=, [:int], :nil, "sp_zen_win_set_scale_mode"
+      native_func :raw_scale_mode, [], :int, "sp_zen_win_get_scale_mode"
+      native_func :scale=, [:float], :nil, "sp_zen_win_set_scale"
+      native_func :scale, [], :float, "sp_zen_win_get_scale"
+      native_func :set_window_size, [:int, :int], :nil, "sp_zen_win_set_window_size"
       native_func :vsync=, [:int], :nil, "sp_zen_win_vsync_set"
       native_func :target_fps=, [:int], :nil, "sp_zen_win_target_fps_set"
       native_func :delta_time, [], :float, "sp_zen_win_delta_time"
@@ -50,8 +60,11 @@ module Zenoo
       native_func :wasm?, [], :bool, "sp_zen_win_is_wasm"
       native_func :start_wasm_loop, [:any], :nil, "sp_zen_win_start_wasm_loop"
 
-      def self.init(w, h, title, fullscreen = false)
-        Zenoo::Native::Window.raw_init(w.to_i, h.to_i, title.to_s, fullscreen ? 1 : 0)
+      def self.init(w, h, title, fullscreen = false, win_w = 0, win_h = 0, scale_mode = 0)
+        win_w = w.to_i if win_w.to_i <= 0
+        win_h = h.to_i if win_h.to_i <= 0
+        Zenoo::Native::Window.raw_init_scaled(w.to_i, h.to_i, title.to_s, win_w, win_h, fullscreen ? 1 : 0)
+        Zenoo::Native::Window.raw_scale_mode = (scale_mode == :integer || scale_mode == 1) ? 1 : 0
       end
     end
 
