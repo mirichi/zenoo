@@ -435,7 +435,7 @@ module Zenoo
         Window.draw_line(
           wx + 1.0, wy + title_bar_h + 2.0,
           wx + ww - 1.0, wy + title_bar_h + 2.0,
-          border_color,
+          color: border_color,
           z: win_z + 1.5
         )
 

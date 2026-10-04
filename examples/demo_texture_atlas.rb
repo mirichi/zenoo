@@ -54,8 +54,8 @@ def bake_crystals(slots)
 
       c_top = Color.new(120, 220, 255)
       c_bot = Color.new(40, 100, 230)
-      Window.draw_triangle(cx, cy - size, cx - size * 0.6, cy, cx + size * 0.6, cy, c_top)
-      Window.draw_triangle(cx, cy + size, cx - size * 0.6, cy, cx + size * 0.6, cy, c_bot)
+      Window.draw_triangle(cx, cy - size, cx - size * 0.6, cy, cx + size * 0.6, cy, color: c_top)
+      Window.draw_triangle(cx, cy + size, cx - size * 0.6, cy, cx + size * 0.6, cy, color: c_bot)
     end
   end
 end
@@ -66,15 +66,15 @@ def bake_heart(slot)
     Window.clear(Color.new(0, 0, 0, 0))
     Window.draw_rect(14, 16, 20, 20, radius: 10.0, color: Color.new(255, 60, 100))
     Window.draw_rect(30, 16, 20, 20, radius: 10.0, color: Color.new(255, 60, 100))
-    Window.draw_triangle(14, 26, 50, 26, 32, 52, Color.new(255, 60, 100))
+    Window.draw_triangle(14, 26, 50, 26, 32, 52, color: Color.new(255, 60, 100))
   end
 end
 
 def bake_star(slot)
   Image.render_to(slot) do
     Window.clear(Color.new(0, 0, 0, 0))
-    Window.draw_triangle(32, 10, 14, 48, 50, 48, Color.new(255, 230, 50))
-    Window.draw_triangle(32, 54, 14, 20, 50, 20, Color.new(255, 230, 50))
+    Window.draw_triangle(32, 10, 14, 48, 50, 48, color: Color.new(255, 230, 50))
+    Window.draw_triangle(32, 54, 14, 20, 50, 20, color: Color.new(255, 230, 50))
   end
 end
 
