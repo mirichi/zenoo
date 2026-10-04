@@ -288,6 +288,46 @@ module Zenoo
       close_path
     end
 
+    # 楕円パス (HTML5 Canvas 2D 互換)
+    def ellipse(cx, cy, rx, ry, rotation = 0.0, start_angle = 0.0, end_angle = Math::PI * 2, counterclockwise = false)
+      rx = rx.to_f.abs
+      ry = ry.to_f.abs
+      return if rx <= 0.0 || ry <= 0.0
+
+      da = end_angle.to_f - start_angle.to_f
+      if counterclockwise
+        da -= Math::PI * 2 while da > 0
+        da += Math::PI * 2 while da < -Math::PI * 2
+      else
+        da += Math::PI * 2 while da < 0
+        da -= Math::PI * 2 while da > Math::PI * 2
+      end
+
+      # ラマヌジャンの楕円周長近似による滑らかな分割数 (32〜96ステップ)
+      approx_len = Math::PI * (3.0 * (rx + ry) - Math.sqrt((3.0 * rx + ry) * (rx + 3.0 * ry))) * (da.abs / (Math::PI * 2))
+      steps = [[(approx_len / 4.0).to_i, 32].max, 96].min
+
+      rot = rotation.to_f
+      cos_rot = Math.cos(rot)
+      sin_rot = Math.sin(rot)
+
+      0.upto(steps) do |i|
+        angle = start_angle + da * (i / steps.to_f)
+        lx = Math.cos(angle) * rx
+        ly = Math.sin(angle) * ry
+
+        px = cx + (lx * cos_rot - ly * sin_rot)
+        py = cy + (lx * sin_rot + ly * cos_rot)
+        tx, ty = @transform.apply(px, py)
+
+        if i == 0 && current_subpath.empty?
+          current_subpath.points << [tx, ty]
+        else
+          current_subpath.points << [tx, ty]
+        end
+      end
+    end
+
     # 矩形パス
     def rect(x, y, w, h)
       move_to(x, y)
