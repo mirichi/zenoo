@@ -34,6 +34,10 @@ sp_int sp_ZenImage_texture_width(sp_ZenImage* s);
 sp_int sp_ZenImage_texture_height(sp_ZenImage* s);
 sp_int sp_ZenImage_texture_id(sp_ZenImage* s);
 sp_bool sp_ZenImage_is_sub_image(sp_ZenImage* s);
+void sp_ZenImage_set_filter(sp_ZenImage* s, sp_int filter);
+sp_int sp_ZenImage_get_filter(sp_ZenImage* s);
+void sp_zen_image_set_default_filter(sp_int filter);
+sp_int sp_zen_image_get_default_filter(void);
 sp_int sp_zen_get_image_free_count(void);
 
 // Shader メソッド
@@ -48,6 +52,7 @@ void sp_ZenShader_set_mat4(sp_ZenShader* s, const char* name, const char* mat4_b
 
 // Window / Input / Renderer ラッパー
 sp_int sp_zen_win_init(sp_int w, sp_int h, const char* title, sp_int fullscreen);
+sp_int sp_zen_win_init_scaled(sp_int base_w, sp_int base_h, const char* title, sp_int win_w, sp_int win_h, sp_int fullscreen);
 sp_int sp_zen_win_update(void);
 void sp_zen_win_clear(uint32_t color);
 void sp_zen_win_start_wasm_loop(sp_RbVal proc_val);
@@ -59,6 +64,11 @@ void sp_zen_win_vsync_set(sp_int vsync);
 void sp_zen_win_target_fps_set(sp_int fps);
 double sp_zen_win_delta_time(void);
 double sp_zen_win_time(void);
+void sp_zen_win_set_scale_mode(sp_int mode);
+sp_int sp_zen_win_get_scale_mode(void);
+void sp_zen_win_set_scale(double scale);
+double sp_zen_win_get_scale(void);
+void sp_zen_win_set_window_size(sp_int w, sp_int h);
 
 sp_bool sp_zen_input_key_pressed(sp_int key);
 sp_bool sp_zen_input_key_push(sp_int key);

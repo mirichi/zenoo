@@ -44,4 +44,22 @@ class Zenoo::Image
     end
     Zenoo::Backend.current_target = old_target
   end
+
+  if defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel"
+    def filter
+      raw_filter == 0 ? :nearest : :linear
+    end
+
+    def filter=(val)
+      self.raw_filter = (val == :nearest || val == 0) ? 0 : 1
+    end
+
+    def self.default_filter
+      raw_default_filter == 0 ? :nearest : :linear
+    end
+
+    def self.default_filter=(val)
+      self.raw_default_filter = (val == :nearest || val == 0) ? 0 : 1
+    end
+  end
 end
