@@ -713,8 +713,19 @@ module Zenoo
       Point.new(x, y)
     end
 
-    # カプセル (角丸矩形 Rect に統合)
-    def self.capsule(x1, y1, x2, y2, r)
+    # 太さを持つ直線 / 線分 (角丸なしの OBB: 端面は直角)
+    def self.line(x1, y1, x2, y2, width = 1.0)
+      dx = x2.to_f - x1.to_f
+      dy = y2.to_f - y1.to_f
+      len = Math.sqrt(dx * dx + dy * dy)
+      ang = Math.atan2(dy, dx) * (180.0 / Math::PI)
+      cx = (x1.to_f + x2.to_f) * 0.5
+      cy = (y1.to_f + y2.to_f) * 0.5
+      Rect.new(cx, cy, len, width.to_f, angle: ang, radius: 0.0, pivot: :center)
+    end
+
+    # セグメント (両端が半円のカプセル形状: 角丸矩形 Rect に統合)
+    def self.segment(x1, y1, x2, y2, r)
       dx = x2.to_f - x1.to_f
       dy = y2.to_f - y1.to_f
       len = Math.sqrt(dx * dx + dy * dy)

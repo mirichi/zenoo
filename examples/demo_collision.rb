@@ -38,17 +38,19 @@ targets = [
   Target.new("Circle (Rotated rx != ry)", Collision.circle(800, 180, 75, 35, angle: 30), :ellipse),
   # 4. 不等スケール角丸矩形 (Scaled Rounded Rect)
   Target.new("Scaled Rounded Rect", Collision.rect(520, 420, 120, 80, radius: 20, angle: 15, scale_x: 1.4, scale_y: 0.8), :rounded_rect),
-  # 5. カプセル (Capsule)
-  Target.new("Capsule", Collision.capsule(780, 440, 920, 520, 30), :capsule),
-  # 6. 凸多角形 (五角形)
+  # 5. セグメント (Segment: 端が半円)
+  Target.new("Segment", Collision.segment(780, 440, 920, 520, 30), :segment),
+  # 6. 太線 (Line: 端面が直角の OBB)
+  Target.new("Line (Flat Ends)", Collision.line(980, 460, 1160, 530, 40), :rect),
+  # 7. 凸多角形 (五角形)
   Target.new(
     "Polygon (Pentagon)",
     Collision.polygon([
-      [1080.0, 220.0],
-      [1160.0, 270.0],
-      [1130.0, 360.0],
-      [1030.0, 360.0],
-      [1000.0, 270.0]
+      [1080.0, 180.0],
+      [1160.0, 230.0],
+      [1130.0, 320.0],
+      [1030.0, 320.0],
+      [1000.0, 230.0]
     ]),
     :polygon
   )
@@ -153,7 +155,7 @@ Window.loop(1280, 720, "Zenoo GJK Collision System Demo") do
       end
       Window.draw_text(el.center_x - 55, el.center_y + 55, target.name, size: 14, color: [200, 215, 230, 255])
 
-    when :rounded_rect, :capsule
+    when :rounded_rect, :segment
       r = target.shape
       Window.draw_path do |c|
         c.save
