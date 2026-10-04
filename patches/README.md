@@ -33,6 +33,39 @@ Zenoo を WebAssembly (Emscripten / ブラウザ) 環境向けにビルドする
 
 ---
 
+## 0002-fix-sp_fiber-emscripten-stack.patch
+
+- **対象ファイル**: `~/spinel/lib/sp_fiber.c`
+- **対象バージョン**: Spinel master (commit: `fe340608` 付近)
+
+### 発生していた現象
+- WebAssembly (Emscripten / ブラウザ) 環境において、アプリ起動時にクラッシュまたはスタックオーバーフロー等の例外が発生し、正常にメインループが開始しない現象が発生していました。
+
+### 原因
+- Spinel のランタイム起動処理 (`sp_main_stack_run`) では、メイン処理を実行する前に `mmap` で独自のスタック領域を確保してスタックスイッチを行おうとします。
+- しかし WebAssembly / Emscripten 環境では OS レベルのスタック切り替え（コンテキストスイッチ）に対応していません。
+- WASI 向けにはスタックスイッチを行わずに直接 `body()` を呼び出すバイパスルートがありましたが、Emscripten 向けの分岐が漏れていました。
+
+### 修正内容
+`sp_fiber.c` のスタック切り替えバイパス条件に `__EMSCRIPTEN__` を追加しました：
+
+```c
+// 修正前:
+void sp_main_stack_run(void (*body)(void)) {
+
+// 修正後:
+void sp_main_stack_run(void (*body)(void)) {
+#if defined(__wasi__) || defined(__EMSCRIPTEN__)
+  body();
+  return;
+#else
+  // 通常のスタックスイッチ処理
+```
+
+これにより、Emscripten 環境でも不要・非対応なスタック切り替えを行わず、安全にメイン処理が起動するようになります。
+
+---
+
 ### パッチの適用手順
 
 Spinel ディレクトリで以下のコマンドを実行します：
@@ -40,12 +73,11 @@ Spinel ディレクトリで以下のコマンドを実行します：
 ```bash
 cd ~/spinel
 git apply /path/to/zenoo/patches/0001-fix-sp_slab-emscripten-wasm-memory.patch
+git apply /path/to/zenoo/patches/0002-fix-sp_fiber-emscripten-stack.patch
 ```
-
-または手動で `~/spinel/lib/sp_slab.c` の 245 行目付近を上記のように修正してください。
 
 適用後は、Zenoo リポジトリ側でキャッシュをクリアして再ビルドを行います：
 ```bash
-rm -f build/wasm_cache/rt/sp_slab.o build/wasm_cache/libspinel_rt.a
+rm -rf build/wasm_cache
 ./build_pages.sh
 ```
