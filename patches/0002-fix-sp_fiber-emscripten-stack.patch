@@ -1,0 +1,23 @@
+diff --git a/lib/sp_fiber.c b/lib/sp_fiber.c
+index 63724f5e..424938ca 100644
+--- a/lib/sp_fiber.c
++++ b/lib/sp_fiber.c
+@@ -470,6 +470,10 @@ static void sp_main_stack_entry(void) {
+    any size, down to the floor -- run it where we are: a program must not fail
+    to start because it could not reserve a big stack. */
+ void sp_main_stack_run(void (*body)(void)) {
++#if defined(__wasi__) || defined(__EMSCRIPTEN__)
++  body();
++  return;
++#else
+   size_t guard = sp_fiber_guard();
+   size_t want = sp_main_stack_bytes();
+   char *base = MAP_FAILED;
+@@ -498,6 +502,7 @@ void sp_main_stack_run(void (*body)(void)) {
+   sp_thread_stack_lo = 0; sp_thread_stack_hi = 0;
+   munmap(sp_main_stack_base, sp_main_stack_map);
+   sp_main_stack_base = 0; sp_main_stack_map = 0;
++#endif
+ }
+ 
+ void sp_fiber_worker_init(void) {
