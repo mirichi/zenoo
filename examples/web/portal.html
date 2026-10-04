@@ -108,6 +108,9 @@
     .card.sound::before {
       background: linear-gradient(90deg, #38bdf8, #818cf8);
     }
+    .card.collision::before {
+      background: linear-gradient(90deg, #f43f5e, #fb923c);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -129,6 +132,7 @@
     .card.window .card-tag { color: #818cf8; }
     .card.clip .card-tag { color: #2dd4bf; }
     .card.sound .card-tag { color: #38bdf8; }
+    .card.collision .card-tag { color: #fb7185; }
 
     .card h2 {
       font-size: 22px;
@@ -234,6 +238,24 @@
       background: #2dd4bf;
       color: #0b0d14;
       box-shadow: 0 0 20px rgba(45, 212, 191, 0.4);
+    }
+    .card.sound .btn-launch {
+      background: #4f46e5;
+      color: #fff;
+    }
+    .card.sound .btn-launch:hover {
+      background: #818cf8;
+      color: #0b0d14;
+      box-shadow: 0 0 20px rgba(129, 140, 248, 0.4);
+    }
+    .card.collision .btn-launch {
+      background: #f43f5e;
+      color: #fff;
+    }
+    .card.collision .btn-launch:hover {
+      background: #fb7185;
+      color: #0b0d14;
+      box-shadow: 0 0 20px rgba(244, 63, 94, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -416,6 +438,24 @@
         </ul>
       </div>
       <a href="sound/" class="btn-launch">サウンドデモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- 2D Collision Playground Demo Card -->
+    <div class="card collision">
+      <div>
+        <div class="card-tag">Collision Engine</div>
+        <h2>2D Collision Playground</h2>
+        <p class="desc">
+          GJK / SAT による高精度な2D凸図形衝突判定エンジン。円、点、矩形 (AABB)、OBB、直線 (line)、カプセル (segment)、三角形、任意多角形のリアルタイム交差判定を体験できます。
+        </p>
+        <ul class="features">
+          <li>円・矩形・OBB・線分・カプセル・三角形・多角形の総当たり判定</li>
+          <li>左ボタンドラッグで平行移動、右ボタンドラッグで回転操作</li>
+          <li>Dirty フラグによる座標・頂点キャッシュの遅延自動評価</li>
+          <li>DXRuby 風の直感的かつ高速な API 設計</li>
+        </ul>
+      </div>
+      <a href="collision/" class="btn-launch">衝突判定デモを起動 (Launch Demo) →</a>
     </div>
   </main>
 
