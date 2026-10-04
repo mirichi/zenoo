@@ -14,9 +14,9 @@ else
   end
 end
 
-# ====================================================
+# ==========================================
 # 共通 Ruby レイヤー (CRuby / Spinel 完全共通)
-# ====================================================
+# ==========================================
 require_relative 'zenoo/color'
 require_relative 'zenoo/backend'
 require_relative 'zenoo/layout'

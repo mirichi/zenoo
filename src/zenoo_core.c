@@ -284,7 +284,7 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
 
     const GLubyte* renderer = glGetString(GL_RENDERER);
     const GLubyte* version = glGetString(GL_VERSION);
-    printf("[Zenoo] Initialized successfully (%s).\n", monitor ? "Fullscreen Mode" : "Windowed Mode");
+    printf("[Zenoo v%s] Initialized successfully (%s).\n", ZENOO_VERSION, monitor ? "Fullscreen Mode" : "Windowed Mode");
     printf("        GPU Renderer : %s\n", renderer ? (const char*)renderer : "Unknown");
     printf("        OpenGL Ver   : %s\n", version ? (const char*)version : "Unknown");
 
@@ -349,6 +349,10 @@ void zen_shutdown(void) {
 #ifdef _WIN32
     timeEndPeriod(1);
 #endif
+}
+
+const char* zen_get_version(void) {
+    return ZENOO_VERSION;
 }
 
 int zen_window_should_close(void) {

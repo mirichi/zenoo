@@ -236,6 +236,10 @@ void sp_zen_win_shutdown(void) {
     zen_shutdown();
 }
 
+const char* sp_zen_get_version(void) {
+    return zen_get_version();
+}
+
 sp_int sp_zen_win_size_w(void) {
     int w = 0, h = 0;
     zen_get_window_size(&w, &h);
