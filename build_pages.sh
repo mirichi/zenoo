@@ -30,6 +30,7 @@ mkdir -p "${DOCS_DIR}/atlas"
 mkdir -p "${DOCS_DIR}/window"
 mkdir -p "${DOCS_DIR}/clip"
 mkdir -p "${DOCS_DIR}/sound"
+mkdir -p "${DOCS_DIR}/collision"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -250,16 +251,33 @@ build_sound() {
     echo "-> Sound build done!"
 }
 
+build_collision() {
+    echo "=== Building GJK Collision Playground (${DOCS_DIR}/collision) ==="
+    mkdir -p "${DOCS_DIR}/collision"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_collision.rb -c -o "${DOCS_DIR}/collision/app.c"
+    strip_always_inline "${DOCS_DIR}/collision/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/collision/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/collision/index.html" \
+        --shell-file examples/web/shell_collision.html
+
+    rm -f "${DOCS_DIR}/collision/app.c"
+    echo "-> Collision build done!"
+}
+
 case "$TARGET" in
-    game)   build_game ;;
-    gui)    build_gui ;;
-    font)   build_font ;;
-    vector) build_vector ;;
-    image)  build_image ;;
-    atlas)  build_atlas ;;
-    window) build_window ;;
-    clip)   build_clip ;;
-    sound)  build_sound ;;
+    game)      build_game ;;
+    gui)       build_gui ;;
+    font)      build_font ;;
+    vector)    build_vector ;;
+    image)     build_image ;;
+    atlas)     build_atlas ;;
+    window)    build_window ;;
+    clip)      build_clip ;;
+    sound)     build_sound ;;
+    collision) build_collision ;;
     all)
         build_game
         build_gui
@@ -270,10 +288,11 @@ case "$TARGET" in
         build_window
         build_clip
         build_sound
+        build_collision
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|all]"
         exit 1
         ;;
 esac
@@ -281,14 +300,15 @@ esac
 echo ""
 echo "=========================================================="
 echo " Showcase build complete! (target: $TARGET)"
-echo " Portal: ${DOCS_DIR}/index.html"
-echo " Game  : ${DOCS_DIR}/game/index.html"
-echo " GUI   : ${DOCS_DIR}/gui/index.html"
-echo " Font  : ${DOCS_DIR}/font/index.html"
-echo " Vector: ${DOCS_DIR}/vector/index.html"
-echo " Image : ${DOCS_DIR}/image/index.html"
-echo " Atlas : ${DOCS_DIR}/atlas/index.html"
-echo " Window: ${DOCS_DIR}/window/index.html"
-echo " Clip  : ${DOCS_DIR}/clip/index.html"
-echo " Sound : ${DOCS_DIR}/sound/index.html"
+echo " Portal   : ${DOCS_DIR}/index.html"
+echo " Game     : ${DOCS_DIR}/game/index.html"
+echo " GUI      : ${DOCS_DIR}/gui/index.html"
+echo " Font     : ${DOCS_DIR}/font/index.html"
+echo " Vector   : ${DOCS_DIR}/vector/index.html"
+echo " Image    : ${DOCS_DIR}/image/index.html"
+echo " Atlas    : ${DOCS_DIR}/atlas/index.html"
+echo " Window   : ${DOCS_DIR}/window/index.html"
+echo " Clip     : ${DOCS_DIR}/clip/index.html"
+echo " Sound    : ${DOCS_DIR}/sound/index.html"
+echo " Collision: ${DOCS_DIR}/collision/index.html"
 echo "=========================================================="
