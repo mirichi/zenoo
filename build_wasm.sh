@@ -31,12 +31,11 @@ echo "=== [1/4] Generating C code with Spinel AOT (${TARGET_RB}) ==="
 sed -i 's/__attribute__((always_inline))//g' "${OUTPUT_DIR}/app.c"
 
 echo "=== [2/4] Building Spinel Runtime for Wasm ==="
-RT_FILES=(sp_bigint.c sp_crypto.c sp_pack.c sp_time.c sp_core.c sp_net.c sp_system.c sp_gc.c sp_slab.c sp_alloc.c sp_dtoa.c sp_marshal.c sp_format.c sp_string.c sp_inspect.c sp_array.c sp_str.c sp_hash.c sp_proc.c sp_exc.c sp_re.c sp_random.c sp_fiber.c sp_sched.c sp_io.c sp_iobuffer.c sp_cold.c sp_process.c sp_process_status.c)
-
-for f in "${RT_FILES[@]}"; do
-    obj="${CACHE_DIR}/rt/${f%.c}.o"
-    if [ ! -f "$obj" ] || [ "${SPINEL_DIR}/lib/$f" -nt "$obj" ]; then
-        emcc -c -O2 -I"${SPINEL_DIR}/lib" -I"${SPINEL_DIR}/lib/regexp" "${SPINEL_DIR}/lib/$f" -o "$obj"
+for f in "${SPINEL_DIR}"/lib/*.c; do
+    bn=$(basename "$f" .c)
+    obj="${CACHE_DIR}/rt/${bn}.o"
+    if [ ! -f "$obj" ] || [ "$f" -nt "$obj" ]; then
+        emcc -c -O2 -I"${SPINEL_DIR}/lib" -I"${SPINEL_DIR}/lib/regexp" "$f" -o "$obj"
     fi
 done
 

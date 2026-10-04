@@ -2,12 +2,27 @@
 
 require_relative '../lib/zenoo'
 
-# サウンドリソースの準備
-ogg_path = File.expand_path("../assets/sounds/sample.ogg", __dir__)
-wav_path = File.expand_path("../assets/sounds/sample.wav", __dir__)
+# サウンドリソースの検索 (ルート、build/、Wasm 等どのディレクトリから実行されても検出可能にする)
+def find_asset_file(rel_path)
+  candidates = [
+    rel_path,
+    "../#{rel_path}",
+    "../../#{rel_path}",
+    "/#{rel_path}",
+    File.expand_path("../#{rel_path}", __dir__)
+  ]
+  candidates.each do |p|
+    return p if File.exist?(p)
+  end
+  rel_path
+end
+
+ogg_path = find_asset_file("assets/sounds/sample.ogg")
+wav_path = find_asset_file("assets/sounds/sample.wav")
 
 bgm_ogg = File.exist?(ogg_path) ? Sound.load(ogg_path) : nil
 bgm_wav = File.exist?(wav_path) ? Sound.load(wav_path) : nil
+
 
 # 動的波形効果音 (SoundEffect) のプリセット
 sound_sine     = SoundEffect.tone(440, 0.3, type: :sine)
