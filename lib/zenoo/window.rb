@@ -336,7 +336,9 @@ module Zenoo
       # ピボット (center_x, center_y, または pivot: :center, :top_left, [px, py])
       cx = center_x.to_f
       cy = center_y.to_f
-      if pivot == :center
+      if pivot.nil?
+        # デフォルト (center_x, center_y)
+      elsif pivot == :center
         cx = 0.5
         cy = 0.5
       elsif pivot == :top_left

@@ -7,11 +7,7 @@ if defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel"
 else
   # CRuby C拡張 (.so) 環境
   so_path = File.expand_path("../ext/zenoo/zenoo.so", __dir__)
-  if File.exist?(so_path)
-    require so_path
-  else
-    require 'zenoo'
-  end
+  require so_path if File.exist?(so_path)
 end
 
 # ==========================================

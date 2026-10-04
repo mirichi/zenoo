@@ -61,6 +61,8 @@ void sp_zen_win_shutdown(void);
 const char* sp_zen_get_version(void);
 sp_int sp_zen_win_size_w(void);
 sp_int sp_zen_win_size_h(void);
+sp_int sp_zen_win_os_size_w(void);
+sp_int sp_zen_win_os_size_h(void);
 void sp_zen_win_vsync_set(sp_int vsync);
 void sp_zen_win_target_fps_set(sp_int fps);
 double sp_zen_win_delta_time(void);

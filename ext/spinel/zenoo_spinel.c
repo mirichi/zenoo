@@ -25,7 +25,7 @@ sp_int sp_zen_get_image_free_count(void) {
     return (sp_int)s_image_free_count;
 }
 
-static sp_int s_image_cls_id = 7;
+static sp_int s_image_cls_id = 0;
 
 sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
@@ -252,6 +252,18 @@ sp_int sp_zen_win_size_h(void) {
     return (sp_int)h;
 }
 
+sp_int sp_zen_win_os_size_w(void) {
+    int w = 0, h = 0;
+    zen_get_os_window_size(&w, &h);
+    return (sp_int)w;
+}
+
+sp_int sp_zen_win_os_size_h(void) {
+    int w = 0, h = 0;
+    zen_get_os_window_size(&w, &h);
+    return (sp_int)h;
+}
+
 void sp_zen_win_vsync_set(sp_int vsync) {
     zen_set_vsync((int)vsync);
 }
@@ -442,7 +454,7 @@ sp_RbVal sp_zen_font_atlas_image(sp_int image_cls_id) {
     if (!img) return sp_box_nil();
 
     sp_int cid = (image_cls_id > 0) ? image_cls_id : s_image_cls_id;
-    if (cid <= 0) cid = 7;
+    if (cid <= 0) cid = s_image_cls_id;
 
     sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenAtlasImage_noop_free, NULL);
     memset(s, 0, sizeof(*s));

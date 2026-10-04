@@ -12,8 +12,9 @@ gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/glad.c -o build
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_core.c -o build/zenoo_core.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_gfx.c -o build/zenoo_gfx.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_font.c -o build/zenoo_font.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_audio.c -o build/zenoo_audio.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c ext/spinel/zenoo_spinel.c -o build/zenoo_spinel.o
-ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_core.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_spinel.o
+ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_core.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_audio.o build/zenoo_spinel.o
 echo "  -> build/libzenoo_spinel.a created successfully."
 
 TARGET_RB="${1:-examples/demo_spinel_interactive.rb}"
@@ -24,6 +25,8 @@ echo "=== [2/2] AOT Compiling Ruby app: ${TARGET_RB} ==="
     --link build/libzenoo_spinel.a \
     --link -lglfw \
     --link -lGL \
+    --link -lpthread \
+    --link -ldl \
     --link -lm
 
 echo "  -> Compiled binary created: ${OUT_BIN}"

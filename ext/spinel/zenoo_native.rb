@@ -50,6 +50,8 @@ module Zenoo
       native_func :clear, [:int], :nil, "sp_zen_win_clear"
       native_func :size_w, [], :int, "sp_zen_win_size_w"
       native_func :size_h, [], :int, "sp_zen_win_size_h"
+      native_func :os_size_w, [], :int, "sp_zen_win_os_size_w"
+      native_func :os_size_h, [], :int, "sp_zen_win_os_size_h"
       native_func :raw_scale_mode=, [:int], :nil, "sp_zen_win_set_scale_mode"
       native_func :raw_scale_mode, [], :int, "sp_zen_win_get_scale_mode"
       native_func :scale=, [:float], :nil, "sp_zen_win_set_scale"
@@ -63,11 +65,24 @@ module Zenoo
       native_func :wasm?, [], :bool, "sp_zen_win_is_wasm"
       native_func :start_wasm_loop, [:any], :nil, "sp_zen_win_start_wasm_loop"
 
+      def self.scale_mode=(val)
+        mode = (val == :integer || val == 1) ? 1 : 0
+        Zenoo::Native::Window.raw_scale_mode = mode
+      end
+
+      def self.scale_mode
+        Zenoo::Native::Window.raw_scale_mode == 1 ? :integer : :fit
+      end
+
+      def self.window_size
+        [Zenoo::Native::Window.os_size_w, Zenoo::Native::Window.os_size_h]
+      end
+
       def self.init(w, h, title, fullscreen = false, win_w = 0, win_h = 0, scale_mode = 0)
         win_w = w.to_i if win_w.to_i <= 0
         win_h = h.to_i if win_h.to_i <= 0
         Zenoo::Native::Window.raw_init_scaled(w.to_i, h.to_i, title.to_s, win_w, win_h, fullscreen ? 1 : 0)
-        Zenoo::Native::Window.raw_scale_mode = (scale_mode == :integer || scale_mode == 1) ? 1 : 0
+        Zenoo::Native::Window.scale_mode = scale_mode
       end
     end
 
@@ -221,7 +236,11 @@ class Zenoo::Native::Font
   end
 
   def self.atlas_image
-    Zenoo::Native::FontHelper.atlas_image_raw(7)
+    @_atlas_init ||= begin
+      Zenoo::Image.new(1, 1)
+      true
+    end
+    Zenoo::Native::FontHelper.atlas_image_raw(0)
   end
 
   def metrics(size)
