@@ -3,6 +3,9 @@ module Zenoo
   native_lib "GL"
   native_lib "m"
 
+  native_func :version, [], :string, "sp_zen_get_version"
+  VERSION = version
+
   # ==========================================
   # 1. Image (Spinel native_struct)
   # ==========================================

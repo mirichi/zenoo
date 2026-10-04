@@ -8,6 +8,8 @@
 extern "C" {
 #endif
 
+#define ZENOO_VERSION "0.1.0"
+
 // カラーヘルパーマクロ (0xRRGGBBAA)
 #define ZEN_RGBA(r, g, b, a) (((uint32_t)(r) << 24) | ((uint32_t)(g) << 16) | ((uint32_t)(b) << 8) | (uint32_t)(a))
 #define ZEN_RGB(r, g, b)     ZEN_RGBA(r, g, b, 255)
@@ -87,6 +89,7 @@ int  zen_init_scaled(int base_width, int base_height, const char* title, int win
 int  zen_init_fullscreen(const char* title); // 全画面 (排他フルスクリーン) で初期化
 void zen_toggle_fullscreen(void);            // フルスクリーンとウィンドウの切り替え
 void zen_shutdown(void);
+const char* zen_get_version(void);
 
 // 【ハイブリッド方式 A】DXRuby風の手軽なメインループ用 (1行でPresent/入力/時間更新/終了判定)
 // 使用例: while (zen_update()) { zen_clear(0x181818FF); zen_draw_rect(...); }

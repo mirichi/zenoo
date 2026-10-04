@@ -930,6 +930,11 @@ static VALUE audio_s_get_master_volume(VALUE klass) {
     return DBL2NUM((double)zen_audio_get_master_volume());
 }
 
+static VALUE zenoo_s_version(VALUE klass) {
+    (void)klass;
+    return rb_str_new_cstr(zen_get_version());
+}
+
 // ==========================================
 // C拡張初期化エントリポイント
 // ==========================================
@@ -938,6 +943,9 @@ void Init_zenoo(void) {
     zen_set_gc_trigger_callback(rb_zenoo_gc_hook);
 
     rb_mZenoo = rb_define_module("Zenoo");
+    rb_define_const(rb_mZenoo, "VERSION", rb_str_new_cstr(ZENOO_VERSION));
+    rb_define_singleton_method(rb_mZenoo, "version", zenoo_s_version, 0);
+
     rb_mNative = rb_define_module_under(rb_mZenoo, "Native");
 
     // 1. Window
