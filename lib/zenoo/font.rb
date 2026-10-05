@@ -118,9 +118,14 @@ module Zenoo
       MPLUS
     end
 
-
     def self.atlas_image
-      @atlas_image ||= Native::Font.atlas_image
+      @atlas_image ||= begin
+        # Native 内部メソッドで R8 アトラス画像を生成 (ユーザーからは見えない)
+        img = Native::Image.create_r8(2048, 2048)
+        # C 側にフォントアトラスの描画先テクスチャとして登録
+        Native::FontHelper.set_atlas_image(img)
+        img
+      end
     end
   end
 end

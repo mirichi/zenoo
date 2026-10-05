@@ -91,6 +91,27 @@ static VALUE image_s_load(int argc, VALUE* argv, VALUE klass) {
     return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
 }
 
+static VALUE image_s_create_format(VALUE klass, VALUE rb_w, VALUE rb_h, VALUE rb_format) {
+    int w = NUM2INT(rb_w);
+    int h = NUM2INT(rb_h);
+    int format = NUM2INT(rb_format);
+    ZenImage* img = zen_image_create_format(w, h, format);
+    if (!img) {
+        rb_raise(rb_eRuntimeError, "Failed to create formatted Image (%dx%d, format=%d)", w, h, format);
+    }
+    return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
+}
+
+static VALUE image_s_create_r8(VALUE klass, VALUE rb_w, VALUE rb_h) {
+    int w = NUM2INT(rb_w);
+    int h = NUM2INT(rb_h);
+    ZenImage* img = zen_image_create_format(w, h, ZEN_IMAGE_FORMAT_R8);
+    if (!img) {
+        rb_raise(rb_eRuntimeError, "Failed to create R8 Image (%dx%d)", w, h);
+    }
+    return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
+}
+
 static VALUE image_set_filter(VALUE self, VALUE rb_filter) {
     ZenImage* img;
     TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
@@ -373,18 +394,27 @@ static VALUE font_get_metrics(VALUE self, VALUE rb_size) {
     return rb_ary_new_from_args(3, DBL2NUM(ascent), DBL2NUM(descent), DBL2NUM(line_gap));
 }
 
-static VALUE s_atlas_image_obj = Qnil;
+static VALUE font_helper_s_set_atlas_image(VALUE klass, VALUE rb_img) {
+    (void)klass;
+    ZenImage* img = NULL;
+    if (rb_obj_is_kind_of(rb_img, rb_cNativeImage)) {
+        TypedData_Get_Struct(rb_img, ZenImage, &zenoo_image_data_type, img);
+    }
+    if (img) {
+        zen_font_set_atlas_image(img);
+    }
+    return Qnil;
+}
 
 static VALUE font_s_atlas_image(VALUE klass) {
     (void)klass;
+    if (rb_const_defined(rb_mZenoo, rb_intern("Font"))) {
+        VALUE cFont = rb_const_get(rb_mZenoo, rb_intern("Font"));
+        return rb_funcall(cFont, rb_intern("atlas_image"), 0);
+    }
     ZenImage* img = zen_font_get_atlas_image();
     if (!img) return Qnil;
-
-    if (NIL_P(s_atlas_image_obj)) {
-        s_atlas_image_obj = TypedData_Wrap_Struct(rb_cNativeImage, &zenoo_image_data_type, img);
-        rb_gc_register_address(&s_atlas_image_obj);
-    }
-    return s_atlas_image_obj;
+    return TypedData_Wrap_Struct(rb_cNativeImage, &zenoo_image_data_type, img);
 }
 
 // ==========================================
@@ -1009,6 +1039,8 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "sub_image?", image_is_sub_image, 0);
     rb_define_method(rb_cNativeImage, "filter=", image_set_filter, 1);
     rb_define_method(rb_cNativeImage, "filter", image_get_filter, 0);
+    rb_define_singleton_method(rb_cNativeImage, "create_format", image_s_create_format, 3);
+    rb_define_singleton_method(rb_cNativeImage, "create_r8", image_s_create_r8, 2);
     rb_define_singleton_method(rb_cNativeImage, "default_filter=", image_s_set_default_filter, 1);
     rb_define_singleton_method(rb_cNativeImage, "default_filter", image_s_get_default_filter, 0);
 
@@ -1039,6 +1071,9 @@ void Init_zenoo(void) {
     rb_define_singleton_method(rb_cNativeFont, "atlas_image", font_s_atlas_image, 0);
     rb_define_method(rb_cNativeFont, "get_glyph", font_get_glyph, 2);
     rb_define_method(rb_cNativeFont, "metrics", font_get_metrics, 1);
+
+    VALUE mFontHelper = rb_define_module_under(rb_mNative, "FontHelper");
+    rb_define_singleton_method(mFontHelper, "set_atlas_image", font_helper_s_set_atlas_image, 1);
 
     // 7. Sound (Zenoo::Native::Sound)
     rb_cNativeSound = rb_define_class_under(rb_mNative, "Sound", rb_cObject);

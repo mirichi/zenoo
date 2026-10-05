@@ -22,6 +22,7 @@ typedef struct sp_ZenShader_s {
 // Image メソッド
 void sp_ZenImage_free(void* p);
 sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h);
+sp_ZenImage* sp_ZenImage_new_format_internal(sp_int cls_id, sp_int w, sp_int h, sp_int marker, sp_int format);
 sp_ZenImage* sp_ZenImage_load(sp_int cls_id, const char* path);
 sp_int sp_ZenImage_width(sp_ZenImage* s);
 sp_int sp_ZenImage_height(sp_ZenImage* s);
@@ -118,7 +119,7 @@ typedef struct sp_ZenFont_s {
 
 void sp_ZenFont_free(void* p);
 sp_ZenFont* sp_ZenFont_load(sp_int cls_id, const char* path);
-sp_RbVal sp_zen_font_atlas_image(sp_int image_cls_id);
+void sp_zen_font_set_atlas_image(sp_RbVal image_val);
 
 sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size);
 sp_bool sp_zen_font_glyph_visible(void);

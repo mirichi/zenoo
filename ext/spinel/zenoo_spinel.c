@@ -25,11 +25,8 @@ sp_int sp_zen_get_image_free_count(void) {
     return (sp_int)s_image_free_count;
 }
 
-static sp_int s_image_cls_id = 0;
-
 sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
-    s_image_cls_id = cls_id;
     sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(s, 0, sizeof(*s));
     s->cls_id = cls_id;
@@ -37,9 +34,18 @@ sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h) {
     return s;
 }
 
+sp_ZenImage* sp_ZenImage_new_format_internal(sp_int cls_id, sp_int w, sp_int h, sp_int marker, sp_int format) {
+    (void)marker;
+    zen_set_gc_trigger_callback(spinel_gc_hook);
+    sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
+    memset(s, 0, sizeof(*s));
+    s->cls_id = cls_id;
+    s->image = zen_image_create_format((int)w, (int)h, (int)format);
+    return s;
+}
+
 sp_ZenImage* sp_ZenImage_load(sp_int cls_id, const char* path) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
-    s_image_cls_id = cls_id;
     sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(s, 0, sizeof(*s));
     s->cls_id = cls_id;
@@ -426,10 +432,6 @@ void sp_zen_renderer_reset_scissor(void) {
 // ==========================================
 static ZenGlyph s_query_glyph_cache;
 
-static void sp_ZenAtlasImage_noop_free(void* p) {
-    (void)p;
-}
-
 void sp_ZenFont_free(void* p) {
     sp_ZenFont* s = (sp_ZenFont*)p;
     if (s && s->font) {
@@ -449,18 +451,11 @@ sp_ZenFont* sp_ZenFont_load(sp_int cls_id, const char* path) {
     return s;
 }
 
-sp_RbVal sp_zen_font_atlas_image(sp_int image_cls_id) {
-    ZenImage* img = zen_font_get_atlas_image();
-    if (!img) return sp_box_nil();
-
-    sp_int cid = (image_cls_id > 0) ? image_cls_id : s_image_cls_id;
-    if (cid <= 0) cid = s_image_cls_id;
-
-    sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenAtlasImage_noop_free, NULL);
-    memset(s, 0, sizeof(*s));
-    s->cls_id = cid;
-    s->image = img;
-    return sp_box_obj(s, (int)cid);
+void sp_zen_font_set_atlas_image(sp_RbVal image_val) {
+    ZenImage* img = unpack_image(image_val);
+    if (img) {
+        zen_font_set_atlas_image(img);
+    }
 }
 
 sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size) {

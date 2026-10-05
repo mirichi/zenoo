@@ -36,11 +36,13 @@ sound_boom     = SoundEffect.noise(0.4, volume: 0.8, release: 0.3)
 # 状態変数
 current_status = "Ready. Click buttons or press keys 1-7 to play sounds."
 master_vol = 1.0
+bgm_vol = 1.0
 bgm_pitch = 1.0
 bgm_pan = 0.0
 bgm_loop = true
 
 if bgm_ogg
+  bgm_ogg.volume = bgm_vol
   bgm_ogg.looping = bgm_loop
 end
 
@@ -65,7 +67,7 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
 
   # 左側: 動的波形生成 (SoundEffect)
   GUI.cursor(30.0, 80.0)
-  GUI.panel("Dynamic Sound Effects (PCM)", w: 490.0, h: 550.0) do
+  GUI.panel("Dynamic Sound Effects (PCM)", w: 490.0, h: 560.0) do
     GUI.label("Generated on-the-fly with mathematical waveforms", size: 13, color: Color.new(150, 160, 180))
 
     GUI.row(spacing: 12) do
@@ -113,7 +115,7 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
 
   # 右側: ファイルオーディオ (OGG / WAV) & オーディオコントロール
   GUI.cursor(550.0, 80.0)
-  GUI.panel("File Audio & Engine Controls", w: 490.0, h: 550.0) do
+  GUI.panel("File Audio & Engine Controls", w: 490.0, h: 560.0) do
     GUI.label("Decoded via stb_vorbis & miniaudio engine", size: 13, color: Color.new(150, 160, 180))
 
     if bgm_ogg
@@ -136,6 +138,15 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
       end
     end
 
+    if bgm_wav
+      GUI.row(spacing: 10) do
+        if GUI.button("Play WAV (SFX)", w: 140.0, h: 36.0)
+          bgm_wav.play
+          current_status = "Playing sample.wav"
+        end
+      end
+    end
+
     GUI.label("--- Sound & Engine Parameters ---", size: 14, color: Color.new(180, 180, 200))
 
     GUI.label("Master Volume: #{(master_vol * 100).to_i}%", size: 13, color: Color.new(200, 210, 225))
@@ -146,6 +157,13 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
     end
 
     if bgm_ogg
+      GUI.label("BGM Volume: #{(bgm_vol * 100).to_i}%", size: 13, color: Color.new(200, 210, 225))
+      new_bvol = GUI.slider("BGM Vol", bgm_vol, 0.0, 2.0, w: 452.0)
+      if (new_bvol.to_f - bgm_vol).abs > 0.01
+        bgm_vol = new_bvol.to_f
+        bgm_ogg.volume = bgm_vol
+      end
+
       GUI.label("BGM Pitch: #{bgm_pitch.round(2)}x", size: 13, color: Color.new(200, 210, 225))
       new_pitch = GUI.slider("Pitch", bgm_pitch, 0.5, 2.0, w: 452.0)
       if (new_pitch.to_f - bgm_pitch).abs > 0.01
@@ -160,7 +178,7 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
         bgm_ogg.pan = bgm_pan
       end
 
-      if GUI.button(bgm_loop ? "BGM Loop: Enabled" : "BGM Loop: Disabled", w: 220.0, h: 38.0)
+      if GUI.button(bgm_loop ? "BGM Loop: Enabled" : "BGM Loop: Disabled", w: 220.0, h: 36.0)
         bgm_loop = !bgm_loop
         bgm_ogg.looping = bgm_loop
         current_status = "BGM Loop set to #{bgm_loop}"

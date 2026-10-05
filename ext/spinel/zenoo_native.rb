@@ -11,6 +11,7 @@ module Zenoo
   # ==========================================
   native_struct "Zenoo::Image", "sp_ZenImage", "sp_ZenImage_free"
   native_new [:int, :int], "sp_ZenImage_new"
+  native_new [:int, :int, :int, :int], "sp_ZenImage_new_format_internal"
   native_new [:string],    "sp_ZenImage_load"
   native_method :width,  [], :int, "sp_ZenImage_width"
   native_method :height, [], :int, "sp_ZenImage_height"
@@ -154,6 +155,15 @@ module Zenoo
     module Image
       native_func :reset_render_target, [], :nil, "sp_ZenImage_reset_render_target"
       native_func :free_count, [], :int, "sp_zen_get_image_free_count"
+
+      # ライブラリ内部専用のフォーマット指定生成メソッド
+      def self.create_format(w, h, format)
+        Zenoo::Image.new(w.to_i, h.to_i, -1, format.to_i)
+      end
+
+      def self.create_r8(w, h)
+        create_format(w, h, 1)
+      end
     end
 
     # ==========================================
@@ -171,7 +181,7 @@ module Zenoo
       native_func :glyph_y1,      [], :float, "sp_zen_font_glyph_y1"
       native_func :glyph_advance,   [], :float, "sp_zen_font_glyph_advance"
       native_func :glyph_is_bitmap, [], :bool,  "sp_zen_font_glyph_is_bitmap"
-      native_func :atlas_image_raw, [:int], :any, "sp_zen_font_atlas_image"
+      native_func :set_atlas_image, [:any], :nil, "sp_zen_font_set_atlas_image"
     end
 
     # ==========================================
@@ -236,11 +246,7 @@ class Zenoo::Native::Font
   end
 
   def self.atlas_image
-    @_atlas_init ||= begin
-      Zenoo::Image.new(1, 1)
-      true
-    end
-    Zenoo::Native::FontHelper.atlas_image_raw(0)
+    Zenoo::Font.atlas_image
   end
 
   def metrics(size)

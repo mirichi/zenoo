@@ -206,8 +206,14 @@ int       zen_get_default_texture_filter(void);
 void      zen_image_set_filter(ZenImage* image, int filter);
 int       zen_image_get_filter(const ZenImage* image);
 
+enum ZenImageFormat {
+    ZEN_IMAGE_FORMAT_RGBA = 0,
+    ZEN_IMAGE_FORMAT_R8   = 1
+};
+
 // 画像生成 & ロード & サブ画像切り出し
 ZenImage* zen_image_create(int width, int height);
+ZenImage* zen_image_create_format(int width, int height, int format);
 ZenImage* zen_image_load(const char* filepath);
 ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pixels);
 ZenImage* zen_image_sub_image(ZenImage* parent, int x, int y, int width, int height);
@@ -299,6 +305,7 @@ ZenFont*  zen_font_load_memory(const unsigned char* data, size_t size);
 void      zen_font_destroy(ZenFont* font);
 int       zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* out_glyph);
 void      zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* descent, float* line_gap);
+void      zen_font_set_atlas_image(ZenImage* image);
 ZenImage* zen_font_get_atlas_image(void);
 
 // ==========================================
