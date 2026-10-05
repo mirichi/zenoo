@@ -19,7 +19,7 @@ fi
 SPINEL_DIR="${HOME}/spinel"
 SPINEL_BIN="${SPINEL_DIR}/bin/spinel"
 
-DOCS_DIR="examples/docs"
+DOCS_DIR="docs"
 CACHE_DIR="build/wasm_cache"
 mkdir -p "${DOCS_DIR}/game"
 mkdir -p "${DOCS_DIR}/gui"

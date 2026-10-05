@@ -48,7 +48,7 @@ var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIR
         // web worker
         PACKAGE_PATH = encodeURIComponent(location.pathname.substring(0, location.pathname.lastIndexOf('/')) + '/');
       }
-      var PACKAGE_NAME = 'examples/docs/vector/index.data';
+      var PACKAGE_NAME = 'docs/vector/index.data';
       var REMOTE_PACKAGE_BASE = 'index.data';
       var REMOTE_PACKAGE_NAME = Module['locateFile'] ? Module['locateFile'](REMOTE_PACKAGE_BASE, '') : REMOTE_PACKAGE_BASE;
       var REMOTE_PACKAGE_SIZE = metadata['remote_package_size'];
@@ -133,9 +133,9 @@ Module['FS_createPath']("/assets", "sounds", true, true);
             // canOwn this data in the filesystem, it is a slice into the heap that will never change
         Module['FS_createDataFile'](name, null, data, true, true, true);
           }
-          Module['removeRunDependency']('datafile_examples/docs/vector/index.data');
+          Module['removeRunDependency']('datafile_docs/vector/index.data');
       }
-      Module['addRunDependency']('datafile_examples/docs/vector/index.data');
+      Module['addRunDependency']('datafile_docs/vector/index.data');
 
       if (!Module['preloadResults']) Module['preloadResults'] = {};
 
