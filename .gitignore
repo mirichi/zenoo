@@ -1,0 +1,24 @@
+# ==========================================
+# Zenoo .gitignore
+# ==========================================
+
+# ビルド成果物・中間ファイル (Wasm / C Extension)
+build/
+ext/zenoo/Makefile
+ext/zenoo/*.o
+ext/zenoo/*.so
+ext/zenoo/*.bundle
+ext/zenoo/*.dll
+mkmf.log
+
+# 一時検証・スクラッチファイル
+scratch/
+examples/scratch/
+
+# OS / エディタ固有ファイル
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
