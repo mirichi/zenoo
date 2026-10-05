@@ -205,7 +205,11 @@ int zen_image_get_filter(const ZenImage* image) {
     return image->texture->filter;
 }
 
-ZenImage* zen_image_create(int width, int height) {
+#ifndef GL_R8
+#define GL_R8 0x8229
+#endif
+
+ZenImage* zen_image_create_format(int width, int height, int format) {
     if (width <= 0 || height <= 0) return NULL;
 
     ZenTexture* tex = zen_texture_create(width, height);
@@ -218,7 +222,16 @@ ZenImage* zen_image_create(int width, int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_f);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    if (format == ZEN_IMAGE_FORMAT_R8) {
+        unsigned char* clear_buf = (unsigned char*)calloc(1, (size_t)width * (size_t)height);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, clear_buf);
+        if (clear_buf) {
+            free(clear_buf);
+        }
+    } else {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    }
 
     ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
     if (!img && s_gc_callback) {
@@ -237,6 +250,10 @@ ZenImage* zen_image_create(int width, int height) {
     img->height = height;
 
     return img;
+}
+
+ZenImage* zen_image_create(int width, int height) {
+    return zen_image_create_format(width, height, ZEN_IMAGE_FORMAT_RGBA);
 }
 
 ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pixels) {

@@ -49,9 +49,9 @@
       border-radius: 8px;
       overflow: hidden;
       border: 1px solid #233554;
-      width: min(96vw, calc(72dvh * 16 / 9));
-      height: min(calc(96vw * 9 / 16), 72dvh);
-      aspect-ratio: 16 / 9;
+      width: min(96vw, calc(72dvh * 1080 / 700));
+      height: min(calc(96vw * 700 / 1080), 72dvh);
+      aspect-ratio: 1080 / 700;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -110,7 +110,7 @@
 
   <div id="canvas-container">
     <div id="loading">Loading Wasm & Audio Assets...</div>
-    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" width="1080" height="700"></canvas>
   </div>
 
   <div id="controls">
@@ -143,6 +143,72 @@
         Module.audioContext.resume();
       }
     }, { once: false });
+
+    // タッチ操作でブラウザスクロールを抑止し canvas への入力を保護
+    function handleTouchStart(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+    }
+    function handleTouchMove(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+    }
+    function handleTouchEnd(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+    }
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    // ポインターキャプチャ (スライダーやボタンをドラッグしたまま canvas 外に出ても追従)
+    canvasElement.addEventListener('pointerdown', function(e) {
+      try {
+        canvasElement.setPointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+    canvasElement.addEventListener('pointerup', function(e) {
+      try {
+        canvasElement.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+    canvasElement.addEventListener('pointercancel', function(e) {
+      try {
+        canvasElement.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+
+    // 画面外でマウスボタンが離されたときでも canvas へ mouseup を中継
+    window.addEventListener('mouseup', function(e) {
+      if (e.target !== canvasElement) {
+        var ev = new MouseEvent('mouseup', {
+          bubbles: true,
+          cancelable: true,
+          button: e.button,
+          buttons: e.buttons,
+          clientX: e.clientX,
+          clientY: e.clientY
+        });
+        canvasElement.dispatchEvent(ev);
+      }
+    });
+
+    // フォーカスが外れた際に全ボタンを離した状態にリセット
+    window.addEventListener('blur', function() {
+      for (var b = 0; b < 3; b++) {
+        var ev = new MouseEvent('mouseup', {
+          bubbles: true,
+          cancelable: true,
+          button: b,
+          buttons: 0
+        });
+        canvasElement.dispatchEvent(ev);
+      }
+    });
 
     var Module = {
       preRun: [],
