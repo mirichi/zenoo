@@ -157,6 +157,16 @@ module Zenoo
       Native::Input.gamepad_button_release?(id.to_i, resolve_gamepad_button(button))
     end
 
+    # ゲームパッドの振動 (デュアルランブル)
+    def self.vibrate_gamepad(id = 0, strong = 1.0, weak = 1.0, duration = 0.2)
+      Native::Input.vibrate_gamepad(id.to_i, strong.to_f, weak.to_f, duration.to_f)
+    end
+
+    # スマホ/デバイス本体の振動 (Web/Android等)
+    def self.vibrate(duration = 0.2)
+      Native::Input.vibrate(duration.to_f)
+    end
+
     # アナログスティックの円形デッドゾーン処理 (Radial Deadzone)
     def self.apply_deadzone(vx, vy, deadzone = 0.2)
       len = Math.sqrt(vx * vx + vy * vy)

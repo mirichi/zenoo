@@ -68,27 +68,30 @@ module Zenoo
     # ----------------------------------------------------
     @default_font = nil
 
+    def self.find_font_file(filename)
+      candidates = [
+        "assets/fonts/#{filename}",
+        "../assets/fonts/#{filename}",
+        "../../assets/fonts/#{filename}",
+        "/assets/fonts/#{filename}"
+      ]
+      candidates << File.expand_path("../../assets/fonts/#{filename}", __dir__) if defined?(__dir__) && __dir__
+      candidates.each do |p|
+        return p if File.exist?(p)
+      end
+      "/assets/fonts/#{filename}"
+    end
+
     def self.load_default_font
-      path = "/assets/fonts/MPLUS1p-Regular.ttf"
-      rel1 = "assets/fonts/MPLUS1p-Regular.ttf"
-      if File.exist?(rel1)
-        path = rel1
-      elsif File.exist?("/assets/fonts/MPLUS1p-Regular.ttf")
-        path = "/assets/fonts/MPLUS1p-Regular.ttf"
-      elsif File.exist?("C:/Windows/Fonts/msgothic.ttc")
+      path = find_font_file("MPLUS1p-Regular.ttf")
+      if !File.exist?(path) && File.exist?("C:/Windows/Fonts/msgothic.ttc")
         path = "C:/Windows/Fonts/msgothic.ttc"
       end
       new(path)
     end
 
     def self.load_sinclair_font
-      path = "/assets/fonts/zx_spectrum.ttf"
-      rel1 = "assets/fonts/zx_spectrum.ttf"
-      if File.exist?(rel1)
-        path = rel1
-      elsif File.exist?("/assets/fonts/zx_spectrum.ttf")
-        path = "/assets/fonts/zx_spectrum.ttf"
-      end
+      path = find_font_file("zx_spectrum.ttf")
       new(path)
     end
 

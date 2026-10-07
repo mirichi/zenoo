@@ -28,8 +28,7 @@ mkdir -p "${CACHE_DIR}/regexp"
 
 echo "=== [1/4] Generating C code with Spinel AOT (${TARGET_RB}) ==="
 "${SPINEL_BIN}" --no-inline-hot -Ilib "${TARGET_RB}" -c -o "${OUTPUT_DIR}/app.c"
-sed -i 's/__attribute__((always_inline))//g' "${OUTPUT_DIR}/app.c"
-sed -i -E 's|/mnt/c/Users/[^/"'"'"'\s]+|/workspace|g' "${OUTPUT_DIR}/app.c"
+python3 -c "import sys, re; p=sys.argv[1]; s=open(p, 'r', encoding='utf-8', errors='ignore').read().replace('__attribute__((always_inline))', ''); s=re.sub(r'/mnt/c/Users/[^/\"\'\s]+', '/workspace', s); open(p, 'w', encoding='utf-8').write(s)" "${OUTPUT_DIR}/app.c"
 
 echo "=== [2/4] Building Spinel Runtime for Wasm ==="
 for f in "${SPINEL_DIR}"/lib/*.c; do

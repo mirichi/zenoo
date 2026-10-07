@@ -654,6 +654,18 @@ static VALUE input_gamepad_button_release(VALUE self, VALUE rb_id, VALUE rb_butt
     return zen_is_gamepad_button_release(NUM2INT(rb_id), NUM2INT(rb_button)) ? Qtrue : Qfalse;
 }
 
+static VALUE input_vibrate_gamepad(VALUE self, VALUE rb_id, VALUE rb_strong, VALUE rb_weak, VALUE rb_duration) {
+    (void)self;
+    zen_gamepad_vibrate(NUM2INT(rb_id), (float)NUM2DBL(rb_strong), (float)NUM2DBL(rb_weak), (float)NUM2DBL(rb_duration));
+    return Qnil;
+}
+
+static VALUE input_vibrate(VALUE self, VALUE rb_duration) {
+    (void)self;
+    zen_vibrate((float)NUM2DBL(rb_duration));
+    return Qnil;
+}
+
 static int zen_ext_utf32_to_utf8(uint32_t cp, char* out) {
     if (cp <= 0x7F) {
         out[0] = (char)cp;
@@ -1016,6 +1028,8 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mInput, "gamepad_button_pressed?", input_gamepad_button_pressed, 2);
     rb_define_singleton_method(mInput, "gamepad_button_push?", input_gamepad_button_push, 2);
     rb_define_singleton_method(mInput, "gamepad_button_release?", input_gamepad_button_release, 2);
+    rb_define_singleton_method(mInput, "vibrate_gamepad", input_vibrate_gamepad, 4);
+    rb_define_singleton_method(mInput, "vibrate", input_vibrate, 1);
     rb_define_singleton_method(mInput, "input_chars", input_input_chars, 0);
     rb_define_singleton_method(mInput, "set_ime_position", input_set_ime_position, 2);
 

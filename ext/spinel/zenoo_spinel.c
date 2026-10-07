@@ -370,6 +370,14 @@ sp_bool sp_zen_input_gamepad_button_release(sp_int id, sp_int button) {
     return zen_is_gamepad_button_release((int)id, (int)button) ? true : false;
 }
 
+void sp_zen_input_vibrate_gamepad(sp_int id, double strong, double weak, double duration) {
+    zen_gamepad_vibrate((int)id, (float)strong, (float)weak, (float)duration);
+}
+
+void sp_zen_input_vibrate(double duration) {
+    zen_vibrate((float)duration);
+}
+
 sp_int sp_zen_input_get_char(void) {
     return (sp_int)zen_get_char();
 }

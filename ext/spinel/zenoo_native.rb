@@ -105,6 +105,8 @@ module Zenoo
       native_func :gamepad_button_pressed?, [:int, :int], :bool, "sp_zen_input_gamepad_button_pressed"
       native_func :gamepad_button_push?, [:int, :int], :bool, "sp_zen_input_gamepad_button_push"
       native_func :gamepad_button_release?, [:int, :int], :bool, "sp_zen_input_gamepad_button_release"
+      native_func :vibrate_gamepad, [:int, :float, :float, :float], :nil, "sp_zen_input_vibrate_gamepad"
+      native_func :vibrate, [:float], :nil, "sp_zen_input_vibrate"
       native_func :get_char, [], :int, "sp_zen_input_get_char"
       native_func :set_ime_position, [:int, :int], :nil, "sp_zen_input_set_ime_position"
 

@@ -172,6 +172,8 @@ float  zen_get_gamepad_axis(int id, int axis);
 int    zen_is_gamepad_button_pressed(int id, int button);
 int    zen_is_gamepad_button_push(int id, int button);
 int    zen_is_gamepad_button_release(int id, int button);
+void   zen_gamepad_vibrate(int id, float strong, float weak, float duration);
+void   zen_vibrate(float duration);
 
 // ==========================================
 // 2. テクスチャ (Texture) & 画像 (Image) API
