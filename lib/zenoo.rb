@@ -6,8 +6,11 @@ if defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel"
   require_relative '../ext/spinel/zenoo_native'
 else
   # CRuby C拡張 (.so) 環境
-  so_path = File.expand_path("../ext/zenoo/zenoo.so", __dir__)
-  require so_path if File.exist?(so_path)
+  begin
+    send(:require_relative, '../ext/zenoo/zenoo')
+  rescue LoadError
+    # ロードできなかった場合は呼び出し側で処理
+  end
 end
 
 # ==========================================

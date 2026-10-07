@@ -29,6 +29,7 @@ mkdir -p "${CACHE_DIR}/regexp"
 echo "=== [1/4] Generating C code with Spinel AOT (${TARGET_RB}) ==="
 "${SPINEL_BIN}" --no-inline-hot -Ilib "${TARGET_RB}" -c -o "${OUTPUT_DIR}/app.c"
 sed -i 's/__attribute__((always_inline))//g' "${OUTPUT_DIR}/app.c"
+sed -i -E 's|/mnt/c/Users/[^/"'"'"'\s]+|/workspace|g' "${OUTPUT_DIR}/app.c"
 
 echo "=== [2/4] Building Spinel Runtime for Wasm ==="
 for f in "${SPINEL_DIR}"/lib/*.c; do
@@ -67,6 +68,8 @@ emcc -O2 \
     -s WASM=1 \
     -s EXPORTED_FUNCTIONS="['_main','_zen_push_char']" \
     --preload-file assets@/assets \
+    -fmacro-prefix-map="${PWD}"=. \
+    -fdebug-prefix-map="${PWD}"=. \
     -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" \
     "${OUTPUT_DIR}/app.c" \
     "${CACHE_DIR}/zenoo_core.o" \

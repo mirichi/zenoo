@@ -71,11 +71,8 @@ module Zenoo
     def self.load_default_font
       path = "/assets/fonts/MPLUS1p-Regular.ttf"
       rel1 = "assets/fonts/MPLUS1p-Regular.ttf"
-      rel2 = File.expand_path("../../assets/fonts/MPLUS1p-Regular.ttf", __dir__)
       if File.exist?(rel1)
         path = rel1
-      elsif File.exist?(rel2)
-        path = rel2
       elsif File.exist?("/assets/fonts/MPLUS1p-Regular.ttf")
         path = "/assets/fonts/MPLUS1p-Regular.ttf"
       elsif File.exist?("C:/Windows/Fonts/msgothic.ttc")
@@ -87,11 +84,8 @@ module Zenoo
     def self.load_sinclair_font
       path = "/assets/fonts/zx_spectrum.ttf"
       rel1 = "assets/fonts/zx_spectrum.ttf"
-      rel2 = File.expand_path("../../assets/fonts/zx_spectrum.ttf", __dir__)
       if File.exist?(rel1)
         path = rel1
-      elsif File.exist?(rel2)
-        path = rel2
       elsif File.exist?("/assets/fonts/zx_spectrum.ttf")
         path = "/assets/fonts/zx_spectrum.ttf"
       end
