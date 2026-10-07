@@ -29,6 +29,7 @@ DEMOS=(
     "examples/demo_ttf_sdf_font.rb"
     "examples/demo_sound.rb"
     "examples/demo_collision.rb"
+    "examples/demo_vibration.rb"
 )
 
 echo "=== [2/2] AOT Compiling All Demos for Linux ==="

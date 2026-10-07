@@ -440,8 +440,17 @@ class Player
 end
 
 def check_collisions(bullet_manager, enemy_manager, item_manager, particle_manager, player)
+  player_hit = false
+
   enemy_manager.enemies.each do |e|
     if e.active
+      p_dx = player.x - e.x
+      p_dy = player.y - e.y
+      p_hit_dist = player.radius + e.radius
+      if p_dx * p_dx + p_dy * p_dy < p_hit_dist * p_hit_dist
+        player_hit = true
+      end
+
       bullet_manager.bullets.each do |b|
         if b.active
           dx = e.x - b.x
@@ -471,6 +480,11 @@ def check_collisions(bullet_manager, enemy_manager, item_manager, particle_manag
         end
       end
     end
+  end
+
+  if player_hit
+    Input.vibrate_gamepad(0, 0.8, 0.8, 0.1)
+    Input.vibrate(0.1)
   end
 
   item_manager.items.each do |i|
