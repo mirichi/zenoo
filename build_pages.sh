@@ -89,6 +89,8 @@ COMMON_EMCC_FLAGS=(
     -s WASM=1
     -s EXPORTED_FUNCTIONS="['_main','_zen_push_char']"
     --preload-file assets@/assets
+    -fmacro-prefix-map="${PWD}"=.
+    -fdebug-prefix-map="${PWD}"=.
     -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib"
 )
 
@@ -104,7 +106,7 @@ COMMON_OBJS=(
 TARGET="${1:-all}"
 
 strip_always_inline() {
-    python3 -c "import sys; p=sys.argv[1]; s=open(p, 'r', encoding='utf-8', errors='ignore').read().replace('__attribute__((always_inline))', ''); open(p, 'w', encoding='utf-8').write(s)" "$1"
+    python3 -c "import sys, re; p=sys.argv[1]; s=open(p, 'r', encoding='utf-8', errors='ignore').read().replace('__attribute__((always_inline))', ''); s=re.sub(r'/mnt/c/Users/[^/\"\'\s]+', '/workspace', s); open(p, 'w', encoding='utf-8').write(s)" "$1"
 }
 
 build_game() {
