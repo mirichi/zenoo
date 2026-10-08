@@ -212,6 +212,10 @@ static void window_focus_callback(GLFWwindow* window, int focused) {
                 s_keys_release[i] = 1;
             }
         }
+        for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
+            zen_gamepad_vibrate(i, 0.0f, 0.0f, 0.0f);
+        }
+        zen_vibrate(0.0f);
     }
 }
 
@@ -366,6 +370,45 @@ static int zen_init_internal(int width, int height, const char* title, GLFWmonit
     // オーディオシステムの初期化
     zen_audio_init();
 
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        if (!window.__zen_vibration_cleanup_registered) {
+            window.__zen_vibration_cleanup_registered = true;
+            var stopAll = function() {
+                try {
+                    if (navigator.getGamepads) {
+                        var gps = navigator.getGamepads();
+                        for (var i = 0; i < gps.length; i++) {
+                            var g = gps[i];
+                            if (g && g.vibrationActuator) {
+                                if (g.vibrationActuator.reset) g.vibrationActuator.reset().catch(function(){});
+                                if (g.vibrationActuator.playEffect) {
+                                    g.vibrationActuator.playEffect('dual-rumble', {
+                                        startDelay: 0,
+                                        duration: 1,
+                                        weakMagnitude: 0,
+                                        strongMagnitude: 0
+                                    }).catch(function(){});
+                                }
+                            }
+                        }
+                    }
+                    if (navigator.vibrate) {
+                        navigator.vibrate(0);
+                    }
+                } catch(e) {}
+            };
+            window.addEventListener('pagehide', stopAll);
+            window.addEventListener('beforeunload', stopAll);
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'hidden') {
+                    stopAll();
+                }
+            });
+        }
+    });
+#endif
+
     return 1;
 }
 
@@ -450,6 +493,12 @@ void zen_shutdown(void) {
             s_linux_ff_fds[i] = -1;
         }
     }
+#endif
+#ifdef __EMSCRIPTEN__
+    for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
+        zen_gamepad_vibrate(i, 0.0f, 0.0f, 0.0f);
+    }
+    zen_vibrate(0.0f);
 #endif
 }
 
@@ -960,12 +1009,21 @@ void zen_gamepad_vibrate(int id, float strong, float weak, float duration) {
         s_gamepad_vibration_timer[id] = duration;
     }
 #elif defined(__EMSCRIPTEN__)
-    if (duration <= 0.0f) {
+    if (duration <= 0.0f || (strong <= 0.0f && weak <= 0.0f)) {
         EM_ASM({
             var id = $0;
             var gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
             if (gamepads && gamepads[id] && gamepads[id].vibrationActuator) {
-                gamepads[id].vibrationActuator.reset().catch(function(e) {});
+                var act = gamepads[id].vibrationActuator;
+                if (act.reset) act.reset().catch(function(e) {});
+                if (act.playEffect) {
+                    act.playEffect('dual-rumble', {
+                        startDelay: 0,
+                        duration: 1,
+                        weakMagnitude: 0,
+                        strongMagnitude: 0
+                    }).catch(function(e) {});
+                }
             }
         }, id);
         return;
@@ -1049,6 +1107,14 @@ void zen_vibrate(float duration) {
                 } catch(e) {}
             }
         }, duration);
+    } else {
+        EM_ASM({
+            if (navigator.vibrate) {
+                try {
+                    navigator.vibrate(0);
+                } catch(e) {}
+            }
+        });
     }
 #else
     (void)duration;

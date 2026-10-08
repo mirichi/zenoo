@@ -318,6 +318,49 @@
         document.exitFullscreen();
       }
     });
+
+    // ----------------------------------------------------
+    // パッド・端末振動の確実な停止 (ポータル離脱時 / ページ非表示時)
+    // ----------------------------------------------------
+    function stopAllVibration() {
+      try {
+        if (navigator.getGamepads) {
+          var gamepads = navigator.getGamepads();
+          for (var i = 0; i < gamepads.length; i++) {
+            var gp = gamepads[i];
+            if (gp && gp.vibrationActuator) {
+              if (gp.vibrationActuator.reset) gp.vibrationActuator.reset().catch(function(){});
+              if (gp.vibrationActuator.playEffect) {
+                gp.vibrationActuator.playEffect('dual-rumble', {
+                  startDelay: 0,
+                  duration: 1,
+                  weakMagnitude: 0,
+                  strongMagnitude: 0
+                }).catch(function(){});
+              }
+            }
+          }
+        }
+        if (navigator.vibrate) {
+          navigator.vibrate(0);
+        }
+      } catch (err) {}
+    }
+
+    var backBtn = document.querySelector('.btn-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', function() {
+        stopAllVibration();
+      });
+    }
+
+    window.addEventListener('pagehide', stopAllVibration);
+    window.addEventListener('beforeunload', stopAllVibration);
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'hidden') {
+        stopAllVibration();
+      }
+    });
   </script>
   {{{ SCRIPT }}}
 </body>
