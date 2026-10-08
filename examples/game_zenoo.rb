@@ -11,6 +11,65 @@ COLOR_BUTTON_HOVER = Color.new(70, 70, 80)
 COLOR_TEXT_GRAY    = Color.new(140, 140, 140)
 COLOR_PURPLE       = Color.new(210, 60, 255)
 COLOR_EXP_GREEN    = Color.new(50, 255, 130)
+COLOR_HEART_RED    = Color.new(255, 70, 90)
+COLOR_EXP_BAR_BG   = Color.new(30, 40, 35)
+
+# ゲーム状態
+STATE_PLAY     = 0 # プレイ中
+STATE_PAUSE    = 1 # ポーズ (ステータス確認)
+STATE_TITLE    = 2 # タイトル画面
+STATE_LEVELUP  = 3 # レベルアップ 3 択
+STATE_GAMEOVER = 4 # リザルト画面
+
+# アップグレード種別数 (0..7)
+UPGRADE_COUNT = 8
+
+# ==========================================
+# 0. 効果音 (SoundEffect で起動時に波形生成)
+# ==========================================
+class Sfx
+  SHOT      = 0
+  HIT       = 1
+  KILL      = 2
+  EXPLODE   = 3
+  GEM       = 4
+  LEVELUP   = 5
+  DAMAGE    = 6
+  BOSS_KILL = 7
+  HEAL      = 8
+  SELECT    = 9
+
+  def initialize
+    @sounds = [
+      SoundEffect.sweep(1500, 700, 0.04, type: :square, volume: 0.10),
+      SoundEffect.tone(180, 0.03, type: :square, volume: 0.12),
+      SoundEffect.sweep(600, 120, 0.12, type: :square, volume: 0.22),
+      SoundEffect.noise(0.30, volume: 0.40, release: 0.25),
+      SoundEffect.tone(1320, 0.05, type: :triangle, volume: 0.22),
+      SoundEffect.sweep(400, 1300, 0.35, type: :square, volume: 0.25),
+      SoundEffect.sweep(320, 50, 0.30, type: :sawtooth, volume: 0.50),
+      SoundEffect.noise(0.90, volume: 0.70, release: 0.70),
+      SoundEffect.sweep(600, 1000, 0.20, type: :triangle, volume: 0.35),
+      SoundEffect.tone(880, 0.04, type: :square, volume: 0.15)
+    ]
+    # 同一フレームでの多重再生を防ぐクールダウン (フレーム数)
+    @cooldowns = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  end
+
+  def tick
+    i = 0
+    while i < @cooldowns.size
+      @cooldowns[i] -= 1 if @cooldowns[i] > 0
+      i += 1
+    end
+  end
+
+  def play(id, cooldown = 2)
+    return if @cooldowns[id] > 0
+    @cooldowns[id] = cooldown
+    @sounds[id].play
+  end
+end
 
 # ==========================================
 # 1. パーティクル & エフェクト (短命GCオブジェクト)
@@ -51,11 +110,12 @@ end
 class DamageText
   attr_reader :dead
 
-  def initialize(x, y, text, color = Color::WHITE)
+  def initialize(x, y, text, color = Color::WHITE, size = 18)
     @x = x.to_f + (rand(16) - 8).to_f
     @y = y.to_f
     @text = text.to_s
     @color = color
+    @size = size
     @life = 25
     @dead = false
   end
@@ -69,7 +129,7 @@ class DamageText
   def draw(cx, cy)
     sx = @x - cx
     sy = @y - cy
-    Window.draw_text(sx, sy, @text, font: Font::SINCLAIR, size: 18, color: @color)
+    Window.draw_text(sx, sy, @text, font: Font::SINCLAIR, size: @size, color: @color)
   end
 end
 
@@ -200,16 +260,18 @@ class Orbiter
 end
 
 # ==========================================
-# 3. ドロップアイテム (EXPジェム)
+# 3. ドロップアイテム (EXPジェム / 回復ハート)
 # ==========================================
 class Item
-  attr_accessor :x, :y, :dead, :value
+  attr_accessor :x, :y, :dead, :value, :kind
 
-  def initialize(x, y, value = 10)
+  # kind: 0 = EXPジェム, 1 = 回復ハート
+  def initialize(x, y, value = 10, kind = 0)
     @x = x.to_f
     @y = y.to_f
     @value = value
-    @life = 600
+    @kind = kind
+    @life = kind == 1 ? 900 : 600
     @dead = false
   end
 
@@ -237,6 +299,12 @@ class Item
     return if @life < 100 && (@life % 10) < 5
     sx = @x - cx
     sy = @y - cy
+    if @kind == 1
+      # 十字型のハート (回復)
+      Window.draw_rect(sx - 9.0, sy - 3.0, 18.0, 6.0, color: COLOR_HEART_RED)
+      Window.draw_rect(sx - 3.0, sy - 9.0, 6.0, 18.0, color: COLOR_HEART_RED)
+      return
+    end
     c = @value > 10 ? COLOR_EXP_GREEN : Color::YELLOW
     s = @value > 10 ? 12.0 : 8.0
     Window.draw_rect(sx - s * 0.5, sy - s * 0.5, s, s, color: c)
@@ -247,7 +315,7 @@ end
 # 4. 敵キャラクター (Enemy)
 # ==========================================
 class Enemy
-  attr_accessor :x, :y, :radius, :hp, :max_hp, :speed, :sides, :color, :score_value, :dead, :is_boss
+  attr_accessor :x, :y, :radius, :hp, :max_hp, :speed, :sides, :color, :score_value, :dead, :is_boss, :flash
 
   def initialize(px, py, type = :normal)
     edge = rand(4)
@@ -268,6 +336,7 @@ class Enemy
     @dead = false
     @rotation = 0.0
     @is_boss = false
+    @flash = 0 # 被弾時の白フラッシュ残りフレーム
 
     case type
     when :fast
@@ -311,11 +380,13 @@ class Enemy
     @x += @speed * Math.cos(angle)
     @y += @speed * Math.sin(angle)
     @rotation += 0.03
+    @flash -= 1 if @flash > 0
   end
 
   def draw(cx, cy)
     sx = @x - cx
     sy = @y - cy
+    fill = @flash > 0 ? Color::WHITE : @color
 
     @sides.times do |i|
       a1 = @rotation + i * (2.0 * Math::PI / @sides)
@@ -324,7 +395,7 @@ class Enemy
       vy1 = sy + @radius * Math.sin(a1)
       vx2 = sx + @radius * Math.cos(a2)
       vy2 = sy + @radius * Math.sin(a2)
-      Window.draw_triangle(sx, sy, vx2, vy2, vx1, vy1, color: @color)
+      Window.draw_triangle(sx, sy, vx2, vy2, vx1, vy1, color: fill)
       Window.draw_line(vx1, vy1, vx2, vy2, color: Color::WHITE, width: @is_boss ? 2.0 : 1.0)
     end
 
@@ -347,7 +418,8 @@ end
 class Player
   attr_accessor :x, :y, :radius, :sides, :rotation, :speed, :fire_timer, :fire_rate,
                 :score, :magnet_radius, :shot_level, :orbiter_count, :missile_level,
-                :missile_timer, :orbiters
+                :missile_timer, :orbiters,
+                :hp, :max_hp, :invincible, :exp, :level, :fired
 
   def initialize(x, y)
     @x = x.to_f
@@ -365,6 +437,28 @@ class Player
     @missile_level = 0
     @missile_timer = 0
     @orbiters = []
+    @hp = 5
+    @max_hp = 5
+    @invincible = 0 # 被弾後の無敵残りフレーム
+    @exp = 0
+    @level = 1
+    @fired = false  # このフレームにメインショットを撃ったか (効果音用)
+  end
+
+  # 次のレベルに必要な経験値 (レベルが上がるにつれて段階的に増加)
+  def exp_to_next
+    # 初期は50、レベルが上がるにつれて増加幅も大きくなる
+    lv = @level - 1
+    50 + lv * 40 + (lv * lv * 4)
+  end
+
+  # ダメージを受けたら true を返す (無敵中は false)
+  def take_damage(amount)
+    return false if @invincible > 0
+    @hp -= amount
+    @hp = 0 if @hp < 0
+    @invincible = 90
+    true
   end
 
   def rebuild_orbiters
@@ -375,6 +469,9 @@ class Player
   end
 
   def update(bullets, missiles, enemies, particles)
+    @fired = false
+    @invincible -= 1 if @invincible > 0
+
     # 移動
     @x += Input.x * @speed
     @y += Input.y * @speed
@@ -418,6 +515,7 @@ class Player
     else
       @fire_timer = @fire_rate
       fire_shots(bullets, particles)
+      @fired = true
     end
 
     # ミサイル自動発射
@@ -499,18 +597,23 @@ class Player
     sx = @x - cx
     sy = @y - cy
 
-    @sides.times do |i|
-      angle1 = @rotation + i * (2.0 * Math::PI / @sides)
-      vx1 = sx + @radius * Math.cos(angle1)
-      vy1 = sy + @radius * Math.sin(angle1)
+    # 無敵中は点滅 (本体のみ。オービターは常に描画)
+    visible = @invincible <= 0 || ((@invincible / 4) % 2) == 0
+    if visible
+      body_color = @hp <= 1 ? COLOR_HEART_RED : Color::GREEN
+      @sides.times do |i|
+        angle1 = @rotation + i * (2.0 * Math::PI / @sides)
+        vx1 = sx + @radius * Math.cos(angle1)
+        vy1 = sy + @radius * Math.sin(angle1)
 
-      angle2 = @rotation + ((i + 1) % @sides) * (2.0 * Math::PI / @sides)
-      vx2 = sx + @radius * Math.cos(angle2)
-      vy2 = sy + @radius * Math.sin(angle2)
+        angle2 = @rotation + ((i + 1) % @sides) * (2.0 * Math::PI / @sides)
+        vx2 = sx + @radius * Math.cos(angle2)
+        vy2 = sy + @radius * Math.sin(angle2)
 
-      Window.draw_triangle(sx, sy, vx2, vy2, vx1, vy1, color: Color::GREEN)
-      Window.draw_line(vx1, vy1, vx2, vy2, color: Color::WHITE)
-      Window.draw_rect(vx1 - 2.0, vy1 - 2.0, 4.0, 4.0, color: Color::WHITE)
+        Window.draw_triangle(sx, sy, vx2, vy2, vx1, vy1, color: body_color)
+        Window.draw_line(vx1, vy1, vx2, vy2, color: Color::WHITE)
+        Window.draw_rect(vx1 - 2.0, vy1 - 2.0, 4.0, 4.0, color: Color::WHITE)
+      end
     end
 
     @orbiters.each { |orb| orb.draw(cx, cy) }
@@ -524,6 +627,15 @@ class Game
   attr_accessor :player, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state
 
   def initialize
+    @sfx = Sfx.new
+    @best_score = 0
+    @title_timer = 0
+    reset_world
+    @game_state = STATE_TITLE
+  end
+
+  # ワールド全体を初期状態に戻す (リトライ時にも使用)
+  def reset_world
     @player = Player.new(1280.0 / 2.0, 720.0 / 2.0)
     @bullets = []
     @missiles = []
@@ -531,13 +643,46 @@ class Game
     @items = []
     @particles = []
     @damage_texts = []
-    @game_state = 0 # 0: プレイ中, 1: スキルメニュー
+    @game_state = STATE_PLAY
     @menu_cursor = 0
     @stick_prev_up = false
     @stick_prev_down = false
+    @prev_mouse_x = -1.0
+    @prev_mouse_y = -1.0
     @spawn_timer = 0
     @spawn_interval = 50.0
     @boss_spawn_timer = 1200 # 20秒ごとに出現
+
+    # 演出
+    @shake = 0.0         # 画面シェイク強度 (px)
+    @hitstop = 0         # ヒットストップ残りフレーム
+    @damage_flash = 0    # 被弾時の赤フラッシュ残りフレーム
+    @levelup_flash = 0   # レベルアップ時の白フラッシュ
+
+    # 戦績
+    @frames_alive = 0
+    @kills = 0
+    @combo = 0
+    @combo_timer = 0
+    @max_combo = 0
+    @new_record = false
+
+    # 死亡演出 / 画面遷移
+    @player_dead = false
+    @death_timer = 0
+    @state_timer = 0 # 画面遷移直後の誤入力防止用
+
+    # レベルアップ選択肢 (アップグレード種別の index)
+    @choices = []
+  end
+
+  def add_shake(amount)
+    @shake += amount
+    @shake = 10.0 if @shake > 10.0
+  end
+
+  def add_hitstop(frames)
+    @hitstop = frames if frames > @hitstop
   end
 
   def spawn_enemies
@@ -566,7 +711,7 @@ class Game
   end
 
   def check_collisions
-    player_hit = false
+    contact_damage = 0
     boss_hit = false
 
     # 1. 弾 vs 敵
@@ -574,13 +719,19 @@ class Game
       next if e.dead
 
       # 自機との接触判定
-      p_dx = @player.x - e.x
-      p_dy = @player.y - e.y
-      p_dist_sq = p_dx * p_dx + p_dy * p_dy
-      p_hit_dist = @player.radius + e.radius
-      if p_dist_sq < p_hit_dist * p_hit_dist
-        player_hit = true
-        boss_hit = true if e.is_boss
+      unless @player_dead
+        p_dx = @player.x - e.x
+        p_dy = @player.y - e.y
+        p_dist_sq = p_dx * p_dx + p_dy * p_dy
+        p_hit_dist = @player.radius + e.radius
+        if p_dist_sq < p_hit_dist * p_hit_dist
+          if e.is_boss
+            boss_hit = true
+            contact_damage = 2
+          elsif contact_damage < 1
+            contact_damage = 1
+          end
+        end
       end
 
       # オービター刃 vs 敵
@@ -623,32 +774,104 @@ class Game
       end
     end
 
-    # 3. 振動フィードバック
-    if player_hit
-      if boss_hit
-        Input.vibrate_gamepad(0, 1.0, 1.0, 0.15) # ボス接触は特大振動
-      else
-        Input.vibrate_gamepad(0, 0.7, 0.7, 0.1)  # 通常接触
-      end
-      Input.vibrate(0.1)
+    # 3. 自機の被弾処理 (無敵時間中は無効)
+    if contact_damage > 0 && @player.take_damage(contact_damage)
+      on_player_damaged(boss_hit)
     end
 
     # 4. アイテム取得判定
+    return if @player_dead
     @items.each do |item|
       next if item.dead
       dx = @player.x - item.x
       dy = @player.y - item.y
       if dx * dx + dy * dy < 40.0 * 40.0
         item.dead = true
-        @player.score += item.value
-        # 取得キラキラパーティクル
-        @particles << Particle.new(item.x, item.y, (rand(4) - 2).to_f, (rand(4) - 2).to_f, 12, COLOR_EXP_GREEN, 4.0)
+        if item.kind == 1
+          pick_heart(item)
+        else
+          @player.exp += item.value
+          @sfx.play(Sfx::GEM, 3)
+          # 取得キラキラパーティクル
+          @particles << Particle.new(item.x, item.y, (rand(4) - 2).to_f, (rand(4) - 2).to_f, 12, COLOR_EXP_GREEN, 4.0)
+        end
       end
+    end
+  end
+
+  def pick_heart(item)
+    if @player.hp < @player.max_hp
+      @player.hp += 1
+      @damage_texts << DamageText.new(@player.x - 30.0, @player.y - 50.0, "+1 HP", COLOR_HEART_RED, 22)
+    else
+      # HP満タン時はスコアボーナス
+      @player.score += 100
+      @damage_texts << DamageText.new(@player.x - 30.0, @player.y - 50.0, "+100", COLOR_HEART_RED, 22)
+    end
+    @sfx.play(Sfx::HEAL, 4)
+    8.times do
+      ang = rand(360) * Math::PI / 180.0
+      @particles << Particle.new(item.x, item.y, 3.0 * Math.cos(ang), 3.0 * Math.sin(ang), 18, COLOR_HEART_RED, 5.0)
+    end
+  end
+
+  # 自機被弾時の演出・振動・ノックバック
+  def on_player_damaged(boss_hit)
+    @combo = 0
+    @combo_timer = 0
+    @damage_flash = 14
+    add_shake(boss_hit ? 8.0 : 5.0)
+    add_hitstop(5)
+    @sfx.play(Sfx::DAMAGE, 10)
+
+    # 3. 振動フィードバック
+    if boss_hit
+      Input.vibrate_gamepad(0, 1.0, 1.0, 0.25) # ボス接触は特大振動
+    else
+      Input.vibrate_gamepad(0, 0.7, 0.7, 0.15) # 通常接触
+    end
+    Input.vibrate(0.1)
+
+    # 周囲の雑魚を押し返して立て直す余地を作る
+    @enemies.each do |e|
+      next if e.dead || e.is_boss
+      dx = e.x - @player.x
+      dy = e.y - @player.y
+      dist = Math.sqrt(dx * dx + dy * dy)
+      if dist < 180.0 && dist > 0.1
+        push = 180.0 - dist
+        e.x += (dx / dist) * push
+        e.y += (dy / dist) * push
+      end
+    end
+
+    12.times do
+      ang = rand(360) * Math::PI / 180.0
+      spd = rand(6).to_f + 2.0
+      @particles << Particle.new(@player.x, @player.y, spd * Math.cos(ang), spd * Math.sin(ang), 20, COLOR_HEART_RED, 6.0)
+    end
+
+    on_player_death if @player.hp <= 0
+  end
+
+  def on_player_death
+    @player_dead = true
+    @death_timer = 100
+    add_shake(10.0)
+    add_hitstop(12)
+    @sfx.play(Sfx::BOSS_KILL, 30)
+    Input.vibrate_gamepad(0, 1.0, 1.0, 0.6)
+    80.times do
+      ang = rand(360) * Math::PI / 180.0
+      spd = rand(12).to_f + 2.0
+      @particles << Particle.new(@player.x, @player.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(40) + 30, Color::GREEN, 9.0)
     end
   end
 
   def damage_enemy(e, dmg, text_color)
     e.hp -= dmg
+    e.flash = 3
+    @sfx.play(Sfx::HIT, 3)
     @damage_texts << DamageText.new(e.x, e.y - e.radius, dmg, text_color)
     # 被弾スパーク
     3.times do
@@ -661,7 +884,18 @@ class Game
     end
   end
 
+  def combo_multiplier
+    1 + @combo / 10
+  end
+
   def kill_enemy(e)
+    # コンボ & スコア加算
+    @kills += 1
+    @combo += 1
+    @combo_timer = 120
+    @max_combo = @combo if @combo > @max_combo
+    @player.score += e.score_value * combo_multiplier
+
     if e.is_boss
       # ボス撃破：大爆発＆大量ジェム
       60.times do
@@ -672,6 +906,11 @@ class Game
       12.times do
         @items << Item.new(e.x + (rand(80) - 40).to_f, e.y + (rand(80) - 40).to_f, 30)
       end
+      @items << Item.new(e.x, e.y, 0, 1)
+      add_shake(9.0)
+      add_hitstop(8)
+      @sfx.play(Sfx::BOSS_KILL, 20)
+      Input.vibrate_gamepad(0, 1.0, 0.6, 0.3)
     elsif e.max_hp > 5
       # エリート撃破
       25.times do
@@ -682,6 +921,11 @@ class Game
       4.times do
         @items << Item.new(e.x + (rand(40) - 20).to_f, e.y + (rand(40) - 20).to_f, 20)
       end
+      # 20% の確率で回復ハートをドロップ
+      @items << Item.new(e.x, e.y, 0, 1) if rand(100) < 20
+      add_shake(3.0)
+      add_hitstop(3)
+      @sfx.play(Sfx::EXPLODE, 4)
     else
       # 通常・チビ撃破
       12.times do
@@ -690,10 +934,14 @@ class Game
         @particles << Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(15) + 10, COLOR_ORANGE, 5.0)
       end
       @items << Item.new(e.x, e.y, 10)
+      add_shake(0.6)
+      @sfx.play(Sfx::KILL, 3)
     end
   end
 
   def create_explosion(x, y, radius, damage)
+    add_shake(2.5)
+    @sfx.play(Sfx::EXPLODE, 4)
     # 爆発パーティクル
     25.times do
       ang = rand(360) * Math::PI / 180.0
@@ -711,47 +959,184 @@ class Game
     end
   end
 
+  # ==========================================
+  # 入力ヘルパー
+  # ==========================================
+  def confirm_pressed?
+    Input.gamepad_button_push?(:a) || Input.key_push?(:enter) || Input.key_push?(:space) ||
+      Input.key_push?(:z) || Input.mouse_push?(:left)
+  end
+
   def update_draw_frame
-    esc_pressed = Input.key_push?(:escape)
-    right_clicked = Input.mouse_push?(:right)
-    start_pressed = Input.gamepad_button_push?(:start) || Input.gamepad_button_push?(:back)
-    b_pressed = (@game_state == 1) && Input.gamepad_button_push?(:b)
+    @sfx.tick
+    @state_timer += 1
 
-    if esc_pressed || right_clicked || start_pressed || b_pressed
-      @game_state = (@game_state == 0 ? 1 : 0)
+    case @game_state
+    when STATE_TITLE
+      update_title
+    when STATE_PLAY
+      update_play
+    when STATE_PAUSE
+      update_pause
+    when STATE_LEVELUP
+      update_levelup
+    when STATE_GAMEOVER
+      update_gameover
     end
 
-    if @game_state == 0
-      # 1. 敵スポーン
-      spawn_enemies
-
-      # 2. オブジェクト更新
-      @player.update(@bullets, @missiles, @enemies, @particles)
-      @bullets.each { |b| b.update }
-      @missiles.each { |m| m.update(@enemies) }
-      @enemies.each { |e| e.update(@player.x, @player.y) }
-      @items.each { |i| i.update(@player.x, @player.y, @player.magnet_radius) }
-      @particles.each { |p| p.update }
-      @damage_texts.each { |t| t.update }
-
-      # 3. 当たり判定
-      check_collisions
-
-      # 4. オブジェクトの自然なGC回収 (delete_if)
-      @bullets.delete_if { |b| b.dead }
-      @missiles.delete_if { |m| m.dead }
-      @enemies.delete_if { |e| e.dead }
-      @items.delete_if { |i| i.dead }
-      @particles.delete_if { |p| p.dead }
-      @damage_texts.delete_if { |t| t.dead }
-    elsif @game_state == 1
-      handle_skill_menu
-    end
+    # 画面シェイク減衰
+    @shake *= 0.80
+    @shake = 0.0 if @shake < 0.2
+    @damage_flash -= 1 if @damage_flash > 0
+    @levelup_flash -= 1 if @levelup_flash > 0
 
     draw_game
   end
 
-  def handle_skill_menu
+  def change_state(state)
+    @game_state = state
+    @state_timer = 0
+  end
+
+  def update_title
+    @title_timer += 1
+    return unless @state_timer > 10 && confirm_pressed?
+    reset_world
+    @sfx.play(Sfx::LEVELUP, 10)
+    change_state(STATE_PLAY)
+  end
+
+  def update_play
+    esc_pressed = Input.key_push?(:escape)
+    right_clicked = Input.mouse_push?(:right)
+    start_pressed = Input.gamepad_button_push?(:start) || Input.gamepad_button_push?(:back)
+
+    if (esc_pressed || right_clicked || start_pressed) && !@player_dead
+      change_state(STATE_PAUSE)
+      return
+    end
+
+    # ヒットストップ中はワールドを止める (描画のみ継続)
+    if @hitstop > 0
+      @hitstop -= 1
+      return
+    end
+
+    # コンボ時間切れ
+    if @combo_timer > 0
+      @combo_timer -= 1
+      @combo = 0 if @combo_timer <= 0
+    end
+
+    # 1. 敵スポーン
+    spawn_enemies unless @player_dead
+
+    # 2. オブジェクト更新
+    unless @player_dead
+      @frames_alive += 1
+      @player.update(@bullets, @missiles, @enemies, @particles)
+      @sfx.play(Sfx::SHOT, 4) if @player.fired
+    end
+    @bullets.each { |b| b.update }
+    @missiles.each { |m| m.update(@enemies) }
+    @enemies.each { |e| e.update(@player.x, @player.y) }
+    @items.each { |i| i.update(@player.x, @player.y, @player.magnet_radius) }
+    @particles.each { |p| p.update }
+    @damage_texts.each { |t| t.update }
+
+    # 3. 当たり判定
+    check_collisions
+
+    # 4. オブジェクトの自然なGC回収 (delete_if)
+    @bullets.delete_if { |b| b.dead }
+    @missiles.delete_if { |m| m.dead }
+    @enemies.delete_if { |e| e.dead }
+    @items.delete_if { |i| i.dead }
+    @particles.delete_if { |p| p.dead }
+    @damage_texts.delete_if { |t| t.dead }
+
+    # 5. 死亡演出 → リザルトへ
+    if @player_dead
+      @death_timer -= 1
+      if @death_timer <= 0
+        if @player.score > @best_score
+          @best_score = @player.score
+          @new_record = true
+        end
+        change_state(STATE_GAMEOVER)
+      end
+      return
+    end
+
+    # 6. レベルアップ判定
+    if @player.exp >= @player.exp_to_next
+      start_levelup
+    end
+  end
+
+  def update_pause
+    esc_pressed = Input.key_push?(:escape)
+    right_clicked = Input.mouse_push?(:right)
+    start_pressed = Input.gamepad_button_push?(:start) || Input.gamepad_button_push?(:back)
+    b_pressed = Input.gamepad_button_push?(:b)
+
+    if esc_pressed || right_clicked || start_pressed || b_pressed
+      change_state(STATE_PLAY)
+      return
+    end
+
+    # Q / Y ボタンでタイトルへ戻る
+    if Input.key_push?(:q) || Input.gamepad_button_push?(:y)
+      change_state(STATE_TITLE)
+    end
+  end
+
+  def update_gameover
+    return unless @state_timer > 45 && confirm_pressed?
+    reset_world
+    @sfx.play(Sfx::LEVELUP, 10)
+    change_state(STATE_PLAY)
+  end
+
+  # ==========================================
+  # レベルアップ (ランダム 3 択)
+  # ==========================================
+  def upgrade_available?(idx)
+    case idx
+    when 0 then @player.sides < 10
+    when 1 then @player.shot_level < 5
+    when 2 then @player.orbiter_count < 4
+    when 3 then @player.missile_level < 3
+    when 4 then @player.speed < 9.0
+    when 5 then @player.fire_rate > 3
+    when 6 then @player.magnet_radius < 460.0
+    else true # 最大HPアップは常に選択可能
+    end
+  end
+
+  def start_levelup
+    @player.exp -= @player.exp_to_next
+    @player.level += 1
+
+    # 選択可能なアップグレードから重複なしで最大 3 つ抽選
+    candidates = []
+    UPGRADE_COUNT.times do |i|
+      candidates << i if upgrade_available?(i)
+    end
+    @choices = []
+    while @choices.size < 3 && candidates.size > 0
+      pick = rand(candidates.size)
+      @choices << candidates[pick]
+      candidates.delete_at(pick)
+    end
+
+    @menu_cursor = 0
+    @levelup_flash = 10
+    @sfx.play(Sfx::LEVELUP, 10)
+    change_state(STATE_LEVELUP)
+  end
+
+  def update_levelup
     # 上下選択入力 (十字キー / WSキー / 上下矢印 / 左スティック)
     up_pressed = Input.key_push?(:up) || Input.key_push?(:w) || Input.gamepad_button_push?(:dpad_up)
     down_pressed = Input.key_push?(:down) || Input.key_push?(:s) || Input.gamepad_button_push?(:dpad_down)
@@ -770,90 +1155,175 @@ class Game
       @stick_prev_down = false
     end
 
+    count = @choices.size
     if up_pressed
-      @menu_cursor = (@menu_cursor - 1) % 7
+      @menu_cursor = (@menu_cursor - 1) % count
+      @sfx.play(Sfx::SELECT, 2)
     elsif down_pressed
-      @menu_cursor = (@menu_cursor + 1) % 7
+      @menu_cursor = (@menu_cursor + 1) % count
+      @sfx.play(Sfx::SELECT, 2)
     end
 
-    # マウスによる選択（ホバー）
+    # マウスによる選択（ホバー）: マウスが動いたときだけカーソルを奪う
     mx = Input.mouse_x
     my = Input.mouse_y
+    mouse_moved = (mx != @prev_mouse_x || my != @prev_mouse_y)
+    @prev_mouse_x = mx
+    @prev_mouse_y = my
     mouse_hover_idx = -1
-    7.times do |i|
-      top = 205.0 + (i.to_f * 45.0)
-      if mx >= 140.0 && mx <= 1140.0 && my >= top && my <= top + 40.0
+    count.times do |i|
+      top = levelup_row_top(i)
+      if mx >= 240.0 && mx <= 1040.0 && my >= top && my <= top + 80.0
         mouse_hover_idx = i
-        @menu_cursor = i
+        @menu_cursor = i if mouse_moved
         break
       end
     end
 
-    # 決定（購入）操作: ゲームパッド A, キーボード Enter/Space/Z, またはマウス左クリック
+    # 遷移直後の誤爆防止
+    return if @state_timer < 20
+
+    # 決定操作: ゲームパッド A, キーボード Enter/Space/Z, またはマウス左クリック
     buy_pressed = Input.gamepad_button_push?(:a) || Input.key_push?(:enter) || Input.key_push?(:space) || Input.key_push?(:z)
     if mouse_hover_idx >= 0 && Input.mouse_push?(:left)
+      @menu_cursor = mouse_hover_idx
       buy_pressed = true
     end
 
     return unless buy_pressed
 
-    execute_skill_upgrade(@menu_cursor)
+    execute_skill_upgrade(@choices[@menu_cursor])
+    @sfx.play(Sfx::HEAL, 4)
+    change_state(STATE_PLAY)
+    # 経験値が余っていれば連続レベルアップ
+    start_levelup if @player.exp >= @player.exp_to_next
+  end
+
+  def levelup_row_top(i)
+    250.0 + i.to_f * 100.0
   end
 
   def execute_skill_upgrade(idx)
-    shape_cost = (@player.sides - 2) * 100
-    shot_cost = @player.shot_level * 80
-    orbiter_cost = (@player.orbiter_count + 1) * 70
-    missile_cost = (@player.missile_level + 1) * 90
-
     case idx
     when 0 # 形状強化
-      if @player.score >= shape_cost
-        @player.score -= shape_cost
-        @player.sides += 1
-      end
+      @player.sides += 1
     when 1 # 拡散ショット
-      if @player.score >= shot_cost && @player.shot_level < 5
-        @player.score -= shot_cost
-        @player.shot_level += 1
-      end
+      @player.shot_level += 1
     when 2 # 近接回転刃 (オービター)
-      if @player.score >= orbiter_cost && @player.orbiter_count < 4
-        @player.score -= orbiter_cost
-        @player.orbiter_count += 1
-        @player.rebuild_orbiters
-      end
+      @player.orbiter_count += 1
+      @player.rebuild_orbiters
     when 3 # 追尾爆発ミサイル
-      if @player.score >= missile_cost && @player.missile_level < 3
-        @player.score -= missile_cost
-        @player.missile_level += 1
-      end
+      @player.missile_level += 1
     when 4 # 移動速度
-      if @player.score >= 50
-        @player.score -= 50
-        @player.speed += 1.0
-      end
+      @player.speed += 1.0
     when 5 # 連射速度 (下限 3 を限度とする)
-      if @player.score >= 50 && @player.fire_rate > 3
-        @player.score -= 50
-        @player.fire_rate -= 2
-        @player.fire_rate = 3 if @player.fire_rate < 3
-      end
+      @player.fire_rate -= 2
+      @player.fire_rate = 3 if @player.fire_rate < 3
     when 6 # 磁石範囲
-      if @player.score >= 50
-        @player.score -= 50
-        @player.magnet_radius += 50.0
-      end
+      @player.magnet_radius += 60.0
+    when 7 # 最大HPアップ & 全回復
+      @player.max_hp += 1
+      @player.hp = @player.max_hp
     end
+  end
+
+  def upgrade_title(idx)
+    case idx
+    when 0 then "UPGRADE SHAPE"
+    when 1 then "SPREAD SHOT"
+    when 2 then "ENERGY ORBITER"
+    when 3 then "HOMING MISSILE"
+    when 4 then "SPEED UP"
+    when 5 then "FIRE RATE UP"
+    when 6 then "MAGNET RADIUS"
+    else "VITALITY"
+    end
+  end
+
+  def upgrade_desc(idx)
+    case idx
+    when 0 then "Sides #{@player.sides} -> #{@player.sides + 1}  (more shots from every vertex)"
+    when 1 then "Way #{@player.shot_level} -> #{@player.shot_level + 1}"
+    when 2 then "Blades #{@player.orbiter_count} -> #{@player.orbiter_count + 1}"
+    when 3 then "Missile Lv #{@player.missile_level} -> #{@player.missile_level + 1}"
+    when 4 then "Speed #{@player.speed.to_i} -> #{@player.speed.to_i + 1}"
+    when 5
+      next_rate = @player.fire_rate - 2
+      next_rate = 3 if next_rate < 3
+      "Interval #{@player.fire_rate} -> #{next_rate} frames"
+    when 6 then "Range #{@player.magnet_radius.to_i} -> #{@player.magnet_radius.to_i + 60}"
+    else "Max HP #{@player.max_hp} -> #{@player.max_hp + 1}  & full heal"
+    end
+  end
+
+  # ==========================================
+  # 描画
+  # ==========================================
+  def time_str(frames)
+    sec = frames / 60
+    m = sec / 60
+    s = sec % 60
+    s_str = s < 10 ? "0#{s}" : "#{s}"
+    "#{m}:#{s_str}"
+  end
+
+  def draw_centered(y, text, size, color, font = Font::SINCLAIR)
+    w = Window.text_width(text, font: font, size: size)
+    Window.draw_text((1280.0 - w) * 0.5, y, text, font: font, size: size, color: color)
   end
 
   def draw_game
     Window.clear(Color::BLACK)
 
-    cx = @player.x - 1280.0 / 2.0
-    cy = @player.y - 720.0 / 2.0
+    # 画面シェイク: カメラ位置にランダムオフセットを加える
+    shake_x = 0.0
+    shake_y = 0.0
+    if @shake > 0.0
+      shake_x = (rand(2001) - 1000).to_f / 1000.0 * @shake
+      shake_y = (rand(2001) - 1000).to_f / 1000.0 * @shake
+    end
+
+    if @game_state == STATE_TITLE
+      draw_title
+      return
+    end
+
+    cx = @player.x - 1280.0 / 2.0 + shake_x
+    cy = @player.y - 720.0 / 2.0 + shake_y
 
     # 背景グリッド
+    draw_grid(cx, cy)
+
+    # オブジェクト描画
+    @items.each { |i| i.draw(cx, cy) }
+    @particles.each { |p| p.draw(cx, cy) }
+    @enemies.each { |e| e.draw(cx, cy) }
+    @bullets.each { |b| b.draw(cx, cy) }
+    @missiles.each { |m| m.draw(cx, cy) }
+    @player.draw(cx, cy) unless @player_dead
+    @damage_texts.each { |d| d.draw(cx, cy) }
+
+    # 被弾の赤フラッシュ / レベルアップの白フラッシュ
+    if @damage_flash > 0
+      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 0, 0, @damage_flash * 8))
+    end
+    if @levelup_flash > 0
+      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 255, 255, @levelup_flash * 10))
+    end
+
+    draw_hud
+
+    case @game_state
+    when STATE_PAUSE
+      draw_pause_menu
+    when STATE_LEVELUP
+      draw_levelup_menu
+    when STATE_GAMEOVER
+      draw_gameover
+    end
+  end
+
+  def draw_grid(cx, cy)
     grid_size = 100.0
     offset_x = -(cx.to_i % 100).to_f
     offset_y = -(cy.to_i % 100).to_f
@@ -869,84 +1339,146 @@ class Game
       Window.draw_line(0.0, y, 1280.0, y, color: COLOR_GRID_DARK)
       y += grid_size
     end
-
-    # オブジェクト描画
-    @items.each { |i| i.draw(cx, cy) }
-    @particles.each { |p| p.draw(cx, cy) }
-    @enemies.each { |e| e.draw(cx, cy) }
-    @bullets.each { |b| b.draw(cx, cy) }
-    @missiles.each { |m| m.draw(cx, cy) }
-    @player.draw(cx, cy)
-    @damage_texts.each { |d| d.draw(cx, cy) }
-
-    # HUD (UI)
-    entities_count = @bullets.size + @missiles.size + @enemies.size + @items.size + @particles.size + @damage_texts.size
-    pad_str = Input.gamepad_connected?(0) ? "[PAD: ON]" : "[PAD: OFF]"
-    hud_str = "SCORE: #{@player.score}  FPS: #{Window.fps.to_i}  OBJECTS: #{entities_count}  #{pad_str}"
-    Window.draw_text(20.0, 20.0, hud_str, font: Font::SINCLAIR, size: 24, color: Color::WHITE)
-
-    # スキルメニュー画面
-    if @game_state == 1
-      draw_skill_menu
-    end
   end
 
-  def draw_skill_menu
+  def draw_hud
+    # HUD (UI)
+    hud_str = "SCORE: #{@player.score}   TIME: #{time_str(@frames_alive)}   LV: #{@player.level}"
+    Window.draw_text(20.0, 20.0, hud_str, font: Font::SINCLAIR, size: 24, color: Color::WHITE)
+
+    # HP (ハートブロック)
+    @player.max_hp.times do |i|
+      hx = 20.0 + i.to_f * 30.0
+      c = i < @player.hp ? COLOR_HEART_RED : COLOR_HP_GRAY
+      Window.draw_rect(hx, 56.0, 24.0, 18.0, color: c)
+    end
+
+    # コンボ表示
+    if @combo >= 3
+      combo_size = 28 + (@combo > 40 ? 20 : @combo / 2)
+      combo_str = "#{@combo} COMBO  x#{combo_multiplier}"
+      w = Window.text_width(combo_str, font: Font::SINCLAIR, size: combo_size)
+      ratio = @combo_timer.to_f / 120.0
+      Window.draw_text(1260.0 - w, 20.0, combo_str, font: Font::SINCLAIR, size: combo_size, color: COLOR_ORANGE)
+      Window.draw_rect(1260.0 - w, 24.0 + combo_size.to_f, w * ratio, 4.0, color: COLOR_ORANGE)
+    end
+
+    # EXPバー (画面下端)
+    exp_ratio = @player.exp.to_f / @player.exp_to_next
+    exp_ratio = 1.0 if exp_ratio > 1.0
+    Window.draw_rect(0.0, 710.0, 1280.0, 10.0, color: COLOR_EXP_BAR_BG)
+    Window.draw_rect(0.0, 710.0, 1280.0 * exp_ratio, 10.0, color: COLOR_EXP_GREEN)
+
+    # デバッグ情報
+    entities_count = @bullets.size + @missiles.size + @enemies.size + @items.size + @particles.size + @damage_texts.size
+    pad_str = Input.gamepad_connected?(0) ? "[PAD: ON]" : "[PAD: OFF]"
+    dbg_str = "FPS: #{Window.fps.to_i}  OBJECTS: #{entities_count}  #{pad_str}"
+    Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY)
+  end
+
+  def draw_title
+    t = @title_timer
+    # 背景グリッドをゆっくりスクロール
+    draw_grid(t.to_f * 0.6, t.to_f * 0.3)
+
+    # 中央で回転する多角形 (頂点数が徐々に増える)
+    sides = 3 + (t / 90) % 6
+    rot = t.to_f * 0.02
+    radius = 90.0
+    sides.times do |i|
+      a1 = rot + i * (2.0 * Math::PI / sides)
+      a2 = rot + ((i + 1) % sides) * (2.0 * Math::PI / sides)
+      x1 = 640.0 + radius * Math.cos(a1)
+      y1 = 330.0 + radius * Math.sin(a1)
+      x2 = 640.0 + radius * Math.cos(a2)
+      y2 = 330.0 + radius * Math.sin(a2)
+      Window.draw_triangle(640.0, 330.0, x2, y2, x1, y1, color: Color::GREEN)
+      Window.draw_line(x1, y1, x2, y2, color: Color::WHITE, width: 2.0)
+    end
+
+    draw_centered(100.0, "ZENOO SURVIVOR", 56, Color::WHITE, Font::MPLUS)
+    draw_centered(180.0, "Grow your shape. Survive the swarm.", 20, COLOR_TEXT_GRAY)
+
+    if (t / 30) % 2 == 0
+      draw_centered(470.0, "PRESS ENTER / A / CLICK TO START", 24, Color::CYAN)
+    end
+
+    draw_centered(540.0, "MOVE: WASD / Stick / Hold Left Click    AIM: Mouse / Right Stick", 18, Color::WHITE)
+    draw_centered(570.0, "PAUSE: ESC / START / Right Click", 18, Color::WHITE)
+    draw_centered(630.0, "BEST SCORE: #{@best_score}", 22, COLOR_ORANGE) if @best_score > 0
+  end
+
+  def draw_pause_menu
     Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG)
-    Window.draw_text(420.0, 130.0, "=== UPGRADE SKILLS ===", font: Font::SINCLAIR, size: 32, color: Color::WHITE)
+    draw_centered(130.0, "=== PAUSED ===", 40, Color::WHITE)
 
-    shape_cost = (@player.sides - 2) * 100
-    shot_cost = @player.shot_level * 80
-    orbiter_cost = (@player.orbiter_count + 1) * 70
-    missile_cost = (@player.missile_level + 1) * 90
-
-    next_rate = @player.fire_rate - 2
-    next_rate = 3 if next_rate < 3
-    fire_rate_str = @player.fire_rate <= 3 ? "MAX" : "#{next_rate}"
-
-    labels = [
-      "Upgrade Shape  (Cost: #{shape_cost}) -> Sides: #{@player.sides + 1}",
-      "Spread Shot    (Cost: #{shot_cost}) -> Way: #{@player.shot_level >= 5 ? 'MAX' : @player.shot_level + 1}",
-      "Energy Orbiter (Cost: #{orbiter_cost}) -> Blades: #{@player.orbiter_count >= 4 ? 'MAX' : @player.orbiter_count + 1}",
-      "Homing Missile (Cost: #{missile_cost}) -> Level: #{@player.missile_level >= 3 ? 'MAX' : @player.missile_level + 1}",
-      "Speed Up       (Cost: 50) -> Speed: #{@player.speed.to_i + 1}",
-      "Fire Rate Up   (Cost: 50) -> Rate: #{fire_rate_str}",
-      "Magnet Radius  (Cost: 50) -> Range: #{@player.magnet_radius.to_i + 50}"
+    lines = [
+      "LEVEL      : #{@player.level}",
+      "HP         : #{@player.hp} / #{@player.max_hp}",
+      "SHAPE      : #{@player.sides} sides",
+      "SPREAD     : #{@player.shot_level} way",
+      "ORBITER    : #{@player.orbiter_count} blades",
+      "MISSILE    : Lv #{@player.missile_level}",
+      "SPEED      : #{@player.speed.to_i}",
+      "FIRE RATE  : #{@player.fire_rate} frames",
+      "MAGNET     : #{@player.magnet_radius.to_i}"
     ]
+    lines.each_with_index do |line, i|
+      Window.draw_text(460.0, 210.0 + i.to_f * 34.0, line, font: Font::SINCLAIR, size: 22, color: Color::WHITE)
+    end
 
-    can_buys = [
-      @player.score >= shape_cost,
-      @player.score >= shot_cost && @player.shot_level < 5,
-      @player.score >= orbiter_cost && @player.orbiter_count < 4,
-      @player.score >= missile_cost && @player.missile_level < 3,
-      @player.score >= 50,
-      @player.score >= 50 && @player.fire_rate > 3,
-      @player.score >= 50
-    ]
+    draw_centered(560.0, "ESC / START / Right Click / (B) to Resume", 20, Color::WHITE)
+    draw_centered(595.0, "Q / (Y) to Title", 18, COLOR_TEXT_GRAY)
+  end
 
-    7.times do |i|
-      top = 205.0 + (i.to_f * 45.0)
+  def draw_levelup_menu
+    Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG)
+    draw_centered(130.0, "LEVEL UP!", 56, COLOR_EXP_GREEN)
+    draw_centered(200.0, "Choose one upgrade", 20, COLOR_TEXT_GRAY)
+
+    @choices.each_with_index do |idx, i|
+      top = levelup_row_top(i)
       is_selected = (@menu_cursor == i)
 
       if is_selected
-        Window.draw_rect(140.0, top, 1000.0, 40.0, color: COLOR_BUTTON_HOVER)
-        Window.draw_rect(136.0, top, 4.0, 40.0, color: Color::CYAN)
+        Window.draw_rect(240.0, top, 800.0, 80.0, color: COLOR_BUTTON_HOVER)
+        Window.draw_rect(236.0, top, 4.0, 80.0, color: Color::CYAN)
+      else
+        Window.draw_rect(240.0, top, 800.0, 80.0, color: Color.new(30, 30, 38, 220))
       end
 
+      title_color = is_selected ? Color::CYAN : Color::WHITE
       prefix = is_selected ? "> " : "  "
-      text = "#{prefix}#{labels[i]}"
-
-      c = if can_buys[i]
-            is_selected ? Color::CYAN : Color::WHITE
-          else
-            COLOR_TEXT_GRAY
-          end
-
-      Window.draw_text(160.0, top + 10.0, text, font: Font::SINCLAIR, size: 20, color: c)
+      Window.draw_text(260.0, top + 14.0, "#{prefix}#{upgrade_title(idx)}", font: Font::SINCLAIR, size: 26, color: title_color)
+      Window.draw_text(300.0, top + 48.0, upgrade_desc(idx), font: Font::SINCLAIR, size: 18, color: COLOR_TEXT_GRAY)
     end
 
-    Window.draw_text(290.0, 545.0, "[UP/DOWN/Stick] Select   [A / ENTER / Click] Purchase", font: Font::SINCLAIR, size: 20, color: Color::WHITE)
-    Window.draw_text(330.0, 585.0, "Right Click / ESC / START / (B) to Resume Game", font: Font::SINCLAIR, size: 18, color: COLOR_TEXT_GRAY)
+    draw_centered(570.0, "[UP/DOWN/Stick] Select   [A / ENTER / Click] Choose", 20, Color::WHITE)
+  end
+
+  def draw_gameover
+    Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG)
+    draw_centered(110.0, "GAME OVER", 64, COLOR_HEART_RED)
+
+    lines = [
+      "TIME       : #{time_str(@frames_alive)}",
+      "LEVEL      : #{@player.level}",
+      "KILLS      : #{@kills}",
+      "MAX COMBO  : #{@max_combo}",
+      "SCORE      : #{@player.score}",
+      "BEST       : #{@best_score}"
+    ]
+    lines.each_with_index do |line, i|
+      Window.draw_text(470.0, 220.0 + i.to_f * 40.0, line, font: Font::SINCLAIR, size: 26, color: Color::WHITE)
+    end
+
+    if @new_record && (@state_timer / 15) % 2 == 0
+      draw_centered(480.0, "NEW RECORD!", 32, COLOR_ORANGE)
+    end
+
+    if @state_timer > 45 && (@state_timer / 30) % 2 == 0
+      draw_centered(570.0, "PRESS ENTER / A / CLICK TO RETRY", 26, Color::CYAN)
+    end
   end
 end
 
@@ -956,6 +1488,8 @@ end
 game = Game.new
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
+# 自動テスト時はタイトルを飛ばしてプレイ状態から開始
+game.game_state = STATE_PLAY if test_max > 0
 
 Window.loop(1280, 720, "Zenoo Survival Shooting Game") do
   game.update_draw_frame
