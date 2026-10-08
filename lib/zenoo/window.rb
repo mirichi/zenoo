@@ -25,6 +25,7 @@ module Zenoo
       Native::Window.scale_mode = scale_mode if Native::Window.respond_to?(:scale_mode=)
       Native::Window.vsync = (vsync ? 1 : 0)
       Native::Window.target_fps = 60
+      Font.atlas_image if defined?(Font) && Font.respond_to?(:atlas_image)
 
       @main_loop_block = block
 

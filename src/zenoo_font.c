@@ -138,6 +138,7 @@ static void init_atlas_if_needed(void) {
 
 void zen_font_set_atlas_image(ZenImage* img) {
     load_gl_font_procs();
+    if (s_atlas_image == img) return;
     s_atlas_image = img;
     s_atlas_x = 1;
     s_atlas_y = 1;

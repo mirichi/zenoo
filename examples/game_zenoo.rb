@@ -1396,7 +1396,7 @@ class Game
       Window.draw_line(x1, y1, x2, y2, color: Color::WHITE, width: 2.0)
     end
 
-    draw_centered(100.0, "ZENOO SURVIVOR", 56, Color::WHITE, Font::MPLUS)
+    draw_centered(100.0, "ZENOO SURVIVOR", 56, Color::WHITE)
     draw_centered(180.0, "Grow your shape. Survive the swarm.", 20, COLOR_TEXT_GRAY)
 
     if (t / 30) % 2 == 0
@@ -1488,8 +1488,8 @@ end
 game = Game.new
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
-# 自動テスト時はタイトルを飛ばしてプレイ状態から開始
-game.game_state = STATE_PLAY if test_max > 0
+# 自動テスト時はタイトルを飛ばしてプレイ状態から開始 (ZENOO_TEST_TITLE 指定時はタイトルをテスト)
+game.game_state = STATE_PLAY if test_max > 0 && ENV['ZENOO_TEST_TITLE'] != '1'
 
 Window.loop(1280, 720, "Zenoo Survival Shooting Game") do
   game.update_draw_frame
