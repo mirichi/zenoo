@@ -2,6 +2,56 @@
 
 require_relative '../lib/zenoo'
 
+# レトロCRTブラウン管シェーダー (スキャンライン・樽型歪み・色収差・ビネット)
+CRT_FRAGMENT_SHADER = <<~'GLSL'
+#version 330 core
+in vec4 v_color;
+in vec2 v_uv;
+uniform sampler2D u_texture;
+out vec4 fragColor;
+
+// 樽型歪み (CRTブラウン管の曲面ガラス)
+vec2 crt_curve(vec2 uv) {
+    vec2 cc = uv - 0.5;
+    float dist = dot(cc, cc);
+    return 0.5 + cc * (1.0 + 0.12 * dist + 0.06 * dist * dist);
+}
+
+void main() {
+    vec2 uv = crt_curve(v_uv);
+
+    // 画面外は黒 (ベゼル枠)
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
+
+    // 色収差 (RGBチャンネル微小ズレ)
+    float r = texture(u_texture, crt_curve(v_uv - vec2(0.0012, 0.0))).r;
+    float g = texture(u_texture, uv).g;
+    float b = texture(u_texture, crt_curve(v_uv + vec2(0.0012, 0.0))).b;
+    vec3 col = vec3(r, g, b);
+
+    // スキャンライン (黒い横走査線)
+    // 240本の走査線 (レトロアーケード/CRTスタイル)
+    float scan = sin(uv.y * 240.0 * 6.2831853);
+    float scan_weight = clamp(0.5 + 0.5 * scan, 0.0, 1.0);
+    // 黒い隙間をしっかり暗く (0.20)
+    col *= mix(0.20, 1.15, pow(scan_weight, 0.75));
+
+    // ブラウン管の微小発光 (黒い背景でも走査線の存在感が微かにわかる)
+    col += vec3(0.010) * scan_weight;
+
+    // ビネット (四隅の周辺減光)
+    vec2 vig_uv = uv * (1.0 - uv.yx);
+    float vig = vig_uv.x * vig_uv.y * 15.0;
+    vig = clamp(pow(vig, 0.22), 0.0, 1.0);
+    col *= vig;
+
+    fragColor = vec4(col, 1.0);
+}
+GLSL
+
 # 事前定義カラー定数
 COLOR_ORANGE       = Color.new(255, 161, 0)
 COLOR_HP_GRAY      = Color.new(130, 130, 130)
@@ -624,12 +674,15 @@ end
 # 6. メインゲーム (Game)
 # ==========================================
 class Game
-  attr_accessor :player, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state
+  attr_accessor :player, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled
 
   def initialize
     @sfx = Sfx.new
     @best_score = 0
     @title_timer = 0
+    @crt_enabled = true
+    @crt_shader = nil
+    @screen_buffer = nil
     reset_world
     @game_state = STATE_TITLE
   end
@@ -990,7 +1043,20 @@ class Game
     @damage_flash -= 1 if @damage_flash > 0
     @levelup_flash -= 1 if @levelup_flash > 0
 
-    draw_game
+    # CRT エフェクトのトグル切り替え ([C] キー)
+    @crt_enabled = !@crt_enabled if Input.key_push?(:c)
+
+    if @crt_enabled
+      @screen_buffer ||= Image.new(1280, 720)
+      @crt_shader ||= Shader.new(CRT_FRAGMENT_SHADER)
+      Image.render_to(@screen_buffer) do
+        draw_game
+      end
+      Window.clear(Color::BLACK)
+      Window.draw_image(0.0, 0.0, @screen_buffer, shader: @crt_shader)
+    else
+      draw_game
+    end
   end
 
   def change_state(state)
@@ -1372,7 +1438,7 @@ class Game
     # デバッグ情報
     entities_count = @bullets.size + @missiles.size + @enemies.size + @items.size + @particles.size + @damage_texts.size
     pad_str = Input.gamepad_connected?(0) ? "[PAD: ON]" : "[PAD: OFF]"
-    dbg_str = "FPS: #{Window.fps.to_i}  OBJECTS: #{entities_count}  #{pad_str}"
+    dbg_str = "FPS: #{Window.fps.to_i}  OBJECTS: #{entities_count}  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]"
     Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY)
   end
 
@@ -1396,7 +1462,7 @@ class Game
       Window.draw_line(x1, y1, x2, y2, color: Color::WHITE, width: 2.0)
     end
 
-    draw_centered(100.0, "ZENOO SURVIVOR", 56, Color::WHITE)
+    draw_centered(100.0, "ZENOO SURVIVOR", 56, Color::WHITE, Font::MPLUS)
     draw_centered(180.0, "Grow your shape. Survive the swarm.", 20, COLOR_TEXT_GRAY)
 
     if (t / 30) % 2 == 0
@@ -1404,7 +1470,7 @@ class Game
     end
 
     draw_centered(540.0, "MOVE: WASD / Stick / Hold Left Click    AIM: Mouse / Right Stick", 18, Color::WHITE)
-    draw_centered(570.0, "PAUSE: ESC / START / Right Click", 18, Color::WHITE)
+    draw_centered(570.0, "PAUSE: ESC / START / Right Click    CRT: [C]", 18, Color::WHITE)
     draw_centered(630.0, "BEST SCORE: #{@best_score}", 22, COLOR_ORANGE) if @best_score > 0
   end
 
@@ -1428,7 +1494,7 @@ class Game
     end
 
     draw_centered(560.0, "ESC / START / Right Click / (B) to Resume", 20, Color::WHITE)
-    draw_centered(595.0, "Q / (Y) to Title", 18, COLOR_TEXT_GRAY)
+    draw_centered(595.0, "Q / (Y) to Title    [C] CRT Effect: #{@crt_enabled ? 'ON' : 'OFF'}", 18, COLOR_TEXT_GRAY)
   end
 
   def draw_levelup_menu

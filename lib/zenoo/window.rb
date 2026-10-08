@@ -66,8 +66,13 @@ module Zenoo
     end
 
     def self.clear(color)
-      @bg_color = Backend.color_to_uint32(color)
-      Native::Window.clear(@bg_color)
+      target = Backend.current_target
+      if target
+        draw_rect(0.0, 0.0, target.width, target.height, color: color)
+      else
+        @bg_color = Backend.color_to_uint32(color)
+        Native::Window.clear(@bg_color)
+      end
     end
 
     def self.width
