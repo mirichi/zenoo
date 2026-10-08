@@ -462,5 +462,34 @@
   <footer>
     <p>Powered by <strong>Zenoo</strong> &amp; <strong>Spinel AOT Compiler</strong></p>
   </footer>
+
+  <script>
+    function stopAllGamepadsVibration() {
+      try {
+        if (navigator.getGamepads) {
+          var gamepads = navigator.getGamepads();
+          for (var i = 0; i < gamepads.length; i++) {
+            var gp = gamepads[i];
+            if (gp && gp.vibrationActuator) {
+              if (gp.vibrationActuator.reset) gp.vibrationActuator.reset().catch(function(){});
+              if (gp.vibrationActuator.playEffect) {
+                gp.vibrationActuator.playEffect('dual-rumble', {
+                  startDelay: 0,
+                  duration: 1,
+                  weakMagnitude: 0,
+                  strongMagnitude: 0
+                }).catch(function(){});
+              }
+            }
+          }
+        }
+        if (navigator.vibrate) {
+          navigator.vibrate(0);
+        }
+      } catch (err) {}
+    }
+    window.addEventListener('pageshow', stopAllGamepadsVibration);
+    document.addEventListener('DOMContentLoaded', stopAllGamepadsVibration);
+  </script>
 </body>
 </html>
