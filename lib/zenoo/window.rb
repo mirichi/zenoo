@@ -2,7 +2,11 @@ module Zenoo
   module Window
     # オフスクリーンFBO描画ターゲットスコープ
     def self.with_target(target, &block)
+      old_cam = @camera
+      @camera = nil
       Backend.with_target(target, &block)
+    ensure
+      @camera = old_cam
     end
 
     def self.current_target
@@ -16,6 +20,36 @@ module Zenoo
     @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
     @main_loop_block = nil
     @step_proc = nil
+    @filter = nil
+    @filter_uniforms = nil
+    @screen_buffer = nil
+
+    # 画面全体ポストプロセスフィルター (Shader オブジェクト、または nil で解除)
+    def self.filter
+      @filter
+    end
+
+    def self.filter=(shader)
+      @filter = shader
+    end
+
+    # フィルター用 Uniform パラメータ (Hash: { u_time: t, ... })
+    def self.filter_uniforms
+      @filter_uniforms
+    end
+
+    def self.filter_uniforms=(uniforms)
+      @filter_uniforms = uniforms
+    end
+
+    def self.__ensure_screen_buffer
+      w = Native::Window.size_w
+      h = Native::Window.size_h
+      if @screen_buffer.nil? || @screen_buffer.width != w || @screen_buffer.height != h
+        @screen_buffer = Zenoo::Image.new(w, h)
+      end
+      @screen_buffer
+    end
 
     # DXRuby風メインループ
     def self.loop(width = 1280, height = 720, title = "Zenoo", scale: 1.0, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, &block)
@@ -47,18 +81,49 @@ module Zenoo
       Zenoo::GUI.end_frame if defined?(Zenoo::GUI)
     end
 
-    def self.__draw_step
-      Backend.flush_screen
-      Backend.clear_clips
-      @offset_x = 0.0
-      @offset_y = 0.0
-      Native::Renderer.reset_scissor
+    def self.__draw_step(active_filter = nil)
+      if active_filter && @screen_buffer
+        # 1. オフスクリーンバッファへの描画を完了
+        Backend.flush_image(@screen_buffer)
+        Backend.clear_clips
+        @offset_x = 0.0
+        @offset_y = 0.0
+        Native::Renderer.reset_scissor
+
+        # 2. 描画先を画面（メインフレームバッファ）に戻す
+        Backend.current_target = nil
+        Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
+
+        # 3. 画面に @screen_buffer を active_filter（Shader）で全画面描画
+        draw_image(0, 0, @screen_buffer, shader: active_filter, uniforms: @filter_uniforms)
+        Backend.flush_screen
+      else
+        Backend.flush_screen
+        Backend.clear_clips
+        @offset_x = 0.0
+        @offset_y = 0.0
+        Native::Renderer.reset_scissor
+      end
     end
 
     def self.__step_frame
-      Native::Window.clear(@bg_color)
-      __update_step
-      __draw_step
+      active_filter = @filter
+      if active_filter
+        buf = __ensure_screen_buffer
+        Backend.current_target = buf
+        draw_rect(0.0, 0.0, buf.width, buf.height, color: @bg_color)
+        __update_step
+        __draw_step(active_filter)
+      else
+        Backend.current_target = nil
+        Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
+        Native::Window.clear(@bg_color)
+        __update_step
+        __draw_step(nil)
+      end
+    ensure
+      Backend.current_target = nil
+      Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
     end
 
     def self.time
@@ -174,6 +239,98 @@ module Zenoo
 
     @offset_x = 0.0
     @offset_y = 0.0
+    @camera = nil
+    @camera_disabled_stack = []
+    @cam_ox = 0.0
+    @cam_oy = 0.0
+    @cam_zoom = 1.0
+    @has_camera = false
+
+    def self.__recalculate_camera_cache
+      if @camera && @camera_disabled_stack.empty?
+        @has_camera = true
+        @cam_zoom = @camera.zoom.to_f
+        @cam_ox   = @camera.calc_offset_x.to_f
+        @cam_oy   = @camera.calc_offset_y.to_f
+      else
+        @has_camera = false
+        @cam_zoom = 1.0
+        @cam_ox   = 0.0
+        @cam_oy   = 0.0
+      end
+    end
+
+    # 2D カメラ設定 (Zenoo::Camera2D)
+    # - 引数なし: 現在のカメラを取得
+    # - 引数あり (ブロックなし): カメラを設定
+    # - ブロックあり: ブロック内のみカメラを適用
+    def self.camera(cam = nil, &block)
+      if block
+        old_cam  = @camera
+        old_has  = @has_camera
+        old_ox   = @cam_ox
+        old_oy   = @cam_oy
+        old_zoom = @cam_zoom
+
+        @camera = cam
+        __recalculate_camera_cache
+
+        begin
+          yield
+        ensure
+          @camera     = old_cam
+          @has_camera = old_has
+          @cam_ox     = old_ox
+          @cam_oy     = old_oy
+          @cam_zoom   = old_zoom
+        end
+      elsif cam
+        @camera = cam
+        __recalculate_camera_cache
+      else
+        @camera
+      end
+    end
+
+    def self.camera=(cam)
+      @camera = cam
+      __recalculate_camera_cache
+    end
+
+    # カメラを一時的に無効化して UI などを画面ピクセル座標で描画
+    def self.without_camera
+      @camera_disabled_stack.push(true)
+      old_has = @has_camera
+      @has_camera = false
+      begin
+        yield
+      ensure
+        @camera_disabled_stack.pop
+        @has_camera = old_has
+      end
+    end
+
+    def self.camera_enabled?
+      !@camera.nil? && @camera_disabled_stack.empty?
+    end
+
+    # 画面座標 -> ワールド座標変換 (マウス位置など)
+    def self.to_world(sx, sy)
+      if camera_enabled?
+        @camera.screen_to_world(sx, sy)
+      else
+        [sx.to_f, sy.to_f]
+      end
+    end
+
+    # ワールド座標 -> 画面座標変換
+    def self.to_screen(wx, wy)
+      if camera_enabled?
+        @camera.world_to_screen(wx, wy)
+      else
+        [wx.to_f, wy.to_f]
+      end
+    end
 
     def self.offset_x
       @offset_x
@@ -256,23 +413,36 @@ module Zenoo
                        shadow_blur: 0.0,
                        shadow_color: nil,
                        image: nil,
+                       camera: true,
                        z: 0.0)
       actual_color = color || (border_color ? nil : :white)
       c_color = Backend.normalize_color(actual_color)
-      ax = x.to_f + @offset_x
-      ay = y.to_f + @offset_y
-      wf = w.to_f
-      hf = h.to_f
+
+      if @has_camera && camera
+        cur_zoom = @cam_zoom
+        ax = (x.to_f * cur_zoom) + @cam_ox + @offset_x
+        ay = (y.to_f * cur_zoom) + @cam_oy + @offset_y
+        wf = w.to_f * cur_zoom
+        hf = h.to_f * cur_zoom
+        rad = radius.to_f * cur_zoom
+      else
+        cur_zoom = 1.0
+        ax = x.to_f + @offset_x
+        ay = y.to_f + @offset_y
+        wf = w.to_f
+        hf = h.to_f
+        rad = radius.to_f
+      end
 
       b_width = 0.0
       b0 = 0.0; b1 = 0.0; b2 = 0.0; b3 = 0.0
       if border_color
-        b_width = (border_width || 1.0).to_f
+        b_width = (border_width || 1.0).to_f * cur_zoom
         bc = Backend.normalize_color(border_color)
         b0 = bc[0].to_f; b1 = bc[1].to_f; b2 = bc[2].to_f; b3 = bc[3].to_f
       end
 
-      s_blur = shadow_blur.to_f
+      s_blur = shadow_blur.to_f * cur_zoom
       s0 = 0.0; s1 = 0.0; s2 = 0.0; s3 = 0.0
       if s_blur > 0.0
         sc = Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR)
@@ -283,7 +453,7 @@ module Zenoo
       data = [
         ax, ay, wf, hf,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        radius.to_f, b_width, s_blur, mode,
+        rad, b_width, s_blur, mode,
         b0, b1, b2, b3,
         s0, s1, s2, s3,
         0.0, 0.0, 1.0, 1.0
@@ -306,6 +476,7 @@ module Zenoo
                         shadow_blur: 0.0,
                         shadow_color: nil,
                         image: nil,
+                        camera: true,
                         z: 0.0)
       rf = r.to_f
       d = rf * 2.0
@@ -317,6 +488,7 @@ module Zenoo
                 shadow_blur: shadow_blur,
                 shadow_color: shadow_color,
                 image: image,
+                camera: camera,
                 z: z)
     end
 
@@ -333,7 +505,9 @@ module Zenoo
                         alpha: 255,
                         blend: :alpha,
                         shader: nil,
+                        uniforms: nil,
                         src_rect: nil,
+                        camera: true,
                         z: 0.0)
       return unless image
       effective_shader = shader || @current_shader || default_sprite_shader
@@ -348,9 +522,17 @@ module Zenoo
         c_color = [c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f * af]
       end
 
-      # スケール
-      sx = (scale ? scale.to_f : scale_x.to_f)
-      sy = (scale ? scale.to_f : scale_y.to_f)
+      if @has_camera && camera
+        sx = (scale ? scale.to_f : scale_x.to_f) * @cam_zoom
+        sy = (scale ? scale.to_f : scale_y.to_f) * @cam_zoom
+        ax = (x.to_f * @cam_zoom) + @cam_ox + @offset_x
+        ay = (y.to_f * @cam_zoom) + @cam_oy + @offset_y
+      else
+        sx = scale ? scale.to_f : scale_x.to_f
+        sy = scale ? scale.to_f : scale_y.to_f
+        ax = x.to_f + @offset_x
+        ay = y.to_f + @offset_y
+      end
 
       # ピボット (center_x, center_y, または pivot: :center, :top_left, [px, py])
       cx = center_x.to_f
@@ -376,9 +558,6 @@ module Zenoo
 
       # blend mode
       b_mode = Backend.normalize_blend_mode(blend)
-
-      ax = x.to_f + @offset_x
-      ay = y.to_f + @offset_y
 
       if src_rect
         tw = image.texture_width.to_f
@@ -416,16 +595,25 @@ module Zenoo
         1,
         image: image,
         shader: effective_shader,
+        uniforms: uniforms,
         blend: b_mode,
         z: z
       )
     end
 
 
-    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color: :white, z: 0.0)
-      ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
-      ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
-      ax3 = x3.to_f + @offset_x; ay3 = y3.to_f + @offset_y
+    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color: :white, camera: true, z: 0.0)
+      if @has_camera && camera
+        cam_ox = @cam_ox + @offset_x
+        cam_oy = @cam_oy + @offset_y
+        ax1 = (x1.to_f * @cam_zoom) + cam_ox; ay1 = (y1.to_f * @cam_zoom) + cam_oy
+        ax2 = (x2.to_f * @cam_zoom) + cam_ox; ay2 = (y2.to_f * @cam_zoom) + cam_oy
+        ax3 = (x3.to_f * @cam_zoom) + cam_ox; ay3 = (y3.to_f * @cam_zoom) + cam_oy
+      else
+        ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
+        ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
+        ax3 = x3.to_f + @offset_x; ay3 = y3.to_f + @offset_y
+      end
 
       if color.is_a?(Array) && color.length == 3 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
         # 頂点ごとの色指定 [c1, c2, c3]
@@ -456,11 +644,19 @@ module Zenoo
       )
     end
 
-    def self.draw_line(x1, y1, x2, y2, color: :white, width: 1.0, z: 0.0)
+    def self.draw_line(x1, y1, x2, y2, color: :white, width: 1.0, camera: true, z: 0.0)
       actual_color = color || :white
-      ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
-      ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
-      w = width.to_f
+      if @has_camera && camera
+        cam_ox = @cam_ox + @offset_x
+        cam_oy = @cam_oy + @offset_y
+        ax1 = (x1.to_f * @cam_zoom) + cam_ox; ay1 = (y1.to_f * @cam_zoom) + cam_oy
+        ax2 = (x2.to_f * @cam_zoom) + cam_ox; ay2 = (y2.to_f * @cam_zoom) + cam_oy
+        w = width.to_f * @cam_zoom
+      else
+        ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
+        ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
+        w = width.to_f
+      end
 
       dx = ax2 - ax1
       dy = ay2 - ay1
@@ -572,13 +768,19 @@ module Zenoo
     end
 
     # ----------------------------------------------------
-    # 高品質 SDF テキスト描画 API (改行なし・文字列直接描画)
+    # 高品質 SDF テキスト描画 API (改行・アライメント対応)
+    # - align: :left (デフォルト), :center, :right
+    # - valign: :top (デフォルト), :middle / :center, :bottom, :baseline
+    # - line_spacing: 行送り倍率 (Float, デフォルトはフォントメトリクス準拠)
     # ブロックが渡された場合は 1文字単位のカスタム装飾を実行
     # ----------------------------------------------------
     def self.draw_text(x, y, text,
                        font: nil,
                        size: 24,
                        color: :white,
+                       align: :left,
+                       valign: :top,
+                       line_spacing: nil,
                        weight: 0.0,
                        outline_width: 0.0,
                        outline_color: :black,
@@ -587,15 +789,97 @@ module Zenoo
                        shadow_dx: 0.0,
                        shadow_dy: 0.0,
                        sdf: nil,
+                       camera: true,
                        z: 0.0,
                        &block)
+      return if text.nil?
+      str = text.to_s
+      return if str.empty?
+
+      target_font = font || Font.default
+      return unless target_font
+
+      if @has_camera && camera
+        base_x = (x.to_f * @cam_zoom) + @cam_ox
+        base_y = (y.to_f * @cam_zoom) + @cam_oy
+        f_size = size.to_f * @cam_zoom
+      else
+        base_x = x.to_f
+        base_y = y.to_f
+        f_size = size.to_f
+      end
+      f_size = 24.0 if f_size <= 0.0
+
+      # 改行を含む複数行テキストの処理
+      if str.include?("\n")
+        lines = str.split("\n", -1)
+        line_count = lines.length
+        metrics = target_font.metrics(f_size)
+        line_h = line_spacing ? (f_size * line_spacing.to_f) : (metrics[:line_height] || (f_size * 1.2))
+        total_h = f_size + (line_count - 1) * line_h
+
+        cur_base_y = base_y
+        case valign
+        when :middle, :center
+          cur_base_y -= total_h * 0.5
+        when :bottom
+          cur_base_y -= total_h
+        when :baseline
+          cur_base_y -= (metrics[:ascent] || f_size * 0.8)
+        end
+
+        lines.each_with_index do |line_text, idx|
+          line_y = cur_base_y + idx * line_h
+          line_x = base_x
+          if align == :center
+            line_x -= target_font.text_width(line_text, f_size) * 0.5
+          elsif align == :right
+            line_x -= target_font.text_width(line_text, f_size)
+          end
+
+          if block
+            __draw_text_custom(line_x, line_y, line_text, font, size, color,
+                               weight, outline_width, outline_color,
+                               shadow_blur, shadow_color,
+                               shadow_dx, shadow_dy, sdf, z, &block)
+          else
+            __draw_text_simple(line_x, line_y, line_text, font, size, color,
+                               weight, outline_width, outline_color,
+                               shadow_blur, shadow_color,
+                               shadow_dx, shadow_dy, sdf, z)
+          end
+        end
+        return
+      end
+
+      # 単一行テキストの揃え位置オフセット算出 (デフォルト :left / :top 時は text_width や metrics をスキップしてゼロコスト化)
+      draw_x = base_x
+      if align == :center
+        draw_x -= target_font.text_width(str, f_size) * 0.5
+      elsif align == :right
+        draw_x -= target_font.text_width(str, f_size)
+      end
+
+      draw_y = base_y
+      if valign != :top
+        case valign
+        when :middle, :center
+          draw_y -= f_size * 0.5
+        when :bottom
+          draw_y -= f_size
+        when :baseline
+          metrics = target_font.metrics(f_size)
+          draw_y -= (metrics[:ascent] || f_size * 0.8)
+        end
+      end
+
       if block
-        __draw_text_custom(x, y, text, font, size, color,
+        __draw_text_custom(draw_x, draw_y, str, font, f_size, color,
                            weight, outline_width, outline_color,
                            shadow_blur, shadow_color,
                            shadow_dx, shadow_dy, sdf, z, &block)
       else
-        __draw_text_simple(x, y, text, font, size, color,
+        __draw_text_simple(draw_x, draw_y, str, font, f_size, color,
                            weight, outline_width, outline_color,
                            shadow_blur, shadow_color,
                            shadow_dx, shadow_dy, sdf, z)
@@ -840,17 +1124,23 @@ module Zenoo
       @canvas ||= Canvas.new
     end
 
-    def self.draw_path
+    def self.draw_path(camera: true)
       c = canvas
-      has_offset = (@offset_x != 0.0 || @offset_y != 0.0)
-      if has_offset
+      cam = (@camera && @camera_disabled_stack.empty? && camera) ? @camera : nil
+      zoom = cam ? cam.zoom : 1.0
+      cam_ox = (cam ? cam.calc_offset_x : 0.0) + @offset_x
+      cam_oy = (cam ? cam.calc_offset_y : 0.0) + @offset_y
+
+      has_transform = (cam_ox != 0.0 || cam_oy != 0.0 || zoom != 1.0)
+      if has_transform
         c.save
-        c.translate(@offset_x, @offset_y)
+        c.translate(cam_ox, cam_oy)
+        c.scale(zoom, zoom) if zoom != 1.0
       end
       c.begin_path
       yield c
     ensure
-      c.restore if has_offset
+      c.restore if has_transform
     end
   end
 end

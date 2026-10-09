@@ -23,10 +23,11 @@ module Zenoo
   native_method :texture_height, [], :int, "sp_ZenImage_texture_height"
   native_method :texture_id, [], :int, "sp_ZenImage_texture_id"
   native_method :sub_image?, [], :bool, "sp_ZenImage_is_sub_image"
-  native_method :raw_filter=, [:int], :nil, "sp_ZenImage_set_filter"
-  native_method :raw_filter, [], :int, "sp_ZenImage_get_filter"
-  native_class_method :raw_default_filter=, [:int], :nil, "sp_zen_image_set_default_filter"
-  native_class_method :raw_default_filter, [], :int, "sp_zen_image_get_default_filter"
+  native_method :raw_texture_filter=, [:int], :nil, "sp_ZenImage_set_filter"
+  native_method :raw_texture_filter, [], :int, "sp_ZenImage_get_filter"
+  native_class_method :raw_default_texture_filter=, [:int], :nil, "sp_zen_image_set_default_filter"
+  native_class_method :raw_default_texture_filter, [], :int, "sp_zen_image_get_default_filter"
+  native_method :replace_texture!, [:self], :nil, "sp_ZenImage_replace_texture"
 
   # ==========================================
   # 2. Native::NativeShader (Spinel native_struct)

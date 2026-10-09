@@ -27,6 +27,10 @@ class Zenoo::Image
     old_target = Zenoo::Backend.current_target
     Zenoo::Backend.current_target = target
 
+    # オフスクリーン描画中はワールドカメラの影響を遮断 (ローカル座標系にリセット)
+    old_camera = Zenoo::Window.respond_to?(:camera) ? Zenoo::Window.camera : nil
+    Zenoo::Window.camera = nil if Zenoo::Window.respond_to?(:camera=)
+
     if is_sub
       prev_ox = Zenoo::Window.offset_x
       prev_oy = Zenoo::Window.offset_y
@@ -42,24 +46,52 @@ class Zenoo::Image
       Zenoo::Window.offset_x = prev_ox
       Zenoo::Window.offset_y = prev_oy
     end
+    Zenoo::Window.camera = old_camera if Zenoo::Window.respond_to?(:camera=)
     Zenoo::Backend.current_target = old_target
   end
 
+  # シェーダーフィルターの適用 (画像加工・ポストプロセス)
+  # 非破壊版: 加工済みの新しい Image を生成して返します
+  def apply_filter(shader, uniforms: nil)
+    result = Zenoo::Image.new(width, height)
+    Zenoo::Image.render_to(result) do
+      Zenoo::Window.clear([0, 0, 0, 0])
+      Zenoo::Window.draw_image(0, 0, self, shader: shader, uniforms: uniforms)
+    end
+    Zenoo::Backend.flush_image(result)
+    result
+  end
+
+  # 破壊版: 自身のテクスチャをシェーダー処理で上書き加工します
+  def apply_filter!(shader, uniforms: nil)
+    filtered = apply_filter(shader, uniforms: uniforms)
+    if respond_to?(:replace_texture!)
+      replace_texture!(filtered)
+    else
+      Zenoo::Image.render_to(self) do
+        Zenoo::Window.clear([0, 0, 0, 0])
+        Zenoo::Window.draw_image(0, 0, filtered)
+      end
+      Zenoo::Backend.flush_image(self)
+    end
+    self
+  end
+
   if defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel"
-    def filter
-      raw_filter == 0 ? :nearest : :linear
+    def texture_filter
+      raw_texture_filter == 0 ? :nearest : :linear
     end
 
-    def filter=(val)
-      self.raw_filter = (val == :nearest || val == 0) ? 0 : 1
+    def texture_filter=(val)
+      self.raw_texture_filter = (val == :nearest || val == 0) ? 0 : 1
     end
 
-    def self.default_filter
-      raw_default_filter == 0 ? :nearest : :linear
+    def self.default_texture_filter
+      raw_default_texture_filter == 0 ? :nearest : :linear
     end
 
-    def self.default_filter=(val)
-      self.raw_default_filter = (val == :nearest || val == 0) ? 0 : 1
+    def self.default_texture_filter=(val)
+      self.raw_default_texture_filter = (val == :nearest || val == 0) ? 0 : 1
     end
   end
 end
