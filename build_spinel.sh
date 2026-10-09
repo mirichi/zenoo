@@ -8,13 +8,17 @@ fi
 
 echo "=== [1/2] Building Zenoo Spinel C Archive (libzenoo_spinel.a) ==="
 mkdir -p build
+rm -f build/libzenoo_spinel.a build/zenoo_core.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/glad.c -o build/glad.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_core.c -o build/zenoo_core.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_window.c -o build/zenoo_window.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_input.c -o build/zenoo_input.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_vibration.c -o build/zenoo_vibration.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_image.c -o build/zenoo_image.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_gfx.c -o build/zenoo_gfx.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_font.c -o build/zenoo_font.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_audio.c -o build/zenoo_audio.o
 gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c ext/spinel/zenoo_spinel.c -o build/zenoo_spinel.o
-ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_core.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_audio.o build/zenoo_spinel.o
+ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_window.o build/zenoo_input.o build/zenoo_vibration.o build/zenoo_image.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_audio.o build/zenoo_spinel.o
 echo "  -> build/libzenoo_spinel.a created successfully."
 
 TARGET_RB="${1:-examples/demo_spinel_interactive.rb}"

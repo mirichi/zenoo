@@ -1,16 +1,11 @@
+// ==========================================
+// 描画コア (Graphics / Shader / Batching) 実装
+// ==========================================
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#ifdef __EMSCRIPTEN__
-#include <GLES3/gl3.h>
-#else
-#include "glad/glad.h"
-#endif
-#include "zenoo.h"
-
+#include "zenoo_internal.h"
 
 static GLuint s_dynamic_vao = 0;
 static GLuint s_dynamic_vbo = 0;
@@ -20,9 +15,7 @@ static GLuint s_active_texture = 0;
 static GLuint s_active_program = 0;
 static int s_current_blend_mode = -1;
 static ZenImage* s_current_render_target = NULL;
-static void (*s_gc_callback)(void) = NULL;
 
-// ヘルパー: 0xRRGGBBAA -> float[4]
 static void color_to_floats(uint32_t c, float out[4]) {
     out[0] = ((c >> 24) & 0xFF) / 255.0f;
     out[1] = ((c >> 16) & 0xFF) / 255.0f;
@@ -70,9 +63,10 @@ static GLuint compile_shader(GLenum type, const char* source) {
     return shader;
 }
 
-void zen_gfx_init(int width, int height) {
-    (void)width; (void)height;
-
+// ------------------------------------------
+// ライフサイクル & 内部参照
+// ------------------------------------------
+void zen__gfx_init(void) {
     // 1x1 白テクスチャの生成 (単色描画用: テクスチャ未指定時はこれをサンプリング)
     glGenTextures(1, &s_white_texture);
     glBindTexture(GL_TEXTURE_2D, s_white_texture);
@@ -85,16 +79,118 @@ void zen_gfx_init(int width, int height) {
     // 汎用動的バッファ初期化
     glGenBuffers(1, &s_dynamic_vbo);
     glGenVertexArrays(1, &s_dynamic_vao);
+
+    s_current_render_target = NULL;
+    s_current_blend_mode = -1;
 }
 
-void zen_gfx_shutdown(void) {
-    if (s_white_texture) glDeleteTextures(1, &s_white_texture);
-    if (s_dynamic_vbo) glDeleteBuffers(1, &s_dynamic_vbo);
-    if (s_dynamic_vao) glDeleteVertexArrays(1, &s_dynamic_vao);
+void zen__gfx_shutdown(void) {
+    if (s_white_texture) {
+        glDeleteTextures(1, &s_white_texture);
+        s_white_texture = 0;
+    }
+    if (s_dynamic_vbo) {
+        glDeleteBuffers(1, &s_dynamic_vbo);
+        s_dynamic_vbo = 0;
+    }
+    if (s_dynamic_vao) {
+        glDeleteVertexArrays(1, &s_dynamic_vao);
+        s_dynamic_vao = 0;
+    }
+    s_current_render_target = NULL;
 }
 
+ZenImage* zen__gfx_render_target(void) {
+    return s_current_render_target;
+}
+
+uint32_t zen__gfx_white_texture(void) {
+    return (uint32_t)s_white_texture;
+}
+
+// フレーム開始時の初期化 (画面をターゲットにし、余白を黒クリア、ゲーム領域を設定)
+void zen__gfx_begin_frame(void) {
+    const ZenViewport* vp = zen__viewport();
+
+    s_current_render_target = NULL;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // 1. 全体を黒でクリア (レターボックス余白)
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(0, 0, vp->fb_w, vp->fb_h);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // 2. 仮想解像度アスペクト比のゲーム領域ビューポートとシザーを設定
+    glViewport(vp->x, vp->y, vp->w, vp->h);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(vp->x, vp->y, vp->w, vp->h);
+
+    // 3. ブレンドモード初期化
+    s_current_blend_mode = -1;
+    zen_set_blend_mode(ZEN_BLEND_ALPHA);
+
+    s_active_program = 0;
+    s_active_texture = s_white_texture;
+}
+
+// ------------------------------------------
+// クリア (現在の描画先を指定色で塗るだけ)
+// ------------------------------------------
+void zen_clear(uint32_t color) {
+    float clr[4];
+    color_to_floats(color, clr);
+
+    if (s_current_render_target) {
+        int tw = s_current_render_target->texture ? s_current_render_target->texture->width : s_current_render_target->width;
+        int th = s_current_render_target->texture ? s_current_render_target->texture->height : s_current_render_target->height;
+        glViewport(0, 0, tw, th);
+        glDisable(GL_SCISSOR_TEST);
+        glClearColor(clr[0], clr[1], clr[2], clr[3]);
+        glClear(GL_COLOR_BUFFER_BIT);
+    } else {
+        const ZenViewport* vp = zen__viewport();
+        glViewport(vp->x, vp->y, vp->w, vp->h);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(vp->x, vp->y, vp->w, vp->h);
+        glClearColor(clr[0], clr[1], clr[2], clr[3]);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+}
+
+// ------------------------------------------
+// レンダーターゲット切り替え
+// ------------------------------------------
+void zen_set_render_target(ZenImage* target) {
+    s_current_render_target = target;
+
+    if (target != NULL && target->texture != NULL) {
+        if (!target->has_fbo) {
+            glGenFramebuffers(1, &target->fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->texture->id, 0);
+            target->has_fbo = 1;
+        } else {
+            glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
+        }
+        int tw = target->texture->width;
+        int th = target->texture->height;
+        glViewport(0, 0, tw, th);
+        glDisable(GL_SCISSOR_TEST); // FBO切り替え時は画面用シザーを解除
+    } else {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        // 画面復帰時はレターボックスのゲーム領域ビューポートとシザーを正しく復元
+        const ZenViewport* vp = zen__viewport();
+        glViewport(vp->x, vp->y, vp->w, vp->h);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(vp->x, vp->y, vp->w, vp->h);
+    }
+}
+
+// ------------------------------------------
+// ブレンドモード
+// ------------------------------------------
 void zen_set_blend_mode(int mode) {
-    if (!zen_is_window_active() && !s_current_render_target) return;
     if (s_current_blend_mode == mode) return;
     s_current_blend_mode = mode;
     switch (mode) {
@@ -117,302 +213,60 @@ void zen_set_blend_mode(int mode) {
     }
 }
 
-void zen_gfx_begin(uint32_t clear_color, int width, int height) {
-    // オフスクリーン描画ターゲットの場合のみビューポートとクリアを実行
+// ------------------------------------------
+// クリッピング (シザー)
+// ------------------------------------------
+void zen_set_scissor(int x, int y, int w, int h) {
+    if (w < 0) w = 0;
+    if (h < 0) h = 0;
+
+    glEnable(GL_SCISSOR_TEST);
+
     if (s_current_render_target) {
-        glViewport(0, 0, s_current_render_target->width, s_current_render_target->height);
-        float clr[4];
-        color_to_floats(clear_color, clr);
-        glClearColor(clr[0], clr[1], clr[2], clr[3]);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(x, y, w, h);
     } else {
-        (void)width; (void)height; (void)clear_color;
-    }
+        const ZenViewport* vp = zen__viewport();
 
-    s_current_blend_mode = -1;
-    zen_set_blend_mode(ZEN_BLEND_ALPHA);
+        int sx = vp->x + (int)floorf((float)x * vp->scale);
+        int sy = vp->y + (int)floorf((float)(vp->base_h - (y + h)) * vp->scale);
+        int sw = (int)ceilf((float)w * vp->scale);
+        int sh = (int)ceilf((float)h * vp->scale);
 
-    s_active_program = 0;
-    s_active_texture = s_white_texture;
-}
-
-void zen_gfx_flush(void) {
-    // マイクロカーネル化により即時描画（draw_buffer）に統一されたため Flush 処理は不要
-}
-
-// ==========================================
-// ==========================================
-// テクスチャ (Texture) & 画像 (Image) 実装
-// ==========================================
-ZenTexture* zen_texture_create(int width, int height) {
-    if (width <= 0 || height <= 0) return NULL;
-
-    ZenTexture* tex = (ZenTexture*)calloc(1, sizeof(ZenTexture));
-    if (!tex && s_gc_callback) {
-        s_gc_callback();
-        tex = (ZenTexture*)calloc(1, sizeof(ZenTexture));
-    }
-    if (!tex) return NULL;
-
-    tex->width = width;
-    tex->height = height;
-    tex->ref_count = 1;
-
-    glGenTextures(1, &tex->id);
-    if (!tex->id && s_gc_callback) {
-        s_gc_callback();
-        glGenTextures(1, &tex->id);
-    }
-
-    return tex;
-}
-
-void zen_texture_release(ZenTexture* texture) {
-    if (!texture) return;
-    texture->ref_count--;
-    if (texture->ref_count <= 0) {
-        if (s_active_texture == texture->id) {
-            s_active_texture = s_white_texture;
+        // ゲーム領域の枠外にはみ出さないよう clamp
+        if (sx < vp->x) {
+            sw -= (vp->x - sx);
+            sx = vp->x;
         }
-        if (texture->id) {
-            glDeleteTextures(1, &texture->id);
+        if (sy < vp->y) {
+            sh -= (vp->y - sy);
+            sy = vp->y;
         }
-        free(texture);
+        if (sx + sw > vp->x + vp->w) {
+            sw = (vp->x + vp->w) - sx;
+        }
+        if (sy + sh > vp->y + vp->h) {
+            sh = (vp->y + vp->h) - sy;
+        }
+        if (sw < 0) sw = 0;
+        if (sh < 0) sh = 0;
+
+        glScissor(sx, sy, sw, sh);
     }
 }
 
-static int s_default_texture_filter = ZEN_FILTER_LINEAR;
-
-void zen_set_default_texture_filter(int filter) {
-    s_default_texture_filter = filter;
-}
-
-int zen_get_default_texture_filter(void) {
-    return s_default_texture_filter;
-}
-
-void zen_image_set_filter(ZenImage* image, int filter) {
-    if (!image || !image->texture || !image->texture->id) return;
-    image->texture->filter = filter;
-    GLint gl_f = (filter == ZEN_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
-    glBindTexture(GL_TEXTURE_2D, image->texture->id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_f);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_f);
-}
-
-int zen_image_get_filter(const ZenImage* image) {
-    if (!image || !image->texture) return ZEN_FILTER_LINEAR;
-    return image->texture->filter;
-}
-
-#ifndef GL_R8
-#define GL_R8 0x8229
-#endif
-
-ZenImage* zen_image_create_format(int width, int height, int format) {
-    if (width <= 0 || height <= 0) return NULL;
-
-    ZenTexture* tex = zen_texture_create(width, height);
-    if (!tex) return NULL;
-    tex->filter = s_default_texture_filter;
-
-    GLint gl_f = (s_default_texture_filter == ZEN_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
-    glBindTexture(GL_TEXTURE_2D, tex->id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_f);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_f);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    if (format == ZEN_IMAGE_FORMAT_R8) {
-        unsigned char* clear_buf = (unsigned char*)calloc(1, (size_t)width * (size_t)height);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, clear_buf);
-        if (clear_buf) {
-            free(clear_buf);
-        }
+void zen_reset_scissor(void) {
+    if (s_current_render_target) {
+        glDisable(GL_SCISSOR_TEST);
     } else {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    }
-
-    ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
-    if (!img && s_gc_callback) {
-        s_gc_callback();
-        img = (ZenImage*)calloc(1, sizeof(ZenImage));
-    }
-    if (!img) {
-        zen_texture_release(tex);
-        return NULL;
-    }
-
-    img->texture = tex;
-    img->x = 0;
-    img->y = 0;
-    img->width = width;
-    img->height = height;
-
-    return img;
-}
-
-ZenImage* zen_image_create(int width, int height) {
-    return zen_image_create_format(width, height, ZEN_IMAGE_FORMAT_RGBA);
-}
-
-ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pixels) {
-    if (width <= 0 || height <= 0 || !pixels) return NULL;
-
-    ZenTexture* tex = zen_texture_create(width, height);
-    if (!tex) return NULL;
-    tex->filter = s_default_texture_filter;
-
-    GLint gl_f = (s_default_texture_filter == ZEN_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
-    glBindTexture(GL_TEXTURE_2D, tex->id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_f);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_f);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
-    ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
-    if (!img && s_gc_callback) {
-        s_gc_callback();
-        img = (ZenImage*)calloc(1, sizeof(ZenImage));
-    }
-    if (!img) {
-        zen_texture_release(tex);
-        return NULL;
-    }
-
-    img->texture = tex;
-    img->x = 0;
-    img->y = 0;
-    img->width = width;
-    img->height = height;
-
-    return img;
-}
-
-ZenImage* zen_image_sub_image(ZenImage* parent, int x, int y, int width, int height) {
-    if (!parent || !parent->texture || width <= 0 || height <= 0) return NULL;
-
-    ZenImage* img = (ZenImage*)calloc(1, sizeof(ZenImage));
-    if (!img && s_gc_callback) {
-        s_gc_callback();
-        img = (ZenImage*)calloc(1, sizeof(ZenImage));
-    }
-    if (!img) return NULL;
-
-    img->texture = parent->texture;
-    img->texture->ref_count++;
-    img->x = parent->x + x;
-    img->y = parent->y + y;
-    img->width = width;
-    img->height = height;
-
-    return img;
-}
-
-ZenImage* zen_image_load(const char* filepath) {
-    if (!filepath) return NULL;
-
-    int w, h, channels;
-    stbi_set_flip_vertically_on_load(0);
-    unsigned char* data = stbi_load(filepath, &w, &h, &channels, 4);
-    if (!data) {
-        fprintf(stderr, "[Zenoo Image] Failed to load image: %s (%s)\n", filepath, stbi_failure_reason());
-        return NULL;
-    }
-
-    ZenImage* img = zen_image_create_from_pixels(w, h, (const uint32_t*)data);
-    stbi_image_free(data);
-    return img;
-}
-
-void zen_image_destroy(ZenImage* image) {
-    if (!image) return;
-    zen_gfx_flush();
-
-    if (s_current_render_target == image) {
-        zen_set_render_target(NULL);
-    }
-
-    if (image->has_fbo) {
-        glDeleteFramebuffers(1, &image->fbo);
-    }
-    if (image->texture) {
-        zen_texture_release(image->texture);
-        image->texture = NULL;
-    }
-    free(image);
-}
-
-void zen_image_get_size(const ZenImage* image, int* width, int* height) {
-    if (!image) {
-        if (width) *width = 0;
-        if (height) *height = 0;
-        return;
-    }
-    if (width) *width = image->width;
-    if (height) *height = image->height;
-}
-
-void zen_image_get_bounds(const ZenImage* image, int* x, int* y, int* w, int* h) {
-    if (!image) {
-        if (x) *x = 0; if (y) *y = 0; if (w) *w = 0; if (h) *h = 0;
-        return;
-    }
-    if (x) *x = image->x;
-    if (y) *y = image->y;
-    if (w) *w = image->width;
-    if (h) *h = image->height;
-}
-
-void zen_image_get_texture_size(const ZenImage* image, int* tex_w, int* tex_h) {
-    if (!image || !image->texture) {
-        if (tex_w) *tex_w = 0; if (tex_h) *tex_h = 0;
-        return;
-    }
-    if (tex_w) *tex_w = image->texture->width;
-    if (tex_h) *tex_h = image->texture->height;
-}
-
-void zen_image_get_uv(const ZenImage* image, float* u, float* v, float* uw, float* vh) {
-    if (!image || !image->texture || image->texture->width <= 0 || image->texture->height <= 0) {
-        if (u) *u = 0.0f; if (v) *v = 0.0f; if (uw) *uw = 1.0f; if (vh) *vh = 1.0f;
-        return;
-    }
-    float tw = (float)image->texture->width;
-    float th = (float)image->texture->height;
-    if (u)  *u  = (float)image->x / tw;
-    if (v)  *v  = (float)image->y / th;
-    if (uw) *uw = (float)image->width / tw;
-    if (vh) *vh = (float)image->height / th;
-}
-
-void zen_set_render_target(ZenImage* target) {
-    zen_gfx_flush();
-
-    s_current_render_target = target;
-
-    if (target != NULL && target->texture != NULL) {
-        if (!target->has_fbo) {
-            glGenFramebuffers(1, &target->fbo);
-            glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->texture->id, 0);
-            target->has_fbo = 1;
-        } else {
-            glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
-        }
-        glViewport(0, 0, target->texture->width, target->texture->height);
-    } else {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        int win_w, win_h;
-        zen_get_window_size(&win_w, &win_h);
-        glViewport(0, 0, win_w, win_h);
+        const ZenViewport* vp = zen__viewport();
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(vp->x, vp->y, vp->w, vp->h);
     }
 }
 
-// ==========================================
-// 汎用シェーダー (ZenShader) API 実装
-// ==========================================
+// ------------------------------------------
+// シェーダー (ZenShader)
+// ------------------------------------------
 struct ZenShader {
     GLuint program_id;
 };
@@ -458,8 +312,6 @@ ZenShader* zen_shader_create(const char* vert_src, const char* frag_src) {
     shader->program_id = prog;
     return shader;
 }
-
-
 
 void zen_shader_destroy(ZenShader* shader) {
     if (!shader) return;
@@ -514,22 +366,9 @@ void zen_shader_set_mat4(ZenShader* shader, const char* name, const float* mat4)
     if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, mat4);
 }
 
-// ==========================================
-// 汎用 Quad バッチ & GC トリガー
-// ==========================================
-
-void zen_set_gc_trigger_callback(void (*callback)(void)) {
-    s_gc_callback = callback;
-}
-
-uint32_t zen_image_get_texture_id(const ZenImage* image) {
-    return (image && image->texture) ? (uint32_t)image->texture->id : 0;
-}
-
-void zen_flush(void) {
-    zen_gfx_flush();
-}
-
+// ------------------------------------------
+// 汎用動的頂点バッファ描画 API
+// ------------------------------------------
 void zen_draw_buffer(int topology,
                       const uint8_t* layout,
                       const uint8_t* divisors,
@@ -550,7 +389,9 @@ void zen_draw_buffer(int topology,
         cur_w = (s_current_render_target->texture) ? s_current_render_target->texture->width : s_current_render_target->width;
         cur_h = (s_current_render_target->texture) ? s_current_render_target->texture->height : s_current_render_target->height;
     } else {
-        zen_get_window_size(&cur_w, &cur_h);
+        const ZenViewport* vp = zen__viewport();
+        cur_w = vp->base_w;
+        cur_h = vp->base_h;
     }
     GLint u_res = glGetUniformLocation(prog, "u_resolution");
     if (u_res >= 0) {
@@ -584,7 +425,7 @@ void zen_draw_buffer(int topology,
     glBindVertexArray(s_dynamic_vao);
     glBindBuffer(GL_ARRAY_BUFFER, s_dynamic_vbo);
 
-    // Buffer Orphaning: 同期ストールを完全に排除
+    // Buffer Orphaning: 同期ストールを排除
     glBufferData(GL_ARRAY_BUFFER, total_bytes, NULL, GL_STREAM_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0, total_bytes, vertex_data);
 
@@ -632,62 +473,4 @@ void zen_draw_buffer(int topology,
     }
 
     glBindVertexArray(0);
-}
-
-void zen_set_scissor(int x, int y, int w, int h) {
-    if (!zen_is_window_active() && !s_current_render_target) return;
-    zen_gfx_flush();
-
-    if (w < 0) w = 0;
-    if (h < 0) h = 0;
-
-    glEnable(GL_SCISSOR_TEST);
-
-    if (s_current_render_target) {
-        glScissor(x, y, w, h);
-    } else {
-        int vp_x = 0, vp_y = 0, vp_w = 0, vp_h = 0, base_h = 0;
-        float vp_scale = 1.0f;
-        zen_get_viewport_info(&vp_x, &vp_y, &vp_w, &vp_h, &vp_scale, &base_h);
-
-        int sx = vp_x + (int)floorf((float)x * vp_scale);
-        int sy = vp_y + (int)floorf((float)(base_h - (y + h)) * vp_scale);
-        int sw = (int)ceilf((float)w * vp_scale);
-        int sh = (int)ceilf((float)h * vp_scale);
-
-        // ゲーム領域の枠外にはみ出さないよう clamp
-        if (sx < vp_x) {
-            sw -= (vp_x - sx);
-            sx = vp_x;
-        }
-        if (sy < vp_y) {
-            sh -= (vp_y - sy);
-            sy = vp_y;
-        }
-        if (sx + sw > vp_x + vp_w) {
-            sw = (vp_x + vp_w) - sx;
-        }
-        if (sy + sh > vp_y + vp_h) {
-            sh = (vp_y + vp_h) - sy;
-        }
-        if (sw < 0) sw = 0;
-        if (sh < 0) sh = 0;
-
-        glScissor(sx, sy, sw, sh);
-    }
-}
-
-void zen_reset_scissor(void) {
-    if (!zen_is_window_active() && !s_current_render_target) return;
-    zen_gfx_flush();
-
-    if (s_current_render_target) {
-        glDisable(GL_SCISSOR_TEST);
-    } else {
-        int vp_x = 0, vp_y = 0, vp_w = 0, vp_h = 0, base_h = 0;
-        float vp_scale = 1.0f;
-        zen_get_viewport_info(&vp_x, &vp_y, &vp_w, &vp_h, &vp_scale, &base_h);
-        glEnable(GL_SCISSOR_TEST);
-        glScissor(vp_x, vp_y, vp_w, vp_h);
-    }
 }

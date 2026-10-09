@@ -91,33 +91,37 @@ void zen_toggle_fullscreen(void);            // フルスクリーンとウィ�
 void zen_shutdown(void);
 const char* zen_get_version(void);
 
-// 【ハイブリッド方式 A】DXRuby風の手軽なメインループ用 (1行でPresent/入力/時間更新/終了判定)
-// 使用例: while (zen_update()) { zen_clear(0x181818FF); zen_draw_rect(...); }
-int  zen_update(void);
-void zen_clear(uint32_t color);
+// ------------------------------------------
+// フレーム制御
+// ------------------------------------------
+// 1フレームは必ず「begin_frame → (clear・描画) → end_frame」の順で進む。
+// 各関数は自分の役割だけを行い、互いを呼び合わない (zen_update を除く)。
+//
+//   方式A (DXRuby風):  while (zen_update()) { zen_clear(0x181818FF); ...描画... }
+//   方式B (明示):      while (zen_begin_frame()) { zen_clear(c); ...描画...; zen_end_frame(); }
+//   方式C (コールバック): zen_run_loop(frame_fn);  // Wasm ではこれを使う
+//
+int  zen_begin_frame(void);      // 入力・時間の更新と画面描画の準備。終了要求があれば 0 を返す
+void zen_end_frame(void);        // 画面への表示 (SwapBuffers) と目標FPSまでの待機
+int  zen_update(void);           // 「前フレームの zen_end_frame + zen_begin_frame」の省略形
+void zen_clear(uint32_t color);  // 現在の描画先 (画面のゲーム領域 or レンダーターゲット) を塗りつぶすだけ
 
-// Wasm (Emscripten) requestAnimationFrame 駆動用 API
-typedef void (*zen_step_callback_fn)(void);
-void zen_set_step_callback(zen_step_callback_fn fn);
-void zen_start_wasm_loop(void);
+// フレームごとに fn を呼ぶメインループ。
+// ネイティブ: ウィンドウが閉じられるまでブロックする。
+// Wasm      : requestAnimationFrame に登録して即座に戻る。
+typedef void (*zen_frame_fn)(void);
+void zen_run_loop(zen_frame_fn fn);
 int  zen_is_wasm(void);
-
-// 【ハイブリッド方式 B】ロジックと描画を明示的に分離したい場合用
-int  zen_window_should_close(void);
-void zen_poll_events(void);                 // 純粋に入力・OSイベント・時間更新のみ
-void zen_begin_frame(uint32_t clear_color); // 純粋に描画開始・クリアのみ
-void zen_end_frame(void);                   // 純粋に描画Flush・SwapBuffers(Present)のみ
 
 // 時間 & ウィンドウ情報 & フレームレート制御 & スケーリング
 double zen_get_time(void);
 float  zen_get_delta_time(void);
-void   zen_get_window_size(int* width, int* height);
-void   zen_get_os_window_size(int* width, int* height);
-void   zen_set_window_size(int width, int height);
+void   zen_get_screen_size(int* width, int* height);  // 仮想解像度 (ゲーム内の論理座標系)
+void   zen_get_window_size(int* width, int* height);  // OS ウィンドウのサイズ
+void   zen_set_window_size(int width, int height);    // OS ウィンドウのサイズ変更
 void   zen_set_scale_mode(int mode);
 int    zen_get_scale_mode(void);
 float  zen_get_scale(void);
-int    zen_is_window_active(void);
 void   zen_set_target_fps(int fps); // 目標FPS設定 (デフォルト60fps固定。0で無制限)
 int    zen_get_target_fps(void);
 void   zen_set_vsync(int vsync);    // 1: VSync有効, 0: VSync無効
@@ -198,10 +202,6 @@ struct ZenImage {
 };
 typedef struct ZenImage ZenImage;
 
-// テクスチャ実体操作
-ZenTexture* zen_texture_create(int width, int height);
-void        zen_texture_release(ZenTexture* texture);
-
 // テクスチャフィルタ設定
 void      zen_set_default_texture_filter(int filter);
 int       zen_get_default_texture_filter(void);
@@ -250,10 +250,8 @@ void       zen_shader_set_mat4(ZenShader* shader, const char* name, const float*
 // メモリ不足時に言語側 (CRubyのrb_gc()やSpinelのGC) を呼び出すためのコールバック
 void       zen_set_gc_trigger_callback(void (*callback)(void));
 
-void       zen_flush(void);
-
-// ビューポート & クリッピング (glScissor)
-void       zen_get_viewport_info(int* vp_x, int* vp_y, int* vp_w, int* vp_h, float* vp_scale, int* base_h);
+// クリッピング (glScissor)
+// 座標は現在の描画先の論理座標。描画先を切り替えるとクリップは解除される。
 void       zen_set_scissor(int x, int y, int w, int h);
 void       zen_reset_scissor(void);
 

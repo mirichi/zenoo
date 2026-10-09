@@ -478,7 +478,7 @@ static VALUE win_set_scale(VALUE self, VALUE rb_scale) {
     (void)self;
     double scale = NUM2DBL(rb_scale);
     int base_w = 0, base_h = 0;
-    zen_get_window_size(&base_w, &base_h);
+    zen_get_screen_size(&base_w, &base_h);
     if (base_w > 0 && base_h > 0 && scale > 0.0) {
         zen_set_window_size((int)(base_w * scale), (int)(base_h * scale));
     }
@@ -494,7 +494,7 @@ static VALUE win_set_window_size(VALUE self, VALUE rb_w, VALUE rb_h) {
 static VALUE win_get_os_window_size(VALUE self) {
     (void)self;
     int w = 0, h = 0;
-    zen_get_os_window_size(&w, &h);
+    zen_get_window_size(&w, &h);
     return rb_ary_new_from_args(2, INT2NUM(w), INT2NUM(h));
 }
 
@@ -512,21 +512,21 @@ static VALUE win_clear(VALUE self, VALUE rb_color) {
 static VALUE win_get_size(VALUE self) {
     (void)self;
     int w = 0, h = 0;
-    zen_get_window_size(&w, &h);
+    zen_get_screen_size(&w, &h);
     return rb_ary_new_from_args(2, INT2NUM(w), INT2NUM(h));
 }
 
 static VALUE win_get_size_w(VALUE self) {
     (void)self;
     int w = 0, h = 0;
-    zen_get_window_size(&w, &h);
+    zen_get_screen_size(&w, &h);
     return INT2NUM(w);
 }
 
 static VALUE win_get_size_h(VALUE self) {
     (void)self;
     int w = 0, h = 0;
-    zen_get_window_size(&w, &h);
+    zen_get_screen_size(&w, &h);
     return INT2NUM(h);
 }
 
@@ -719,7 +719,6 @@ static VALUE input_set_ime_position(VALUE self, VALUE rb_x, VALUE rb_y) {
 // ==========================================
 static VALUE renderer_flush(VALUE self) {
     (void)self;
-    zen_flush();
     return Qnil;
 }
 
