@@ -50,7 +50,10 @@ done
 emar rcs "${CACHE_DIR}/libspinel_rt.a" "${CACHE_DIR}/rt"/*.o "${CACHE_DIR}/regexp"/*.o
 
 echo "=== [3/4] Building Zenoo C Kernel for Wasm ==="
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_core.c -o "${CACHE_DIR}/zenoo_core.o"
+emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_window.c -o "${CACHE_DIR}/zenoo_window.o"
+emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_input.c -o "${CACHE_DIR}/zenoo_input.o"
+emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_vibration.c -o "${CACHE_DIR}/zenoo_vibration.o"
+emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_image.c -o "${CACHE_DIR}/zenoo_image.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${CACHE_DIR}/zenoo_gfx.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${CACHE_DIR}/zenoo_font.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_audio.c -o "${CACHE_DIR}/zenoo_audio.o"
@@ -71,7 +74,10 @@ emcc -O2 \
     -fdebug-prefix-map="${PWD}"=. \
     -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" \
     "${OUTPUT_DIR}/app.c" \
-    "${CACHE_DIR}/zenoo_core.o" \
+    "${CACHE_DIR}/zenoo_window.o" \
+    "${CACHE_DIR}/zenoo_input.o" \
+    "${CACHE_DIR}/zenoo_vibration.o" \
+    "${CACHE_DIR}/zenoo_image.o" \
     "${CACHE_DIR}/zenoo_gfx.o" \
     "${CACHE_DIR}/zenoo_font.o" \
     "${CACHE_DIR}/zenoo_audio.o" \

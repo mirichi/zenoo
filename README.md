@@ -271,8 +271,11 @@ zenoo/
 │   └── stb_vorbis.c           # stb_vorbis Ogg Vorbis デコーダー
 ├── src/                       # C 言語マイクロカーネル実装
 │   ├── glad.c                 # OpenGL 3.3 ローダー
-│   ├── zenoo_core.c           # ウィンドウ・入力・イベント
-│   ├── zenoo_gfx.c            # Quad バッチ・GPU Instancing・GLSL
+│   ├── zenoo_window.c         # ウィンドウ・ライフサイクル・フレーム制御
+│   ├── zenoo_input.c          # 入力 (キー・マウス・ゲームパッド・IME)
+│   ├── zenoo_vibration.c      # 振動 (XInput / Linux FF / Web)
+│   ├── zenoo_image.c          # テクスチャ・画像・FBO
+│   ├── zenoo_gfx.c            # 描画状態・GLSL・動的頂点バッファ
 │   ├── zenoo_font.c           # SDF アトラス・stb_truetype 統合
 │   └── zenoo_audio.c          # miniaudio オーディオブリッジ
 ├── lib/                       # Pure Ruby クラスライブラリ

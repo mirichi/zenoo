@@ -230,8 +230,7 @@ void sp_zen_win_start_wasm_loop(sp_RbVal proc_val) {
     if (proc_val.tag == SP_TAG_OBJ && proc_val.v.p) {
         s_wasm_step_proc = (sp_Proc*)proc_val.v.p;
     }
-    zen_set_step_callback(spinel_wasm_step_wrapper);
-    zen_start_wasm_loop();
+    zen_run_loop(spinel_wasm_step_wrapper);
 }
 
 sp_bool sp_zen_win_is_wasm(void) {
@@ -248,25 +247,25 @@ const char* sp_zen_get_version(void) {
 
 sp_int sp_zen_win_size_w(void) {
     int w = 0, h = 0;
-    zen_get_window_size(&w, &h);
+    zen_get_screen_size(&w, &h);
     return (sp_int)w;
 }
 
 sp_int sp_zen_win_size_h(void) {
     int w = 0, h = 0;
-    zen_get_window_size(&w, &h);
+    zen_get_screen_size(&w, &h);
     return (sp_int)h;
 }
 
 sp_int sp_zen_win_os_size_w(void) {
     int w = 0, h = 0;
-    zen_get_os_window_size(&w, &h);
+    zen_get_window_size(&w, &h);
     return (sp_int)w;
 }
 
 sp_int sp_zen_win_os_size_h(void) {
     int w = 0, h = 0;
-    zen_get_os_window_size(&w, &h);
+    zen_get_window_size(&w, &h);
     return (sp_int)h;
 }
 
@@ -296,7 +295,7 @@ sp_int sp_zen_win_get_scale_mode(void) {
 
 void sp_zen_win_set_scale(double scale) {
     int base_w = 0, base_h = 0;
-    zen_get_window_size(&base_w, &base_h);
+    zen_get_screen_size(&base_w, &base_h);
     if (base_w > 0 && base_h > 0 && scale > 0.0) {
         zen_set_window_size((int)(base_w * scale), (int)(base_h * scale));
     }
@@ -420,7 +419,6 @@ void sp_zen_renderer_draw_buffer(
 }
 
 void sp_zen_renderer_flush(void) {
-    zen_flush();
 }
 
 void sp_zen_renderer_set_blend_mode(sp_int mode) {

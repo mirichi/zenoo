@@ -67,7 +67,10 @@ build_c_kernel_obj() {
         emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj"
     fi
 }
-build_c_kernel_obj "src/zenoo_core.c" "${CACHE_DIR}/zenoo_core.o"
+build_c_kernel_obj "src/zenoo_window.c" "${CACHE_DIR}/zenoo_window.o"
+build_c_kernel_obj "src/zenoo_input.c" "${CACHE_DIR}/zenoo_input.o"
+build_c_kernel_obj "src/zenoo_vibration.c" "${CACHE_DIR}/zenoo_vibration.o"
+build_c_kernel_obj "src/zenoo_image.c" "${CACHE_DIR}/zenoo_image.o"
 build_c_kernel_obj "src/zenoo_gfx.c" "${CACHE_DIR}/zenoo_gfx.o"
 build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
 build_c_kernel_obj "src/zenoo_audio.c" "${CACHE_DIR}/zenoo_audio.o"
@@ -95,7 +98,10 @@ COMMON_EMCC_FLAGS=(
 )
 
 COMMON_OBJS=(
-    "${CACHE_DIR}/zenoo_core.o"
+    "${CACHE_DIR}/zenoo_window.o"
+    "${CACHE_DIR}/zenoo_input.o"
+    "${CACHE_DIR}/zenoo_vibration.o"
+    "${CACHE_DIR}/zenoo_image.o"
     "${CACHE_DIR}/zenoo_gfx.o"
     "${CACHE_DIR}/zenoo_font.o"
     "${CACHE_DIR}/zenoo_audio.o"

@@ -179,6 +179,13 @@ GLAPI PFNGLTEXIMAGE2DPROC glTexImage2D;
 GLAPI PFNGLTEXPARAMETERIPROC glTexParameteri;
 GLAPI PFNGLACTIVETEXTUREPROC glActiveTexture;
 
+#define GL_R8                             0x8229
+#define GL_UNPACK_ALIGNMENT               0x0CF5
+typedef void (APIENTRYP PFNGLTEXSUBIMAGE2DPROC)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels);
+typedef void (APIENTRYP PFNGLPIXELSTOREIPROC)(GLenum pname, GLint param);
+GLAPI PFNGLTEXSUBIMAGE2DPROC glTexSubImage2D;
+GLAPI PFNGLPIXELSTOREIPROC glPixelStorei;
+
 GLAPI PFNGLCREATESHADERPROC glCreateShader;
 GLAPI PFNGLSHADERSOURCEPROC glShaderSource;
 GLAPI PFNGLCOMPILESHADERPROC glCompileShader;

@@ -6,56 +6,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-#ifdef __EMSCRIPTEN__
-#include <GLES3/gl3.h>
-#else
-#include "glad/glad.h"
-#endif
-#include "zenoo.h"
-#include <GLFW/glfw3.h>
-
-#ifndef GL_UNPACK_ALIGNMENT
-#define GL_UNPACK_ALIGNMENT 0x0CF5
-#endif
-
-#ifndef GL_R8
-#define GL_R8 0x8229
-#endif
-
-#ifdef __EMSCRIPTEN__
-static inline void zen_font_gl_tex_sub_image_2d(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels) {
-    glTexSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
-}
-static inline void zen_font_gl_pixel_storei(GLenum pname, GLint param) {
-    glPixelStorei(pname, param);
-}
-static inline void load_gl_font_procs(void) {}
-#else
-typedef void (APIENTRY *PFNGLTEXSUBIMAGE2DPROC)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels);
-typedef void (APIENTRY *PFNGLPIXELSTOREIPROC)(GLenum pname, GLint param);
-
-static PFNGLTEXSUBIMAGE2DPROC pfn_glTexSubImage2D = NULL;
-static PFNGLPIXELSTOREIPROC   pfn_glPixelStorei = NULL;
-
-static void load_gl_font_procs(void) {
-    if (!pfn_glTexSubImage2D) {
-        pfn_glTexSubImage2D = (PFNGLTEXSUBIMAGE2DPROC)glfwGetProcAddress("glTexSubImage2D");
-    }
-    if (!pfn_glPixelStorei) {
-        pfn_glPixelStorei = (PFNGLPIXELSTOREIPROC)glfwGetProcAddress("glPixelStorei");
-    }
-}
-static inline void zen_font_gl_tex_sub_image_2d(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels) {
-    if (pfn_glTexSubImage2D) {
-        pfn_glTexSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
-    }
-}
-static inline void zen_font_gl_pixel_storei(GLenum pname, GLint param) {
-    if (pfn_glPixelStorei) {
-        pfn_glPixelStorei(pname, param);
-    }
-}
-#endif
+#include "zenoo_internal.h"
 
 
 #define ATLAS_WIDTH  2048
@@ -97,8 +48,6 @@ static int s_next_font_id = 1;
 static void init_atlas_if_needed(void) {
     if (s_atlas_image) return;
 
-    load_gl_font_procs();
-
     ZenTexture* tex = zen_texture_create(ATLAS_WIDTH, ATLAS_HEIGHT);
     if (!tex) return;
 
@@ -114,7 +63,7 @@ static void init_atlas_if_needed(void) {
     // 初期クリア (全ピクセルを外側 0 に初期化)
     unsigned char* clear_buf = (unsigned char*)calloc(1, ATLAS_WIDTH * ATLAS_HEIGHT);
     if (clear_buf) {
-        zen_font_gl_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, ATLAS_WIDTH, ATLAS_HEIGHT, GL_RED, GL_UNSIGNED_BYTE, clear_buf);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ATLAS_WIDTH, ATLAS_HEIGHT, GL_RED, GL_UNSIGNED_BYTE, clear_buf);
         free(clear_buf);
     }
 
@@ -137,7 +86,6 @@ static void init_atlas_if_needed(void) {
 }
 
 void zen_font_set_atlas_image(ZenImage* img) {
-    load_gl_font_procs();
     if (s_atlas_image == img) return;
     s_atlas_image = img;
     s_atlas_x = 1;
@@ -360,9 +308,9 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
 
             // OpenGL テクスチャへ部分転送
             glBindTexture(GL_TEXTURE_2D, s_atlas_image->texture ? s_atlas_image->texture->id : 0);
-            zen_font_gl_pixel_storei(GL_UNPACK_ALIGNMENT, 1);
-            zen_font_gl_tex_sub_image_2d(GL_TEXTURE_2D, 0, dest_x, dest_y, w, h_out, GL_RED, GL_UNSIGNED_BYTE, pixels);
-            zen_font_gl_pixel_storei(GL_UNPACK_ALIGNMENT, 4);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, dest_x, dest_y, w, h_out, GL_RED, GL_UNSIGNED_BYTE, pixels);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
             if (use_bitmap) {
                 stbtt_FreeBitmap(pixels, NULL);
