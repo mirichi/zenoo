@@ -39,6 +39,7 @@ void sp_ZenImage_set_filter(sp_ZenImage* s, sp_int filter);
 sp_int sp_ZenImage_get_filter(sp_ZenImage* s);
 void sp_zen_image_set_default_filter(sp_int filter);
 sp_int sp_zen_image_get_default_filter(void);
+void sp_ZenImage_replace_texture(sp_ZenImage* dst, sp_ZenImage* src);
 sp_int sp_zen_get_image_free_count(void);
 
 // Shader メソッド

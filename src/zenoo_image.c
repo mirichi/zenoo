@@ -88,6 +88,36 @@ int zen_image_get_filter(const ZenImage* image) {
     return image->texture->filter;
 }
 
+void zen_image_set_texture_filter(ZenImage* image, int filter) {
+    zen_image_set_filter(image, filter);
+}
+
+int zen_image_get_texture_filter(const ZenImage* image) {
+    return zen_image_get_filter(image);
+}
+
+void zen_image_replace_texture(ZenImage* dst, ZenImage* src) {
+    if (!dst || !src || !src->texture) return;
+    if (dst->texture == src->texture) return;
+
+    if (dst->has_fbo) {
+        glDeleteFramebuffers(1, &dst->fbo);
+        dst->fbo = 0;
+        dst->has_fbo = 0;
+    }
+
+    if (dst->texture) {
+        zen_texture_release(dst->texture);
+    }
+
+    dst->texture = src->texture;
+    dst->texture->ref_count++;
+    dst->x = src->x;
+    dst->y = src->y;
+    dst->width = src->width;
+    dst->height = src->height;
+}
+
 // ------------------------------------------
 // 画像生成 & ロード & 破棄
 // ------------------------------------------

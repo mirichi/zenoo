@@ -136,6 +136,15 @@ static VALUE image_s_get_default_filter(VALUE klass) {
     return filter_to_sym(zen_get_default_texture_filter());
 }
 
+static VALUE image_replace_texture(VALUE self, VALUE rb_other) {
+    ZenImage* dst;
+    ZenImage* src;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, dst);
+    TypedData_Get_Struct(rb_other, ZenImage, &zenoo_image_data_type, src);
+    zen_image_replace_texture(dst, src);
+    return self;
+}
+
 static VALUE image_get_width(VALUE self) {
     ZenImage* img;
     TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
@@ -1050,12 +1059,13 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "texture_id", image_get_texture_id, 0);
     rb_define_method(rb_cNativeImage, "uv", image_get_uv, 0);
     rb_define_method(rb_cNativeImage, "sub_image?", image_is_sub_image, 0);
-    rb_define_method(rb_cNativeImage, "filter=", image_set_filter, 1);
-    rb_define_method(rb_cNativeImage, "filter", image_get_filter, 0);
+    rb_define_method(rb_cNativeImage, "texture_filter=", image_set_filter, 1);
+    rb_define_method(rb_cNativeImage, "texture_filter", image_get_filter, 0);
+    rb_define_method(rb_cNativeImage, "replace_texture!", image_replace_texture, 1);
     rb_define_singleton_method(rb_cNativeImage, "create_format", image_s_create_format, 3);
     rb_define_singleton_method(rb_cNativeImage, "create_r8", image_s_create_r8, 2);
-    rb_define_singleton_method(rb_cNativeImage, "default_filter=", image_s_set_default_filter, 1);
-    rb_define_singleton_method(rb_cNativeImage, "default_filter", image_s_get_default_filter, 0);
+    rb_define_singleton_method(rb_cNativeImage, "default_texture_filter=", image_s_set_default_filter, 1);
+    rb_define_singleton_method(rb_cNativeImage, "default_texture_filter", image_s_get_default_filter, 0);
 
     // 4. NativeShader (Zenoo::Native::NativeShader)
     rb_cNativeShader = rb_define_class_under(rb_mNative, "NativeShader", rb_cObject);

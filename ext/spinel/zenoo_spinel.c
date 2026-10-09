@@ -141,6 +141,12 @@ sp_int sp_zen_image_get_default_filter(void) {
     return (sp_int)zen_get_default_texture_filter();
 }
 
+void sp_ZenImage_replace_texture(sp_ZenImage* dst, sp_ZenImage* src) {
+    if (dst && dst->image && src && src->image) {
+        zen_image_replace_texture(dst->image, src->image);
+    }
+}
+
 // ==========================================
 // Shader (sp_ZenShader)
 // ==========================================

@@ -207,6 +207,9 @@ void      zen_set_default_texture_filter(int filter);
 int       zen_get_default_texture_filter(void);
 void      zen_image_set_filter(ZenImage* image, int filter);
 int       zen_image_get_filter(const ZenImage* image);
+void      zen_image_set_texture_filter(ZenImage* image, int filter);
+int       zen_image_get_texture_filter(const ZenImage* image);
+void      zen_image_replace_texture(ZenImage* dst, ZenImage* src);
 
 enum ZenImageFormat {
     ZEN_IMAGE_FORMAT_RGBA = 0,

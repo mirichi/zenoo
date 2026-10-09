@@ -125,7 +125,7 @@ end
 # 1. パーティクル & エフェクト (短命GCオブジェクト)
 # ==========================================
 class Particle
-  attr_reader :dead
+  attr_reader :dead, :x, :y
 
   def initialize(x, y, vx, vy, life, color, size = 6.0)
     @x = x.to_f
@@ -148,17 +148,15 @@ class Particle
     @dead = true if @life <= 0
   end
 
-  def draw(cx, cy)
-    sx = @x - cx
-    sy = @y - cy
+  def draw
     s = (@life.to_f / @max_life) * @size
-    Window.draw_rect(sx - s * 0.5, sy - s * 0.5, s, s, color: @color)
+    Window.draw_rect(@x - s * 0.5, @y - s * 0.5, s, s, color: @color)
   end
 end
 
 # 敵頭上に飛び出すダメージ数値ポップアップ
 class DamageText
-  attr_reader :dead
+  attr_reader :dead, :x, :y
 
   def initialize(x, y, text, color = Color::WHITE, size = 18)
     @x = x.to_f + (rand(16) - 8).to_f
@@ -176,10 +174,8 @@ class DamageText
     @dead = true if @life <= 0
   end
 
-  def draw(cx, cy)
-    sx = @x - cx
-    sy = @y - cy
-    Window.draw_text(sx, sy, @text, font: Font::SINCLAIR, size: @size, color: @color)
+  def draw
+    Window.draw_text(@x, @y, @text, font: Font::SINCLAIR, size: @size, color: @color)
   end
 end
 
@@ -206,10 +202,8 @@ class Bullet
     @dead = true if @traveled > 1400.0
   end
 
-  def draw(cx, cy)
-    sx = @x - cx
-    sy = @y - cy
-    Window.draw_rect(sx - 2.5, sy - 2.5, 5.0, 5.0, color: Color::CYAN)
+  def draw
+    Window.draw_rect(@x - 2.5, @y - 2.5, 5.0, 5.0, color: Color::CYAN)
   end
 end
 
@@ -273,10 +267,8 @@ class Missile
     @exploded = true
   end
 
-  def draw(cx, cy)
-    sx = @x - cx
-    sy = @y - cy
-    Window.draw_rect(sx - 4.0, sy - 4.0, 8.0, 8.0, color: Color::RED)
+  def draw
+    Window.draw_rect(@x - 4.0, @y - 4.0, 8.0, 8.0, color: Color::RED)
   end
 end
 
@@ -301,11 +293,9 @@ class Orbiter
     @y = py + @radius * Math.sin(@angle)
   end
 
-  def draw(cx, cy)
-    sx = @x - cx
-    sy = @y - cy
-    Window.draw_rect(sx - 6.0, sy - 6.0, 12.0, 12.0, color: Color::CYAN)
-    Window.draw_rect(sx - 3.0, sy - 3.0, 6.0, 6.0, color: Color::WHITE)
+  def draw
+    Window.draw_rect(@x - 6.0, @y - 6.0, 12.0, 12.0, color: Color::CYAN)
+    Window.draw_rect(@x - 3.0, @y - 3.0, 6.0, 6.0, color: Color::WHITE)
   end
 end
 
@@ -345,19 +335,17 @@ class Item
     end
   end
 
-  def draw(cx, cy)
+  def draw
     return if @life < 100 && (@life % 10) < 5
-    sx = @x - cx
-    sy = @y - cy
     if @kind == 1
       # 十字型のハート (回復)
-      Window.draw_rect(sx - 9.0, sy - 3.0, 18.0, 6.0, color: COLOR_HEART_RED)
-      Window.draw_rect(sx - 3.0, sy - 9.0, 6.0, 18.0, color: COLOR_HEART_RED)
+      Window.draw_rect(@x - 9.0, @y - 3.0, 18.0, 6.0, color: COLOR_HEART_RED)
+      Window.draw_rect(@x - 3.0, @y - 9.0, 6.0, 18.0, color: COLOR_HEART_RED)
       return
     end
     c = @value > 10 ? COLOR_EXP_GREEN : Color::YELLOW
     s = @value > 10 ? 12.0 : 8.0
-    Window.draw_rect(sx - s * 0.5, sy - s * 0.5, s, s, color: c)
+    Window.draw_rect(@x - s * 0.5, @y - s * 0.5, s, s, color: c)
   end
 end
 
@@ -433,31 +421,41 @@ class Enemy
     @flash -= 1 if @flash > 0
   end
 
-  def draw(cx, cy)
-    sx = @x - cx
-    sy = @y - cy
+  def draw
     fill = @flash > 0 ? Color::WHITE : @color
 
+    # 頂点を事前計算して Math.cos/sin の回数を半減
+    verts = []
+    step = 2.0 * Math::PI / @sides
     @sides.times do |i|
-      a1 = @rotation + i * (2.0 * Math::PI / @sides)
-      a2 = @rotation + ((i + 1) % @sides) * (2.0 * Math::PI / @sides)
-      vx1 = sx + @radius * Math.cos(a1)
-      vy1 = sy + @radius * Math.sin(a1)
-      vx2 = sx + @radius * Math.cos(a2)
-      vy2 = sy + @radius * Math.sin(a2)
-      Window.draw_triangle(sx, sy, vx2, vy2, vx1, vy1, color: fill)
-      Window.draw_line(vx1, vy1, vx2, vy2, color: Color::WHITE, width: @is_boss ? 2.0 : 1.0)
+      a = @rotation + i * step
+      verts << [@x + @radius * Math.cos(a), @y + @radius * Math.sin(a)]
+    end
+
+    # 1. 三角形 (TRIANGLES) をまとめて描画
+    @sides.times do |i|
+      v1 = verts[i]
+      v2 = verts[(i + 1) % @sides]
+      Window.draw_triangle(@x, @y, v2[0], v2[1], v1[0], v1[1], color: fill)
+    end
+
+    # 2. 外周線 (LINES) をまとめて描画
+    line_w = @is_boss ? 2.0 : 1.0
+    @sides.times do |i|
+      v1 = verts[i]
+      v2 = verts[(i + 1) % @sides]
+      Window.draw_line(v1[0], v1[1], v2[0], v2[1], color: Color::WHITE, width: line_w)
     end
 
     if @max_hp > 1
       bar_w = @radius * 2.0
       bar_h = @is_boss ? 8.0 : 5.0
-      bar_y = sy - @radius - (@is_boss ? 18.0 : 12.0)
+      bar_y = @y - @radius - (@is_boss ? 18.0 : 12.0)
       hp_ratio = @hp.to_f / @max_hp
       hp_ratio = 0.0 if hp_ratio < 0.0
-      Window.draw_rect(sx - bar_w * 0.5, bar_y, bar_w, bar_h, color: COLOR_HP_GRAY)
+      Window.draw_rect(@x - bar_w * 0.5, bar_y, bar_w, bar_h, color: COLOR_HP_GRAY)
       hp_color = @is_boss ? Color.new(255, 60, 100) : Color::GREEN
-      Window.draw_rect(sx - bar_w * 0.5, bar_y, bar_w * hp_ratio, bar_h, color: hp_color)
+      Window.draw_rect(@x - bar_w * 0.5, bar_y, bar_w * hp_ratio, bar_h, color: hp_color)
     end
   end
 end
@@ -518,7 +516,7 @@ class Player
     end
   end
 
-  def update(bullets, missiles, enemies, particles)
+  def update(bullets, missiles, enemies, particles, camera = nil)
     @fired = false
     @invincible -= 1 if @invincible > 0
 
@@ -526,10 +524,14 @@ class Player
     @x += Input.x * @speed
     @y += Input.y * @speed
 
-    cx = @x - 1280.0 / 2.0
-    cy = @y - 720.0 / 2.0
-    mx = Input.mouse_x + cx
-    my = Input.mouse_y + cy
+    if camera
+      mx, my = camera.screen_to_world(Input.mouse_x, Input.mouse_y)
+    else
+      cx = @x - 1280.0 / 2.0
+      cy = @y - 720.0 / 2.0
+      mx = Input.mouse_x + cx
+      my = Input.mouse_y + cy
+    end
 
     # マウス追従
     if Input.mouse_pressed?(:left)
@@ -643,30 +645,27 @@ class Player
     end
   end
 
-  def draw(cx, cy)
-    sx = @x - cx
-    sy = @y - cy
-
+  def draw
     # 無敵中は点滅 (本体のみ。オービターは常に描画)
     visible = @invincible <= 0 || ((@invincible / 4) % 2) == 0
     if visible
       body_color = @hp <= 1 ? COLOR_HEART_RED : Color::GREEN
       @sides.times do |i|
         angle1 = @rotation + i * (2.0 * Math::PI / @sides)
-        vx1 = sx + @radius * Math.cos(angle1)
-        vy1 = sy + @radius * Math.sin(angle1)
+        vx1 = @x + @radius * Math.cos(angle1)
+        vy1 = @y + @radius * Math.sin(angle1)
 
         angle2 = @rotation + ((i + 1) % @sides) * (2.0 * Math::PI / @sides)
-        vx2 = sx + @radius * Math.cos(angle2)
-        vy2 = sy + @radius * Math.sin(angle2)
+        vx2 = @x + @radius * Math.cos(angle2)
+        vy2 = @y + @radius * Math.sin(angle2)
 
-        Window.draw_triangle(sx, sy, vx2, vy2, vx1, vy1, color: body_color)
+        Window.draw_triangle(@x, @y, vx2, vy2, vx1, vy1, color: body_color)
         Window.draw_line(vx1, vy1, vx2, vy2, color: Color::WHITE)
         Window.draw_rect(vx1 - 2.0, vy1 - 2.0, 4.0, 4.0, color: Color::WHITE)
       end
     end
 
-    @orbiters.each { |orb| orb.draw(cx, cy) }
+    @orbiters.each(&:draw)
   end
 end
 
@@ -674,7 +673,7 @@ end
 # 6. メインゲーム (Game)
 # ==========================================
 class Game
-  attr_accessor :player, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled
+  attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled
 
   def initialize
     @sfx = Sfx.new
@@ -682,7 +681,6 @@ class Game
     @title_timer = 0
     @crt_enabled = true
     @crt_shader = nil
-    @screen_buffer = nil
     reset_world
     @game_state = STATE_TITLE
   end
@@ -690,6 +688,7 @@ class Game
   # ワールド全体を初期状態に戻す (リトライ時にも使用)
   def reset_world
     @player = Player.new(1280.0 / 2.0, 720.0 / 2.0)
+    @camera = Camera2D.new(target: @player, smooth_speed: 0.8)
     @bullets = []
     @missiles = []
     @enemies = []
@@ -707,7 +706,6 @@ class Game
     @boss_spawn_timer = 1200 # 20秒ごとに出現
 
     # 演出
-    @shake = 0.0         # 画面シェイク強度 (px)
     @hitstop = 0         # ヒットストップ残りフレーム
     @damage_flash = 0    # 被弾時の赤フラッシュ残りフレーム
     @levelup_flash = 0   # レベルアップ時の白フラッシュ
@@ -730,8 +728,7 @@ class Game
   end
 
   def add_shake(amount)
-    @shake += amount
-    @shake = 10.0 if @shake > 10.0
+    @camera.shake([amount * 1.5, 20.0].min, 0.25)
   end
 
   def add_hitstop(frames)
@@ -797,11 +794,14 @@ class Game
       end
 
       # 通常弾 vs 敵
+      hit_r = e.radius + 3.0
       @bullets.each do |b|
         next if b.dead
-        dx = e.x - b.x
-        dy = e.y - b.y
-        if dx * dx + dy * dy < (e.radius + 3.0)**2
+        dx = (e.x - b.x).abs
+        next if dx > hit_r
+        dy = (e.y - b.y).abs
+        next if dy > hit_r
+        if dx * dx + dy * dy < hit_r * hit_r
           b.dead = true
           damage_enemy(e, b.damage, Color::YELLOW)
           break if e.dead
@@ -809,11 +809,14 @@ class Game
       end
 
       # ミサイル直撃 vs 敵
+      m_hit_r = e.radius + 8.0
       @missiles.each do |m|
         next if m.dead
-        dx = e.x - m.x
-        dy = e.y - m.y
-        if dx * dx + dy * dy < (e.radius + 8.0)**2
+        dx = (e.x - m.x).abs
+        next if dx > m_hit_r
+        dy = (e.y - m.y).abs
+        next if dy > m_hit_r
+        if dx * dx + dy * dy < m_hit_r * m_hit_r
           m.explode
         end
       end
@@ -1037,26 +1040,24 @@ class Game
       update_gameover
     end
 
-    # 画面シェイク減衰
-    @shake *= 0.80
-    @shake = 0.0 if @shake < 0.2
+    # カメラ更新 (ターゲット追従 & 画面シェイク減衰)
+    @camera.update
+
     @damage_flash -= 1 if @damage_flash > 0
     @levelup_flash -= 1 if @levelup_flash > 0
 
-    # CRT エフェクトのトグル切り替え ([C] キー)
-    @crt_enabled = !@crt_enabled if Input.key_push?(:c)
-
-    if @crt_enabled
-      @screen_buffer ||= Image.new(1280, 720)
-      @crt_shader ||= Shader.new(CRT_FRAGMENT_SHADER)
-      Image.render_to(@screen_buffer) do
-        draw_game
-      end
-      Window.clear(Color::BLACK)
-      Window.draw_image(0.0, 0.0, @screen_buffer, shader: @crt_shader)
-    else
-      draw_game
+    # CRT エフェクトの初期化とトグル切り替え ([C] キー)
+    if @crt_shader.nil?
+      @crt_shader = Shader.new(CRT_FRAGMENT_SHADER)
+      Window.filter = @crt_shader if @crt_enabled
     end
+
+    if Input.key_push?(:c)
+      @crt_enabled = !@crt_enabled
+      Window.filter = @crt_enabled ? @crt_shader : nil
+    end
+
+    draw_game
   end
 
   def change_state(state)
@@ -1100,7 +1101,7 @@ class Game
     # 2. オブジェクト更新
     unless @player_dead
       @frames_alive += 1
-      @player.update(@bullets, @missiles, @enemies, @particles)
+      @player.update(@bullets, @missiles, @enemies, @particles, @camera)
       @sfx.play(Sfx::SHOT, 4) if @player.fired
     end
     @bullets.each { |b| b.update }
@@ -1334,42 +1335,38 @@ class Game
   end
 
   def draw_centered(y, text, size, color, font = Font::SINCLAIR)
-    w = Window.text_width(text, font: font, size: size)
-    Window.draw_text((1280.0 - w) * 0.5, y, text, font: font, size: size, color: color)
+    Window.draw_text(640.0, y, text, font: font, size: size, color: color, align: :center)
   end
 
   def draw_game
     Window.clear(Color::BLACK)
-
-    # 画面シェイク: カメラ位置にランダムオフセットを加える
-    shake_x = 0.0
-    shake_y = 0.0
-    if @shake > 0.0
-      shake_x = (rand(2001) - 1000).to_f / 1000.0 * @shake
-      shake_y = (rand(2001) - 1000).to_f / 1000.0 * @shake
-    end
 
     if @game_state == STATE_TITLE
       draw_title
       return
     end
 
-    cx = @player.x - 1280.0 / 2.0 + shake_x
-    cy = @player.y - 720.0 / 2.0 + shake_y
+    # 画面外カリング用の可視矩形 (1280x720 + マージン)
+    cam_x = @camera.x
+    cam_y = @camera.y
+    cull_l = cam_x - 720.0
+    cull_r = cam_x + 720.0
+    cull_t = cam_y - 440.0
+    cull_b = cam_y + 440.0
 
-    # 背景グリッド
-    draw_grid(cx, cy)
+    # ワールド空間描画 (Window.camera ブロック構文)
+    Window.camera(@camera) do
+      draw_grid
+      @items.each { |i| i.draw if i.x >= cull_l && i.x <= cull_r && i.y >= cull_t && i.y <= cull_b }
+      @particles.each { |p| p.draw if p.x >= cull_l && p.x <= cull_r && p.y >= cull_t && p.y <= cull_b }
+      @enemies.each { |e| e.draw if e.x >= cull_l && e.x <= cull_r && e.y >= cull_t && e.y <= cull_b }
+      @bullets.each { |b| b.draw if b.x >= cull_l && b.x <= cull_r && b.y >= cull_t && b.y <= cull_b }
+      @missiles.each(&:draw)
+      @player.draw unless @player_dead
+      @damage_texts.each { |d| d.draw if d.x >= cull_l && d.x <= cull_r && d.y >= cull_t && d.y <= cull_b }
+    end
 
-    # オブジェクト描画
-    @items.each { |i| i.draw(cx, cy) }
-    @particles.each { |p| p.draw(cx, cy) }
-    @enemies.each { |e| e.draw(cx, cy) }
-    @bullets.each { |b| b.draw(cx, cy) }
-    @missiles.each { |m| m.draw(cx, cy) }
-    @player.draw(cx, cy) unless @player_dead
-    @damage_texts.each { |d| d.draw(cx, cy) }
-
-    # 被弾の赤フラッシュ / レベルアップの白フラッシュ
+    # 画面空間描画 (被弾の赤フラッシュ / レベルアップの白フラッシュ / HUD)
     if @damage_flash > 0
       Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 0, 0, @damage_flash * 8))
     end
@@ -1389,18 +1386,39 @@ class Game
     end
   end
 
-  def draw_grid(cx, cy)
+  # ワールド座標系での背景グリッド描画 (カメラの可視範囲のみ描画)
+  def draw_grid
     grid_size = 100.0
-    offset_x = -(cx.to_i % 100).to_f
-    offset_y = -(cy.to_i % 100).to_f
+    half_w = 1280.0 * 0.5
+    half_h = 720.0 * 0.5
+    left = ((@camera.x - half_w - grid_size) / grid_size).floor * grid_size
+    right = ((@camera.x + half_w + grid_size) / grid_size).ceil * grid_size
+    top = ((@camera.y - half_h - grid_size) / grid_size).floor * grid_size
+    bottom = ((@camera.y + half_h + grid_size) / grid_size).ceil * grid_size
 
-    x = offset_x
+    x = left
+    while x <= right
+      Window.draw_line(x, top, x, bottom, color: COLOR_GRID_DARK)
+      x += grid_size
+    end
+
+    y = top
+    while y <= bottom
+      Window.draw_line(left, y, right, y, color: COLOR_GRID_DARK)
+      y += grid_size
+    end
+  end
+
+  # スクリーン座標系でのグリッド描画 (タイトル画面用)
+  def draw_screen_grid(ox, oy)
+    grid_size = 100.0
+    x = -(ox.to_i % 100).to_f
     while x < 1280.0
       Window.draw_line(x, 0.0, x, 720.0, color: COLOR_GRID_DARK)
       x += grid_size
     end
 
-    y = offset_y
+    y = -(oy.to_i % 100).to_f
     while y < 720.0
       Window.draw_line(0.0, y, 1280.0, y, color: COLOR_GRID_DARK)
       y += grid_size
@@ -1419,13 +1437,13 @@ class Game
       Window.draw_rect(hx, 56.0, 24.0, 18.0, color: c)
     end
 
-    # コンボ表示
+    # コンボ表示 (右揃え align: :right)
     if @combo >= 3
       combo_size = 28 + (@combo > 40 ? 20 : @combo / 2)
       combo_str = "#{@combo} COMBO  x#{combo_multiplier}"
       w = Window.text_width(combo_str, font: Font::SINCLAIR, size: combo_size)
       ratio = @combo_timer.to_f / 120.0
-      Window.draw_text(1260.0 - w, 20.0, combo_str, font: Font::SINCLAIR, size: combo_size, color: COLOR_ORANGE)
+      Window.draw_text(1260.0, 20.0, combo_str, font: Font::SINCLAIR, size: combo_size, color: COLOR_ORANGE, align: :right)
       Window.draw_rect(1260.0 - w, 24.0 + combo_size.to_f, w * ratio, 4.0, color: COLOR_ORANGE)
     end
 
@@ -1445,7 +1463,7 @@ class Game
   def draw_title
     t = @title_timer
     # 背景グリッドをゆっくりスクロール
-    draw_grid(t.to_f * 0.6, t.to_f * 0.3)
+    draw_screen_grid(t.to_f * 0.6, t.to_f * 0.3)
 
     # 中央で回転する多角形 (頂点数が徐々に増える)
     sides = 3 + (t / 90) % 6
