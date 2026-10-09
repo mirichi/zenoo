@@ -521,8 +521,9 @@ class Player
     @invincible -= 1 if @invincible > 0
 
     # 移動
-    @x += Input.x * @speed
-    @y += Input.y * @speed
+    dx, dy = Input.vector
+    @x += dx * @speed
+    @y += dy * @speed
 
     if camera
       mx, my = camera.screen_to_world(Input.mouse_x, Input.mouse_y)
@@ -676,6 +677,9 @@ class Game
   attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled
 
   def initialize
+    # ゲーム固有のアクションマッピング (ポーズ操作)
+    Input.define_action(:pause, keys: [:escape, :p], gamepad: [:start, :back], mouse: [:right])
+
     @sfx = Sfx.new
     @best_score = 0
     @title_timer = 0
@@ -697,8 +701,6 @@ class Game
     @damage_texts = []
     @game_state = STATE_PLAY
     @menu_cursor = 0
-    @stick_prev_up = false
-    @stick_prev_down = false
     @prev_mouse_x = -1.0
     @prev_mouse_y = -1.0
     @spawn_timer = 0
@@ -1019,8 +1021,7 @@ class Game
   # 入力ヘルパー
   # ==========================================
   def confirm_pressed?
-    Input.gamepad_button_push?(:a) || Input.key_push?(:enter) || Input.key_push?(:space) ||
-      Input.key_push?(:z) || Input.mouse_push?(:left)
+    Input.action_push?(:ui_accept)
   end
 
   def update_draw_frame
@@ -1074,11 +1075,7 @@ class Game
   end
 
   def update_play
-    esc_pressed = Input.key_push?(:escape)
-    right_clicked = Input.mouse_push?(:right)
-    start_pressed = Input.gamepad_button_push?(:start) || Input.gamepad_button_push?(:back)
-
-    if (esc_pressed || right_clicked || start_pressed) && !@player_dead
+    if Input.action_push?(:pause) && !@player_dead
       change_state(STATE_PAUSE)
       return
     end
@@ -1142,12 +1139,7 @@ class Game
   end
 
   def update_pause
-    esc_pressed = Input.key_push?(:escape)
-    right_clicked = Input.mouse_push?(:right)
-    start_pressed = Input.gamepad_button_push?(:start) || Input.gamepad_button_push?(:back)
-    b_pressed = Input.gamepad_button_push?(:b)
-
-    if esc_pressed || right_clicked || start_pressed || b_pressed
+    if Input.action_push?(:pause) || Input.action_push?(:ui_cancel)
       change_state(STATE_PLAY)
       return
     end
@@ -1204,23 +1196,9 @@ class Game
   end
 
   def update_levelup
-    # 上下選択入力 (十字キー / WSキー / 上下矢印 / 左スティック)
-    up_pressed = Input.key_push?(:up) || Input.key_push?(:w) || Input.gamepad_button_push?(:dpad_up)
-    down_pressed = Input.key_push?(:down) || Input.key_push?(:s) || Input.gamepad_button_push?(:dpad_down)
-
-    stick_y = Input.y
-    if stick_y < -0.4
-      up_pressed = true unless @stick_prev_up
-      @stick_prev_up = true
-    else
-      @stick_prev_up = false
-    end
-    if stick_y > 0.4
-      down_pressed = true unless @stick_prev_down
-      @stick_prev_down = true
-    else
-      @stick_prev_down = false
-    end
+    # 上下選択入力 (十字キー / WSキー / 上下矢印 / 左スティックを自動統合)
+    up_pressed = Input.action_push?(:ui_up)
+    down_pressed = Input.action_push?(:ui_down)
 
     count = @choices.size
     if up_pressed
@@ -1250,8 +1228,8 @@ class Game
     # 遷移直後の誤爆防止
     return if @state_timer < 20
 
-    # 決定操作: ゲームパッド A, キーボード Enter/Space/Z, またはマウス左クリック
-    buy_pressed = Input.gamepad_button_push?(:a) || Input.key_push?(:enter) || Input.key_push?(:space) || Input.key_push?(:z)
+    # 決定操作 (Action: :ui_accept またはマウスホバークリック)
+    buy_pressed = Input.action_push?(:ui_accept)
     if mouse_hover_idx >= 0 && Input.mouse_push?(:left)
       @menu_cursor = mouse_hover_idx
       buy_pressed = true

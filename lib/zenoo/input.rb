@@ -193,30 +193,18 @@ module Zenoo
     end
 
     # ==========================================
-    # DXRuby 風 入力 API (方向・移動)
+    # 方向・移動 API (DXRuby 互換 & 簡易アクセス)
     # ==========================================
     # 水平方向の入力値 (-1.0 .. 1.0)
-    # キーボード (A/D, 矢印左右)、十字キー、左アナログスティックを自動統合
+    # デフォルトでアクション :left と :right を合成
     def self.x(id = 0)
-      dx = 0.0
-      dx -= 1.0 if key_pressed?(:a) || key_pressed?(:left) || gamepad_button_pressed?(:dpad_left, id)
-      dx += 1.0 if key_pressed?(:d) || key_pressed?(:right) || gamepad_button_pressed?(:dpad_right, id)
-      return dx if dx != 0.0
-
-      stick = left_stick(id, 0.2)
-      stick[0].to_f
+      axis(:left, :right, id)
     end
 
     # 垂直方向の入力値 (-1.0 .. 1.0)
-    # キーボード (W/S, 矢印上下)、十字キー、左アナログスティックを自動統合
+    # デフォルトでアクション :up と :down を合成
     def self.y(id = 0)
-      dy = 0.0
-      dy -= 1.0 if key_pressed?(:w) || key_pressed?(:up) || gamepad_button_pressed?(:dpad_up, id)
-      dy += 1.0 if key_pressed?(:s) || key_pressed?(:down) || gamepad_button_pressed?(:dpad_down, id)
-      return dy if dy != 0.0
-
-      stick = left_stick(id, 0.2)
-      stick[1].to_f
+      axis(:up, :down, id)
     end
 
     # 右スティック水平方向 (-1.0 .. 1.0)
@@ -230,5 +218,282 @@ module Zenoo
       stick = right_stick(id, 0.2)
       stick[1].to_f
     end
+
+    # ==========================================
+    # アクションマッピング API (Input Action Map)
+    # ==========================================
+    @actions = {}
+    @axis_state_prev = {} # { [axis, id, dir] => boolean }
+
+    def self.actions
+      @actions
+    end
+
+    # アクションの定義・追加登録
+    # @param name [Symbol] アクション名 (例: :jump, :ui_accept)
+    # @param keys [Symbol, Array<Symbol>] キーボードのキー
+    # @param gamepad [Symbol, Integer, Array] ゲームパッドのボタン
+    # @param mouse [Symbol, Integer, Array] マウスのボタン (:left, :right, :middle)
+    # @param stick [Symbol] スティック方向ショートカット (:up, :down, :left, :right)
+    # @param axes [Array<Array>] アナログ軸バインド [axis_sym, direction, threshold]
+    def self.define_action(name, keys: nil, gamepad: nil, mouse: nil, stick: nil, axes: nil)
+      act = (@actions[name.to_sym] ||= { keys: [], gamepad: [], mouse: [], axes: [] })
+      if keys
+        Array(keys).each do |k|
+          rk = resolve_key(k)
+          act[:keys] << rk unless act[:keys].include?(rk)
+        end
+      end
+      if gamepad
+        Array(gamepad).each do |b|
+          rb = resolve_gamepad_button(b)
+          act[:gamepad] << rb unless act[:gamepad].include?(rb)
+        end
+      end
+      if mouse
+        Array(mouse).each do |m|
+          rm = resolve_mouse(m)
+          act[:mouse] << rm unless act[:mouse].include?(rm)
+        end
+      end
+      if stick
+        case stick
+        when :up    then (act[:axes] << [:ly, :negative, 0.5, 0.2]) unless act[:axes].any? { |a| a[0] == :ly && a[1] == :negative }
+        when :down  then (act[:axes] << [:ly, :positive, 0.5, 0.2]) unless act[:axes].any? { |a| a[0] == :ly && a[1] == :positive }
+        when :left  then (act[:axes] << [:lx, :negative, 0.5, 0.2]) unless act[:axes].any? { |a| a[0] == :lx && a[1] == :negative }
+        when :right then (act[:axes] << [:lx, :positive, 0.5, 0.2]) unless act[:axes].any? { |a| a[0] == :lx && a[1] == :positive }
+        end
+      end
+      if axes
+        Array(axes).each do |ax|
+          act[:axes] << ax unless act[:axes].include?(ax)
+        end
+      end
+      act
+    end
+
+    # 指定したアクション、または全アクションをクリア
+    def self.clear_action(name = nil)
+      if name
+        @actions.delete(name.to_sym)
+      else
+        @actions.clear
+      end
+    end
+
+    # アクションの強度 (0.0 .. 1.0)
+    def self.action_strength(name, id = 0)
+      act = @actions[name.to_sym]
+      return 0.0 unless act
+
+      max_val = 0.0
+
+      # 1. キーボード
+      act[:keys].each do |k|
+        return 1.0 if Native::Input.key_pressed?(k)
+      end
+
+      # 2. ゲームパッドボタン
+      act[:gamepad].each do |b|
+        return 1.0 if Native::Input.gamepad_button_pressed?(id.to_i, b)
+      end
+
+      # 3. マウスボタン
+      act[:mouse].each do |m|
+        return 1.0 if Native::Input.mouse_pressed?(m)
+      end
+
+      # 4. アナログ軸 (トリガーやスティック)
+      act[:axes].each do |ax_def|
+        axis_name, dir, _thresh, deadzone = ax_def
+        deadzone ||= 0.2
+        val = gamepad_axis(axis_name, id)
+        raw = case dir
+              when :positive then val > 0.0 ? val : 0.0
+              when :negative then val < 0.0 ? -val : 0.0
+              else val > 0.0 ? val : 0.0
+              end
+
+        strength = if raw <= deadzone
+                     0.0
+                   else
+                     ((raw - deadzone) / (1.0 - deadzone)).clamp(0.0, 1.0)
+                   end
+
+        max_val = strength if strength > max_val
+      end
+
+      max_val
+    end
+
+    # アクションが押されているか (持続)
+    def self.action_pressed?(name, id = 0)
+      act = @actions[name.to_sym]
+      return false unless act
+
+      # キーボード
+      act[:keys].each do |k|
+        return true if Native::Input.key_pressed?(k)
+      end
+
+      # ゲームパッドボタン
+      act[:gamepad].each do |b|
+        return true if Native::Input.gamepad_button_pressed?(id.to_i, b)
+      end
+
+      # マウスボタン
+      act[:mouse].each do |m|
+        return true if Native::Input.mouse_pressed?(m)
+      end
+
+      # アナログ軸
+      act[:axes].each do |ax_def|
+        axis_name, dir, thresh, _deadzone = ax_def
+        thresh ||= 0.5
+        val = gamepad_axis(axis_name, id)
+        case dir
+        when :positive
+          return true if val >= thresh
+        when :negative
+          return true if val <= -thresh
+        else
+          return true if val >= thresh
+        end
+      end
+
+      false
+    end
+
+    # アクションが押された瞬間か (トリガー)
+    def self.action_push?(name, id = 0)
+      act = @actions[name.to_sym]
+      return false unless act
+
+      # キーボード
+      act[:keys].each do |k|
+        return true if Native::Input.key_push?(k)
+      end
+
+      # ゲームパッドボタン
+      act[:gamepad].each do |b|
+        return true if Native::Input.gamepad_button_push?(id.to_i, b)
+      end
+
+      # マウスボタン
+      act[:mouse].each do |m|
+        return true if Native::Input.mouse_push?(m)
+      end
+
+      # アナログ軸の閾値クロス判定 (今フレームで閾値を超え、前フレームでは未超過)
+      act[:axes].each do |ax_def|
+        axis_name, dir, thresh, _deadzone = ax_def
+        thresh ||= 0.5
+        val = gamepad_axis(axis_name, id)
+        cur_active = case dir
+                     when :positive then val >= thresh
+                     when :negative then val <= -thresh
+                     else val >= thresh
+                     end
+        key = [axis_name, id.to_i, dir]
+        prev_active = @axis_state_prev[key] || false
+        return true if cur_active && !prev_active
+      end
+
+      false
+    end
+
+    # アクションが離された瞬間か (リリース)
+    def self.action_release?(name, id = 0)
+      act = @actions[name.to_sym]
+      return false unless act
+
+      act[:keys].each do |k|
+        return true if Native::Input.key_release?(k)
+      end
+
+      act[:gamepad].each do |b|
+        return true if Native::Input.gamepad_button_release?(id.to_i, b)
+      end
+
+      act[:mouse].each do |m|
+        return true if Native::Input.mouse_release?(m)
+      end
+
+      # アナログ軸のリリース判定
+      act[:axes].each do |ax_def|
+        axis_name, dir, thresh, _deadzone = ax_def
+        thresh ||= 0.5
+        val = gamepad_axis(axis_name, id)
+        cur_active = case dir
+                     when :positive then val >= thresh
+                     when :negative then val <= -thresh
+                     else val >= thresh
+                     end
+        key = [axis_name, id.to_i, dir]
+        prev_active = @axis_state_prev[key] || false
+        return true if !cur_active && prev_active
+      end
+
+      false
+    end
+
+    # 軸の入力値 (-1.0 .. 1.0)
+    # positive_action の強さ - negative_action の強さ
+    def self.axis(negative_action, positive_action, id = 0)
+      pos = action_strength(positive_action, id)
+      neg = action_strength(negative_action, id)
+      pos - neg
+    end
+
+    # 2次元移動ベクトル [dx, dy]
+    # 4方向のアクションからベクトルを算出し、長さを 1.0 にクランプ (斜め移動速度超過を防止)
+    # 引数省略時はデフォルトで (:left, :right, :up, :down) を使用
+    def self.vector(negative_x = :left, positive_x = :right, negative_y = :up, positive_y = :down, id: 0)
+      dx = axis(negative_x, positive_x, id)
+      dy = axis(negative_y, positive_y, id)
+
+      len = Math.sqrt(dx * dx + dy * dy)
+      if len > 1.0
+        dx /= len
+        dy /= len
+      end
+      [dx, dy]
+    end
+
+    # 毎フレーム末尾で軸状態を更新 (Window.__update_step から自動呼出し)
+    def self.__update_step
+      @actions.each_value do |act|
+        act[:axes].each do |ax_def|
+          axis_name, dir, thresh, _deadzone = ax_def
+          thresh ||= 0.5
+          val = gamepad_axis(axis_name, 0)
+          cur_active = case dir
+                       when :positive then val >= thresh
+                       when :negative then val <= -thresh
+                       else val >= thresh
+                       end
+          @axis_state_prev[[axis_name, 0, dir]] = cur_active
+        end
+      end
+    end
+
+    # デフォルトの組み込みアクション初期化
+    def self.__init_default_actions
+      # --- UI ナビゲーション用アクション ---
+      define_action(:ui_accept, keys: [:enter, :space, :z], gamepad: [:a], mouse: [:left])
+      define_action(:ui_cancel, keys: [:escape, :x], gamepad: [:b], mouse: [:right])
+      define_action(:ui_up,     keys: [:up, :w], gamepad: [:dpad_up], stick: :up)
+      define_action(:ui_down,   keys: [:down, :s], gamepad: [:dpad_down], stick: :down)
+      define_action(:ui_left,   keys: [:left, :a], gamepad: [:dpad_left], stick: :left)
+      define_action(:ui_right,  keys: [:right, :d], gamepad: [:dpad_right], stick: :right)
+
+      # --- ゲームプレイ・自機移動用アクション (プレフィックスなし) ---
+      define_action(:up,        keys: [:up, :w], gamepad: [:dpad_up], stick: :up)
+      define_action(:down,      keys: [:down, :s], gamepad: [:dpad_down], stick: :down)
+      define_action(:left,      keys: [:left, :a], gamepad: [:dpad_left], stick: :left)
+      define_action(:right,     keys: [:right, :d], gamepad: [:dpad_right], stick: :right)
+    end
+
+    __init_default_actions
   end
 end
