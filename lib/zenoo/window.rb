@@ -243,6 +243,8 @@ module Zenoo
       @offset_y = prev_oy
     end
 
+    DEFAULT_SHADOW_COLOR = [0, 0, 0, 180].freeze
+
     # ----------------------------------------------------
     # 描画 API 
     # ----------------------------------------------------
@@ -252,27 +254,38 @@ module Zenoo
                        border_color: nil,
                        border_width: nil,
                        shadow_blur: 0.0,
-                       shadow_color: [0, 0, 0, 180],
+                       shadow_color: nil,
                        image: nil,
                        z: 0.0)
       actual_color = color || (border_color ? nil : :white)
       c_color = Backend.normalize_color(actual_color)
-      b_width = border_color ? (border_width || 1.0).to_f : 0.0
-      b_color = Backend.normalize_color(border_color)
-
-      s_blur = shadow_blur.to_f
-      s_color = (s_blur > 0.0) ? Backend.normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
-
       ax = x.to_f + @offset_x
       ay = y.to_f + @offset_y
+      wf = w.to_f
+      hf = h.to_f
+
+      b_width = 0.0
+      b0 = 0.0; b1 = 0.0; b2 = 0.0; b3 = 0.0
+      if border_color
+        b_width = (border_width || 1.0).to_f
+        bc = Backend.normalize_color(border_color)
+        b0 = bc[0].to_f; b1 = bc[1].to_f; b2 = bc[2].to_f; b3 = bc[3].to_f
+      end
+
+      s_blur = shadow_blur.to_f
+      s0 = 0.0; s1 = 0.0; s2 = 0.0; s3 = 0.0
+      if s_blur > 0.0
+        sc = Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR)
+        s0 = sc[0].to_f; s1 = sc[1].to_f; s2 = sc[2].to_f; s3 = sc[3].to_f
+      end
 
       mode = image ? 1.0 : 0.0
       data = [
-        ax, ay, w.to_f, h.to_f,
+        ax, ay, wf, hf,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
         radius.to_f, b_width, s_blur, mode,
-        b_color[0].to_f, b_color[1].to_f, b_color[2].to_f, b_color[3].to_f,
-        s_color[0].to_f, s_color[1].to_f, s_color[2].to_f, s_color[3].to_f,
+        b0, b1, b2, b3,
+        s0, s1, s2, s3,
         0.0, 0.0, 1.0, 1.0
       ].pack("f*")
 
@@ -291,7 +304,7 @@ module Zenoo
                         border_color: nil,
                         border_width: nil,
                         shadow_blur: 0.0,
-                        shadow_color: [0, 0, 0, 180],
+                        shadow_color: nil,
                         image: nil,
                         z: 0.0)
       rf = r.to_f
@@ -328,11 +341,11 @@ module Zenoo
       c_color = Backend.normalize_color(color || :white)
 
       # alpha の適用 (0..255)
-      if alpha
+      if alpha && alpha != 255
         af = alpha.to_f / 255.0
         af = 0.0 if af < 0.0
         af = 1.0 if af > 1.0
-        c_color = [c_color[0], c_color[1], c_color[2], c_color[3] * af]
+        c_color = [c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f * af]
       end
 
       # スケール
@@ -521,8 +534,16 @@ module Zenoo
     end
 
     class CharContext
-      attr_accessor :char, :index, :line_index, :x, :y, :w, :h, :color, :scale, :visible
+      attr_accessor :char, :index, :line_index, :x, :y, :w, :h, :color, :visible
       attr_accessor :outline_width, :outline_color, :weight
+
+      def scale
+        @scale
+      end
+
+      def scale=(val)
+        @scale = val
+      end
 
       def reset(char, index, gx, gy, gw, gh, default_color, def_out_w, def_out_c, def_weight = 0.0)
         @char = char
@@ -552,6 +573,7 @@ module Zenoo
 
     # ----------------------------------------------------
     # 高品質 SDF テキスト描画 API (改行なし・文字列直接描画)
+    # ブロックが渡された場合は 1文字単位のカスタム装飾を実行
     # ----------------------------------------------------
     def self.draw_text(x, y, text,
                        font: nil,
@@ -561,12 +583,29 @@ module Zenoo
                        outline_width: 0.0,
                        outline_color: :black,
                        shadow_blur: 0.0,
-                       shadow_color: [0, 0, 0, 180],
+                       shadow_color: nil,
                        shadow_dx: 0.0,
                        shadow_dy: 0.0,
                        sdf: nil,
                        z: 0.0,
                        &block)
+      if block
+        __draw_text_custom(x, y, text, font, size, color,
+                           weight, outline_width, outline_color,
+                           shadow_blur, shadow_color,
+                           shadow_dx, shadow_dy, sdf, z, &block)
+      else
+        __draw_text_simple(x, y, text, font, size, color,
+                           weight, outline_width, outline_color,
+                           shadow_blur, shadow_color,
+                           shadow_dx, shadow_dy, sdf, z)
+      end
+    end
+
+    def self.__draw_text_simple(x, y, text, font, size, color,
+                                weight, outline_width, outline_color,
+                                shadow_blur, shadow_color,
+                                shadow_dx, shadow_dy, sdf, z)
       return if text.nil?
 
       target_font = font || Font.default
@@ -586,19 +625,120 @@ module Zenoo
       s_blur = shadow_blur.to_f
       s_dx = shadow_dx.to_f
       s_dy = shadow_dy.to_f
-      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color) : [0.0, 0.0, 0.0, 0.0]
+      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : [0.0, 0.0, 0.0, 0.0]
 
-      # sdf オプションの解決:
-      # - sdf: true  -> 強制 SDF
-      # - sdf: false -> 強制 ビットマップ (大文字でも直接ラスタライズ)
-      # - sdf: nil   -> 自動判定 (エフェクトがあれば SDF、なければサイズ判定)
       effective_sdf = if sdf.nil?
                         (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? true : nil
                       else
                         sdf ? true : false
                       end
 
-      # 画面上ピクセルとアトラスピクセルのスケール比補正 (アトラス基準サイズはFont::SDF_BASE_SIZE)
+      scale_ratio = Font::SDF_BASE_SIZE / f_size
+      s_atlas_dx = s_dx * scale_ratio
+      s_atlas_dy = s_dy * scale_ratio
+      s_atlas_blur = s_blur * scale_ratio
+      s_atlas_outline_w = outline_w * scale_ratio
+      s_weight = weight.to_f
+      s_atlas_weight = s_weight * scale_ratio
+
+      p0 = [s_atlas_outline_w, s_atlas_blur, s_atlas_dx, s_atlas_dy]
+      p1 = outline_c
+      p2 = s_c
+      shader = sdf_font_shader
+
+      metrics = target_font.metrics(f_size)
+      ascent = metrics[:ascent]
+
+      pen_x = (x.to_f + @offset_x).round
+      pen_y = (y.to_f + @offset_y + ascent).round.to_f
+
+      str = text.to_s
+      chars = str.chars
+      len = chars.length
+      return if len == 0
+
+      batch = []
+      glyph_count = 0
+
+      cr = c_color[0].to_f; cg = c_color[1].to_f; cb = c_color[2].to_f; ca = c_color[3].to_f
+      p0_0 = p0[0].to_f; p0_1 = p0[1].to_f; p0_2 = p0[2].to_f; p0_3 = p0[3].to_f
+      p1_0 = p1[0].to_f; p1_1 = p1[1].to_f; p1_2 = p1[2].to_f; p1_3 = p1[3].to_f
+      p2_0 = p2[0].to_f; p2_1 = p2[1].to_f; p2_2 = p2[2].to_f; p2_3 = p2[3].to_f
+
+      i = 0
+      while i < len
+        ch = chars[i]
+        glyph_data = target_font.get_glyph(ch, f_size, effective_sdf)
+        adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
+
+        if glyph_data && glyph_data[0] # visible == true
+          _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
+          is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
+          gx = (pen_x + x0).round.to_f
+          gy = (pen_y + y0).round.to_f
+          gw = (x1 - x0).to_f
+          gh = (y1 - y0).to_f
+
+          batch.push(
+            gx, gy, gw, gh,
+            cr, cg, cb, ca,
+            p0_0, p0_1, p0_2, p0_3,
+            p1_0, p1_1, p1_2, p1_3,
+            p2_0, p2_1, p2_2, p2_3,
+            s_atlas_weight, is_bmp, 0.0, 0.0,
+            u0.to_f, v0.to_f, (u1 - u0).to_f, (v1 - v0).to_f
+          )
+          glyph_count += 1
+        end
+
+        pen_x += adv
+        i += 1
+      end
+
+      if glyph_count > 0
+        Backend.enqueue_draw(
+          Backend::Pipelines::FONT,
+          batch.pack("f*"),
+          glyph_count,
+          image: font_atlas,
+          shader: shader,
+          z: z
+        )
+      end
+    end
+
+    def self.__draw_text_custom(x, y, text, font, size, color,
+                                weight, outline_width, outline_color,
+                                shadow_blur, shadow_color,
+                                shadow_dx, shadow_dy, sdf, z,
+                                &block)
+      return if text.nil?
+
+      target_font = font || Font.default
+      return unless target_font
+
+      font_atlas = Font.atlas_image
+      return unless font_atlas
+
+      f_size = size.to_f
+      f_size = 24.0 if f_size <= 0.0
+
+      c_color = Backend.normalize_color(color)
+
+      outline_w = outline_width.to_f
+      outline_c = (outline_w > 0.0) ? Backend.normalize_color(outline_color) : [0.0, 0.0, 0.0, 0.0]
+
+      s_blur = shadow_blur.to_f
+      s_dx = shadow_dx.to_f
+      s_dy = shadow_dy.to_f
+      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : [0.0, 0.0, 0.0, 0.0]
+
+      effective_sdf = if sdf.nil?
+                        (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? true : nil
+                      else
+                        sdf ? true : false
+                      end
+
       scale_ratio = Font::SDF_BASE_SIZE / f_size
       s_atlas_dx = s_dx * scale_ratio
       s_atlas_dy = s_dy * scale_ratio
@@ -627,97 +767,61 @@ module Zenoo
       batch = []
       glyph_count = 0
 
-      if block_given?
-        ctx = @char_ctx
-        i = 0
-        while i < len
-          ch = chars[i]
-          glyph_data = target_font.get_glyph(ch, f_size, effective_sdf)
-          adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
+      ctx = @char_ctx
+      i = 0
+      while i < len
+        ch = chars[i]
+        glyph_data = target_font.get_glyph(ch, f_size, effective_sdf)
+        adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
 
-          if glyph_data && glyph_data[0] # visible == true
-            _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
-            is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
-            gx = (pen_x + x0).round
-            gy = (pen_y + y0).round
-            gw = x1 - x0
-            gh = y1 - y0
-            uv = [u0, v0, u1 - u0, v1 - v0]
-            is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
+        if glyph_data && glyph_data[0] # visible == true
+          _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
+          is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
+          gx = (pen_x + x0).round
+          gy = (pen_y + y0).round
+          gw = x1 - x0
+          gh = y1 - y0
+          uv = [u0, v0, u1 - u0, v1 - v0]
 
-            ctx.reset(ch, i, gx, gy, gw, gh, c_color, outline_w, outline_c, s_weight)
-            yield(ctx)
+          ctx.reset(ch, i, gx, gy, gw, gh, c_color, outline_w, outline_c, s_weight)
+          yield(ctx)
 
-            if ctx.visible
-              cgx = ctx.x
-              cgy = ctx.y
-              cgw = ctx.w
-              cgh = ctx.h
+          if ctx.visible
+            cgx = ctx.x
+            cgy = ctx.y
+            cgw = ctx.w
+            cgh = ctx.h
 
-              if ctx.scale != 1.0
-                sc = ctx.scale
-                # 中心を基準にスケーリング
-                cx = cgx + cgw * 0.5
-                cy = cgy + cgh * 0.5
-                cgw *= sc
-                cgh *= sc
-                cgx = cx - cgw * 0.5
-                cgy = cy - cgh * 0.5
-              end
-
-              cur_color = (ctx.color.equal?(c_color)) ? c_color : Backend.normalize_color(ctx.color)
-              cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
-              cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : Backend.normalize_color(ctx.outline_color)
-              cur_p3 = (ctx.weight == s_weight) ? [s_atlas_weight, is_bmp, 0.0, 0.0] : [ctx.weight * scale_ratio, is_bmp, 0.0, 0.0]
-
-              batch.push(
-                cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
-                cur_color[0].to_f, cur_color[1].to_f, cur_color[2].to_f, cur_color[3].to_f,
-                cur_p0[0].to_f, cur_p0[1].to_f, cur_p0[2].to_f, cur_p0[3].to_f,
-                cur_p1[0].to_f, cur_p1[1].to_f, cur_p1[2].to_f, cur_p1[3].to_f,
-                p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
-                cur_p3[0].to_f, cur_p3[1].to_f, cur_p3[2].to_f, cur_p3[3].to_f,
-                uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
-              )
-              glyph_count += 1
+            if ctx.scale != 1.0
+              sc = ctx.scale
+              cx = cgx + cgw * 0.5
+              cy = cgy + cgh * 0.5
+              cgw *= sc
+              cgh *= sc
+              cgx = cx - cgw * 0.5
+              cgy = cy - cgh * 0.5
             end
-          end
 
-          pen_x += adv
-          i += 1
-        end
-      else
-        i = 0
-        while i < len
-          ch = chars[i]
-          glyph_data = target_font.get_glyph(ch, f_size, effective_sdf)
-          adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
-
-          if glyph_data && glyph_data[0] # visible == true
-            _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
-            is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
-            gx = (pen_x + x0).round
-            gy = (pen_y + y0).round
-            gw = x1 - x0
-            gh = y1 - y0
-            uv = [u0, v0, u1 - u0, v1 - v0]
-            cur_p3 = [s_atlas_weight, is_bmp, 0.0, 0.0]
+            cur_color = (ctx.color.equal?(c_color)) ? c_color : Backend.normalize_color(ctx.color)
+            cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
+            cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : Backend.normalize_color(ctx.outline_color)
+            cur_p3 = (ctx.weight == s_weight) ? [s_atlas_weight, is_bmp, 0.0, 0.0] : [ctx.weight * scale_ratio, is_bmp, 0.0, 0.0]
 
             batch.push(
-              gx.to_f, gy.to_f, gw.to_f, gh.to_f,
-              c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-              p0[0].to_f, p0[1].to_f, p0[2].to_f, p0[3].to_f,
-              p1[0].to_f, p1[1].to_f, p1[2].to_f, p1[3].to_f,
+              cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
+              cur_color[0].to_f, cur_color[1].to_f, cur_color[2].to_f, cur_color[3].to_f,
+              cur_p0[0].to_f, cur_p0[1].to_f, cur_p0[2].to_f, cur_p0[3].to_f,
+              cur_p1[0].to_f, cur_p1[1].to_f, cur_p1[2].to_f, cur_p1[3].to_f,
               p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
               cur_p3[0].to_f, cur_p3[1].to_f, cur_p3[2].to_f, cur_p3[3].to_f,
               uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
             )
             glyph_count += 1
           end
-
-          pen_x += adv
-          i += 1
         end
+
+        pen_x += adv
+        i += 1
       end
 
       if glyph_count > 0
