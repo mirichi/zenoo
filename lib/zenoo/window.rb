@@ -79,6 +79,7 @@ module Zenoo
       Zenoo::GUI.begin_frame if defined?(Zenoo::GUI)
       @main_loop_block.call if @main_loop_block
       Zenoo::GUI.end_frame if defined?(Zenoo::GUI)
+      Zenoo::Input.__update_step if defined?(Zenoo::Input)
     end
 
     def self.__draw_step(active_filter = nil)

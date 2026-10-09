@@ -288,14 +288,23 @@ case "$TARGET" in
     collision) build_collision ;;
     all)
         build_game
+        sleep 0.5
         build_gui
+        sleep 0.5
         build_font
+        sleep 0.5
         build_vector
+        sleep 0.5
         build_image
+        sleep 0.5
         build_atlas
+        sleep 0.5
         build_window
+        sleep 0.5
         build_clip
+        sleep 0.5
         build_sound
+        sleep 0.5
         build_collision
         ;;
     *)
