@@ -1,1 +1,427 @@
-<!doctypehtml><html lang=ja><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"name=viewport><title>Zenoo Immediate Mode GUI Showcase (Spinel Wasm)</title><style>*{box-sizing:border-box;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}body{margin:0;padding:10px;background-color:#0d0f18;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;height:100dvh;overflow:hidden;touch-action:none}#header{margin-bottom:8px;text-align:center;flex-shrink:0}h1{margin:0 0 4px 0;font-size:18px;color:#0fc;letter-spacing:1px}p{margin:0;font-size:11px;color:#8892b0}#canvas-container{position:relative;box-shadow:0 10px 30px rgba(0,0,0,.8);border-radius:8px;overflow:hidden;border:1px solid #233554;width:min(96vw,calc(72dvh * 16 / 9));height:min(calc(96vw * 9 / 16),72dvh);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background-color:#000;flex-shrink:0}canvas.emscripten{display:block;border:0 none;background-color:#000;outline:0;width:100%!important;height:100%!important;touch-action:none}#controls-bar{margin-top:10px;display:flex;gap:12px;align-items:center;flex-shrink:0}.btn{background:#1e293b;border:1px solid #38bdf8;color:#38bdf8;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;text-decoration:none;display:inline-flex;align-items:center}.btn:active{background:#38bdf8;color:#0f172a}.btn-back{border-color:#a855f7;color:#c084fc}.btn-back:active{background:#c084fc;color:#0f172a}#status{margin-top:8px;font-size:11px;color:#64ffda;flex-shrink:0}#portrait-hint{display:none}@media (orientation:portrait) and (max-width:600px){#portrait-hint{display:block;margin-top:6px;font-size:11px;color:#facc15;background:rgba(250,204,21,.1);padding:4px 10px;border-radius:4px;border:1px dashed rgba(250,204,21,.3)}#canvas-container{width:98vw;height:calc(98vw * 9 / 16)}}@media (orientation:landscape) and (max-height:550px){body{padding:0;justify-content:center}#header,#portrait-hint,#status{display:none!important}#canvas-container{width:min(100vw,calc(100dvh * 16 / 9));height:min(100dvh,calc(100vw * 9 / 16));max-width:100vw;max-height:100dvh;border-radius:0;border:none;box-shadow:none}#controls-bar{position:fixed;top:8px;right:8px;left:8px;margin-top:0;justify-content:space-between;pointer-events:none;z-index:9999}#controls-bar>*{pointer-events:auto}.btn{background:rgba(15,23,42,.75);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:6px 12px;font-size:11px;border-radius:20px;opacity:.75;transition:opacity .2s}.btn:active,.btn:hover{opacity:1}}</style></head><body><div id=header><h1>ZENOO IMMEDIATE MODE GUI SHOWCASE</h1><p>Pure Ruby GUI & SDF Modern Cards | Powered by Spinel AOT & WebGL 2.0</p></div><div id=canvas-container><canvas class=emscripten height=720 id=canvas oncontextmenu=event.preventDefault() tabindex=-1 width=1280></canvas><input autocapitalize=off autocomplete=off autocorrect=off id=zenoo-hidden-input spellcheck=false style=position:absolute;opacity:0;pointer-events:none;left:-9999px;top:-9999px;width:1px;height:1px;font-size:16px;border:none></div><div id=controls-bar><a class="btn btn-back"href=../ >← ポータルに戻る</a> <button class=btn id=btn-fullscreen>全画面</button></div><div id=status>Loading WebAssembly module...</div><div id=portrait-hint>📱 スマホを横向きにすると画面いっぱいに遊べます</div><script>var statusElement=document.getElementById("status"),canvasElement=document.getElementById("canvas"),Module={print:function(e){console.log(e)},printErr:function(e){console.error(e)},canvas:canvasElement,setStatus:function(e){Module.setStatus.last||(Module.setStatus.last={time:Date.now(),text:""}),e!==Module.setStatus.last.text&&(statusElement.innerText=e||"Pure Ruby即時モードGUI (ボタン・スライダー・Modern/Retroスタイル切替)")},totalDependencies:0,monitorRunDependencies:function(e){this.totalDependencies=Math.max(this.totalDependencies,e),Module.setStatus(e?"Preparing... ("+(this.totalDependencies-e)+"/"+this.totalDependencies+")":"All downloads clear.")}};Module.setStatus("Downloading..."),window.onerror=function(){Module.setStatus("Exception thrown, see JavaScript console")};var isTwoFingerTouch=!1,touchSuppressUntil=0,lastTwoFingerPos={x:0,y:0};function getTouchesCenter(e){return e.length<2?{x:e[0].clientX,y:e[0].clientY}:{x:(e[0].clientX+e[1].clientX)/2,y:(e[0].clientY+e[1].clientY)/2}}function dispatchMouseEvent(e,n,t,o,s){var i=new MouseEvent(e,{bubbles:!0,cancelable:!0,view:window,button:n,buttons:t,clientX:o,clientY:s});canvasElement.dispatchEvent(i)}function handleTouchStart(e){if(e.target===canvasElement&&e.preventDefault(),e.touches.length>=2){dispatchMouseEvent("mouseup",0,0,e.touches[0].clientX,e.touches[0].clientY);var n=getTouchesCenter(e.touches);lastTwoFingerPos=n,isTwoFingerTouch=!0,touchSuppressUntil=Date.now()+200,dispatchMouseEvent("mousedown",2,2,n.x,n.y)}}function handleTouchMove(e){if(e.target===canvasElement&&e.preventDefault(),isTwoFingerTouch&&e.touches.length>=2){var n=getTouchesCenter(e.touches);lastTwoFingerPos=n,dispatchMouseEvent("mousemove",2,2,n.x,n.y)}}function handleTouchEnd(e){e.target===canvasElement&&e.preventDefault(),isTwoFingerTouch&&e.touches.length<2&&(isTwoFingerTouch=!1,dispatchMouseEvent("mouseup",2,0,lastTwoFingerPos.x,lastTwoFingerPos.y),touchSuppressUntil=Date.now()+250)}document.addEventListener("touchstart",handleTouchStart,{passive:!1}),document.addEventListener("touchmove",handleTouchMove,{passive:!1}),document.addEventListener("touchend",handleTouchEnd,{passive:!1}),document.addEventListener("touchcancel",handleTouchEnd,{passive:!1}),canvasElement.addEventListener("mousedown",(function(e){0===e.button&&Date.now()<touchSuppressUntil&&(e.stopImmediatePropagation(),e.preventDefault())}),!0),canvasElement.addEventListener("pointerdown",(function(e){try{canvasElement.setPointerCapture(e.pointerId)}catch(e){}})),canvasElement.addEventListener("pointerup",(function(e){try{canvasElement.releasePointerCapture(e.pointerId)}catch(e){}})),canvasElement.addEventListener("pointercancel",(function(e){try{canvasElement.releasePointerCapture(e.pointerId)}catch(e){}})),window.addEventListener("mouseup",(function(e){if(e.target!==canvasElement){var n=new MouseEvent("mouseup",{bubbles:!0,cancelable:!0,button:e.button,buttons:e.buttons,clientX:e.clientX,clientY:e.clientY});canvasElement.dispatchEvent(n)}})),window.addEventListener("blur",(function(){for(var e=0;e<3;e++){var n=new MouseEvent("mouseup",{bubbles:!0,cancelable:!0,button:e,buttons:0});canvasElement.dispatchEvent(n)}})),document.getElementById("btn-fullscreen").addEventListener("click",(function(e){e.preventDefault(),document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch((function(e){}))}));var hiddenInput=document.getElementById("zenoo-hidden-input"),isComposing=!1;function sendStringToZenoo(e){if(e&&Module._zen_push_char)for(var n=0;n<e.length;n++){var t=e.charCodeAt(n);if(t>=55296&&t<=56319&&n+1<e.length)t=65536+(t-55296<<10)+(e.charCodeAt(++n)-56320);Module._zen_push_char(t)}}window.zenooOnFocusTextInput=function(e,n){hiddenInput&&(e>=0&&n>=0?hiddenInput.focus():hiddenInput.blur())},window.addEventListener("keydown",(function(e){document.activeElement===hiddenInput&&(isComposing||e.isComposing||229===e.keyCode)&&"Enter"===e.key&&e.stopImmediatePropagation()}),!0),hiddenInput&&(hiddenInput.addEventListener("compositionstart",(function(e){isComposing=!0})),hiddenInput.addEventListener("compositionend",(function(e){isComposing=!1;var n=e.data||hiddenInput.value;n&&n.length>0&&sendStringToZenoo(n),hiddenInput.value=""})),hiddenInput.addEventListener("input",(function(e){if(!isComposing&&!e.isComposing){var n=hiddenInput.value;n&&n.length>0&&(sendStringToZenoo(n),hiddenInput.value="")}})),hiddenInput.addEventListener("keydown",(function(e){isComposing||e.isComposing||229===e.keyCode||"Enter"!==e.key&&"Escape"!==e.key||hiddenInput.blur()})))</script><script async src=index.js></script></body></html>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Zenoo Immediate Mode GUI Showcase (Spinel Wasm)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 10px;
+      background-color: #0d0f18;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      min-height: 100dvh;
+      height: 100dvh;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #header {
+      margin-bottom: 8px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    h1 {
+      margin: 0 0 4px 0;
+      font-size: 18px;
+      color: #00ffcc;
+      letter-spacing: 1px;
+    }
+    p {
+      margin: 0;
+      font-size: 11px;
+      color: #8892b0;
+    }
+    #canvas-container {
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #233554;
+      width: min(96vw, calc(72dvh * 16 / 9));
+      height: min(calc(96vw * 9 / 16), 72dvh);
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #000;
+      flex-shrink: 0;
+    }
+    canvas.emscripten {
+      display: block;
+      border: 0px none;
+      background-color: #000;
+      outline: none;
+      width: 100% !important;
+      height: 100% !important;
+      touch-action: none;
+    }
+    #controls-bar {
+      margin-top: 10px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .btn {
+      background: #1e293b;
+      border: 1px solid #38bdf8;
+      color: #38bdf8;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    .btn:active {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+    .btn-back {
+      border-color: #a855f7;
+      color: #c084fc;
+    }
+    .btn-back:active {
+      background: #c084fc;
+      color: #0f172a;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #64ffda;
+      flex-shrink: 0;
+    }
+    #portrait-hint {
+      display: none;
+    }
+    @media (orientation: portrait) and (max-width: 600px) {
+      #portrait-hint {
+        display: block;
+        margin-top: 6px;
+        font-size: 11px;
+        color: #facc15;
+        background: rgba(250, 204, 21, 0.1);
+        padding: 4px 10px;
+        border-radius: 4px;
+        border: 1px dashed rgba(250, 204, 21, 0.3);
+      }
+      #canvas-container {
+        width: 98vw;
+        height: calc(98vw * 9 / 16);
+      }
+    }
+    @media (orientation: landscape) and (max-height: 550px) {
+      body {
+        padding: 0;
+        justify-content: center;
+      }
+      #header, #status, #portrait-hint {
+        display: none !important;
+      }
+      #canvas-container {
+        width: min(100vw, calc(100dvh * 16 / 9));
+        height: min(100dvh, calc(100vw * 9 / 16));
+        max-width: 100vw;
+        max-height: 100dvh;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+      }
+      #controls-bar {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        left: 8px;
+        margin-top: 0;
+        justify-content: space-between;
+        pointer-events: none;
+        z-index: 9999;
+      }
+      #controls-bar > * {
+        pointer-events: auto;
+      }
+      .btn {
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        padding: 6px 12px;
+        font-size: 11px;
+        border-radius: 20px;
+        opacity: 0.75;
+        transition: opacity 0.2s;
+      }
+      .btn:hover, .btn:active {
+        opacity: 1.0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>ZENOO IMMEDIATE MODE GUI SHOWCASE</h1>
+    <p>Pure Ruby GUI &amp; SDF Modern Cards | Powered by Spinel AOT &amp; WebGL 2.0</p>
+  </div>
+  <div id="canvas-container">
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" width="1280" height="720"></canvas>
+    <input id="zenoo-hidden-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+      style="position: absolute; opacity: 0; pointer-events: none; left: -9999px; top: -9999px; width: 1px; height: 1px; font-size: 16px; border: none;">
+  </div>
+  <div id="controls-bar">
+    <a href="../" class="btn btn-back">← ポータルに戻る</a>
+    <button class="btn" id="btn-fullscreen">全画面</button>
+  </div>
+  <div id="status">Loading WebAssembly module...</div>
+  <div id="portrait-hint">📱 スマホを横向きにすると画面いっぱいに遊べます</div>
+
+  <script type='text/javascript'>
+    var statusElement = document.getElementById('status');
+    var canvasElement = document.getElementById('canvas');
+
+    var Module = {
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
+      canvas: canvasElement,
+      setStatus: function(text) {
+        if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+        if (text === Module.setStatus.last.text) return;
+        statusElement.innerText = text ? text : "Pure Ruby即時モードGUI (ボタン・スライダー・Modern/Retroスタイル切替)";
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads clear.');
+      }
+    };
+    Module.setStatus('Downloading...');
+    window.onerror = function() {
+      Module.setStatus('Exception thrown, see JavaScript console');
+    };
+
+    // ----------------------------------------------------
+    // タッチ操作サポート (2本指タップで右クリック)
+    // ----------------------------------------------------
+    var isTwoFingerTouch = false;
+    var touchSuppressUntil = 0;
+    var lastTwoFingerPos = { x: 0, y: 0 };
+
+    function getTouchesCenter(touches) {
+      if (touches.length < 2) return { x: touches[0].clientX, y: touches[0].clientY };
+      return {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2
+      };
+    }
+
+    function dispatchMouseEvent(type, button, buttons, x, y) {
+      var ev = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        button: button,
+        buttons: buttons,
+        clientX: x,
+        clientY: y
+      });
+      canvasElement.dispatchEvent(ev);
+    }
+
+    function handleTouchStart(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (e.touches.length >= 2) {
+        dispatchMouseEvent('mouseup', 0, 0, e.touches[0].clientX, e.touches[0].clientY);
+
+        var center = getTouchesCenter(e.touches);
+        lastTwoFingerPos = center;
+        isTwoFingerTouch = true;
+        touchSuppressUntil = Date.now() + 200;
+
+        dispatchMouseEvent('mousedown', 2, 2, center.x, center.y);
+      }
+    }
+
+    function handleTouchMove(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (isTwoFingerTouch && e.touches.length >= 2) {
+        var center = getTouchesCenter(e.touches);
+        lastTwoFingerPos = center;
+        dispatchMouseEvent('mousemove', 2, 2, center.x, center.y);
+      }
+    }
+
+    function handleTouchEnd(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (isTwoFingerTouch) {
+        if (e.touches.length < 2) {
+          isTwoFingerTouch = false;
+          dispatchMouseEvent('mouseup', 2, 0, lastTwoFingerPos.x, lastTwoFingerPos.y);
+          touchSuppressUntil = Date.now() + 250;
+        }
+      }
+    }
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    // 2本指解除直後の synthetic 左クリックを抑止
+    canvasElement.addEventListener('mousedown', function(e) {
+      if (e.button === 0 && Date.now() < touchSuppressUntil) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }
+    }, true);
+
+    // ポインターキャプチャ
+    canvasElement.addEventListener('pointerdown', function(e) {
+      try {
+        canvasElement.setPointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+    canvasElement.addEventListener('pointerup', function(e) {
+      try {
+        canvasElement.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+    canvasElement.addEventListener('pointercancel', function(e) {
+      try {
+        canvasElement.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+
+    window.addEventListener('mouseup', function(e) {
+      if (e.target !== canvasElement) {
+        var ev = new MouseEvent('mouseup', {
+          bubbles: true,
+          cancelable: true,
+          button: e.button,
+          buttons: e.buttons,
+          clientX: e.clientX,
+          clientY: e.clientY
+        });
+        canvasElement.dispatchEvent(ev);
+      }
+    });
+
+    window.addEventListener('blur', function() {
+      for (var b = 0; b < 3; b++) {
+        var ev = new MouseEvent('mouseup', {
+          bubbles: true,
+          cancelable: true,
+          button: b,
+          buttons: 0
+        });
+        canvasElement.dispatchEvent(ev);
+      }
+    });
+
+    // 全画面ボタン
+    document.getElementById('btn-fullscreen').addEventListener('click', function(e) {
+      e.preventDefault();
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(function(err) {});
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    // ----------------------------------------------------
+    // テキストボックス入力 / スマホソフトキーボード連携
+    // ----------------------------------------------------
+    var hiddenInput = document.getElementById('zenoo-hidden-input');
+    var isComposing = false;
+
+    window.zenooOnFocusTextInput = function(x, y) {
+      if (!hiddenInput) return;
+      if (x >= 0 && y >= 0) {
+        hiddenInput.focus();
+      } else {
+        hiddenInput.blur();
+      }
+    };
+
+    function sendStringToZenoo(text) {
+      if (!text || !Module._zen_push_char) return;
+      for (var i = 0; i < text.length; i++) {
+        var code = text.charCodeAt(i);
+        if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length) {
+          var high = code;
+          var low = text.charCodeAt(++i);
+          code = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
+        }
+        Module._zen_push_char(code);
+      }
+    }
+
+    // IME変換中の Enter が GLFW に漏れてテキストボックスのフォーカスが解除されるのを抑止
+    window.addEventListener('keydown', function(e) {
+      if (document.activeElement === hiddenInput && (isComposing || e.isComposing || e.keyCode === 229)) {
+        if (e.key === 'Enter') {
+          e.stopImmediatePropagation();
+        }
+      }
+    }, true);
+
+    if (hiddenInput) {
+      // 変換開始
+      hiddenInput.addEventListener('compositionstart', function(e) {
+        isComposing = true;
+      });
+
+      // 変換確定 (日本語文字列を一括送信)
+      hiddenInput.addEventListener('compositionend', function(e) {
+        isComposing = false;
+        var text = e.data || hiddenInput.value;
+        if (text && text.length > 0) {
+          sendStringToZenoo(text);
+        }
+        hiddenInput.value = '';
+      });
+
+      // 直接入力 (半角英数など非IME入力時)
+      hiddenInput.addEventListener('input', function(e) {
+        if (isComposing || e.isComposing) {
+          return; // IME変換中の未確定文字列は送信しない
+        }
+        var text = hiddenInput.value;
+        if (text && text.length > 0) {
+          sendStringToZenoo(text);
+          hiddenInput.value = '';
+        }
+      });
+
+      // 決定キー (Enter/Escape) でフォーカス解除
+      hiddenInput.addEventListener('keydown', function(e) {
+        if (isComposing || e.isComposing || e.keyCode === 229) {
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          hiddenInput.blur();
+        }
+      });
+    }
+  </script>
+  <script async type="text/javascript" src="index.js"></script>
+</body>
+</html>

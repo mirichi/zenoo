@@ -31,6 +31,7 @@ mkdir -p "${DOCS_DIR}/window"
 mkdir -p "${DOCS_DIR}/clip"
 mkdir -p "${DOCS_DIR}/sound"
 mkdir -p "${DOCS_DIR}/collision"
+mkdir -p "${DOCS_DIR}/tween"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -275,6 +276,22 @@ build_collision() {
     echo "-> Collision build done!"
 }
 
+build_tween() {
+    echo "=== Building Tween & Easing Animation (${DOCS_DIR}/tween) ==="
+    mkdir -p "${DOCS_DIR}/tween"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_tween.rb -c -o "${DOCS_DIR}/tween/app.c"
+    strip_always_inline "${DOCS_DIR}/tween/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/tween/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/tween/index.html" \
+        --shell-file examples/web/shell_tween.html
+
+    rm -f "${DOCS_DIR}/tween/app.c"
+    echo "-> Tween build done!"
+}
+
 case "$TARGET" in
     game)      build_game ;;
     gui)       build_gui ;;
@@ -286,6 +303,7 @@ case "$TARGET" in
     clip)      build_clip ;;
     sound)     build_sound ;;
     collision) build_collision ;;
+    tween)     build_tween ;;
     all)
         build_game
         sleep 0.5
@@ -306,10 +324,12 @@ case "$TARGET" in
         build_sound
         sleep 0.5
         build_collision
+        sleep 0.5
+        build_tween
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|all]"
         exit 1
         ;;
 esac
@@ -328,4 +348,5 @@ echo " Window   : ${DOCS_DIR}/window/index.html"
 echo " Clip     : ${DOCS_DIR}/clip/index.html"
 echo " Sound    : ${DOCS_DIR}/sound/index.html"
 echo " Collision: ${DOCS_DIR}/collision/index.html"
+echo " Tween    : ${DOCS_DIR}/tween/index.html"
 echo "=========================================================="
