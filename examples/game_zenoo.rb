@@ -187,7 +187,7 @@ end
 # 2. 弾 & 近接武器 (Bullet, Missile, Orbiter)
 # ==========================================
 class Bullet
-  attr_accessor :x, :y, :vx, :vy, :dead, :damage
+  attr_accessor :x, :y, :vx, :vy, :dead, :damage, :shape
 
   def initialize(x, y, angle, speed = 16.0, damage = 1)
     @x = x.to_f
@@ -197,11 +197,14 @@ class Bullet
     @damage = damage
     @traveled = 0.0
     @dead = false
+    @shape = Collision.circle(@x, @y, 2.5)
   end
 
   def update
     @x += @vx
     @y += @vy
+    @shape.x = @x
+    @shape.y = @y
     @traveled += 16.0
     @dead = true if @traveled > 1400.0
   end
@@ -213,7 +216,7 @@ end
 
 # 追尾＆着弾範囲爆発ミサイル
 class Missile
-  attr_accessor :x, :y, :vx, :vy, :dead, :damage, :exploded
+  attr_accessor :x, :y, :vx, :vy, :dead, :damage, :exploded, :shape
 
   def initialize(x, y, target_x, target_y)
     @x = x.to_f
@@ -228,6 +231,7 @@ class Missile
     @life = 90
     @dead = false
     @exploded = false
+    @shape = Collision.circle(@x, @y, 4.0)
   end
 
   def update(enemies)
@@ -264,6 +268,8 @@ class Missile
 
     @x += @vx
     @y += @vy
+    @shape.x = @x
+    @shape.y = @y
   end
 
   def explode
@@ -278,7 +284,7 @@ end
 
 # 自機周囲を旋回する近接シールド刃
 class Orbiter
-  attr_accessor :x, :y, :damage
+  attr_accessor :x, :y, :damage, :shape
 
   def initialize(index, total)
     @index = index
@@ -289,12 +295,15 @@ class Orbiter
     @damage = 2
     @x = 0.0
     @y = 0.0
+    @shape = Collision.circle(@x, @y, 6.0)
   end
 
   def update(px, py)
     @angle += @speed
     @x = px + @radius * Math.cos(@angle)
     @y = py + @radius * Math.sin(@angle)
+    @shape.x = @x
+    @shape.y = @y
   end
 
   def draw
@@ -357,7 +366,7 @@ end
 # 4. 敵キャラクター (Enemy)
 # ==========================================
 class Enemy
-  attr_accessor :x, :y, :radius, :hp, :max_hp, :speed, :sides, :color, :score_value, :dead, :is_boss, :flash, :type
+  attr_accessor :x, :y, :radius, :hp, :max_hp, :speed, :sides, :color, :score_value, :dead, :is_boss, :flash, :type, :shape, :hit_radius
 
   @atlas = nil
   @sprites = nil
@@ -459,6 +468,8 @@ class Enemy
       @speed = 3.4
       @color = Color::YELLOW
       @score_value = 10
+      # 三角形の内接円 (6.0) は極小ですり抜けの原因となるため、見た目と当たりのバランスが良い 10.0 を採用
+      @hit_radius = 10.0
     when :elite
       @sides = 5
       @radius = 32.0
@@ -467,6 +478,7 @@ class Enemy
       @speed = 1.4
       @color = Color::RED
       @score_value = 50
+      @hit_radius = @radius * Math.cos(Math::PI / @sides)
     when :boss
       @sides = 8
       @radius = 70.0
@@ -476,6 +488,7 @@ class Enemy
       @color = COLOR_PURPLE
       @score_value = 300
       @is_boss = true
+      @hit_radius = @radius * Math.cos(Math::PI / @sides)
     else
       @sides = 4
       @radius = 18.0
@@ -484,7 +497,10 @@ class Enemy
       @speed = 2.0
       @color = Color::BLUE
       @score_value = 20
+      @hit_radius = @radius * Math.cos(Math::PI / @sides)
     end
+
+    @shape = Collision.circle(@x, @y, @hit_radius)
   end
 
   def update(px, py)
@@ -492,6 +508,8 @@ class Enemy
     @x += @speed * Math.cos(angle)
     @y += @speed * Math.sin(angle)
     @rotation += 0.03
+    @shape.x = @x
+    @shape.y = @y
     @flash -= 1 if @flash > 0
   end
 
@@ -519,7 +537,13 @@ class Player
   attr_accessor :x, :y, :radius, :sides, :rotation, :speed, :fire_timer, :fire_rate,
                 :score, :magnet_radius, :shot_level, :orbiter_count, :missile_level,
                 :missile_timer, :orbiters,
-                :hp, :max_hp, :invincible, :exp, :level, :fired
+                :hp, :max_hp, :invincible, :exp, :level, :fired, :shape, :hit_radius
+
+  def rebuild_shape
+    # 正三角形 (外接半径 28.0) の内接円 (14.0) 程度のコンパクトな当たり判定
+    @hit_radius = 12.0
+    @shape = Collision.circle(@x, @y, @hit_radius)
+  end
 
   def initialize(x, y)
     @x = x.to_f
@@ -543,6 +567,7 @@ class Player
     @exp = 0
     @level = 1
     @fired = false  # このフレームにメインショットを撃ったか (効果音用)
+    rebuild_shape
   end
 
   # 次のレベルに必要な経験値 (レベルが上がるにつれて段階的に増加)
@@ -648,6 +673,9 @@ class Player
 
     # オービター更新
     @orbiters.each { |orb| orb.update(@x, @y) }
+
+    @shape.x = @x
+    @shape.y = @y
   end
 
   def fire_shots(bullets, particles)
@@ -726,7 +754,7 @@ end
 # 6. メインゲーム (Game)
 # ==========================================
 class Game
-  attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled
+  attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled, :collision_mode, :collision_time_ms
 
   def spawn_particle(p)
     @particles.shift if @particles.size >= MAX_PARTICLES
@@ -747,6 +775,8 @@ class Game
     @title_timer = 0
     @crt_enabled = true
     @crt_shader = nil
+    @collision_mode = :exact # :exact (Collision GJK) または :simple (円判定)
+    @collision_time_ms = 0.0
     reset_world
     @game_state = STATE_TITLE
   end
@@ -825,8 +855,10 @@ class Game
   end
 
   def check_collisions
+    t0 = Window.time
     contact_damage = 0
     boss_hit = false
+    is_exact = (@collision_mode == :exact)
 
     # 1. 弾 vs 敵
     @enemies.each do |e|
@@ -834,11 +866,16 @@ class Game
 
       # 自機との接触判定
       unless @player_dead
-        p_dx = @player.x - e.x
-        p_dy = @player.y - e.y
-        p_dist_sq = p_dx * p_dx + p_dy * p_dy
-        p_hit_dist = @player.radius + e.radius
-        if p_dist_sq < p_hit_dist * p_hit_dist
+        hit = if is_exact
+          Collision.check(@player.shape, e.shape)
+        else
+          p_dx = @player.x - e.x
+          p_dy = @player.y - e.y
+          p_hit_dist = @player.hit_radius + e.hit_radius
+          (p_dx * p_dx + p_dy * p_dy) < (p_hit_dist * p_hit_dist)
+        end
+
+        if hit
           if e.is_boss
             boss_hit = true
             contact_damage = 2
@@ -850,22 +887,55 @@ class Game
 
       # オービター刃 vs 敵
       @player.orbiters.each do |orb|
-        o_dx = orb.x - e.x
-        o_dy = orb.y - e.y
-        if o_dx * o_dx + o_dy * o_dy < (e.radius + 12.0)**2
+        hit = if is_exact
+          Collision.check(orb.shape, e.shape)
+        else
+          o_dx = orb.x - e.x
+          o_dy = orb.y - e.y
+          o_r = e.hit_radius + 6.0
+          (o_dx * o_dx + o_dy * o_dy) < (o_r * o_r)
+        end
+
+        if hit
           damage_enemy(e, orb.damage, Color::CYAN)
         end
       end
 
       # 通常弾 vs 敵
-      hit_r = e.radius + 3.0
+      hit_r = e.hit_radius + 2.5
+      hit_r_sq = hit_r * hit_r
+      max_reach = hit_r + 18.0
       @bullets.each do |b|
         next if b.dead
-        dx = (e.x - b.x).abs
-        next if dx > hit_r
-        dy = (e.y - b.y).abs
-        next if dy > hit_r
-        if dx * dx + dy * dy < hit_r * hit_r
+        dx = e.x - b.x
+        next if dx.abs > max_reach
+        dy = e.y - b.y
+        next if dy.abs > max_reach
+
+        hit = false
+        if is_exact
+          hit = Collision.check(b.shape, e.shape)
+          # トンネリング対策: 高速弾が1フレームで敵を飛び越えた場合、1フレーム手前の中間点でも判定
+          unless hit
+            b.shape.x = b.x - b.vx * 0.5
+            b.shape.y = b.y - b.vy * 0.5
+            hit = Collision.check(b.shape, e.shape)
+            b.shape.x = b.x
+            b.shape.y = b.y
+          end
+        else
+          # Continuous Collision Detection (CCD):
+          # 弾の移動線分と敵中心の最短アプローチ距離の2乗を計算 (sqrt不要・O(1))
+          # 弾の速さは 16.0 なので vx^2 + vy^2 = 256.0
+          u = (dx * b.vx + dy * b.vy) / 256.0
+          u = 0.0 if u > 0.0
+          u = -1.0 if u < -1.0
+          cx = dx - u * b.vx
+          cy = dy - u * b.vy
+          hit = (cx * cx + cy * cy) < hit_r_sq
+        end
+
+        if hit
           b.dead = true
           damage_enemy(e, b.damage, Color::YELLOW)
           break if e.dead
@@ -873,14 +943,18 @@ class Game
       end
 
       # ミサイル直撃 vs 敵
-      m_hit_r = e.radius + 8.0
+      m_hit_r_sq = (e.hit_radius + 4.0) * (e.hit_radius + 4.0) unless is_exact
       @missiles.each do |m|
         next if m.dead
-        dx = (e.x - m.x).abs
-        next if dx > m_hit_r
-        dy = (e.y - m.y).abs
-        next if dy > m_hit_r
-        if dx * dx + dy * dy < m_hit_r * m_hit_r
+        hit = if is_exact
+          Collision.check(m.shape, e.shape)
+        else
+          dx = e.x - m.x
+          dy = e.y - m.y
+          (dx * dx + dy * dy) < m_hit_r_sq
+        end
+
+        if hit
           m.explode
         end
       end
@@ -898,6 +972,9 @@ class Game
     if contact_damage > 0 && @player.take_damage(contact_damage)
       on_player_damaged(boss_hit)
     end
+
+    dt_ms = (Window.time - t0) * 1000.0
+    @collision_time_ms = @collision_time_ms * 0.9 + dt_ms * 0.1
 
     # 4. アイテム取得判定
     return if @player_dead
@@ -1120,6 +1197,10 @@ class Game
       Window.filter = @crt_enabled ? @crt_shader : nil
     end
 
+    if Input.key_push?(:m)
+      @collision_mode = (@collision_mode == :exact ? :simple : :exact)
+    end
+
     draw_game
   end
 
@@ -1314,6 +1395,7 @@ class Game
     case idx
     when 0 # 形状強化
       @player.sides += 1
+      @player.rebuild_shape
     when 1 # 拡散ショット
       @player.shot_level += 1
     when 2 # 近接回転刃 (オービター)
@@ -1496,7 +1578,11 @@ class Game
     # デバッグ情報
     entities_count = @bullets.size + @missiles.size + @enemies.size + @items.size + @particles.size + @damage_texts.size
     pad_str = Input.gamepad_connected?(0) ? "[PAD: ON]" : "[PAD: OFF]"
-    dbg_str = "FPS: #{Window.fps.to_i}  OBJECTS: #{entities_count}  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]"
+    mode_str = @collision_mode == :exact ? "EXACT(API)" : "SIMPLE(MATH)"
+    val_100 = (@collision_time_ms * 100).to_i
+    val_dec = val_100 % 100
+    col_str = "#{val_100 / 100}.#{val_dec < 10 ? '0' : ''}#{val_dec}ms"
+    dbg_str = "FPS: #{Window.fps.to_i}  OBJ: #{entities_count}  COL: #{col_str} [M: #{mode_str}]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]"
     Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY)
   end
 
@@ -1528,7 +1614,7 @@ class Game
     end
 
     draw_centered(540.0, "MOVE: WASD / Stick / Hold Left Click    AIM: Mouse / Right Stick", 18, Color::WHITE)
-    draw_centered(570.0, "PAUSE: ESC / START / Right Click    CRT: [C]", 18, Color::WHITE)
+    draw_centered(570.0, "PAUSE: ESC / START / Right Click    CRT: [C]    COLLISION: [M]", 18, Color::WHITE)
     draw_centered(630.0, "BEST SCORE: #{@best_score}", 22, COLOR_ORANGE) if @best_score > 0
   end
 
@@ -1551,8 +1637,9 @@ class Game
       Window.draw_text(460.0, 210.0 + i.to_f * 34.0, line, font: Font::SINCLAIR, size: 22, color: Color::WHITE)
     end
 
+    mode_str = @collision_mode == :exact ? "EXACT(API)" : "SIMPLE(MATH)"
     draw_centered(560.0, "ESC / START / Right Click / (B) to Resume", 20, Color::WHITE)
-    draw_centered(595.0, "Q / (Y) to Title    [C] CRT Effect: #{@crt_enabled ? 'ON' : 'OFF'}", 18, COLOR_TEXT_GRAY)
+    draw_centered(595.0, "Q / (Y) to Title    [C] CRT: #{@crt_enabled ? 'ON' : 'OFF'}    [M] Collision: #{mode_str}", 18, COLOR_TEXT_GRAY)
   end
 
   def draw_levelup_menu
