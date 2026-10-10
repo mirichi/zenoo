@@ -76,6 +76,7 @@ module Zenoo
     end
 
     def self.__update_step
+      Zenoo::Tween.__update_step(delta_time) if defined?(Zenoo::Tween)
       Zenoo::GUI.begin_frame if defined?(Zenoo::GUI)
       @main_loop_block.call if @main_loop_block
       Zenoo::GUI.end_frame if defined?(Zenoo::GUI)
@@ -579,7 +580,7 @@ module Zenoo
       end
 
       # 角度（度数法からラジアンへ変換）
-      rad = angle.to_f * (Math::PI / 180.0)
+      rad = (angle ? angle.to_f : 0.0) * (Math::PI / 180.0)
 
       # offset_mode: 0.0 (:top_left), 1.0 (:center)
       off_mode = (offset_mode == :center) ? 1.0 : 0.0
