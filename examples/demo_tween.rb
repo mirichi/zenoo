@@ -13,7 +13,7 @@ require_relative '../lib/zenoo'
 
 # アニメーション対象のボックス
 class AnimatedBox
-  attr_accessor :x, :y, :box_size, :color, :alpha, :label
+  attr_reader :x, :y, :box_size, :color, :alpha, :label
 
   def initialize(x, y, label, color)
     @x = x.to_f
@@ -23,6 +23,13 @@ class AnimatedBox
     @color = color
     @alpha = 1.0
   end
+
+  def x=(v); @x = v.to_f; end
+  def y=(v); @y = v.to_f; end
+  def box_size=(v); @box_size = v.to_f; end
+  def color=(v); @color = v; end
+  def alpha=(v); @alpha = v.to_f; end
+  def label=(v); @label = v.to_s; end
 end
 
 # 1. イージング比較データ
@@ -38,7 +45,7 @@ EASINGS = [
 
 # 2. チェーン＆.call の実演キャラクター
 class Hero
-  attr_accessor :x, :y, :scale, :angle, :color, :status_text
+  attr_reader :x, :y, :scale, :angle, :color, :status_text
 
   def initialize
     @x = 880.0
@@ -48,6 +55,13 @@ class Hero
     @color = [255, 215, 0, 255]
     @status_text = "Idle"
   end
+
+  def x=(v); @x = v.to_f; end
+  def y=(v); @y = v.to_f; end
+  def scale=(v); @scale = v.to_f; end
+  def angle=(v); @angle = v.to_f; end
+  def color=(v); @color = v; end
+  def status_text=(v); @status_text = v.to_s; end
 end
 
 # 状態変数
