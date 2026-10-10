@@ -86,9 +86,7 @@ module Zenoo
             @bounding_radius = eff_rx
           else
             @is_true_circle = false
-            max_r = @radius_x > @radius_y ? @radius_x : @radius_y
-            max_s = sx > sy ? sx : sy
-            @bounding_radius = max_r * max_s
+            @bounding_radius = eff_rx > eff_ry ? eff_rx : eff_ry
 
             rad = @angle * (Math::PI / 180.0)
             @cos = Math.cos(rad)
@@ -193,7 +191,9 @@ module Zenoo
 
         set_pivot(pivot)
         @dirty_pos = true
-        @dirty_geom = true
+        @dirty_size = true
+        @dirty_scale = true
+        @dirty_angle = true
         update_cache
       end
 
@@ -202,12 +202,12 @@ module Zenoo
       def x=(v); @x = v.to_f; @dirty_pos = true; end
       def y=(v); @y = v.to_f; @dirty_pos = true; end
 
-      def width=(v);   @width = v.to_f;   @dirty_geom = true; end
-      def height=(v);  @height = v.to_f;  @dirty_geom = true; end
-      def radius=(v);  @radius = v.to_f;  @dirty_geom = true; end
-      def angle=(v);   @angle = v.to_f;   @dirty_geom = true; end
-      def scale_x=(v); @scale_x = v.to_f; @dirty_geom = true; end
-      def scale_y=(v); @scale_y = v.to_f; @dirty_geom = true; end
+      def width=(v);   @width = v.to_f;   @dirty_size = true; end
+      def height=(v);  @height = v.to_f;  @dirty_size = true; end
+      def radius=(v);  @radius = v.to_f;  @dirty_size = true; end
+      def angle=(v);   @angle = v.to_f;   @dirty_angle = true; end
+      def scale_x=(v); @scale_x = v.to_f; @dirty_scale = true; end
+      def scale_y=(v); @scale_y = v.to_f; @dirty_scale = true; end
 
       def set_pivot(pivot)
         if pivot == :center
@@ -219,16 +219,16 @@ module Zenoo
         else
           @pivot_x = 0.5; @pivot_y = 0.5
         end
-        @dirty_geom = true
+        @dirty_size = true
       end
 
       def dirty?
-        @dirty_pos || @dirty_geom
+        @dirty_pos || @dirty_angle || @dirty_scale || @dirty_size
       end
 
       def update_cache
-        if @dirty_geom
-          @dirty_geom = false
+        if @dirty_size
+          @dirty_size = false
           @half_w = @width * 0.5
           @half_h = @height * 0.5
           @_offset_x = @width * (0.5 - @pivot_x)
@@ -243,20 +243,29 @@ module Zenoo
           @core_half_w = @half_w - @radius
           @core_half_h = @half_h - @radius
 
+          @dirty_scale = true
+          @dirty_angle = true
+          @dirty_pos = true
+        end
+
+        if @dirty_scale
+          @dirty_scale = false
           # 等倍スケール判定
           @is_uniform = ((@scale_x - 1.0).abs < 0.0001 && (@scale_y - 1.0).abs < 0.0001)
 
+          # 外接円半径 (スケール後の半幅・半高さから厳密に計算)
+          scaled_hw = @half_w * @scale_x.abs
+          scaled_hh = @half_h * @scale_y.abs
+          @bounding_radius = Math.sqrt(scaled_hw * scaled_hw + scaled_hh * scaled_hh)
+          @dirty_angle = true
+        end
+
+        if @dirty_angle
+          @dirty_angle = false
           # AABB 判定 (非回転かつ等倍)
           norm_ang = (@angle % 360.0).abs
           is_axis_aligned = (norm_ang < 0.0001 || (norm_ang - 360.0).abs < 0.0001)
           @is_aabb = (is_axis_aligned && @is_uniform)
-
-          # 外接円半径
-          base_r = Math.sqrt(@half_w * @half_w + @half_h * @half_h)
-          sx = @scale_x.abs
-          sy = @scale_y.abs
-          max_s = sx > sy ? sx : sy
-          @bounding_radius = base_r * max_s
 
           if is_axis_aligned
             @cos = 1.0
@@ -325,7 +334,9 @@ module Zenoo
 
         set_pivot(pivot)
         @dirty_pos = true
-        @dirty_geom = true
+        @dirty_verts = true
+        @dirty_scale = true
+        @dirty_angle = true
         update_cache
       end
 
@@ -333,10 +344,10 @@ module Zenoo
 
       def x=(v); @x = v.to_f; @dirty_pos = true; end
       def y=(v); @y = v.to_f; @dirty_pos = true; end
-      def angle=(v);   @angle = v.to_f;   @dirty_geom = true; end
-      def scale_x=(v); @scale_x = v.to_f; @dirty_geom = true; end
-      def scale_y=(v); @scale_y = v.to_f; @dirty_geom = true; end
-      def vertices=(v); @vertices = v.map { |pt| [pt[0].to_f, pt[1].to_f] }; @dirty_geom = true; end
+      def angle=(v);   @angle = v.to_f;   @dirty_angle = true; end
+      def scale_x=(v); @scale_x = v.to_f; @dirty_scale = true; end
+      def scale_y=(v); @scale_y = v.to_f; @dirty_scale = true; end
+      def vertices=(v); @vertices = v.map { |pt| [pt[0].to_f, pt[1].to_f] }; @dirty_verts = true; end
 
       def set_pivot(pivot)
         if pivot == :center
@@ -348,16 +359,16 @@ module Zenoo
         else
           @pivot_x = 0.5; @pivot_y = 0.5
         end
-        @dirty_geom = true
+        @dirty_verts = true
       end
 
       def dirty?
-        @dirty_pos || @dirty_geom
+        @dirty_pos || @dirty_angle || @dirty_scale || @dirty_verts
       end
 
       def update_cache
-        if @dirty_geom
-          @dirty_geom = false
+        if @dirty_verts
+          @dirty_verts = false
           sum_x = 0.0
           sum_y = 0.0
           count = @vertices.length
@@ -371,20 +382,41 @@ module Zenoo
           @_local_cy = sum_y / count
 
           @local_vertices = []
+          @local_vx = []
+          @local_vy = []
           @vertices.each do |v|
-            @local_vertices << [v[0] - @_local_cx, v[1] - @_local_cy]
+            lx = v[0] - @_local_cx
+            ly = v[1] - @_local_cy
+            @local_vertices << [lx, ly]
+            @local_vx << lx
+            @local_vy << ly
           end
 
-          max_r_sq = 0.0
-          @local_vertices.each do |v|
-            r_sq = v[0] * v[0] + v[1] * v[1]
-            max_r_sq = r_sq if r_sq > max_r_sq
-          end
+          @dirty_scale = true
+          @dirty_angle = true
+          @dirty_pos = true
+        end
+
+        if @dirty_scale
+          @dirty_scale = false
           sx = @scale_x.abs
           sy = @scale_y.abs
-          max_s = sx > sy ? sx : sy
-          @bounding_radius = Math.sqrt(max_r_sq) * max_s
+          max_r_sq = 0.0
+          i = 0
+          len = @local_vx.length
+          while i < len
+            slx = @local_vx[i] * sx
+            sly = @local_vy[i] * sy
+            r_sq = slx * slx + sly * sly
+            max_r_sq = r_sq if r_sq > max_r_sq
+            i += 1
+          end
+          @bounding_radius = Math.sqrt(max_r_sq)
+          @dirty_angle = true
+        end
 
+        if @dirty_angle
+          @dirty_angle = false
           rad = @angle * (Math::PI / 180.0)
           @cos = Math.cos(rad)
           @sin = Math.sin(rad)
@@ -412,14 +444,15 @@ module Zenoo
         best_y = 0.0
 
         i = 0
-        len = @local_vertices.length
+        len = @local_vx.length
         while i < len
-          v = @local_vertices[i]
-          dot = v[0] * ldx + v[1] * ldy
+          vx = @local_vx[i]
+          vy = @local_vy[i]
+          dot = vx * ldx + vy * ldy
           if dot > max_dot
             max_dot = dot
-            best_x = v[0]
-            best_y = v[1]
+            best_x = vx
+            best_y = vy
           end
           i += 1
         end
