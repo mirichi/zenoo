@@ -33,9 +33,9 @@ module Zenoo
 
     # 数値範囲を補間してブロックへ渡す（直接描画やカスタム値更新用）
     # 例: Tween.value(from: 0.0, to: 1.0, duration: 0.5) { |v| alpha = v }
-    def self.value(from:, to:, duration: 0.0, ease: :linear, delay: 0.0, &block)
+    def self.value(from:, to:, duration: 0.0, ease: :linear, delay: 0.0, steps: nil, round: nil, &block)
       tween = new
-      tween.value(from: from, to: to, duration: duration, ease: ease, delay: delay, &block)
+      tween.value(from: from, to: to, duration: duration, ease: ease, delay: delay, steps: steps, round: round, &block)
       register(tween)
       tween
     end
@@ -152,7 +152,7 @@ module Zenoo
     end
 
     # チェーンの次のステップとしてプロパティ変更を追加
-    def to(target = :__keep__, property = nil, to: nil, duration: 0.0, ease: :linear, delay: 0.0, from: nil)
+    def to(target = :__keep__, property = nil, to: nil, duration: 0.0, ease: :linear, delay: 0.0, from: nil, steps: nil, round: nil)
       # 引数の柔軟な解決 (t.to(:y, to: 200) のように target 省略を許容)
       if target.is_a?(Symbol) && property.nil? && !to.nil?
         property = target
@@ -173,7 +173,9 @@ module Zenoo
         to: to,
         duration: [duration.to_f, 0.0].max,
         ease: ease,
-        from: from
+        from: from,
+        steps: steps,
+        round: round
       }
       self
     end
@@ -198,7 +200,7 @@ module Zenoo
     end
 
     # 数値補間ステップを追加
-    def value(from:, to:, duration: 0.0, ease: :linear, delay: 0.0, &block)
+    def value(from:, to:, duration: 0.0, ease: :linear, delay: 0.0, steps: nil, round: nil, &block)
       self.delay(delay) if delay && delay > 0
       @steps << {
         type: :value,
@@ -206,6 +208,8 @@ module Zenoo
         to: to,
         duration: [duration.to_f, 0.0].max,
         ease: ease,
+        steps: steps,
+        round: round,
         block: block
       }
       self
@@ -261,9 +265,13 @@ module Zenoo
       @steps.each do |step|
         case step[:type]
         when :property
-          step[:target]&.send("#{step[:property]}=", step[:to])
+          val = step[:to]
+          val = val.round if val && (step[:round] == true || (step[:round].nil? && val.is_a?(Integer)))
+          step[:target]&.send("#{step[:property]}=", val)
         when :value
-          step[:block]&.call(step[:to])
+          val = step[:to]
+          val = val.round if val && (step[:round] == true || (step[:round].nil? && val.is_a?(Integer)))
+          step[:block]&.call(val)
         when :call
           call_step_block(step[:block])
         end
@@ -338,14 +346,20 @@ module Zenoo
         @step_elapsed += dt
         dur = step[:duration]
         t = dur <= 0 ? 1.0 : [@step_elapsed / dur, 1.0].min
-        progress = Easing.calc(step[:ease], t)
+        progress = Easing.calc(step[:ease], t, step[:steps] || 1)
 
         current_val = step[:actual_from] + (step[:actual_to] - step[:actual_from]) * progress
+        if step[:round] == true || (step[:round].nil? && step[:is_integer])
+          current_val = current_val.round
+        end
         step[:target].send("#{step[:property]}=", current_val)
 
         if @step_elapsed >= dur
-          # 最終値を確実にセット
-          step[:target].send("#{step[:property]}=", step[:actual_to])
+          final_val = step[:actual_to]
+          if step[:round] == true || (step[:round].nil? && step[:is_integer])
+            final_val = final_val.round
+          end
+          step[:target].send("#{step[:property]}=", final_val)
           leftover = dur <= 0 ? dt : (@step_elapsed - dur)
           advance_step
           leftover
@@ -359,13 +373,20 @@ module Zenoo
         @step_elapsed += dt
         dur = step[:duration]
         t = dur <= 0 ? 1.0 : [@step_elapsed / dur, 1.0].min
-        progress = Easing.calc(step[:ease], t)
+        progress = Easing.calc(step[:ease], t, step[:steps] || 1)
 
         current_val = step[:actual_from] + (step[:actual_to] - step[:actual_from]) * progress
+        if step[:round] == true || (step[:round].nil? && step[:is_integer])
+          current_val = current_val.round
+        end
         step[:block]&.call(current_val)
 
         if @step_elapsed >= dur
-          step[:block]&.call(step[:actual_to])
+          final_val = step[:actual_to]
+          if step[:round] == true || (step[:round].nil? && step[:is_integer])
+            final_val = final_val.round
+          end
+          step[:block]&.call(final_val)
           leftover = dur <= 0 ? dt : (@step_elapsed - dur)
           advance_step
           leftover
@@ -396,6 +417,7 @@ module Zenoo
             from = 0.0
           end
         end
+        step[:is_integer] = (step[:to].is_a?(Integer) && (from.nil? || from.is_a?(Integer)))
         step[:initial_from] = from.to_f
       end
 
@@ -407,11 +429,23 @@ module Zenoo
         step[:actual_to]   = step[:to].to_f
       end
 
+      # steps が未指定で ease が :step の場合、整数の差分から自動推論
+      if step[:steps].nil?
+        ease_sym = step[:ease].is_a?(Array) ? step[:ease][0] : step[:ease]
+        if ease_sym == :step
+          diff = (step[:actual_to] - step[:actual_from]).abs.round
+          step[:steps] = diff > 0 ? diff : 1
+        end
+      end
+
       @step_initialized = true
     end
 
     def init_value_step(step)
-      step[:initial_from] ||= step[:from].to_f
+      unless step.key?(:initial_from)
+        step[:is_integer] = (step[:to].is_a?(Integer) && step[:from].is_a?(Integer))
+        step[:initial_from] = step[:from].to_f
+      end
 
       if @yoyo_reverse
         step[:actual_from] = step[:to].to_f
@@ -419,6 +453,15 @@ module Zenoo
       else
         step[:actual_from] = step[:initial_from]
         step[:actual_to]   = step[:to].to_f
+      end
+
+      # steps が未指定で ease が :step の場合、整数の差分から自動推論
+      if step[:steps].nil?
+        ease_sym = step[:ease].is_a?(Array) ? step[:ease][0] : step[:ease]
+        if ease_sym == :step
+          diff = (step[:actual_to] - step[:actual_from]).abs.round
+          step[:steps] = diff > 0 ? diff : 1
+        end
       end
 
       @step_initialized = true

@@ -14,18 +14,28 @@ module Zenoo
     # イージング関数のディスパッチ
     # ------------------------------------------------------------------
     # :linear, :quad_in, :out_quad, :bounce_out, :elastic_in_out などを柔軟に解釈
-    def calc(type, t)
+    # :step の場合は steps 引数（または [:step, 4] などの配列形式）で分割数を指定可能
+    def calc(type, t, steps = 1)
       return 1.0 if t >= 1.0
       return 0.0 if t <= 0.0
 
-      case type
+      if type.is_a?(Array)
+        ease_name = type[0]
+        steps = type[1].to_i if type[1]
+      else
+        ease_name = type
+      end
+
+      case ease_name
       # Linear
       when :linear, nil
         t
 
       # Step (補間なし・整数フレーム/コマ送り用)
       when :step
-        t < 1.0 ? 0.0 : 1.0
+        s = steps.to_i
+        s = 1 if s <= 0
+        (t * s).floor.to_f / s
 
       # Quadratic
       when :quad_in, :in_quad

@@ -32,7 +32,8 @@ EASINGS = [
   [:cubic_in_out,  "Cubic InOut", [255, 215, 0, 255]],
   [:back_out,      "Back Out",    [255, 140, 60, 255]],
   [:bounce_out,    "Bounce Out",  [255, 100, 150, 255]],
-  [:elastic_out,   "Elastic Out", [180, 120, 255, 255]]
+  [:elastic_out,   "Elastic Out", [180, 120, 255, 255]],
+  [[:step, 5],     "Step (5)",    [0, 220, 220, 255]]
 ]
 
 # 2. チェーン＆.call の実演キャラクター
