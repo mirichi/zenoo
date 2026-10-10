@@ -353,7 +353,76 @@ end
 # 4. 敵キャラクター (Enemy)
 # ==========================================
 class Enemy
-  attr_accessor :x, :y, :radius, :hp, :max_hp, :speed, :sides, :color, :score_value, :dead, :is_boss, :flash
+  attr_accessor :x, :y, :radius, :hp, :max_hp, :speed, :sides, :color, :score_value, :dead, :is_boss, :flash, :type
+
+  @atlas = nil
+  @sprites = nil
+
+  def self.atlas
+    @atlas
+  end
+
+  def self.sprites
+    @sprites
+  end
+
+  def self.init_atlas
+    return if @atlas
+
+    @atlas = Image.new(512, 256)
+    @sprites = {}
+
+    configs = {
+      fast:   { sides: 3, radius: 12.0, color: Color::YELLOW, is_boss: false, size: 48,  x0: 0,   y: 0 },
+      normal: { sides: 4, radius: 18.0, color: Color::BLUE,   is_boss: false, size: 48,  x0: 96,  y: 0 },
+      elite:  { sides: 5, radius: 32.0, color: Color::RED,    is_boss: false, size: 80,  x0: 192, y: 0 },
+      boss:   { sides: 8, radius: 70.0, color: COLOR_PURPLE,  is_boss: true,  size: 160, x0: 0,   y: 80 }
+    }
+
+    configs.each do |type, cfg|
+      sz = cfg[:size]
+      y = cfg[:y]
+      line_w = cfg[:is_boss] ? 2.0 : 1.0
+
+      # 通常スロット
+      s_normal = @atlas.sub_image(cfg[:x0], y, sz, sz)
+      bake_enemy_poly(s_normal, cfg[:sides], cfg[:radius], cfg[:color], line_w)
+
+      # 白フラッシュスロット
+      s_flash = @atlas.sub_image(cfg[:x0] + sz, y, sz, sz)
+      bake_enemy_poly(s_flash, cfg[:sides], cfg[:radius], Color::WHITE, line_w)
+
+      @sprites[type] = { false => s_normal, true => s_flash }
+    end
+  end
+
+  def self.bake_enemy_poly(slot, sides, radius, fill_color, line_w)
+    Image.render_to(slot) do
+      Window.clear(Color.new(0, 0, 0, 0))
+      cx = slot.width * 0.5
+      cy = slot.height * 0.5
+      step = 2.0 * Math::PI / sides
+      verts = []
+      sides.times do |i|
+        a = i * step
+        verts << [cx + radius * Math.cos(a), cy + radius * Math.sin(a)]
+      end
+
+      # 1. 三角形描画 (塗りつぶし)
+      sides.times do |i|
+        v1 = verts[i]
+        v2 = verts[(i + 1) % sides]
+        Window.draw_triangle(cx, cy, v2[0], v2[1], v1[0], v1[1], color: fill_color)
+      end
+
+      # 2. 外周線描画 (白枠)
+      sides.times do |i|
+        v1 = verts[i]
+        v2 = verts[(i + 1) % sides]
+        Window.draw_line(v1[0], v1[1], v2[0], v2[1], color: Color::WHITE, width: line_w)
+      end
+    end
+  end
 
   def initialize(px, py, type = :normal)
     edge = rand(4)
@@ -375,6 +444,7 @@ class Enemy
     @rotation = 0.0
     @is_boss = false
     @flash = 0 # 被弾時の白フラッシュ残りフレーム
+    @type = type
 
     case type
     when :fast
@@ -422,30 +492,8 @@ class Enemy
   end
 
   def draw
-    fill = @flash > 0 ? Color::WHITE : @color
-
-    # 頂点を事前計算して Math.cos/sin の回数を半減
-    verts = []
-    step = 2.0 * Math::PI / @sides
-    @sides.times do |i|
-      a = @rotation + i * step
-      verts << [@x + @radius * Math.cos(a), @y + @radius * Math.sin(a)]
-    end
-
-    # 1. 三角形 (TRIANGLES) をまとめて描画
-    @sides.times do |i|
-      v1 = verts[i]
-      v2 = verts[(i + 1) % @sides]
-      Window.draw_triangle(@x, @y, v2[0], v2[1], v1[0], v1[1], color: fill)
-    end
-
-    # 2. 外周線 (LINES) をまとめて描画
-    line_w = @is_boss ? 2.0 : 1.0
-    @sides.times do |i|
-      v1 = verts[i]
-      v2 = verts[(i + 1) % @sides]
-      Window.draw_line(v1[0], v1[1], v2[0], v2[1], color: Color::WHITE, width: line_w)
-    end
+    sprite = Enemy.sprites[@type][@flash > 0]
+    Window.draw_image(@x, @y, sprite, angle: @rotation * (180.0 / Math::PI), pivot: :center, offset_mode: :center)
 
     if @max_hp > 1
       bar_w = @radius * 2.0
@@ -453,9 +501,9 @@ class Enemy
       bar_y = @y - @radius - (@is_boss ? 18.0 : 12.0)
       hp_ratio = @hp.to_f / @max_hp
       hp_ratio = 0.0 if hp_ratio < 0.0
-      Window.draw_rect(@x - bar_w * 0.5, bar_y, bar_w, bar_h, color: COLOR_HP_GRAY)
+      Window.draw_rect(@x - bar_w * 0.5, bar_y, bar_w, bar_h, color: COLOR_HP_GRAY, z: 1.0)
       hp_color = @is_boss ? Color.new(255, 60, 100) : Color::GREEN
-      Window.draw_rect(@x - bar_w * 0.5, bar_y, bar_w * hp_ratio, bar_h, color: hp_color)
+      Window.draw_rect(@x - bar_w * 0.5, bar_y, bar_w * hp_ratio, bar_h, color: hp_color, z: 1.0)
     end
   end
 end
@@ -1554,6 +1602,7 @@ frame_count = 0
 game.game_state = STATE_PLAY if test_max > 0 && ENV['ZENOO_TEST_TITLE'] != '1'
 
 Window.loop(1280, 720, "Zenoo Survival Shooting Game") do
+  Enemy.init_atlas
   game.update_draw_frame
   if test_max > 0
     frame_count += 1
