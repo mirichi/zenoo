@@ -15,8 +15,25 @@ module Zenoo
     # サポート定理 P' = M * S(M^T * D) + T により厳密判定。
     # ====================================================
 
+    # 幾何形状の基底クラス (ポリモーフィック静的型解決用共通インターフェース)
+    class Shape
+      def is_rounded; false; end
+      def is_aabb; false; end
+      def is_uniform; false; end
+      def half_w; 0.0; end
+      def half_h; 0.0; end
+      def core_half_w; 0.0; end
+      def core_half_h; 0.0; end
+      def radius; 0.0; end
+      def cos; 1.0; end
+      def sin; 0.0; end
+      def bounding_radius; 0.0; end
+      def dirty?; false; end
+      def update_cache; end
+    end
+
     # 円 / 楕円 (楕円は不等半径・不等スケールの Circle として包含)
-    class Circle
+    class Circle < Shape
       attr_reader :x, :y, :radius_x, :radius_y, :angle, :scale_x, :scale_y, :pivot_x, :pivot_y
       attr_reader :center_x, :center_y, :bounding_radius, :is_true_circle, :effective_radius
 
@@ -146,7 +163,7 @@ module Zenoo
     end
 
     # 点
-    class Point
+    class Point < Shape
       attr_reader :x, :y
 
       def initialize(x = 0.0, y = 0.0)
@@ -161,9 +178,6 @@ module Zenoo
       def shape_type; TYPE_POINT; end
       def center_x; @x; end
       def center_y; @y; end
-      def bounding_radius; 0.0; end
-      def dirty?; false; end
-      def update_cache; end
 
       def support(_dx, _dy)
         @_support[0] = @x
@@ -173,7 +187,7 @@ module Zenoo
     end
 
     # 矩形 / OBB / 角丸矩形 (カプセルを包含)
-    class Rect
+    class Rect < Shape
       attr_reader :x, :y, :width, :height, :angle, :radius, :scale_x, :scale_y, :pivot_x, :pivot_y
       attr_reader :center_x, :center_y, :half_w, :half_h, :core_half_w, :core_half_h
       attr_reader :is_aabb, :is_rounded, :is_uniform, :bounding_radius, :cos, :sin
@@ -188,6 +202,9 @@ module Zenoo
         @scale_x = scale_x.to_f
         @scale_y = scale_y.to_f
         @_support = [0.0, 0.0]
+        @is_aabb = false
+        @is_rounded = false
+        @is_uniform = true
 
         set_pivot(pivot)
         @dirty_pos = true
@@ -319,7 +336,7 @@ module Zenoo
     end
 
     # 凸多角形 (Convex Polygon: 回転・不等スケーリング対応)
-    class Polygon
+    class Polygon < Shape
       attr_reader :x, :y, :angle, :scale_x, :scale_y, :pivot_x, :pivot_y
       attr_reader :vertices, :local_vertices, :center_x, :center_y, :bounding_radius
 
