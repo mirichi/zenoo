@@ -111,6 +111,9 @@
     .card.collision::before {
       background: linear-gradient(90deg, #f43f5e, #fb923c);
     }
+    .card.tween::before {
+      background: linear-gradient(90deg, #a855f7, #06b6d4);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -133,6 +136,7 @@
     .card.clip .card-tag { color: #2dd4bf; }
     .card.sound .card-tag { color: #38bdf8; }
     .card.collision .card-tag { color: #fb7185; }
+    .card.tween .card-tag { color: #c084fc; }
 
     .card h2 {
       font-size: 22px;
@@ -256,6 +260,15 @@
       background: #fb7185;
       color: #0b0d14;
       box-shadow: 0 0 20px rgba(244, 63, 94, 0.4);
+    }
+    .card.tween .btn-launch {
+      background: #8b5cf6;
+      color: #fff;
+    }
+    .card.tween .btn-launch:hover {
+      background: #a78bfa;
+      color: #0b0d14;
+      box-shadow: 0 0 20px rgba(167, 139, 250, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -456,6 +469,24 @@
         </ul>
       </div>
       <a href="collision/" class="btn-launch">衝突判定デモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Tween & Easing Animation Demo Card -->
+    <div class="card tween">
+      <div>
+        <div class="card-tag">Animation Engine</div>
+        <h2>Tween &amp; Easing Animation</h2>
+        <p class="desc">
+          直感的なメソッドチェーンによる Tween &amp; Easing アニメーション。各種イージング関数の視覚的比較、時間軸イベント (.call)、クリック追従補間を体験できます。
+        </p>
+        <ul class="features">
+          <li>10種類以上のイージング関数 (Bounce, Elastic, Back, Quad 等)</li>
+          <li>流れるようなチェーン記述 (.to, .delay, .call, .loop, .yoyo)</li>
+          <li>.call { ... } による時間軸イベント発火 (SE再生・状態切替)</li>
+          <li>Tween.kill による上書き＆クリック追従スムーズ移動</li>
+        </ul>
+      </div>
+      <a href="tween/" class="btn-launch">Tween デモを起動 (Launch Demo) →</a>
     </div>
   </main>
 

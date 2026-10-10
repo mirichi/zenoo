@@ -57,7 +57,7 @@ DXRuby に着想を得た直感的な API を備え、デスクトップ（CRuby
 Web ブラウザ上で動作するインタラクティブデモは、GitHub Pages にて公開されています。
 👉 **[Zenoo WebAssembly Showcase (GitHub Pages)](https://mirichi.github.io/zenoo/)**
 
-リポジトリ内の `docs/` ディレクトリに、WebAssembly 向けにビルド済みの全 10 種類のデモとポータルハブが収録されています。
+リポジトリ内の `docs/` ディレクトリに、WebAssembly 向けにビルド済みの全 11 種類のデモとポータルハブが収録されています。
 
 | デモ名 | パス | 内容 |
 |---|---|---|
@@ -72,6 +72,7 @@ Web ブラウザ上で動作するインタラクティブデモは、GitHub Pag
 | **Hardware Clipping** | `docs/clip/` | glScissor ハードウェアクリッピング、画面全体マスクとローカルビューポート |
 | **Audio & Sound Synthesis** | `docs/sound/` | miniaudio & Ogg Vorbis、DXRuby風動的波形合成 (SoundEffect) |
 | **2D Collision Playground** | `docs/collision/` | GJK 2D 凸図形衝突判定、円・カプセル・OBB・凸多角形リアルタイム交差 |
+| **Tween & Easing Animation** | `docs/tween/` | 10種以上のイージング関数、メソッドチェーン (.to/.delay/.call/.yoyo)、時間軸イベント発火 |
 
 ---
 
