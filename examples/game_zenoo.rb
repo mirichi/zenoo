@@ -74,6 +74,10 @@ STATE_GAMEOVER = 4 # リザルト画面
 # アップグレード種別数 (0..7)
 UPGRADE_COUNT = 8
 
+# オブジェクト上限 (描画キュー・メモリ保護)
+MAX_PARTICLES    = 250
+MAX_DAMAGE_TEXTS = 60
+
 # ==========================================
 # 0. 効果音 (SoundEffect で起動時に波形生成)
 # ==========================================
@@ -724,6 +728,16 @@ end
 class Game
   attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled
 
+  def spawn_particle(p)
+    @particles.shift if @particles.size >= MAX_PARTICLES
+    @particles << p
+  end
+
+  def spawn_damage_text(t)
+    @damage_texts.shift if @damage_texts.size >= MAX_DAMAGE_TEXTS
+    @damage_texts << t
+  end
+
   def initialize
     # ゲーム固有のアクションマッピング (ポーズ操作)
     Input.define_action(:pause, keys: [:escape, :p], gamepad: [:start, :back], mouse: [:right])
@@ -899,7 +913,7 @@ class Game
           @player.exp += item.value
           @sfx.play(Sfx::GEM, 3)
           # 取得キラキラパーティクル
-          @particles << Particle.new(item.x, item.y, (rand(4) - 2).to_f, (rand(4) - 2).to_f, 12, COLOR_EXP_GREEN, 4.0)
+          spawn_particle(Particle.new(item.x, item.y, (rand(4) - 2).to_f, (rand(4) - 2).to_f, 12, COLOR_EXP_GREEN, 4.0))
         end
       end
     end
@@ -908,16 +922,16 @@ class Game
   def pick_heart(item)
     if @player.hp < @player.max_hp
       @player.hp += 1
-      @damage_texts << DamageText.new(@player.x - 30.0, @player.y - 50.0, "+1 HP", COLOR_HEART_RED, 22)
+      spawn_damage_text(DamageText.new(@player.x - 30.0, @player.y - 50.0, "+1 HP", COLOR_HEART_RED, 22))
     else
       # HP満タン時はスコアボーナス
       @player.score += 100
-      @damage_texts << DamageText.new(@player.x - 30.0, @player.y - 50.0, "+100", COLOR_HEART_RED, 22)
+      spawn_damage_text(DamageText.new(@player.x - 30.0, @player.y - 50.0, "+100", COLOR_HEART_RED, 22))
     end
     @sfx.play(Sfx::HEAL, 4)
     8.times do
       ang = rand(360) * Math::PI / 180.0
-      @particles << Particle.new(item.x, item.y, 3.0 * Math.cos(ang), 3.0 * Math.sin(ang), 18, COLOR_HEART_RED, 5.0)
+      spawn_particle(Particle.new(item.x, item.y, 3.0 * Math.cos(ang), 3.0 * Math.sin(ang), 18, COLOR_HEART_RED, 5.0))
     end
   end
 
@@ -954,7 +968,7 @@ class Game
     12.times do
       ang = rand(360) * Math::PI / 180.0
       spd = rand(6).to_f + 2.0
-      @particles << Particle.new(@player.x, @player.y, spd * Math.cos(ang), spd * Math.sin(ang), 20, COLOR_HEART_RED, 6.0)
+      spawn_particle(Particle.new(@player.x, @player.y, spd * Math.cos(ang), spd * Math.sin(ang), 20, COLOR_HEART_RED, 6.0))
     end
 
     on_player_death if @player.hp <= 0
@@ -970,7 +984,7 @@ class Game
     80.times do
       ang = rand(360) * Math::PI / 180.0
       spd = rand(12).to_f + 2.0
-      @particles << Particle.new(@player.x, @player.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(40) + 30, Color::GREEN, 9.0)
+      spawn_particle(Particle.new(@player.x, @player.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(40) + 30, Color::GREEN, 9.0))
     end
   end
 
@@ -978,10 +992,10 @@ class Game
     e.hp -= dmg
     e.flash = 3
     @sfx.play(Sfx::HIT, 3)
-    @damage_texts << DamageText.new(e.x, e.y - e.radius, dmg, text_color)
+    spawn_damage_text(DamageText.new(e.x, e.y - e.radius, dmg, text_color))
     # 被弾スパーク
     3.times do
-      @particles << Particle.new(e.x, e.y, (rand(6) - 3).to_f, (rand(6) - 3).to_f, 10, Color::WHITE, 3.0)
+      spawn_particle(Particle.new(e.x, e.y, (rand(6) - 3).to_f, (rand(6) - 3).to_f, 10, Color::WHITE, 3.0))
     end
 
     if e.hp <= 0
@@ -1007,7 +1021,7 @@ class Game
       60.times do
         ang = rand(360) * Math::PI / 180.0
         spd = rand(10).to_f + 2.0
-        @particles << Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(30) + 20, COLOR_PURPLE, 10.0)
+        spawn_particle(Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(30) + 20, COLOR_PURPLE, 10.0))
       end
       12.times do
         @items << Item.new(e.x + (rand(80) - 40).to_f, e.y + (rand(80) - 40).to_f, 30)
@@ -1022,7 +1036,7 @@ class Game
       25.times do
         ang = rand(360) * Math::PI / 180.0
         spd = rand(7).to_f + 2.0
-        @particles << Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(20) + 15, Color::RED, 7.0)
+        spawn_particle(Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(20) + 15, Color::RED, 7.0))
       end
       4.times do
         @items << Item.new(e.x + (rand(40) - 20).to_f, e.y + (rand(40) - 20).to_f, 20)
@@ -1037,7 +1051,7 @@ class Game
       12.times do
         ang = rand(360) * Math::PI / 180.0
         spd = rand(5).to_f + 2.0
-        @particles << Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(15) + 10, COLOR_ORANGE, 5.0)
+        spawn_particle(Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(15) + 10, COLOR_ORANGE, 5.0))
       end
       @items << Item.new(e.x, e.y, 10)
       add_shake(0.6)
@@ -1052,7 +1066,7 @@ class Game
     25.times do
       ang = rand(360) * Math::PI / 180.0
       spd = rand(8).to_f + 2.0
-      @particles << Particle.new(x, y, spd * Math.cos(ang), spd * Math.sin(ang), rand(20) + 10, Color::RED, 8.0)
+      spawn_particle(Particle.new(x, y, spd * Math.cos(ang), spd * Math.sin(ang), rand(20) + 10, Color::RED, 8.0))
     end
     # 範囲内の敵全員にダメージ
     @enemies.each do |e|
