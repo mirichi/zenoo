@@ -854,6 +854,79 @@ class Game
     end
   end
 
+  # 敵同士の重なり防止 (ソフト押し出し)
+  def separate_enemies
+    n = @enemies.size
+    return if n < 2
+
+    i = 0
+    while i < n
+      e1 = @enemies[i]
+      i += 1
+      next if e1.dead
+
+      j = i
+      while j < n
+        e2 = @enemies[j]
+        j += 1
+        next if e2.dead
+
+        dx = e2.x - e1.x
+        r_sum = e1.hit_radius + e2.hit_radius
+        # AABB 高速枝刈り
+        next if dx.abs > r_sum
+
+        dy = e2.y - e1.y
+        next if dy.abs > r_sum
+
+        d2 = dx * dx + dy * dy
+        if d2 < r_sum * r_sum && d2 > 0.0001
+          d = Math.sqrt(d2)
+          overlap = r_sum - d
+          push = overlap * 0.25
+          nx = (dx / d) * push
+          ny = (dy / d) * push
+
+          if e1.is_boss
+            # ボスは動かず、相手のザコ敵を押し出す
+            e2.x += nx * 2.0
+            e2.y += ny * 2.0
+            e2.shape.x = e2.x
+            e2.shape.y = e2.y
+          elsif e2.is_boss
+            # ボスは動かず、相手のザコ敵を押し出す
+            e1.x -= nx * 2.0
+            e1.y -= ny * 2.0
+            e1.shape.x = e1.x
+            e1.shape.y = e1.y
+          elsif e1.max_hp > 5 && e2.max_hp <= 5
+            # エリート敵は動かず、ザコ敵が道を譲る
+            e2.x += nx * 2.0
+            e2.y += ny * 2.0
+            e2.shape.x = e2.x
+            e2.shape.y = e2.y
+          elsif e2.max_hp > 5 && e1.max_hp <= 5
+            # エリート敵は動かず、ザコ敵が道を譲る
+            e1.x -= nx * 2.0
+            e1.y -= ny * 2.0
+            e1.shape.x = e1.x
+            e1.shape.y = e1.y
+          else
+            # 同格同士: 半々で押し合う
+            e1.x -= nx
+            e1.y -= ny
+            e2.x += nx
+            e2.y += ny
+            e1.shape.x = e1.x
+            e1.shape.y = e1.y
+            e2.shape.x = e2.x
+            e2.shape.y = e2.y
+          end
+        end
+      end
+    end
+  end
+
   def check_collisions
     t0 = Window.time
     contact_damage = 0
@@ -1247,6 +1320,7 @@ class Game
     @bullets.each { |b| b.update }
     @missiles.each { |m| m.update(@enemies) }
     @enemies.each { |e| e.update(@player.x, @player.y) }
+    separate_enemies
     @items.each { |i| i.update(@player.x, @player.y, @player.magnet_radius) }
     @particles.each { |p| p.update }
     @damage_texts.each { |t| t.update }
