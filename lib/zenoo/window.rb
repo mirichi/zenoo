@@ -435,6 +435,33 @@ module Zenoo
         rad = radius.to_f
       end
 
+      is_flat = (radius.nil? || rad <= 0.0) &&
+                border_color.nil? &&
+                (shadow_blur.nil? || shadow_blur.to_f <= 0.0) &&
+                image.nil?
+
+      if is_flat
+        x2 = ax + wf
+        y2 = ay + hf
+        cr = c_color[0].to_f; cg = c_color[1].to_f; cb = c_color[2].to_f; ca = c_color[3].to_f
+        data = [
+          ax, ay, cr, cg, cb, ca,
+          ax, y2, cr, cg, cb, ca,
+          x2, ay, cr, cg, cb, ca,
+          x2, ay, cr, cg, cb, ca,
+          ax, y2, cr, cg, cb, ca,
+          x2, y2, cr, cg, cb, ca
+        ].pack("f*")
+        Backend.enqueue_draw(
+          Backend::Pipelines::TRIANGLES,
+          data,
+          6,
+          shader: flat_primitive_shader,
+          z: z
+        )
+        return
+      end
+
       b_width = 0.0
       b0 = 0.0; b1 = 0.0; b2 = 0.0; b3 = 0.0
       if border_color

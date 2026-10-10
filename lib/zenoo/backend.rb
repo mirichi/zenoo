@@ -273,20 +273,9 @@ module Zenoo
         return unless @needs_z_sort
         return if @queue_count <= 1
 
-        i = 1
-        while i < @queue_count
-          target_cmd = @command_pool[i]
-          tz = target_cmd.z
-          j = i - 1
-          while j >= 0
-            prev_cmd = @command_pool[j]
-            break if prev_cmd.z <= tz
-            @command_pool[j + 1] = prev_cmd
-            j -= 1
-          end
-          @command_pool[j + 1] = target_cmd
-          i += 1
-        end
+        valid_cmds = @command_pool[0...@queue_count]
+        valid_cmds.sort_by! { |cmd| [cmd.z, cmd.order] }
+        @command_pool[0...@queue_count] = valid_cmds
       end
 
       def flush
@@ -518,6 +507,7 @@ module Zenoo
     def self.execute_commands(pool, count)
       return if count == 0
 
+      $last_draw_calls = 0
       active_gl_clip = :initial
 
       i = 0
@@ -570,7 +560,8 @@ module Zenoo
                ncmd.uniforms == cur_uniforms &&
                ncmd.blend == cur_blend &&
                ncmd.clip == cur_clip
-              cur_data = cur_data + ncmd.data
+              cur_data = cur_data.dup if cur_data.frozen?
+              cur_data << ncmd.data
               cur_count += ncmd.count
               ncmd.data = nil
               ncmd.image = nil
@@ -589,6 +580,7 @@ module Zenoo
         Native::Renderer.set_blend_mode(cur_blend)
         apply_uniforms(cur_shader, cur_uniforms) if cur_uniforms
 
+        $last_draw_calls = ($last_draw_calls || 0) + 1
         Native::Renderer.draw_buffer(
           cur_pipeline.topology,
           cur_pipeline.layout,
