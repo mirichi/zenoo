@@ -12,14 +12,17 @@ module Zenoo
     # 衝突めり込み・押し出し結果 (MTV: Minimum Translation Vector)
     # ====================================================
     class Hit
-      attr_accessor :depth, :normal_x, :normal_y, :overlap_x, :overlap_y
+      attr_accessor :depth, :normal_x, :normal_y, :overlap_x, :overlap_y, :impact, :contact_x, :contact_y
 
-      def initialize(depth = 0.0, normal_x = 0.0, normal_y = 0.0, overlap_x = 0.0, overlap_y = 0.0)
+      def initialize(depth = 0.0, normal_x = 0.0, normal_y = 0.0, overlap_x = 0.0, overlap_y = 0.0, impact = 0.0, contact_x = 0.0, contact_y = 0.0)
         @depth = depth.to_f
         @normal_x = normal_x.to_f
         @normal_y = normal_y.to_f
         @overlap_x = overlap_x.to_f
         @overlap_y = overlap_y.to_f
+        @impact = impact.to_f
+        @contact_x = contact_x.to_f
+        @contact_y = contact_y.to_f
       end
 
       # a を押し戻す移動量 (overlap_x, overlap_y)
@@ -32,11 +35,11 @@ module Zenoo
 
       # 向き反転 (a と b を入れ替えた結果)
       def flipped
-        Hit.new(@depth, -@normal_x, -@normal_y, -@overlap_x, -@overlap_y)
+        Hit.new(@depth, -@normal_x, -@normal_y, -@overlap_x, -@overlap_y, @impact, @contact_x, @contact_y)
       end
 
       def inspect
-        "#<Zenoo::Collision::Hit depth=#{@depth.round(3)} normal=[#{@normal_x.round(3)}, #{@normal_y.round(3)}] overlap=[#{@overlap_x.round(3)}, #{@overlap_y.round(3)}]>"
+        "#<Zenoo::Collision::Hit depth=#{@depth.round(3)} normal=[#{@normal_x.round(3)}, #{@normal_y.round(3)}] contact=[#{@contact_x.round(2)}, #{@contact_y.round(2)}] overlap=[#{@overlap_x.round(3)}, #{@overlap_y.round(3)}]>"
       end
     end
 
@@ -80,8 +83,22 @@ module Zenoo
       case val
       when :center
         [0.5, 0.5]
-      when :top_left
+      when :top_left, :north_west
         [0.0, 0.0]
+      when :top_center, :north
+        [0.5, 0.0]
+      when :top_right, :north_east
+        [1.0, 0.0]
+      when :center_left, :west
+        [0.0, 0.5]
+      when :center_right, :east
+        [1.0, 0.5]
+      when :bottom_left, :south_west
+        [0.0, 1.0]
+      when :bottom_center, :south
+        [0.5, 1.0]
+      when :bottom_right, :south_east
+        [1.0, 1.0]
       when Array
         [val[0].to_f, (val[1] || val[0]).to_f]
       else
@@ -1180,9 +1197,10 @@ module Zenoo
       shape_a = shape_a.collider if shape_a.respond_to?(:collider)
       shape_b = shape_b.collider if shape_b.respond_to?(:collider)
       return nil unless shape_a && shape_b
+      return nil if shape_a.is_a?(Array) || shape_b.is_a?(Array)
 
-      shape_a.update_cache if shape_a.dirty?
-      shape_b.update_cache if shape_b.dirty?
+      shape_a.update_cache if shape_a.respond_to?(:dirty?) && shape_a.dirty?
+      shape_b.update_cache if shape_b.respond_to?(:dirty?) && shape_b.dirty?
 
       dx = shape_b.center_x - shape_a.center_x
       dy = shape_b.center_y - shape_a.center_y
@@ -1246,7 +1264,12 @@ module Zenoo
         nx = -1.0
         ny = 0.0
       end
-      Hit.new(depth, nx, ny, nx * depth, ny * depth)
+
+      # 接触点 (2つの円の境界・重なりの中間点)
+      cx = a.center_x - nx * (a.effective_radius - depth * 0.5)
+      cy = a.center_y - ny * (a.effective_radius - depth * 0.5)
+
+      Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, cx, cy)
     end
 
     # AABB vs AABB の押し出し
@@ -1259,12 +1282,16 @@ module Zenoo
         depth = ox
         nx = dx >= 0.0 ? -1.0 : 1.0
         ny = 0.0
+        cx = a.center_x - nx * (a.half_w - depth * 0.5)
+        cy = (a.center_y + b.center_y) * 0.5
       else
         depth = oy
         nx = 0.0
         ny = dy >= 0.0 ? -1.0 : 1.0
+        cx = (a.center_x + b.center_x) * 0.5
+        cy = a.center_y - ny * (a.half_h - depth * 0.5)
       end
-      Hit.new(depth, nx, ny, nx * depth, ny * depth)
+      Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, cx, cy)
     end
 
     # 真円 vs 矩形 (回転・角丸対応 SDF 方式)
@@ -1316,7 +1343,12 @@ module Zenoo
 
       nx = lnx * rect.cos - lny * rect.sin
       ny = lnx * rect.sin + lny * rect.cos
-      Hit.new(depth, nx, ny, nx * depth, ny * depth)
+
+      # 接触点: 円の中心から法線の逆向き (矩形側) へ (円と矩形の重なり境界)
+      cx = circle.center_x - nx * (circle.effective_radius - depth * 0.5)
+      cy = circle.center_y - ny * (circle.effective_radius - depth * 0.5)
+
+      Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, cx, cy)
     end
 
     # OBB vs OBB の 4軸 SAT 押し出し
@@ -1382,7 +1414,11 @@ module Zenoo
         best_ny = b.cos * sign
       end
 
-      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap)
+      # 接触点 (両中心の中間から法線方向に補正)
+      cx = (a.center_x + b.center_x) * 0.5 - best_nx * (min_overlap * 0.5)
+      cy = (a.center_y + b.center_y) * 0.5 - best_ny * (min_overlap * 0.5)
+
+      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, 0.0, cx, cy)
     end
 
     # 多角形等を含む汎用 2D SAT 押し出し
@@ -1468,7 +1504,11 @@ module Zenoo
         end
       end
 
-      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap)
+      # 接触点 (両中心の中間から法線方向に補正)
+      cx = (shape_a.center_x + shape_b.center_x) * 0.5 - best_nx * (min_overlap * 0.5)
+      cy = (shape_a.center_y + shape_b.center_y) * 0.5 - best_ny * (min_overlap * 0.5)
+
+      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, 0.0, cx, cy)
     end
 
     def self.project_polygon(axis_x, axis_y, verts)
