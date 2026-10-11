@@ -190,6 +190,27 @@
     var statusElement = document.getElementById('status');
     var canvasElement = document.getElementById('canvas');
 
+    function formatStatus(text) {
+      if (!text) return '';
+      var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+      if (m) {
+        var prefix = m[1].trim();
+        var loaded = parseFloat(m[2]);
+        var total = parseInt(m[4], 10);
+        if (total > 1000 || loaded > 1000) {
+          if (total < loaded) total = loaded;
+          var fmt = function(b) {
+            if (b < 1024) return b + ' B';
+            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+            return (b / (1024 * 1024)).toFixed(1) + ' MB';
+          };
+          var pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+          return prefix + ' ' + fmt(loaded) + ' / ' + fmt(total) + ' (' + pct + '%)';
+        }
+      }
+      return text;
+    }
+
     var Module = {
       print: function(text) { console.log(text); },
       printErr: function(text) { console.error(text); },
@@ -197,7 +218,8 @@
       setStatus: function(text) {
         if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
         if (text === Module.setStatus.last.text) return;
-        statusElement.innerText = text ? text : "GJK 衝突判定プレイグラウンド";
+        Module.setStatus.last.text = text;
+        statusElement.innerText = text ? formatStatus(text) : "GJK 衝突判定プレイグラウンド";
       },
       totalDependencies: 0,
       monitorRunDependencies: function(left) {
