@@ -225,6 +225,66 @@
       }
     });
 
+    // ポインターキャプチャ (ドラッグ中に画面外・Canvas外に出てもイベントを逃さない)
+    canvasElement.addEventListener('pointerdown', function(e) {
+      try {
+        canvasElement.setPointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+    canvasElement.addEventListener('pointerup', function(e) {
+      try {
+        canvasElement.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+    canvasElement.addEventListener('pointercancel', function(e) {
+      try {
+        canvasElement.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+
+    // Canvas外でのドラッグ中の mousemove 転送
+    window.addEventListener('mousemove', function(e) {
+      if (e.target !== canvasElement && e.buttons !== 0) {
+        var ev = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          buttons: e.buttons,
+          clientX: e.clientX,
+          clientY: e.clientY
+        });
+        canvasElement.dispatchEvent(ev);
+      }
+    });
+
+    // Canvas外でのマウスリリース (mouseup) 転送
+    window.addEventListener('mouseup', function(e) {
+      if (e.target !== canvasElement) {
+        var ev = new MouseEvent('mouseup', {
+          bubbles: true,
+          cancelable: true,
+          button: e.button,
+          buttons: e.buttons,
+          clientX: e.clientX,
+          clientY: e.clientY
+        });
+        canvasElement.dispatchEvent(ev);
+      }
+    });
+
+    // ウィンドウフォーカス喪失時の安全リリース (blur)
+    window.addEventListener('blur', function() {
+      for (var b = 0; b < 3; b++) {
+        var ev = new MouseEvent('mouseup', {
+          bubbles: true,
+          cancelable: true,
+          button: b,
+          buttons: 0
+        });
+        canvasElement.dispatchEvent(ev);
+      }
+    });
+
     window.addEventListener('resize', function() {
       window.scrollTo(0, 0);
     });

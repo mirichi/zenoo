@@ -811,8 +811,6 @@ class BilliardsPlayground
 
   def step_frame
     mx, my = Input.mouse_pos
-    mx = 640.0 if mx < 0 || mx > 1280
-    my = 360.0 if my < 0 || my > 720
 
     handle_input(mx, my)
     update_physics

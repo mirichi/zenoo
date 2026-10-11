@@ -66,9 +66,22 @@ static void mouse_button_callback(GLFWwindow* window, int button, int action, in
         if (action == GLFW_PRESS) {
             s_mouse_pressed[button] = 1;
             s_mouse_push[button] = 1;
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
+            HWND hwnd = glfwGetWin32Window(window);
+            if (hwnd) SetCapture(hwnd);
+#endif
         } else if (action == GLFW_RELEASE) {
             s_mouse_pressed[button] = 0;
             s_mouse_release[button] = 1;
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
+            int any_pressed = 0;
+            for (int i = 0; i < 8; i++) {
+                if (s_mouse_pressed[i]) any_pressed = 1;
+            }
+            if (!any_pressed) {
+                ReleaseCapture();
+            }
+#endif
         }
     }
 }
@@ -95,6 +108,9 @@ static void char_callback(GLFWwindow* window, unsigned int codepoint) {
 static void window_focus_callback(GLFWwindow* window, int focused) {
     (void)window;
     if (!focused) {
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
+        ReleaseCapture();
+#endif
         for (int i = 0; i < 8; i++) {
             if (s_mouse_pressed[i]) {
                 s_mouse_pressed[i] = 0;
