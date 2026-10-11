@@ -83,10 +83,124 @@ class Wall
 end
 
 # ------------------------------------------------------------------------------
-# 3. ボール (Ball)
+# 3. ボール3D回転シェーダー (球体法線復元 + クオータニオン逆回転 + 表面模様 + 固定スペキュラ)
+# ------------------------------------------------------------------------------
+SPHERE_BALL_FRAG = <<~'GLSL'
+#version 330 core
+in vec4 v_color;
+in vec2 v_uv;
+uniform sampler2D u_texture;
+uniform vec4 u_quat;       // ボール姿勢クオータニオン (qx, qy, qz, qw)
+uniform vec4 u_ball_color; // ボール固有カラー (r, g, b, a)
+uniform int  u_ball_num;   // ボール番号 (0: 手球, 1-8: ソリッド, 9-15: ストライプ)
+
+out vec4 fragColor;
+
+// クオータニオンによるベクトル回転
+vec3 quat_rotate(vec4 q, vec3 v) {
+    return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+}
+
+void main() {
+    // 1. UV (0..1) から 中心基準の正規化ローカル座標 (-1..1) へ変換
+    vec2 p = v_uv * 2.0 - 1.0;
+    float r2 = dot(p, p);
+    if (r2 > 1.0) {
+        discard; // 球の外側は完全透過
+    }
+
+    // 2. 画面上のワールド法線 N_world を復元 (画面右手系: x右, y下, z手前)
+    float z = sqrt(max(0.0, 1.0 - r2));
+    vec3 n_world = vec3(p.x, p.y, z);
+
+    // 3. ボールローカル法線 N_local へ逆回転 (共役クオータニオン Q*)
+    vec4 q_conj = vec4(-u_quat.xyz, u_quat.w);
+    vec3 n_local = quat_rotate(q_conj, n_world);
+
+    // 4. ボール表面の模様決定
+    vec3 base_col = u_ball_color.rgb;
+    vec3 white_col = vec3(0.97, 0.97, 0.95);
+
+    // (A) ストライプボール (9-15番): 上下の極は白、中央の帯がカラー
+    if (u_ball_num >= 9) {
+        float stripe = smoothstep(0.48, 0.44, abs(n_local.y));
+        base_col = mix(white_col, u_ball_color.rgb, stripe);
+    } else if (u_ball_num == 0) {
+        // 手球: 全体オフホワイト
+        base_col = white_col;
+    }
+
+    // (B) 手球の6極赤ドット (Aramith Pro-Cup 風)
+    if (u_ball_num == 0) {
+        float d_x = min(length(n_local - vec3(1.0, 0.0, 0.0)), length(n_local - vec3(-1.0, 0.0, 0.0)));
+        float d_y = min(length(n_local - vec3(0.0, 1.0, 0.0)), length(n_local - vec3(0.0, -1.0, 0.0)));
+        float d_z = min(length(n_local - vec3(0.0, 0.0, 1.0)), length(n_local - vec3(0.0, 0.0, -1.0)));
+        float min_d = min(d_x, min(d_y, d_z));
+        float dot_mask = smoothstep(0.18, 0.15, min_d);
+        base_col = mix(base_col, vec3(0.85, 0.15, 0.15), dot_mask);
+    } else {
+        // (C) 1〜15番: ローカル +X と -X の2極に白丸と数字を配置
+        float dist_p = length(n_local - vec3(1.0, 0.0, 0.0));
+        float dist_m = length(n_local - vec3(-1.0, 0.0, 0.0));
+        float circle_r = 0.58; // 白丸サークルを拡大 (視認性大幅アップ)
+        float min_dist = min(dist_p, dist_m);
+        float circle_factor = smoothstep(circle_r, circle_r - 0.025, min_dist);
+
+        // 白丸の縁取りシャドウ (背景色との境界をシャープにして白丸と数字を際立たせる)
+        float border_mask = smoothstep(circle_r + 0.025, circle_r, min_dist) * (1.0 - circle_factor);
+        base_col = mix(base_col, vec3(0.04, 0.04, 0.08), border_mask * 0.7);
+        base_col = mix(base_col, white_col, circle_factor);
+
+        // 数字テクスチャのサンプリング
+        bool is_pos_circle = (dist_p < circle_r);
+        bool is_neg_circle = (dist_m < circle_r);
+        if (is_pos_circle || is_neg_circle) {
+            // 文字を白丸の中央で大きくサンプリング (拡大マッピング)
+            float map_scale = circle_r * 1.55;
+            vec2 local_uv;
+            if (is_pos_circle) {
+                local_uv = vec2(-n_local.z, n_local.y) / map_scale + 0.5;
+            } else {
+                local_uv = vec2(n_local.z, n_local.y) / map_scale + 0.5;
+            }
+
+            if (local_uv.x >= 0.0 && local_uv.x <= 1.0 && local_uv.y >= 0.0 && local_uv.y <= 1.0) {
+                float col_idx = float(u_ball_num % 4);
+                float row_idx = float(u_ball_num / 4);
+                vec2 atlas_uv = (vec2(col_idx, row_idx) + local_uv) * 0.25;
+                vec4 tex_sample = texture(u_texture, atlas_uv);
+
+                // テクスチャサンプルの文字コントラスト強調 (縮小ボケを完全解消してクッキリ純黒化)
+                float raw_text = 1.0 - tex_sample.r;
+                float text_mask = smoothstep(0.18, 0.48, raw_text);
+                base_col = mix(base_col, vec3(0.02, 0.02, 0.04), text_mask * circle_factor);
+            }
+        }
+    }
+
+    // 5. 3D球体のライティング (光沢・陰影・スペキュラ) - ワールド法線に対して固定
+    vec3 light_dir = normalize(vec3(-0.45, -0.55, 0.70)); // 左斜め上・手前からのライト
+    float diff = max(dot(n_world, light_dir), 0.0) * 0.35 + 0.68;
+
+    // スペキュラ光沢ハイライト
+    vec3 view_dir = vec3(0.0, 0.0, 1.0);
+    vec3 half_v = normalize(light_dir + view_dir);
+    float spec = pow(max(dot(n_world, half_v), 0.0), 32.0) * 0.90;
+
+    // 縁のフレネル/影
+    float edge_darkening = pow(1.0 - n_world.z, 2.5) * 0.35;
+
+    vec3 final_rgb = (base_col * diff) * (1.0 - edge_darkening) + vec3(spec);
+
+    fragColor = vec4(final_rgb, 1.0);
+}
+GLSL
+
+# ------------------------------------------------------------------------------
+# 4. ボール (Ball)
 # ------------------------------------------------------------------------------
 class Ball
-  attr_accessor :x, :y, :vx, :vy, :radius, :color, :number, :is_cue, :shape, :highlight
+  attr_accessor :x, :y, :vx, :vy, :radius, :color, :number, :is_cue, :shape, :highlight, :quat
 
   BALL_COLORS = [
     [255, 215, 0, 255],   # 1: 黄
@@ -106,7 +220,7 @@ class Ball
     [150, 40, 40, 255]    # 15: えんじストライプ
   ].freeze
 
-  def initialize(x, y, number = 0, radius = 17.0)
+  def initialize(x, y, number = 0, radius = 20.0)
     @x = x.to_f
     @y = y.to_f
     @vx = 0.0
@@ -117,6 +231,21 @@ class Ball
     @color = @is_cue ? [250, 250, 252, 255] : BALL_COLORS[(number - 1) % BALL_COLORS.length]
     @shape = Collision.circle(@x, @y, @radius, anchor: :center)
     @highlight = false
+
+    # 3D回転姿勢クオータニオン (qx, qy, qz, qw)
+    init_quaternion
+  end
+
+  def init_quaternion
+    if @is_cue
+      # 手球は赤ドットが斜めに見える自然な姿勢
+      @quat = [0.25, 0.5, 0.25, 0.79]
+      len = Math.sqrt(@quat.sum { |v| v * v })
+      @quat.map! { |v| v / len }
+    else
+      # ナンバーボールは手前 (Z軸方向) に白丸が向くよう初期化 (Y軸90度回転)
+      @quat = [0.0, 0.7071068, 0.0, 0.7071068]
+    end
   end
 
   def speed
@@ -127,11 +256,52 @@ class Ball
     @vx.abs > 0.04 || @vy.abs > 0.04
   end
 
+  # 転がり運動に応じたクオータニオンの回転合成
+  def roll(dx, dy)
+    dist = Math.sqrt(dx * dx + dy * dy)
+    return if dist < 0.0001
+
+    angle = dist / @radius
+    inv_len = 1.0 / dist
+    ax = -dy * inv_len
+    ay = dx * inv_len
+
+    half = angle * 0.5
+    s = Math.sin(half)
+    c = Math.cos(half)
+    dq_x = ax * s
+    dq_y = ay * s
+    dq_z = 0.0
+    dq_w = c
+
+    # クオータニオン積: new_Q = dQ * old_Q
+    x1, y1, z1, w1 = dq_x, dq_y, dq_z, dq_w
+    x2, y2, z2, w2 = @quat
+
+    nx = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    ny = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+    nz = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+    nw = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+
+    len = Math.sqrt(nx * nx + ny * ny + nz * nz + nw * nw)
+    if len > 0.0
+      @quat[0] = nx / len
+      @quat[1] = ny / len
+      @quat[2] = nz / len
+      @quat[3] = nw / len
+    end
+  end
+
   def update(substep_factor = 1.0)
-    @x += @vx * substep_factor
-    @y += @vy * substep_factor
+    dx = @vx * substep_factor
+    dy = @vy * substep_factor
+    @x += dx
+    @y += dy
     @shape.x = @x
     @shape.y = @y
+
+    # 転がりに応じた 3D クオータニオン回転
+    roll(dx, dy)
 
     # 転がり摩擦 (徐々に減速)
     friction = 0.992**substep_factor
@@ -144,9 +314,7 @@ class Ball
     end
   end
 
-  def draw
-    sp = speed
-
+  def draw(shader = nil, atlas = nil)
     # 移動時のシャドウ
     Window.draw_circle(@x + 3, @y + 4, @radius, color: [0, 0, 0, 75])
 
@@ -156,29 +324,45 @@ class Ball
       Window.draw_circle(@x, @y, @radius + 2, color: [255, 255, 255, 180])
     end
 
-    # ボール本体
-    border_col = @is_cue ? [200, 200, 210, 255] : [40, 40, 45, 200]
-    Window.draw_circle(@x, @y, @radius, color: @color, border_width: 1.5, border_color: border_col)
+    if shader && atlas
+      # 3D球体シェーダー描画
+      diam = @radius * 2.0
+      scale = diam / atlas.width
+      c_f4 = [@color[0] / 255.0, @color[1] / 255.0, @color[2] / 255.0, 1.0]
 
-    # 9〜15番ボールは中央に白帯 (ストライプ球の表現)
-    if @number >= 9
-      Window.draw_rect(@x - @radius * 0.9, @y - 6, @radius * 1.8, 12, color: [250, 250, 250, 220])
+      Window.draw_image(
+        @x, @y, atlas,
+        scale: scale,
+        offset_mode: :center,
+        shader: shader,
+        uniforms: {
+          u_quat: @quat,
+          u_ball_color: c_f4,
+          u_ball_num: @number
+        }
+      )
+    else
+      # フォールバック (通常の2D描画)
+      border_col = @is_cue ? [200, 200, 210, 255] : [40, 40, 45, 200]
+      Window.draw_circle(@x, @y, @radius, color: @color, border_width: 1.5, border_color: border_col)
+
+      if @number >= 9
+        Window.draw_rect(@x - @radius * 0.9, @y - 6, @radius * 1.8, 12, color: [250, 250, 250, 220])
+      end
+
+      unless @is_cue
+        num_bg_r = 7.0
+        Window.draw_circle(@x, @y, num_bg_r, color: [255, 255, 255, 240])
+        num_str = @number.to_s
+        num_x = num_str.length > 1 ? @x - 5 : @x - 3
+        Window.draw_text(num_x, @y - 6, num_str, size: 10, color: [20, 20, 20, 255])
+      end
+
+      hl_ox = @x - @radius * 0.35
+      hl_oy = @y - @radius * 0.35
+      Window.draw_circle(hl_ox, hl_oy, @radius * 0.32, color: [255, 255, 255, 110])
+      Window.draw_circle(hl_ox - 1, hl_oy - 1, @radius * 0.16, color: [255, 255, 255, 190])
     end
-
-    # 中央の番号サークル (手球以外)
-    unless @is_cue
-      num_bg_r = 7.0
-      Window.draw_circle(@x, @y, num_bg_r, color: [255, 255, 255, 240])
-      num_str = @number.to_s
-      num_x = num_str.length > 1 ? @x - 5 : @x - 3
-      Window.draw_text(num_x, @y - 6, num_str, size: 10, color: [20, 20, 20, 255])
-    end
-
-    # 球体の立体感: 左上のスペキュラ光沢ハイライト
-    hl_ox = @x - @radius * 0.35
-    hl_oy = @y - @radius * 0.35
-    Window.draw_circle(hl_ox, hl_oy, @radius * 0.32, color: [255, 255, 255, 110])
-    Window.draw_circle(hl_ox - 1, hl_oy - 1, @radius * 0.16, color: [255, 255, 255, 190])
   end
 end
 
@@ -202,10 +386,49 @@ class BilliardsPlayground
     @current_mouse_x = 0.0
     @current_mouse_y = 0.0
 
+    # 3D球体シェーダーとナンバーアトラスの初期化
+    @ball_shader = Shader.new(SPHERE_BALL_FRAG)
+    @ball_atlas = create_ball_atlas
+
     # サウンド効果音の生成 (SoundEffect)
     init_sounds
 
     reset_balls!
+  end
+
+  # 16球のナンバーテクスチャアトラス動的生成 (512x512, 各セル 128x128)
+  def create_ball_atlas
+    atlas = Image.new(512, 512)
+    Image.render_to(atlas) do
+      Window.clear([255, 255, 255, 255])
+      16.times do |num|
+        col = num % 4
+        row = num / 4
+        cx = col * 128 + 64
+        cy = row * 128 + 64
+
+        if num == 0
+          # 手球用赤ドット (中央に配置)
+          Window.draw_circle(cx, cy, 22, color: [225, 30, 30, 255])
+        else
+          str = num.to_s
+          Window.draw_text(
+            cx, cy - 2, str,
+            size: 156,
+            align: :center,
+            valign: :center,
+            weight: 0.68,
+            color: [0, 0, 0, 255]
+          )
+
+          # 6と9の識別用アンダーバー (中央下に太めに配置)
+          if num == 6 || num == 9
+            Window.draw_rect(cx - 18, cy + 60, 36, 7, color: [0, 0, 0, 255])
+          end
+        end
+      end
+    end
+    atlas
   end
 
   def init_sounds
@@ -558,8 +781,8 @@ class BilliardsPlayground
     # 3. エイムガイドライン
     draw_aim_guide
 
-    # 4. ボール
-    @balls.each(&:draw)
+    # 4. ボール (3D球体シェーダーでリアル回転描画)
+    @balls.each { |b| b.draw(@ball_shader, @ball_atlas) }
 
     # 5. スパーク
     @sparks.each(&:draw)
@@ -570,20 +793,20 @@ class BilliardsPlayground
 
   def draw_hud
     # 左上コントロールパネル (モダンSDFカード)
-    Window.draw_rect(28, 28, 380, 105, radius: 10, color: [15, 25, 22, 225], border_width: 1, border_color: [50, 90, 70, 255], shadow_blur: 16)
+    Window.draw_rect(28, 28, 410, 105, radius: 10, color: [15, 25, 22, 225], border_width: 1, border_color: [50, 90, 70, 255], shadow_blur: 16)
 
-    Window.draw_text(42, 38, "Zenoo Billiards & MTV Physics", size: 18, color: [100, 255, 180, 255])
+    Window.draw_text(42, 38, "Zenoo Billiards & 3D Rolling Shader", size: 18, color: [100, 255, 180, 255])
     Window.draw_text(42, 64, "Drag Ball: Aim & Shoot    [R]: Reset Table", size: 13, color: [210, 230, 220, 255])
     Window.draw_text(42, 84, "[SPACE]: Scatter Balls    [S]: Stop All", size: 13, color: [210, 230, 220, 255])
 
     moving_count = @balls.count(&:moving?)
-    status_str = moving_count > 0 ? "Moving: #{moving_count} balls" : "Table at rest"
+    status_str = moving_count > 0 ? "Rolling: #{moving_count} balls" : "Table at rest"
     status_col = moving_count > 0 ? [255, 215, 80, 255] : [140, 180, 160, 255]
     Window.draw_text(42, 104, "FPS: #{Window.fps.round(1)}  |  #{status_str}", size: 13, color: status_col)
 
-    # 右上ミニ情報
-    Window.draw_rect(1060, 28, 192, 42, radius: 8, color: [15, 25, 22, 200], border_width: 1, border_color: [50, 90, 70, 255])
-    Window.draw_text(1074, 40, "MTV: Penetration 2D", size: 14, color: [80, 220, 240, 255])
+    # 右上ミニ情報 (MTV + 3D Quat Shader)
+    Window.draw_rect(1020, 28, 232, 42, radius: 8, color: [15, 25, 22, 200], border_width: 1, border_color: [50, 90, 70, 255])
+    Window.draw_text(1034, 40, "3D Quat Ball + MTV 2D", size: 14, color: [80, 220, 240, 255])
   end
 
   def step_frame
@@ -600,11 +823,12 @@ end
 # ------------------------------------------------------------------------------
 # メインループ
 # ------------------------------------------------------------------------------
-playground = BilliardsPlayground.new
+playground = nil
 test_frames = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_counter = 0
 
-Window.loop(1280, 720, "Zenoo Billiards & MTV Physics Demo") do
+Window.loop(1280, 720, "Zenoo Billiards & 3D Rolling Shader Demo") do
+  playground ||= BilliardsPlayground.new
   playground.step_frame
   if test_frames > 0
     frame_counter += 1
@@ -614,3 +838,4 @@ Window.loop(1280, 720, "Zenoo Billiards & MTV Physics Demo") do
     end
   end
 end
+

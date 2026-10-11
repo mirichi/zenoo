@@ -117,6 +117,9 @@
     .card.coords::before {
       background: linear-gradient(90deg, #0ea5e9, #10b981);
     }
+    .card.billiards::before {
+      background: linear-gradient(90deg, #10b981, #059669);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -518,6 +521,25 @@
         </ul>
       </div>
       <a href="coords/" class="btn-launch">シミュレーターを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Billiards & 3D Rolling Shader Demo Card -->
+    <div class="card billiards">
+      <div>
+        <div class="card-tag">Physics &amp; 3D Shader</div>
+        <h2>Billiards &amp; 3D Rolling Shader</h2>
+        <p class="desc">
+          Collision.penetration による MTV (めり込み解消) 2D 剛体物理シミュレーションと、フラグメントシェーダーによる 3D クオータニオン転がり回転・固定スペキュラ光沢球体レンダラー。
+        </p>
+        <ul class="features">
+          <li>完全めり込み解消＆高精度弾性衝突物理 (MTV / SAT)</li>
+          <li>ピクセル単位の 3D 球体法線復元＆クオータニオン逆回転</li>
+          <li>ソリッド球・ストライプ球・手球のリアルな表面模様マッピング</li>
+          <li>回転してもブレない固定光源ハイライト・光沢ライティング</li>
+          <li>マウス左ドラッグによるエイム＆パワーショット操作</li>
+        </ul>
+      </div>
+      <a href="billiards/" class="btn-launch">ビリヤード起動 (Launch Demo) →</a>
     </div>
   </main>
 
