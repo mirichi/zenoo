@@ -80,6 +80,7 @@ Web ブラウザ上で動作するインタラクティブデモは、GitHub Pag
 | **Audio & Sound Synthesis** | `docs/sound/` | miniaudio & Ogg Vorbis、DXRuby風動的波形合成 (SoundEffect) |
 | **2D Collision Playground** | `docs/collision/` | GJK 2D 凸図形衝突判定、円・カプセル・OBB・凸多角形リアルタイム交差 |
 | **Tween & Easing Animation** | `docs/tween/` | 10種以上のイージング関数、メソッドチェーン (.to/.delay/.call/.yoyo)、時間軸イベント発火 |
+| **Billiards & MTV Physics** | `examples/demo_billiards.rb` | めり込み解消 (MTV)＆弾性衝突物理、ボールを引っ張って打つビリヤード |
 
 ---
 
@@ -173,6 +174,20 @@ end
 capsule = Collision.segment(100, 100, 300, 200, 15)
 poly = Collision.polygon([[0, 0], [50, -30], [80, 20], [30, 60]])
 puts "Intersecting!" if Collision.check(capsule, poly)
+```
+
+### 5. めり込み解消＆押し出しベクトル (`Collision.penetration`)
+
+```ruby
+# 衝突判定とめり込み量・押し出しベクトル (MTV) を 1 回の呼び出しで同時に取得
+if (hit = Collision.penetration(player.shape, wall.shape))
+  # 壁の外側へ押し戻す
+  player.x += hit.push_x
+  player.y += hit.push_y
+
+  # またはスプライトの push_out_of で 1 行解決
+  # player.push_out_of(wall)
+end
 ```
 
 ---
