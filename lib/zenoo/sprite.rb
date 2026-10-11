@@ -255,6 +255,28 @@ module Zenoo
       collide?(other)
     end
 
+    # 衝突めり込み量・押し出しベクトルを取得 (MTV: 衝突していない場合は nil)
+    def penetration(other)
+      col_a = self.collider
+      return nil unless col_a
+      col_b = other.respond_to?(:collider) ? other.collider : other
+      return nil unless col_b
+      Collision.penetration(col_a, col_b)
+    end
+    alias overlap_with penetration
+
+    # other から自動的にめり込み解消 (位置を直接更新)
+    def push_out_of(other)
+      hit = penetration(other)
+      if hit
+        self.x += hit.overlap_x
+        self.y += hit.overlap_y
+        hit
+      else
+        nil
+      end
+    end
+
     private
 
     def sync_collider
