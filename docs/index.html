@@ -114,6 +114,9 @@
     .card.tween::before {
       background: linear-gradient(90deg, #a855f7, #06b6d4);
     }
+    .card.coords::before {
+      background: linear-gradient(90deg, #0ea5e9, #10b981);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -137,6 +140,7 @@
     .card.sound .card-tag { color: #38bdf8; }
     .card.collision .card-tag { color: #fb7185; }
     .card.tween .card-tag { color: #c084fc; }
+    .card.coords .card-tag { color: #38bdf8; }
 
     .card h2 {
       font-size: 22px;
@@ -269,6 +273,15 @@
       background: #a78bfa;
       color: #0b0d14;
       box-shadow: 0 0 20px rgba(167, 139, 250, 0.4);
+    }
+    .card.coords .btn-launch {
+      background: #0284c7;
+      color: #fff;
+    }
+    .card.coords .btn-launch:hover {
+      background: #38bdf8;
+      color: #0b0d14;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -487,6 +500,24 @@
         </ul>
       </div>
       <a href="tween/" class="btn-launch">Tween デモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Sprite Coords & Collision Visualizer Demo Card -->
+    <div class="card coords">
+      <div>
+        <div class="card-tag">Sprite &amp; Transform</div>
+        <h2>Sprite Coords Visualizer</h2>
+        <p class="desc">
+          スプライトの配置基準 (Anchor)、回転支点 (Pivot)、当たり判定中心 (Collider Offset)、位置 (Position)、縦横個別拡大縮小 (Scale X/Y) の相互作用をリアルタイム可視化する実機シミュレーター。
+        </p>
+        <ul class="features">
+          <li>Anchor / Pivot / Position の関係性を視覚的ガイドで完全理解</li>
+          <li>スライダーによる Scale X/Y 個別調整 &amp; Collider Offset リアルタイム調整</li>
+          <li>マウス左ドラッグ移動、右ドラッグによる支点中心の直感的回転操作</li>
+          <li>矩形・角丸矩形・円・楕円・六角形コライダーとリアルタイム衝突判定テスト</li>
+        </ul>
+      </div>
+      <a href="coords/" class="btn-launch">シミュレーターを起動 (Launch Demo) →</a>
     </div>
   </main>
 
