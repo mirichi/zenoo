@@ -33,6 +33,7 @@ mkdir -p "${DOCS_DIR}/sound"
 mkdir -p "${DOCS_DIR}/collision"
 mkdir -p "${DOCS_DIR}/tween"
 mkdir -p "${DOCS_DIR}/coords"
+mkdir -p "${DOCS_DIR}/billiards"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -309,6 +310,22 @@ build_coords() {
     echo "-> Coords build done!"
 }
 
+build_billiards() {
+    echo "=== Building Billiards & 3D Rolling Shader Demo (${DOCS_DIR}/billiards) ==="
+    mkdir -p "${DOCS_DIR}/billiards"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_billiards.rb -c -o "${DOCS_DIR}/billiards/app.c"
+    strip_always_inline "${DOCS_DIR}/billiards/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/billiards/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/billiards/index.html" \
+        --shell-file examples/web/shell_billiards.html
+
+    rm -f "${DOCS_DIR}/billiards/app.c"
+    echo "-> Billiards build done!"
+}
+
 case "$TARGET" in
     game)      build_game ;;
     gui)       build_gui ;;
@@ -322,6 +339,7 @@ case "$TARGET" in
     collision) build_collision ;;
     tween)     build_tween ;;
     coords)    build_coords ;;
+    billiards) build_billiards ;;
     all)
         build_game
         sleep 0.5
@@ -346,10 +364,12 @@ case "$TARGET" in
         build_tween
         sleep 0.5
         build_coords
+        sleep 0.5
+        build_billiards
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|coords|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|coords|billiards|all]"
         exit 1
         ;;
 esac
@@ -370,4 +390,5 @@ echo " Sound    : ${DOCS_DIR}/sound/index.html"
 echo " Collision: ${DOCS_DIR}/collision/index.html"
 echo " Tween    : ${DOCS_DIR}/tween/index.html"
 echo " Coords   : ${DOCS_DIR}/coords/index.html"
+echo " Billiards: ${DOCS_DIR}/billiards/index.html"
 echo "=========================================================="
