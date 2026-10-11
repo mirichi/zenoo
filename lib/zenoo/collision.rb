@@ -9,6 +9,38 @@ module Zenoo
     TYPE_POLYGON = 3
 
     # ====================================================
+    # 衝突めり込み・押し出し結果 (MTV: Minimum Translation Vector)
+    # ====================================================
+    class Hit
+      attr_accessor :depth, :normal_x, :normal_y, :overlap_x, :overlap_y
+
+      def initialize(depth = 0.0, normal_x = 0.0, normal_y = 0.0, overlap_x = 0.0, overlap_y = 0.0)
+        @depth = depth.to_f
+        @normal_x = normal_x.to_f
+        @normal_y = normal_y.to_f
+        @overlap_x = overlap_x.to_f
+        @overlap_y = overlap_y.to_f
+      end
+
+      # a を押し戻す移動量 (overlap_x, overlap_y)
+      def push_x; @overlap_x; end
+      def push_y; @overlap_y; end
+
+      # b を押し戻す移動量 (-overlap_x, -overlap_y)
+      def push_b_x; -@overlap_x; end
+      def push_b_y; -@overlap_y; end
+
+      # 向き反転 (a と b を入れ替えた結果)
+      def flipped
+        Hit.new(@depth, -@normal_x, -@normal_y, -@overlap_x, -@overlap_y)
+      end
+
+      def inspect
+        "#<Zenoo::Collision::Hit depth=#{@depth.round(3)} normal=[#{@normal_x.round(3)}, #{@normal_y.round(3)}] overlap=[#{@overlap_x.round(3)}, #{@overlap_y.round(3)}]>"
+      end
+    end
+
+    # ====================================================
     # 幾何形状定義 (凸形状)
     # 幾何クラスは Point, Circle (楕円を包含), Rect (カプセルを包含), Polygon の 4 つ。
     # すべての形状が回転 (angle) および 不等スケール (scale_x, scale_y) に完全対応。
@@ -632,6 +664,23 @@ module Zenoo
         @_support[1] = @center_y + (@m10 * lpx + @m11 * lpy)
         @_support
       end
+
+      # ワールド座標系での4頂点 (SAT射影用)
+      def world_vertices
+        update_cache if dirty?
+        hw = @half_w * @scale_x
+        hh = @half_h * @scale_y
+        dx1 = hw * @cos - hh * @sin
+        dy1 = hw * @sin + hh * @cos
+        dx2 = -hw * @cos - hh * @sin
+        dy2 = -hw * @sin + hh * @cos
+        [
+          [@center_x + dx1, @center_y + dy1],
+          [@center_x - dx2, @center_y - dy2],
+          [@center_x - dx1, @center_y - dy1],
+          [@center_x + dx2, @center_y + dy2]
+        ]
+      end
     end
 
     # 凸多角形 (Convex Polygon: 回転・不等スケーリング対応)
@@ -833,6 +882,23 @@ module Zenoo
         @_support[0] = @center_x + (@m00 * best_x + @m01 * best_y)
         @_support[1] = @center_y + (@m10 * best_x + @m11 * best_y)
         @_support
+      end
+
+      # ワールド座標系での頂点配列 (SAT射影用)
+      def world_vertices
+        update_cache if dirty?
+        verts = []
+        i = 0
+        len = @local_vx ? @local_vx.length : 0
+        while i < len
+          lx = @local_vx[i] * @scale_x
+          ly = @local_vy[i] * @scale_y
+          wx = @center_x + lx * @cos - ly * @sin
+          wy = @center_y + lx * @sin + ly * @cos
+          verts << [wx, wy]
+          i += 1
+        end
+        verts
       end
     end
 
@@ -1105,6 +1171,324 @@ module Zenoo
         end
         i += 1
       end
+    end
+
+    # ====================================================
+    # 衝突めり込み量・押し出しベクトル (MTV) 算出エントリ
+    # ====================================================
+    def self.penetration(shape_a, shape_b)
+      shape_a = shape_a.collider if shape_a.respond_to?(:collider)
+      shape_b = shape_b.collider if shape_b.respond_to?(:collider)
+      return nil unless shape_a && shape_b
+
+      shape_a.update_cache if shape_a.dirty?
+      shape_b.update_cache if shape_b.dirty?
+
+      dx = shape_b.center_x - shape_a.center_x
+      dy = shape_b.center_y - shape_a.center_y
+      dist_sq = dx * dx + dy * dy
+      r_sum = shape_a.bounding_radius + shape_b.bounding_radius
+
+      # 1. ブロードフェーズ
+      return nil if dist_sq > r_sum * r_sum
+
+      type_a = shape_a.shape_type
+      type_b = shape_b.shape_type
+
+      # 2. 高速パス (Fast Path)
+
+      # 真円 vs 真円
+      if type_a == TYPE_CIRCLE && type_b == TYPE_CIRCLE
+        if shape_a.is_true_circle && shape_b.is_true_circle
+          return penetration_circle_circle(shape_a, shape_b, dx, dy, dist_sq)
+        end
+      end
+
+      # 真円 vs 等倍矩形 (角丸含む)
+      if type_a == TYPE_CIRCLE && type_b == TYPE_RECT && shape_a.is_true_circle && shape_b.is_uniform
+        return penetration_circle_rect(shape_a, shape_b, dx, dy)
+      elsif type_a == TYPE_RECT && type_b == TYPE_CIRCLE && shape_b.is_true_circle && shape_a.is_uniform
+        hit = penetration_circle_rect(shape_b, shape_a, -dx, -dy)
+        return hit ? hit.flipped : nil
+      end
+
+      # 等倍・非角丸 矩形 vs 矩形
+      if type_a == TYPE_RECT && type_b == TYPE_RECT && shape_a.is_uniform && shape_b.is_uniform
+        if !shape_a.is_rounded && !shape_b.is_rounded
+          if shape_a.is_aabb && shape_b.is_aabb
+            return penetration_aabb_aabb(shape_a, shape_b, dx, dy)
+          else
+            return penetration_obb_obb(shape_a, shape_b, dx, dy)
+          end
+        end
+      end
+
+      # 3. 汎用 SAT (多角形, 傾いた楕円, 角丸矩形同士など)
+      penetration_generic_sat(shape_a, shape_b, dx, dy)
+    end
+
+    class << self
+      alias overlap penetration
+      alias intersect penetration
+    end
+
+    # 真円 vs 真円の押し出し
+    def self.penetration_circle_circle(a, b, dx, dy, dist_sq)
+      r_sum = a.effective_radius + b.effective_radius
+      return nil if dist_sq >= r_sum * r_sum
+
+      dist = Math.sqrt(dist_sq)
+      depth = r_sum - dist
+      if dist > 0.000001
+        nx = -dx / dist
+        ny = -dy / dist
+      else
+        nx = -1.0
+        ny = 0.0
+      end
+      Hit.new(depth, nx, ny, nx * depth, ny * depth)
+    end
+
+    # AABB vs AABB の押し出し
+    def self.penetration_aabb_aabb(a, b, dx, dy)
+      ox = (a.half_w + b.half_w) - (dx >= 0.0 ? dx : -dx)
+      oy = (a.half_h + b.half_h) - (dy >= 0.0 ? dy : -dy)
+      return nil if ox <= 0.0 || oy <= 0.0
+
+      if ox < oy
+        depth = ox
+        nx = dx >= 0.0 ? -1.0 : 1.0
+        ny = 0.0
+      else
+        depth = oy
+        nx = 0.0
+        ny = dy >= 0.0 ? -1.0 : 1.0
+      end
+      Hit.new(depth, nx, ny, nx * depth, ny * depth)
+    end
+
+    # 真円 vs 矩形 (回転・角丸対応 SDF 方式)
+    def self.penetration_circle_rect(circle, rect, dx, dy)
+      ldx = dx * rect.cos + dy * rect.sin
+      ldy = -dx * rect.sin + dy * rect.cos
+
+      sign_x = ldx >= 0.0 ? 1.0 : -1.0
+      sign_y = ldy >= 0.0 ? 1.0 : -1.0
+      abs_x = ldx >= 0.0 ? ldx : -ldx
+      abs_y = ldy >= 0.0 ? ldy : -ldy
+
+      cw = rect.core_half_w
+      ch = rect.core_half_h
+      total_r = rect.radius + circle.effective_radius
+
+      qx = abs_x - cw
+      qy = abs_y - ch
+
+      if qx > 0.0 && qy > 0.0
+        d_sq = qx * qx + qy * qy
+        return nil if d_sq >= total_r * total_r
+        d = Math.sqrt(d_sq)
+        depth = total_r - d
+        lnx = -sign_x * (qx / d)
+        lny = -sign_y * (qy / d)
+      elsif qx > 0.0
+        return nil if qx >= total_r
+        depth = total_r - qx
+        lnx = -sign_x
+        lny = 0.0
+      elsif qy > 0.0
+        return nil if qy >= total_r
+        depth = total_r - qy
+        lnx = 0.0
+        lny = -sign_y
+      else
+        # 内部に埋まっている場合: 最も浅い辺の外側へ
+        if qx > qy
+          depth = -qx + total_r
+          lnx = -sign_x
+          lny = 0.0
+        else
+          depth = -qy + total_r
+          lnx = 0.0
+          lny = -sign_y
+        end
+      end
+
+      nx = lnx * rect.cos - lny * rect.sin
+      ny = lnx * rect.sin + lny * rect.cos
+      Hit.new(depth, nx, ny, nx * depth, ny * depth)
+    end
+
+    # OBB vs OBB の 4軸 SAT 押し出し
+    def self.penetration_obb_obb(a, b, dx, dy)
+      cos_rel = b.cos * a.cos + b.sin * a.sin
+      sin_rel = b.sin * a.cos - b.cos * a.sin
+      c = cos_rel >= 0.0 ? cos_rel : -cos_rel
+      s = sin_rel >= 0.0 ? sin_rel : -sin_rel
+
+      min_overlap = 1.0e30
+      best_nx = 0.0
+      best_ny = 0.0
+
+      # 軸 1: a.X (法線: [a.cos, a.sin])
+      p1 = dx * a.cos + dy * a.sin
+      r1 = a.half_w + b.half_w * c + b.half_h * s
+      p1_abs = p1 >= 0.0 ? p1 : -p1
+      o1 = r1 - p1_abs
+      return nil if o1 <= 0.0
+      if o1 < min_overlap
+        min_overlap = o1
+        sign = p1 >= 0.0 ? -1.0 : 1.0
+        best_nx = a.cos * sign
+        best_ny = a.sin * sign
+      end
+
+      # 軸 2: a.Y (法線: [-a.sin, a.cos])
+      p2 = -dx * a.sin + dy * a.cos
+      r2 = a.half_h + b.half_w * s + b.half_h * c
+      p2_abs = p2 >= 0.0 ? p2 : -p2
+      o2 = r2 - p2_abs
+      return nil if o2 <= 0.0
+      if o2 < min_overlap
+        min_overlap = o2
+        sign = p2 >= 0.0 ? -1.0 : 1.0
+        best_nx = -a.sin * sign
+        best_ny = a.cos * sign
+      end
+
+      # 軸 3: b.X (法線: [b.cos, b.sin])
+      p3 = dx * b.cos + dy * b.sin
+      r3 = b.half_w + a.half_w * c + a.half_h * s
+      p3_abs = p3 >= 0.0 ? p3 : -p3
+      o3 = r3 - p3_abs
+      return nil if o3 <= 0.0
+      if o3 < min_overlap
+        min_overlap = o3
+        sign = p3 >= 0.0 ? -1.0 : 1.0
+        best_nx = b.cos * sign
+        best_ny = b.sin * sign
+      end
+
+      # 軸 4: b.Y (法線: [-b.sin, b.cos])
+      p4 = -dx * b.sin + dy * b.cos
+      r4 = b.half_h + a.half_w * s + a.half_h * c
+      p4_abs = p4 >= 0.0 ? p4 : -p4
+      o4 = r4 - p4_abs
+      return nil if o4 <= 0.0
+      if o4 < min_overlap
+        min_overlap = o4
+        sign = p4 >= 0.0 ? -1.0 : 1.0
+        best_nx = -b.sin * sign
+        best_ny = b.cos * sign
+      end
+
+      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap)
+    end
+
+    # 多角形等を含む汎用 2D SAT 押し出し
+    def self.penetration_generic_sat(shape_a, shape_b, dx, dy)
+      verts_a = shape_a.respond_to?(:world_vertices) ? shape_a.world_vertices : nil
+      verts_b = shape_b.respond_to?(:world_vertices) ? shape_b.world_vertices : nil
+
+      is_circle_a = (shape_a.shape_type == TYPE_CIRCLE && shape_a.is_true_circle)
+      is_circle_b = (shape_b.shape_type == TYPE_CIRCLE && shape_b.is_true_circle)
+
+      # 頂点も円も取れない場合は nil
+      return nil unless (verts_a || is_circle_a) && (verts_b || is_circle_b)
+
+      axes = []
+
+      if verts_a
+        len_a = verts_a.length
+        len_a.times do |i|
+          p1 = verts_a[i]
+          p2 = verts_a[(i + 1) % len_a]
+          nx = -(p2[1] - p1[1])
+          ny = p2[0] - p1[0]
+          l = Math.sqrt(nx * nx + ny * ny)
+          axes << [nx / l, ny / l] if l > 0.000001
+        end
+      end
+
+      if verts_b
+        len_b = verts_b.length
+        len_b.times do |i|
+          p1 = verts_b[i]
+          p2 = verts_b[(i + 1) % len_b]
+          nx = -(p2[1] - p1[1])
+          ny = p2[0] - p1[0]
+          l = Math.sqrt(nx * nx + ny * ny)
+          axes << [nx / l, ny / l] if l > 0.000001
+        end
+      end
+
+      if is_circle_a && verts_b
+        verts_b.each do |v|
+          vx = v[0] - shape_a.center_x
+          vy = v[1] - shape_a.center_y
+          l = Math.sqrt(vx * vx + vy * vy)
+          axes << [vx / l, vy / l] if l > 0.000001
+        end
+      elsif is_circle_b && verts_a
+        verts_a.each do |v|
+          vx = v[0] - shape_b.center_x
+          vy = v[1] - shape_b.center_y
+          l = Math.sqrt(vx * vx + vy * vy)
+          axes << [vx / l, vy / l] if l > 0.000001
+        end
+      end
+
+      min_overlap = 1.0e30
+      best_nx = 0.0
+      best_ny = 0.0
+
+      ab_dx = shape_a.center_x - shape_b.center_x
+      ab_dy = shape_a.center_y - shape_b.center_y
+
+      axes.each do |axis|
+        ax = axis[0]
+        ay = axis[1]
+
+        min_a, max_a = is_circle_a ? project_circle(ax, ay, shape_a) : project_polygon(ax, ay, verts_a)
+        min_b, max_b = is_circle_b ? project_circle(ax, ay, shape_b) : project_polygon(ax, ay, verts_b)
+
+        overlap = (max_a < max_b ? max_a : max_b) - (min_a > min_b ? min_a : min_b)
+        return nil if overlap <= 0.0
+
+        if overlap < min_overlap
+          min_overlap = overlap
+          ab_dot = ab_dx * ax + ab_dy * ay
+          if ab_dot < 0.0
+            best_nx = -ax
+            best_ny = -ay
+          else
+            best_nx = ax
+            best_ny = ay
+          end
+        end
+      end
+
+      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap)
+    end
+
+    def self.project_polygon(axis_x, axis_y, verts)
+      min = axis_x * verts[0][0] + axis_y * verts[0][1]
+      max = min
+      i = 1
+      len = verts.length
+      while i < len
+        dot = axis_x * verts[i][0] + axis_y * verts[i][1]
+        min = dot if dot < min
+        max = dot if dot > max
+        i += 1
+      end
+      [min, max]
+    end
+
+    def self.project_circle(axis_x, axis_y, circle)
+      center_dot = axis_x * circle.center_x + axis_y * circle.center_y
+      r = circle.effective_radius
+      [center_dot - r, center_dot + r]
     end
 
     # ファクトリメソッド
