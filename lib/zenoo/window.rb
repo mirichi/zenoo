@@ -481,19 +481,10 @@ module Zenoo
         s0 = sc[0].to_f; s1 = sc[1].to_f; s2 = sc[2].to_f; s3 = sc[3].to_f
       end
 
-      # ピボット (pivot: :center, :top_left, [px, py])
-      pv_x = 0.5
-      pv_y = 0.5
-      if pivot.nil? || pivot == :center
-        pv_x = 0.5
-        pv_y = 0.5
-      elsif pivot == :top_left
-        pv_x = 0.0
-        pv_y = 0.0
-      elsif pivot.is_a?(Array) && pivot.length >= 2
-        pv_x = pivot[0].to_f
-        pv_y = pivot[1].to_f
-      end
+      # ピボット (pivot: :center, :top_left, :center_left 等)
+      pv = Collision.parse_pivot(pivot)
+      pv_x = pv[0]
+      pv_y = pv[1]
       rot_rad = (angle ? angle.to_f : 0.0) * (Math::PI / 180.0)
 
       mode = image ? 1.0 : 0.0
@@ -582,20 +573,14 @@ module Zenoo
         ay = y.to_f + @offset_y
       end
 
-      # ピボット (center_x, center_y, または pivot: :center, :top_left, [px, py])
-      cx = center_x.to_f
-      cy = center_y.to_f
-      if pivot.nil?
-        # デフォルト (center_x, center_y)
-      elsif pivot == :center
-        cx = 0.5
-        cy = 0.5
-      elsif pivot == :top_left
-        cx = 0.0
-        cy = 0.0
-      elsif pivot.is_a?(Array) && pivot.length >= 2
-        cx = pivot[0].to_f
-        cy = pivot[1].to_f
+      # ピボット (center_x, center_y, または pivot: :center, :top_left, :center_left 等)
+      if pivot
+        pv = Collision.parse_pivot(pivot)
+        cx = pv[0]
+        cy = pv[1]
+      else
+        cx = center_x.to_f
+        cy = center_y.to_f
       end
 
       # 角度（度数法からラジアンへ変換）

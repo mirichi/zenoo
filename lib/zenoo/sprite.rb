@@ -285,19 +285,9 @@ module Zenoo
       h = height
 
       # ピボット比率
-      if @pivot == :center || @pivot.nil?
-        pv_x = 0.5
-        pv_y = 0.5
-      elsif @pivot == :top_left
-        pv_x = 0.0
-        pv_y = 0.0
-      elsif @pivot.is_a?(Array) && @pivot.length >= 2
-        pv_x = @pivot[0].to_f
-        pv_y = @pivot[1].to_f
-      else
-        pv_x = 0.5
-        pv_y = 0.5
-      end
+      pv = Collision.parse_pivot(@pivot)
+      pv_x = pv[0]
+      pv_y = pv[1]
 
       # スプライトのワールド回転中心 (ピボット)
       tl_x = @x - @anchor_x * w
