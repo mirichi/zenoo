@@ -37,11 +37,11 @@ module Zenoo
     }
 
     def self.resolve_key(key)
-      KEY_MAP[key] || key.to_i
+      KEY_MAP[key] || (key.respond_to?(:to_i) ? key.to_i : 0)
     end
 
     def self.resolve_mouse(button)
-      MOUSE_MAP[button] || button.to_i
+      MOUSE_MAP[button] || (button.respond_to?(:to_i) ? button.to_i : 0)
     end
 
     # 押されている状態 (持続)
