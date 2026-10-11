@@ -32,6 +32,7 @@ mkdir -p "${DOCS_DIR}/clip"
 mkdir -p "${DOCS_DIR}/sound"
 mkdir -p "${DOCS_DIR}/collision"
 mkdir -p "${DOCS_DIR}/tween"
+mkdir -p "${DOCS_DIR}/coords"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -77,7 +78,7 @@ build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
 build_c_kernel_obj "src/zenoo_audio.c" "${CACHE_DIR}/zenoo_audio.o"
 build_c_kernel_obj "ext/spinel/zenoo_spinel.c" "${CACHE_DIR}/zenoo_spinel.o"
 
-OPT_LEVEL="${OPT_LEVEL:--O1}"
+OPT_LEVEL="${OPT_LEVEL:--O2}"
 DEBUG_FLAGS="${DEBUG_FLAGS:--g0}"
 
 COMMON_EMCC_FLAGS=(
@@ -292,6 +293,22 @@ build_tween() {
     echo "-> Tween build done!"
 }
 
+build_coords() {
+    echo "=== Building Sprite Coords & Collision Visualizer (${DOCS_DIR}/coords) ==="
+    mkdir -p "${DOCS_DIR}/coords"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_sprite_coords.rb -c -o "${DOCS_DIR}/coords/app.c"
+    strip_always_inline "${DOCS_DIR}/coords/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/coords/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/coords/index.html" \
+        --shell-file examples/web/shell_coords.html
+
+    rm -f "${DOCS_DIR}/coords/app.c"
+    echo "-> Coords build done!"
+}
+
 case "$TARGET" in
     game)      build_game ;;
     gui)       build_gui ;;
@@ -304,6 +321,7 @@ case "$TARGET" in
     sound)     build_sound ;;
     collision) build_collision ;;
     tween)     build_tween ;;
+    coords)    build_coords ;;
     all)
         build_game
         sleep 0.5
@@ -326,10 +344,12 @@ case "$TARGET" in
         build_collision
         sleep 0.5
         build_tween
+        sleep 0.5
+        build_coords
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|coords|all]"
         exit 1
         ;;
 esac
@@ -349,4 +369,5 @@ echo " Clip     : ${DOCS_DIR}/clip/index.html"
 echo " Sound    : ${DOCS_DIR}/sound/index.html"
 echo " Collision: ${DOCS_DIR}/collision/index.html"
 echo " Tween    : ${DOCS_DIR}/tween/index.html"
+echo " Coords   : ${DOCS_DIR}/coords/index.html"
 echo "=========================================================="
