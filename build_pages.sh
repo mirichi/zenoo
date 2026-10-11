@@ -118,6 +118,21 @@ strip_always_inline() {
     python3 -c "import sys, re; p=sys.argv[1]; s=open(p, 'r', encoding='utf-8', errors='ignore').read().replace('__attribute__((always_inline))', ''); s=re.sub(r'/mnt/c/Users/[^/\"\'\s]+', '/workspace', s); open(p, 'w', encoding='utf-8').write(s)" "$1"
 }
 
+patch_emscripten_js() {
+    python3 -c "
+import sys
+p = sys.argv[1]
+try:
+    s = open(p, 'r', encoding='utf-8').read()
+    s = s.replace('const total=Number(headers.get(\"Content-Length\")||packageSize);', 'const total=packageSize||Number(headers.get(\"Content-Length\")||0);')
+    if 'totalLoaded+=download.loaded;totalSize+=download.total}' in s and 'totalSize=Math.max(totalSize,totalLoaded);' not in s:
+        s = s.replace('totalLoaded+=download.loaded;totalSize+=download.total}', 'totalLoaded+=download.loaded;totalSize+=download.total}totalSize=Math.max(totalSize,totalLoaded);')
+    open(p, 'w', encoding='utf-8').write(s)
+except Exception as e:
+    print('Failed to patch', p, e)
+" "$1"
+}
+
 build_game() {
     echo "=== Building Survival Shooting Game (${DOCS_DIR}/game) ==="
     mkdir -p "${DOCS_DIR}/game"
@@ -130,6 +145,7 @@ build_game() {
         -o "${DOCS_DIR}/game/index.html" \
         --shell-file examples/web/shell_game.html
 
+    patch_emscripten_js "${DOCS_DIR}/game/index.js"
     rm -f "${DOCS_DIR}/game/app.c"
     echo "-> Game build done!"
 }
@@ -146,6 +162,7 @@ build_gui() {
         -o "${DOCS_DIR}/gui/index.html" \
         --shell-file examples/web/shell_gui.html
 
+    patch_emscripten_js "${DOCS_DIR}/gui/index.js"
     rm -f "${DOCS_DIR}/gui/app.c"
     echo "-> GUI build done!"
 }
@@ -162,6 +179,7 @@ build_font() {
         -o "${DOCS_DIR}/font/index.html" \
         --shell-file examples/web/shell_font.html
 
+    patch_emscripten_js "${DOCS_DIR}/font/index.js"
     rm -f "${DOCS_DIR}/font/app.c"
     echo "-> Font build done!"
 }
@@ -178,6 +196,7 @@ build_vector() {
         -o "${DOCS_DIR}/vector/index.html" \
         --shell-file examples/web/shell.html
 
+    patch_emscripten_js "${DOCS_DIR}/vector/index.js"
     rm -f "${DOCS_DIR}/vector/app.c"
     echo "-> Vector build done!"
 }
@@ -194,6 +213,7 @@ build_image() {
         -o "${DOCS_DIR}/image/index.html" \
         --shell-file examples/web/shell_image.html
 
+    patch_emscripten_js "${DOCS_DIR}/image/index.js"
     rm -f "${DOCS_DIR}/image/app.c"
     echo "-> Image build done!"
 }
@@ -210,6 +230,7 @@ build_atlas() {
         -o "${DOCS_DIR}/atlas/index.html" \
         --shell-file examples/web/shell_atlas.html
 
+    patch_emscripten_js "${DOCS_DIR}/atlas/index.js"
     rm -f "${DOCS_DIR}/atlas/app.c"
     echo "-> Atlas build done!"
 }
@@ -226,6 +247,7 @@ build_window() {
         -o "${DOCS_DIR}/window/index.html" \
         --shell-file examples/web/shell_window.html
 
+    patch_emscripten_js "${DOCS_DIR}/window/index.js"
     rm -f "${DOCS_DIR}/window/app.c"
     echo "-> Window build done!"
 }
@@ -242,6 +264,7 @@ build_clip() {
         -o "${DOCS_DIR}/clip/index.html" \
         --shell-file examples/web/shell_clip.html
 
+    patch_emscripten_js "${DOCS_DIR}/clip/index.js"
     rm -f "${DOCS_DIR}/clip/app.c"
     echo "-> Clip build done!"
 }
@@ -258,6 +281,7 @@ build_sound() {
         -o "${DOCS_DIR}/sound/index.html" \
         --shell-file examples/web/shell_sound.html
 
+    patch_emscripten_js "${DOCS_DIR}/sound/index.js"
     rm -f "${DOCS_DIR}/sound/app.c"
     echo "-> Sound build done!"
 }
@@ -274,6 +298,7 @@ build_collision() {
         -o "${DOCS_DIR}/collision/index.html" \
         --shell-file examples/web/shell_collision.html
 
+    patch_emscripten_js "${DOCS_DIR}/collision/index.js"
     rm -f "${DOCS_DIR}/collision/app.c"
     echo "-> Collision build done!"
 }
@@ -290,6 +315,7 @@ build_tween() {
         -o "${DOCS_DIR}/tween/index.html" \
         --shell-file examples/web/shell_tween.html
 
+    patch_emscripten_js "${DOCS_DIR}/tween/index.js"
     rm -f "${DOCS_DIR}/tween/app.c"
     echo "-> Tween build done!"
 }
@@ -306,6 +332,7 @@ build_coords() {
         -o "${DOCS_DIR}/coords/index.html" \
         --shell-file examples/web/shell_coords.html
 
+    patch_emscripten_js "${DOCS_DIR}/coords/index.js"
     rm -f "${DOCS_DIR}/coords/app.c"
     echo "-> Coords build done!"
 }
@@ -322,6 +349,7 @@ build_billiards() {
         -o "${DOCS_DIR}/billiards/index.html" \
         --shell-file examples/web/shell_billiards.html
 
+    patch_emscripten_js "${DOCS_DIR}/billiards/index.js"
     rm -f "${DOCS_DIR}/billiards/app.c"
     echo "-> Billiards build done!"
 }
