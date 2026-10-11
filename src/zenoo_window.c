@@ -29,8 +29,11 @@ int swapcontext(ucontext_t *oucp, const ucontext_t *ucp) { (void)oucp; (void)ucp
 #include "zenoo_internal.h"
 
 #ifdef _WIN32
+// NVIDIA Optimus: GeForce dGPU を優先して有効化
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
-__declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
+// ※ AMD Ryzen 内蔵 Radeon + NVIDIA GeForce のノートPC環境では、
+//    AmdPowerXpressRequestHighPerformance が有効だと内蔵 Radeon が優先されてしまうため無効化
+// __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 #endif
 
 #define ZEN_DEFAULT_DT (1.0 / 60.0)
