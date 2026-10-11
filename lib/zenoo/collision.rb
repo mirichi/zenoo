@@ -171,7 +171,7 @@ module Zenoo
       attr_reader :x, :y, :radius_x, :radius_y, :angle, :scale_x, :scale_y
       attr_reader :bounding_radius, :is_true_circle, :effective_radius
 
-      def initialize(x, y, radius_x, radius_y = radius_x, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center)
+      def initialize(x, y, radius_x, radius_y = radius_x, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center)
         @x = x.to_f
         @y = y.to_f
         @radius_x = radius_x.to_f
@@ -183,8 +183,8 @@ module Zenoo
         @offset_y = offset_y.to_f
         @_support = [0.0, 0.0]
 
-        @anchor_x = 0.0
-        @anchor_y = 0.0
+        @anchor_x = 0.5
+        @anchor_y = 0.5
         @pivot_x = 0.5
         @pivot_y = 0.5
 
@@ -1109,7 +1109,7 @@ module Zenoo
 
     # ファクトリメソッド
     # 円 / 楕円 (ry を省略した場合は真円)
-    def self.circle(x, y, rx, ry = rx, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center)
+    def self.circle(x, y, rx, ry = rx, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center)
       Circle.new(x, y, rx, ry, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot)
     end
 

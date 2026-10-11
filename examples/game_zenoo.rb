@@ -197,7 +197,7 @@ class Bullet
     @damage = damage
     @traveled = 0.0
     @dead = false
-    @shape = Collision.circle(@x, @y, 2.5)
+    @shape = Collision.circle(@x, @y, 2.5, anchor: :center)
   end
 
   def update
@@ -231,7 +231,7 @@ class Missile
     @life = 90
     @dead = false
     @exploded = false
-    @shape = Collision.circle(@x, @y, 4.0)
+    @shape = Collision.circle(@x, @y, 4.0, anchor: :center)
   end
 
   def update(enemies)
@@ -295,7 +295,7 @@ class Orbiter
     @damage = 2
     @x = 0.0
     @y = 0.0
-    @shape = Collision.circle(@x, @y, 6.0)
+    @shape = Collision.circle(@x, @y, 6.0, anchor: :center)
   end
 
   def update(px, py)
@@ -500,7 +500,7 @@ class Enemy
       @hit_radius = @radius * Math.cos(Math::PI / @sides)
     end
 
-    @shape = Collision.circle(@x, @y, @hit_radius)
+    @shape = Collision.circle(@x, @y, @hit_radius, anchor: :center)
   end
 
   def update(px, py)
@@ -542,7 +542,7 @@ class Player
   def rebuild_shape
     # 正三角形 (外接半径 28.0) の内接円 (14.0) 程度のコンパクトな当たり判定
     @hit_radius = 12.0
-    @shape = Collision.circle(@x, @y, @hit_radius)
+    @shape = Collision.circle(@x, @y, @hit_radius, anchor: :center)
   end
 
   def initialize(x, y)
@@ -830,7 +830,7 @@ class Game
   end
 
   def spawn_enemies
-    if @spawn_interval > 8.0
+    if @spawn_interval > 4.0
       @spawn_interval -= 0.015
     end
 
