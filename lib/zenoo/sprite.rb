@@ -2,9 +2,9 @@
 
 module Zenoo
   class Sprite
-    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :alpha, :color, :visible, :image
+    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image
 
-    def initialize(x = 0.0, y = 0.0, image = nil)
+    def initialize(x = 0.0, y = 0.0, image = nil, anchor: :top_left, pivot: :center)
       @x = x.to_f
       @y = y.to_f
       @z = 0.0
@@ -12,7 +12,10 @@ module Zenoo
       @angle = 0.0
       @scale_x = 1.0
       @scale_y = 1.0
-      @pivot = :center
+      @anchor_x = 0.0
+      @anchor_y = 0.0
+      self.anchor = anchor
+      self.pivot = pivot
       @alpha = 255
       @color = nil
       @visible = true
@@ -82,6 +85,56 @@ module Zenoo
       @dirty_collider = true
     end
 
+    def pivot_x
+      Collision.parse_pivot(@pivot)[0]
+    end
+
+    def pivot_y
+      Collision.parse_pivot(@pivot)[1]
+    end
+
+    def pivot_x=(v)
+      py = pivot_y
+      self.pivot = [v.to_f, py]
+    end
+
+    def pivot_y=(v)
+      px = pivot_x
+      self.pivot = [px, v.to_f]
+    end
+
+    def anchor
+      if (@anchor_x - 0.0).abs < 0.0001 && (@anchor_y - 0.0).abs < 0.0001
+        :top_left
+      elsif (@anchor_x - 0.5).abs < 0.0001 && (@anchor_y - 0.5).abs < 0.0001
+        :center
+      else
+        [@anchor_x, @anchor_y]
+      end
+    end
+
+    def anchor=(v)
+      ax, ay = Collision.parse_anchor(v)
+      return if @anchor_x == ax && @anchor_y == ay
+      @anchor_x = ax
+      @anchor_y = ay
+      @dirty_collider = true
+    end
+
+    def anchor_x=(v)
+      vf = v.to_f
+      return if @anchor_x == vf
+      @anchor_x = vf
+      @dirty_collider = true
+    end
+
+    def anchor_y=(v)
+      vf = v.to_f
+      return if @anchor_y == vf
+      @anchor_y = vf
+      @dirty_collider = true
+    end
+
     def alpha=(v); @alpha = v; end
     def color=(v); @color = v; end
     def visible=(v); @visible = !!v; end
@@ -109,12 +162,12 @@ module Zenoo
     def set_collider(type = :default,
                      width: nil, height: nil,
                      radius: nil, radius_x: nil, radius_y: nil,
-                     offset_x: 0.0, offset_y: 0.0,
+                     offset_x: nil, offset_y: nil,
                      vertices: nil)
       @collider_type = type
       @collider_shape = nil
-      @col_offset_x = offset_x.to_f
-      @col_offset_y = offset_y.to_f
+      @col_offset_x = offset_x.to_f if offset_x
+      @col_offset_y = offset_y.to_f if offset_y
 
       case type
       when :circle
@@ -146,6 +199,42 @@ module Zenoo
       @dirty_collider = true
     end
 
+    def collider_offset_x
+      @col_offset_x
+    end
+
+    def collider_offset_x=(v)
+      vf = v.to_f
+      return if @col_offset_x == vf
+      @col_offset_x = vf
+      @dirty_collider = true
+    end
+
+    def collider_offset_y
+      @col_offset_y
+    end
+
+    def collider_offset_y=(v)
+      vf = v.to_f
+      return if @col_offset_y == vf
+      @col_offset_y = vf
+      @dirty_collider = true
+    end
+
+    def collider_offset
+      [@col_offset_x, @col_offset_y]
+    end
+
+    def collider_offset=(val)
+      if val.is_a?(Array)
+        self.collider_offset_x = val[0]
+        self.collider_offset_y = val[1]
+      else
+        self.collider_offset_x = val
+        self.collider_offset_y = val
+      end
+    end
+
     # 変形（位置・回転・拡大・ピボット）と同期した Collision::Shape を取得
     def collider
       sync_collider if @dirty_collider || @collider_shape.nil?
@@ -160,6 +249,7 @@ module Zenoo
       return false unless col_b
       Collision.check(col_a, col_b)
     end
+    alias collides_with? collide?
 
     def ===(other)
       collide?(other)
@@ -167,19 +257,12 @@ module Zenoo
 
     private
 
-    # ローカル座標 (画像左上原点) をスプライトの変形に基づいてワールド座標へ変換
-    def transform_local_point(lx, ly)
+    def sync_collider
+      @dirty_collider = false
       w = width
       h = height
 
-      is_no_rot = (@angle % 360.0).abs < 0.0001
-      is_unit_scale = (@scale_x - 1.0).abs < 0.0001 && (@scale_y - 1.0).abs < 0.0001
-
-      # 非回転・等倍かつ中央ピボットの場合の最速パス (O(1) 加算のみ)
-      if is_no_rot && is_unit_scale && (@pivot == :center || @pivot.nil?)
-        return [@x + lx, @y + ly]
-      end
-
+      # ピボット比率
       if @pivot == :center || @pivot.nil?
         pv_x = 0.5
         pv_y = 0.5
@@ -194,147 +277,145 @@ module Zenoo
         pv_y = 0.5
       end
 
-      wpv_x = @x + pv_x * w
-      wpv_y = @y + pv_y * h
+      # スプライトのワールド回転中心 (ピボット)
+      tl_x = @x - @anchor_x * w
+      tl_y = @y - @anchor_y * h
+      wpv_x = tl_x + pv_x * w
+      wpv_y = tl_y + pv_y * h
 
-      rel_x = lx - pv_x * w
-      rel_y = ly - pv_y * h
-
-      slx = rel_x * @scale_x
-      sly = rel_y * @scale_y
-
-      if is_no_rot
-        rot_x = slx
-        rot_y = sly
-      else
-        rad = @angle * (Math::PI / 180.0)
-        c = Math.cos(rad)
-        s = Math.sin(rad)
-        rot_x = slx * c - sly * s
-        rot_y = slx * s + sly * c
-      end
-
-      [wpv_x + rot_x, wpv_y + rot_y]
-    end
-
-    def sync_collider
-      @dirty_collider = false
-      w = width
-      h = height
+      # スプライトの回転中心から見た、コライダー中心のローカル相対オフセット
+      rel_cx = (0.5 - pv_x) * w + @col_offset_x
+      rel_cy = (0.5 - pv_y) * h + @col_offset_y
 
       case @collider_type
       when :default
-        wc = transform_local_point(w * 0.5, h * 0.5)
         if @collider_shape.is_a?(Collision::Rect)
           shape = @collider_shape
-          shape.x = wc[0]
-          shape.y = wc[1]
+          shape.x = wpv_x
+          shape.y = wpv_y
           shape.width = w
           shape.height = h
+          shape.offset_x = rel_cx
+          shape.offset_y = rel_cy
           shape.angle = @angle
           shape.scale_x = @scale_x
           shape.scale_y = @scale_y
+          shape.anchor = :center
+          shape.pivot = :center
         else
           @collider_shape = Collision::Rect.new(
-            wc[0], wc[1], w, h,
-            angle: @angle, scale_x: @scale_x, scale_y: @scale_y, pivot: :center
+            wpv_x, wpv_y, w, h,
+            angle: @angle, scale_x: @scale_x, scale_y: @scale_y,
+            offset_x: rel_cx, offset_y: rel_cy, anchor: :center, pivot: :center
           )
         end
 
       when :rect
-        lcx = (w * 0.5) + @col_offset_x
-        lcy = (h * 0.5) + @col_offset_y
-        wc = transform_local_point(lcx, lcy)
         cw = @col_param1 > 0 ? @col_param1 : w
         ch = @col_param2 > 0 ? @col_param2 : h
         cr = @col_param3
 
         if @collider_shape.is_a?(Collision::Rect)
           shape = @collider_shape
-          shape.x = wc[0]
-          shape.y = wc[1]
+          shape.x = wpv_x
+          shape.y = wpv_y
           shape.width = cw
           shape.height = ch
           shape.radius = cr
+          shape.offset_x = rel_cx
+          shape.offset_y = rel_cy
           shape.angle = @angle
           shape.scale_x = @scale_x
           shape.scale_y = @scale_y
+          shape.anchor = :center
+          shape.pivot = :center
         else
           @collider_shape = Collision::Rect.new(
-            wc[0], wc[1], cw, ch,
-            angle: @angle, radius: cr, scale_x: @scale_x, scale_y: @scale_y, pivot: :center
+            wpv_x, wpv_y, cw, ch,
+            angle: @angle, radius: cr, scale_x: @scale_x, scale_y: @scale_y,
+            offset_x: rel_cx, offset_y: rel_cy, anchor: :center, pivot: :center
           )
         end
 
       when :circle
-        lcx = (w * 0.5) + @col_offset_x
-        lcy = (h * 0.5) + @col_offset_y
-        wc = transform_local_point(lcx, lcy)
         rx = @col_param1 > 0 ? @col_param1 : w * 0.5
         ry = @col_param2 > 0 ? @col_param2 : rx
 
         if @collider_shape.is_a?(Collision::Circle)
           shape = @collider_shape
-          shape.x = wc[0]
-          shape.y = wc[1]
+          shape.x = wpv_x
+          shape.y = wpv_y
           shape.radius_x = rx
           shape.radius_y = ry
+          shape.offset_x = rel_cx
+          shape.offset_y = rel_cy
           shape.angle = @angle
           shape.scale_x = @scale_x
           shape.scale_y = @scale_y
+          shape.anchor = :center
+          shape.pivot = :center
         else
           @collider_shape = Collision::Circle.new(
-            wc[0], wc[1], rx, ry,
-            angle: @angle, scale_x: @scale_x, scale_y: @scale_y, pivot: :center
+            wpv_x, wpv_y, rx, ry,
+            angle: @angle, scale_x: @scale_x, scale_y: @scale_y,
+            offset_x: rel_cx, offset_y: rel_cy, anchor: :center, pivot: :center
           )
         end
 
       when :point
-        lcx = (w * 0.5) + @col_offset_x
-        lcy = (h * 0.5) + @col_offset_y
-        wc = transform_local_point(lcx, lcy)
         if @collider_shape.is_a?(Collision::Point)
           shape = @collider_shape
-          shape.x = wc[0]
-          shape.y = wc[1]
+          shape.x = wpv_x
+          shape.y = wpv_y
+          shape.offset_x = rel_cx
+          shape.offset_y = rel_cy
+          shape.angle = @angle
+          shape.scale_x = @scale_x
+          shape.scale_y = @scale_y
+          shape.anchor = :center
+          shape.pivot = :center
         else
-          @collider_shape = Collision::Point.new(wc[0], wc[1])
+          @collider_shape = Collision::Point.new(
+            wpv_x, wpv_y,
+            angle: @angle, scale_x: @scale_x, scale_y: @scale_y,
+            offset_x: rel_cx, offset_y: rel_cy, anchor: :center, pivot: :center
+          )
         end
 
       when :polygon
         return unless @col_vertices && @col_vertices.length >= 3
-        sum_x = 0.0
-        sum_y = 0.0
-        @col_vertices.each { |v| sum_x += v[0].to_f; sum_y += v[1].to_f }
-        lcx = sum_x / @col_vertices.length
-        lcy = sum_y / @col_vertices.length
-        wc = transform_local_point(lcx, lcy)
-        rel_verts = @col_vertices.map { |v| [v[0].to_f - lcx, v[1].to_f - lcy] }
-
         if @collider_shape.is_a?(Collision::Polygon)
           shape = @collider_shape
-          shape.x = wc[0]
-          shape.y = wc[1]
+          shape.x = wpv_x
+          shape.y = wpv_y
+          shape.offset_x = rel_cx
+          shape.offset_y = rel_cy
           shape.angle = @angle
           shape.scale_x = @scale_x
           shape.scale_y = @scale_y
+          shape.anchor = :center
+          shape.pivot = :center
         else
           @collider_shape = Collision::Polygon.new(
-            rel_verts,
-            x: wc[0], y: wc[1],
-            angle: @angle, scale_x: @scale_x, scale_y: @scale_y, pivot: :center
+            @col_vertices,
+            x: wpv_x, y: wpv_y,
+            angle: @angle, scale_x: @scale_x, scale_y: @scale_y,
+            offset_x: rel_cx, offset_y: rel_cy, anchor: :center, pivot: :center
           )
         end
 
       when :custom
         if @collider_shape.respond_to?(:x=) && @collider_shape.respond_to?(:y=)
-          wc = transform_local_point(w * 0.5 + @col_offset_x, h * 0.5 + @col_offset_y)
           shape = @collider_shape
-          shape.x = wc[0]
-          shape.y = wc[1]
+          shape.x = wpv_x
+          shape.y = wpv_y
+          shape.offset_x = rel_cx if shape.respond_to?(:offset_x=)
+          shape.offset_y = rel_cy if shape.respond_to?(:offset_y=)
           shape.angle = @angle if shape.respond_to?(:angle=)
           shape.scale_x = @scale_x if shape.respond_to?(:scale_x=)
           shape.scale_y = @scale_y if shape.respond_to?(:scale_y=)
+          shape.anchor = :center if shape.respond_to?(:anchor=)
+          shape.pivot = :center if shape.respond_to?(:pivot=)
         end
       end
 

@@ -666,8 +666,11 @@ module Zenoo
 
       return unless sprite.visible && sprite.image
 
+      tl_x = sprite.x - sprite.anchor_x * sprite.width
+      tl_y = sprite.y - sprite.anchor_y * sprite.height
+
       draw_image(
-        sprite.x, sprite.y, sprite.image,
+        tl_x, tl_y, sprite.image,
         angle: sprite.angle,
         scale_x: sprite.scale_x,
         scale_y: sprite.scale_y,
