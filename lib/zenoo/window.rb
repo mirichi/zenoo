@@ -414,6 +414,8 @@ module Zenoo
                        border_width: nil,
                        shadow_blur: 0.0,
                        shadow_color: nil,
+                       angle: 0.0,
+                       pivot: nil,
                        image: nil,
                        camera: true,
                        z: 0.0)
@@ -439,7 +441,8 @@ module Zenoo
       is_flat = (radius.nil? || rad <= 0.0) &&
                 border_color.nil? &&
                 (shadow_blur.nil? || shadow_blur.to_f <= 0.0) &&
-                image.nil?
+                image.nil? &&
+                (angle.nil? || (angle.to_f % 360.0).abs < 0.0001)
 
       if is_flat
         x2 = ax + wf
@@ -478,6 +481,21 @@ module Zenoo
         s0 = sc[0].to_f; s1 = sc[1].to_f; s2 = sc[2].to_f; s3 = sc[3].to_f
       end
 
+      # ピボット (pivot: :center, :top_left, [px, py])
+      pv_x = 0.5
+      pv_y = 0.5
+      if pivot.nil? || pivot == :center
+        pv_x = 0.5
+        pv_y = 0.5
+      elsif pivot == :top_left
+        pv_x = 0.0
+        pv_y = 0.0
+      elsif pivot.is_a?(Array) && pivot.length >= 2
+        pv_x = pivot[0].to_f
+        pv_y = pivot[1].to_f
+      end
+      rot_rad = (angle ? angle.to_f : 0.0) * (Math::PI / 180.0)
+
       mode = image ? 1.0 : 0.0
       data = [
         ax, ay, wf, hf,
@@ -485,7 +503,8 @@ module Zenoo
         rad, b_width, s_blur, mode,
         b0, b1, b2, b3,
         s0, s1, s2, s3,
-        0.0, 0.0, 1.0, 1.0
+        0.0, 0.0, 1.0, 1.0,
+        rot_rad, pv_x, pv_y, 0.0
       ].pack("f*")
 
       Backend.enqueue_draw(
@@ -627,6 +646,36 @@ module Zenoo
         uniforms: uniforms,
         blend: b_mode,
         z: z
+      )
+    end
+
+    def self.draw_sprite(sprite,
+                         camera: true,
+                         z: nil)
+      return unless sprite
+
+      if sprite.is_a?(Array)
+        i = 0
+        len = sprite.length
+        while i < len
+          draw_sprite(sprite[i], camera: camera, z: z)
+          i += 1
+        end
+        return
+      end
+
+      return unless sprite.visible && sprite.image
+
+      draw_image(
+        sprite.x, sprite.y, sprite.image,
+        angle: sprite.angle,
+        scale_x: sprite.scale_x,
+        scale_y: sprite.scale_y,
+        pivot: sprite.pivot,
+        alpha: sprite.alpha,
+        color: sprite.color || :white,
+        camera: camera,
+        z: z || sprite.z
       )
     end
 
