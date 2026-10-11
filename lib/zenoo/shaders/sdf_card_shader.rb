@@ -8,6 +8,7 @@ module Zenoo
       layout (location = 3) in vec4 in_param1;       // border_color (r, g, b, a)
       layout (location = 4) in vec4 in_param2;       // shadow_color (r, g, b, a)
       layout (location = 5) in vec4 in_uv;
+      layout (location = 6) in vec4 in_transform;    // rot_rad, pivot_x, pivot_y, unused
       uniform vec2 u_resolution;
       uniform float u_flip_y;
       out vec2 v_local_pos;
@@ -25,14 +26,34 @@ module Zenoo
           float x = in_bounds.x; float y = in_bounds.y; float w = in_bounds.z; float h = in_bounds.w;
           float shadow_blur = in_param0.z;
           float pad = shadow_blur * 2.0;
-          vec2 pos = vec2(x - pad, y - pad) + in_unit_pos * vec2(w + pad * 2.0, h + pad * 2.0);
+
+          // パディング込みのローカル頂点
+          vec2 local_corner = vec2(-pad, -pad) + in_unit_pos * vec2(w + pad * 2.0, h + pad * 2.0);
+
+          // ピボット位置 (本体基準の比率)
+          vec2 pivot = in_transform.yz;
+          vec2 pivot_pos = pivot * vec2(w, h);
+
+          // ピボットからの相対位置
+          vec2 rel = local_corner - pivot_pos;
+
+          // 回転
+          float rad = in_transform.x;
+          float c = cos(rad);
+          float s = sin(rad);
+          vec2 rot = vec2(rel.x * c - rel.y * s, rel.x * s + rel.y * c);
+
+          // ワールド位置
+          vec2 world_pivot = vec2(x, y) + pivot_pos;
+          vec2 pos = world_pivot + rot;
+
           vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
           float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
           ndc.y = ndc.y * flip;
           gl_Position = vec4(ndc, 0.0, 1.0);
+
           v_half_size = vec2(w * 0.5, h * 0.5);
-          vec2 center = vec2(x + w * 0.5, y + h * 0.5);
-          v_local_pos = pos - center;
+          v_local_pos = local_corner - v_half_size;
           v_color = in_color;
           v_border_color = in_param1;
           v_shadow_color = in_param2;

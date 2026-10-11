@@ -32,7 +32,7 @@ module Zenoo
       POS2_COLOR4         = "\x02\x04"
       POS2_UV2_COLOR4     = "\x02\x02\x04"
       LINE                = "\x02\x04"
-      CARD_INSTANCED      = "\x04\x04\x04\x04\x04\x04"
+      CARD_INSTANCED      = "\x04\x04\x04\x04\x04\x04\x04"
       QUAD_INSTANCED      = CARD_INSTANCED
       SPRITE_INSTANCED    = "\x04\x04\x04\x04\x04"
       FONT_INSTANCED      = "\x04\x04\x04\x04\x04\x04\x04"
@@ -46,7 +46,7 @@ module Zenoo
       POS2_COLOR4         = "\x00\x00"
       POS2_UV2_COLOR4     = "\x00\x00\x00"
       LINE                = "\x00\x00"
-      CARD_INSTANCED      = "\x01\x01\x01\x01\x01\x01"
+      CARD_INSTANCED      = "\x01\x01\x01\x01\x01\x01\x01"
       QUAD_INSTANCED      = CARD_INSTANCED
       SPRITE_INSTANCED    = "\x01\x01\x01\x01\x01"
       FONT_INSTANCED      = "\x01\x01\x01\x01\x01\x01\x01"

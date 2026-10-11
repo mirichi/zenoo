@@ -55,16 +55,63 @@ module Zenoo
 
       def shape_type; TYPE_CIRCLE; end
 
-      def x=(v); @x = v.to_f; @dirty_pos = true; end
-      def y=(v); @y = v.to_f; @dirty_pos = true; end
+      def x=(v)
+        vf = v.to_f
+        return if @x == vf
+        @x = vf
+        @dirty_pos = true
+      end
+
+      def y=(v)
+        vf = v.to_f
+        return if @y == vf
+        @y = vf
+        @dirty_pos = true
+      end
 
       def radius; @radius_x; end
-      def radius=(val); @radius_x = val.to_f; @radius_y = val.to_f; @dirty_geom = true; end
-      def radius_x=(val); @radius_x = val.to_f; @dirty_geom = true; end
-      def radius_y=(val); @radius_y = val.to_f; @dirty_geom = true; end
-      def angle=(val); @angle = val.to_f; @dirty_geom = true; end
-      def scale_x=(val); @scale_x = val.to_f; @dirty_geom = true; end
-      def scale_y=(val); @scale_y = val.to_f; @dirty_geom = true; end
+      def radius=(val)
+        vf = val.to_f
+        return if @radius_x == vf && @radius_y == vf
+        @radius_x = vf
+        @radius_y = vf
+        @dirty_geom = true
+      end
+
+      def radius_x=(val)
+        vf = val.to_f
+        return if @radius_x == vf
+        @radius_x = vf
+        @dirty_geom = true
+      end
+
+      def radius_y=(val)
+        vf = val.to_f
+        return if @radius_y == vf
+        @radius_y = vf
+        @dirty_geom = true
+      end
+
+      def angle=(val)
+        vf = val.to_f
+        return if @angle == vf
+        @angle = vf
+        @dirty_geom = true
+      end
+
+      def scale_x=(val)
+        vf = val.to_f
+        return if @scale_x == vf
+        @scale_x = vf
+        @dirty_geom = true
+      end
+
+      def scale_y=(val)
+        vf = val.to_f
+        return if @scale_y == vf
+        @scale_y = vf
+        @dirty_geom = true
+      end
 
       def set_pivot(pivot)
         if pivot == :center
@@ -216,15 +263,61 @@ module Zenoo
 
       def shape_type; TYPE_RECT; end
 
-      def x=(v); @x = v.to_f; @dirty_pos = true; end
-      def y=(v); @y = v.to_f; @dirty_pos = true; end
+      def x=(v)
+        vf = v.to_f
+        return if @x == vf
+        @x = vf
+        @dirty_pos = true
+      end
 
-      def width=(v);   @width = v.to_f;   @dirty_size = true; end
-      def height=(v);  @height = v.to_f;  @dirty_size = true; end
-      def radius=(v);  @radius = v.to_f;  @dirty_size = true; end
-      def angle=(v);   @angle = v.to_f;   @dirty_angle = true; end
-      def scale_x=(v); @scale_x = v.to_f; @dirty_scale = true; end
-      def scale_y=(v); @scale_y = v.to_f; @dirty_scale = true; end
+      def y=(v)
+        vf = v.to_f
+        return if @y == vf
+        @y = vf
+        @dirty_pos = true
+      end
+
+      def width=(v)
+        vf = v.to_f
+        return if @width == vf
+        @width = vf
+        @dirty_size = true
+      end
+
+      def height=(v)
+        vf = v.to_f
+        return if @height == vf
+        @height = vf
+        @dirty_size = true
+      end
+
+      def radius=(v)
+        vf = v.to_f
+        return if @radius == vf
+        @radius = vf
+        @dirty_size = true
+      end
+
+      def angle=(v)
+        vf = v.to_f
+        return if @angle == vf
+        @angle = vf
+        @dirty_angle = true
+      end
+
+      def scale_x=(v)
+        vf = v.to_f
+        return if @scale_x == vf
+        @scale_x = vf
+        @dirty_scale = true
+      end
+
+      def scale_y=(v)
+        vf = v.to_f
+        return if @scale_y == vf
+        @scale_y = vf
+        @dirty_scale = true
+      end
 
       def set_pivot(pivot)
         if pivot == :center
@@ -359,11 +452,40 @@ module Zenoo
 
       def shape_type; TYPE_POLYGON; end
 
-      def x=(v); @x = v.to_f; @dirty_pos = true; end
-      def y=(v); @y = v.to_f; @dirty_pos = true; end
-      def angle=(v);   @angle = v.to_f;   @dirty_angle = true; end
-      def scale_x=(v); @scale_x = v.to_f; @dirty_scale = true; end
-      def scale_y=(v); @scale_y = v.to_f; @dirty_scale = true; end
+      def x=(v)
+        vf = v.to_f
+        return if @x == vf
+        @x = vf
+        @dirty_pos = true
+      end
+
+      def y=(v)
+        vf = v.to_f
+        return if @y == vf
+        @y = vf
+        @dirty_pos = true
+      end
+
+      def angle=(v)
+        vf = v.to_f
+        return if @angle == vf
+        @angle = vf
+        @dirty_angle = true
+      end
+
+      def scale_x=(v)
+        vf = v.to_f
+        return if @scale_x == vf
+        @scale_x = vf
+        @dirty_scale = true
+      end
+
+      def scale_y=(v)
+        vf = v.to_f
+        return if @scale_y == vf
+        @scale_y = vf
+        @dirty_scale = true
+      end
       def vertices=(v); @vertices = v.map { |pt| [pt[0].to_f, pt[1].to_f] }; @dirty_verts = true; end
 
       def set_pivot(pivot)
@@ -484,6 +606,10 @@ module Zenoo
     # 衝突判定メインエントリ
     # ====================================================
     def self.check(shape_a, shape_b)
+      shape_a = shape_a.collider if shape_a.respond_to?(:collider)
+      shape_b = shape_b.collider if shape_b.respond_to?(:collider)
+      return false unless shape_a && shape_b
+
       shape_a.update_cache if shape_a.dirty?
       shape_b.update_cache if shape_b.dirty?
 

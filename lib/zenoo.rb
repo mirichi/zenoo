@@ -35,6 +35,7 @@ require_relative 'zenoo/collision'
 require_relative 'zenoo/camera'
 require_relative 'zenoo/easing'
 require_relative 'zenoo/tween'
+require_relative 'zenoo/sprite'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
 Window      = Zenoo::Window      unless defined?(Window)
@@ -52,4 +53,5 @@ Collision   = Zenoo::Collision   unless defined?(Collision)
 Camera2D    = Zenoo::Camera2D    unless defined?(Camera2D)
 Easing      = Zenoo::Easing      unless defined?(Easing)
 Tween       = Zenoo::Tween       unless defined?(Tween)
+Sprite      = Zenoo::Sprite      unless defined?(Sprite)
 

@@ -50,6 +50,13 @@ DXRuby に着想を得た直感的な API を備え、デスクトップ（CRuby
    - 円 (Circle)、点 (Point)、線分 (Segment)、矩形 (AABB)、回転矩形 (OBB)、カプセル (Capsule)、任意凸多角形 (Polygon) の高精度・リアルタイム交差判定。
    - ゲームロジックへの組み込みやデバッグ可視化が容易。
 
+9. **Sprite & 変形同期 2D コライダー (`Zenoo::Sprite`)**
+   - 位置 (`x, y`)、回転 (`angle`)、拡大縮小 (`scale_x, scale_y`)、ピボット (`pivot`) を一元管理するスプライトクラス。
+   - `Window.draw_sprite` による単一・配列の一括描画キューイング。
+   - GPU シェーダーの頂点変換と **ピクセル単位で完全同期する幾何コライダー**（`Collision::Shape`）。
+   - 回転矩形・円・多角形・点へのワンタッチ変更（`set_collider`）と、ゼロアロケーションでのキャッシュ更新。
+   - `sprite.collide?(other)`, `sprite === other`, `Collision.check(a, b)` による直感的な交差判定。
+
 ---
 
 ## 🎮 WebAssembly ショーケース (デモ一覧)
@@ -90,8 +97,8 @@ Window.loop(1280, 720, "Zenoo Quickstart") do
   # 画面クリア
   Window.clear([15, 23, 42, 255])
 
-  # SDF 矩形・カード描画 (角丸・ボーダー・ドロップシャドウを統合)
-  Window.draw_rect(100, 100, 300, 180, radius: 16, color: [30, 41, 59, 255], border_width: 2, border_color: :cyan, shadow_blur: 20)
+  # SDF 矩形・カード描画 (角丸・ボーダー・ドロップシャドウ・回転を統合)
+  Window.draw_rect(100, 100, 300, 180, angle: t * 10, radius: 16, color: [30, 41, 59, 255], border_width: 2, border_color: :cyan, shadow_blur: 20)
 
   # SDF 日本語テキスト描画
   Window.draw_text(130, 140, "こんにちは、Zenoo！", size: 24, color: :white)
