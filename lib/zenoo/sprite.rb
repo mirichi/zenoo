@@ -255,14 +255,24 @@ module Zenoo
     alias overlap_with penetration
 
     # other から自動的にめり込み解消 (位置を直接更新)
+    # other が配列の場合は各オブジェクトに対して順次押し出しを行う
     def push_out_of(other)
-      hit = penetration(other)
-      if hit
-        self.x += hit.overlap_x
-        self.y += hit.overlap_y
-        hit
+      if other.is_a?(Array)
+        resolved_hits = []
+        other.each do |item|
+          hit = push_out_of(item)
+          resolved_hits << hit if hit
+        end
+        resolved_hits.empty? ? nil : resolved_hits
       else
-        nil
+        hit = penetration(other)
+        if hit
+          self.x += hit.overlap_x
+          self.y += hit.overlap_y
+          hit
+        else
+          nil
+        end
       end
     end
 
@@ -277,8 +287,13 @@ module Zenoo
     end
 
     # スプライト同士・配列同士の一括衝突判定 (DXRuby互換)
-    def self.check(group_a, group_b, &block)
+    def self.check(group_a, group_b = nil, &block)
       Collision.check_all(group_a, group_b, &block)
+    end
+
+    # スプライト同士・配列同士の一括めり込み量 (MTV) 判定
+    def self.penetration(group_a, group_b = nil, &block)
+      Collision.penetration_all(group_a, group_b, &block)
     end
   end
 end
