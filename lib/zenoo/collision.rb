@@ -50,66 +50,57 @@ module Zenoo
     # サポート定理 P' = M * S(M^T * D) + T により厳密判定。
     # ====================================================
 
+    # 幾何アライメント定義定数
+    ALIGN_MAP = {
+      top_left: [0.0, 0.0],      north_west: [0.0, 0.0],
+      top_center: [0.5, 0.0],    north: [0.5, 0.0],
+      top_right: [1.0, 0.0],     north_east: [1.0, 0.0],
+      center_left: [0.0, 0.5],   west: [0.0, 0.5],
+      center: [0.5, 0.5],
+      center_right: [1.0, 0.5],  east: [1.0, 0.5],
+      bottom_left: [0.0, 1.0],   south_west: [0.0, 1.0],
+      bottom_center: [0.5, 1.0], south: [0.5, 1.0],
+      bottom_right: [1.0, 1.0],  south_east: [1.0, 1.0]
+    }.freeze
+
     # アンカー解釈共通ヘルパー
     def self.parse_anchor(val)
-      case val
-      when :top_left, :north_west
-        [0.0, 0.0]
-      when :center
-        [0.5, 0.5]
-      when :top_center, :north
-        [0.5, 0.0]
-      when :top_right, :north_east
-        [1.0, 0.0]
-      when :center_left, :west
-        [0.0, 0.5]
-      when :center_right, :east
-        [1.0, 0.5]
-      when :bottom_left, :south_west
-        [0.0, 1.0]
-      when :bottom_center, :south
-        [0.5, 1.0]
-      when :bottom_right, :south_east
-        [1.0, 1.0]
-      when Array
-        [val[0].to_f, (val[1] || val[0]).to_f]
-      else
-        [0.0, 0.0]
-      end
+      return [val[0].to_f, (val[1] || val[0]).to_f] if val.is_a?(Array)
+      ALIGN_MAP[val] || [0.0, 0.0]
     end
 
     # ピボット解釈共通ヘルパー
     def self.parse_pivot(val)
-      case val
-      when :center
-        [0.5, 0.5]
-      when :top_left, :north_west
-        [0.0, 0.0]
-      when :top_center, :north
-        [0.5, 0.0]
-      when :top_right, :north_east
-        [1.0, 0.0]
-      when :center_left, :west
-        [0.0, 0.5]
-      when :center_right, :east
-        [1.0, 0.5]
-      when :bottom_left, :south_west
-        [0.0, 1.0]
-      when :bottom_center, :south
-        [0.5, 1.0]
-      when :bottom_right, :south_east
-        [1.0, 1.0]
-      when Array
-        [val[0].to_f, (val[1] || val[0]).to_f]
-      else
-        [0.5, 0.5]
-      end
+      return [val[0].to_f, (val[1] || val[0]).to_f] if val.is_a?(Array)
+      ALIGN_MAP[val] || [0.5, 0.5]
     end
 
     # 幾何形状の基底クラス (ポリモーフィック静的型解決用共通インターフェース)
     class Shape
       attr_reader :anchor_x, :anchor_y, :pivot_x, :pivot_y, :offset_x, :offset_y
       attr_accessor :parent
+
+      def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, parent: nil)
+        @parent = parent
+        @x = x.to_f
+        @y = y.to_f
+        @angle = angle.to_f
+        @scale_x = scale_x.to_f
+        @scale_y = scale_y.to_f
+        @offset_x = offset_x.to_f
+        @offset_y = offset_y.to_f
+        @_support = [0.0, 0.0]
+
+        @anchor_x = 0.0
+        @anchor_y = 0.0
+        @pivot_x = 0.5
+        @pivot_y = 0.5
+
+        set_anchor(anchor)
+        set_pivot(pivot)
+        dirty_pos!
+        dirty_geom!
+      end
 
       def is_rounded; false; end
       def is_aabb; false; end
@@ -325,27 +316,9 @@ module Zenoo
       attr_reader :bounding_radius, :is_true_circle, :effective_radius
 
       def initialize(x = 0.0, y = 0.0, radius_x = 0.0, radius_y = radius_x, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, parent: nil)
-        @parent = parent
-        @x = x.to_f
-        @y = y.to_f
+        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
         @radius_x = radius_x.to_f
         @radius_y = (radius_y || radius_x).to_f
-        @angle = angle.to_f
-        @scale_x = scale_x.to_f
-        @scale_y = scale_y.to_f
-        @offset_x = offset_x.to_f
-        @offset_y = offset_y.to_f
-        @_support = [0.0, 0.0]
-
-        @anchor_x = 0.5
-        @anchor_y = 0.5
-        @pivot_x = 0.5
-        @pivot_y = 0.5
-
-        set_anchor(anchor)
-        set_pivot(pivot)
-        @dirty_pos = true
-        @dirty_geom = true
         update_cache
       end
 
@@ -490,24 +463,7 @@ module Zenoo
     # 点
     class Point < Shape
       def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, parent: nil)
-        @parent = parent
-        @x = x.to_f
-        @y = y.to_f
-        @angle = angle.to_f
-        @scale_x = scale_x.to_f
-        @scale_y = scale_y.to_f
-        @offset_x = offset_x.to_f
-        @offset_y = offset_y.to_f
-        @anchor_x = 0.0
-        @anchor_y = 0.0
-        @pivot_x = 0.5
-        @pivot_y = 0.5
-        @_support = [0.0, 0.0]
-
-        set_anchor(anchor)
-        set_pivot(pivot)
-        @dirty_pos = true
-        @dirty_angle = true
+        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
         update_cache
       end
 
@@ -569,33 +525,14 @@ module Zenoo
       attr_reader :is_aabb, :is_rounded, :is_uniform, :bounding_radius, :cos, :sin
 
       def initialize(x = 0.0, y = 0.0, width = 0.0, height = 0.0, angle: 0.0, radius: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, parent: nil)
-        @parent = parent
-        @x = x.to_f
-        @y = y.to_f
+        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
         @width = width.to_f
         @height = height.to_f
-        @angle = angle.to_f
         @radius = radius.to_f
-        @scale_x = scale_x.to_f
-        @scale_y = scale_y.to_f
-        @offset_x = offset_x.to_f
-        @offset_y = offset_y.to_f
-        @_support = [0.0, 0.0]
         @is_aabb = false
         @is_rounded = false
         @is_uniform = true
-
-        @anchor_x = 0.0
-        @anchor_y = 0.0
-        @pivot_x = 0.5
-        @pivot_y = 0.5
-
-        set_anchor(anchor)
-        set_pivot(pivot)
-        @dirty_pos = true
-        @dirty_size = true
-        @dirty_scale = true
-        @dirty_angle = true
+        dirty_size!
         update_cache
       end
 
@@ -638,8 +575,8 @@ module Zenoo
         @dirty_size = true
       end
 
-      def dirty_pos!; @dirty_pos = true; end
-      def dirty_geom!; @dirty_angle = true; @dirty_scale = true; @dirty_pos = true; end
+      def dirty_pos!; @dirty_pos = true; @_dirty_world_verts = true; end
+      def dirty_geom!; @dirty_angle = true; @dirty_scale = true; @dirty_pos = true; @_dirty_world_verts = true; end
       def dirty_size!; @dirty_size = true; dirty_geom!; end
 
       def dirty?
@@ -764,21 +701,27 @@ module Zenoo
         @_support
       end
 
-      # ワールド座標系での4頂点 (SAT射影用)
+      # ワールド座標系での4頂点 (SAT射影用: 配列再利用キャッシュ)
       def world_vertices
         update_cache if dirty?
-        hw = @half_w * @scale_x
-        hh = @half_h * @scale_y
+        return @_world_vertices if @_world_vertices && !@_dirty_world_verts
+
+        cur_sx = scale_x
+        cur_sy = scale_y
+        hw = @half_w * cur_sx
+        hh = @half_h * cur_sy
         dx1 = hw * @cos - hh * @sin
         dy1 = hw * @sin + hh * @cos
         dx2 = -hw * @cos - hh * @sin
         dy2 = -hw * @sin + hh * @cos
-        [
-          [@center_x + dx1, @center_y + dy1],
-          [@center_x - dx2, @center_y - dy2],
-          [@center_x - dx1, @center_y - dy1],
-          [@center_x + dx2, @center_y + dy2]
-        ]
+
+        @_world_vertices ||= [ [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0] ]
+        @_world_vertices[0][0] = @center_x + dx1; @_world_vertices[0][1] = @center_y + dy1
+        @_world_vertices[1][0] = @center_x - dx2; @_world_vertices[1][1] = @center_y - dy2
+        @_world_vertices[2][0] = @center_x - dx1; @_world_vertices[2][1] = @center_y - dy1
+        @_world_vertices[3][0] = @center_x + dx2; @_world_vertices[3][1] = @center_y + dy2
+        @_dirty_world_verts = false
+        @_world_vertices
       end
     end
 
@@ -787,28 +730,9 @@ module Zenoo
       attr_reader :vertices, :local_vertices, :bounding_radius
 
       def initialize(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, parent: nil)
-        @parent = parent
+        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
         @vertices = vertices.map { |v| [v[0].to_f, v[1].to_f] }
-        @x = x.to_f
-        @y = y.to_f
-        @angle = angle.to_f
-        @scale_x = scale_x.to_f
-        @scale_y = scale_y.to_f
-        @offset_x = offset_x.to_f
-        @offset_y = offset_y.to_f
-        @_support = [0.0, 0.0]
-
-        @anchor_x = 0.5
-        @anchor_y = 0.5
-        @pivot_x = 0.5
-        @pivot_y = 0.5
-
-        set_anchor(anchor)
-        set_pivot(pivot)
-        @dirty_pos = true
-        @dirty_verts = true
-        @dirty_scale = true
-        @dirty_angle = true
+        dirty_verts!
         update_cache
       end
 
@@ -816,8 +740,8 @@ module Zenoo
 
       def vertices=(v); @vertices = v.map { |pt| [pt[0].to_f, pt[1].to_f] }; @dirty_verts = true; end
 
-      def dirty_pos!; @dirty_pos = true; end
-      def dirty_geom!; @dirty_angle = true; @dirty_scale = true; @dirty_pos = true; end
+      def dirty_pos!; @dirty_pos = true; @_dirty_world_verts = true; end
+      def dirty_geom!; @dirty_angle = true; @dirty_scale = true; @dirty_pos = true; @_dirty_world_verts = true; end
       def dirty_verts!; @dirty_verts = true; dirty_geom!; end
 
       def dirty?
@@ -974,21 +898,32 @@ module Zenoo
         @_support
       end
 
-      # ワールド座標系での頂点配列 (SAT射影用)
+      # ワールド座標系での頂点配列 (SAT射影用: 配列再利用キャッシュ)
       def world_vertices
         update_cache if dirty?
-        verts = []
-        i = 0
+        return @_world_vertices if @_world_vertices && !@_dirty_world_verts
+
+        @_world_vertices ||= []
+        cur_sx = scale_x
+        cur_sy = scale_y
         len = @local_vx ? @local_vx.length : 0
+        i = 0
         while i < len
-          lx = @local_vx[i] * @scale_x
-          ly = @local_vy[i] * @scale_y
+          lx = @local_vx[i] * cur_sx
+          ly = @local_vy[i] * cur_sy
           wx = @center_x + lx * @cos - ly * @sin
           wy = @center_y + lx * @sin + ly * @cos
-          verts << [wx, wy]
+          if @_world_vertices[i]
+            @_world_vertices[i][0] = wx
+            @_world_vertices[i][1] = wy
+          else
+            @_world_vertices[i] = [wx, wy]
+          end
           i += 1
         end
-        verts
+        @_world_vertices.pop while @_world_vertices.length > len
+        @_dirty_world_verts = false
+        @_world_vertices
       end
     end
 
@@ -1240,27 +1175,36 @@ module Zenoo
       false
     end
 
-    # 配列同士の判定
+    # 配列・オブジェクト同士の一括衝突判定 (DXRuby 互換: ブロック省略時は衝突ペア配列を返す)
     def self.check_all(group_a, group_b)
-      len_a = group_a.length
-      len_b = group_b.length
+      arr_a = group_a.is_a?(Array) ? group_a : [group_a]
+      arr_b = group_b.is_a?(Array) ? group_b : [group_b]
+      len_a = arr_a.length
+      len_b = arr_b.length
+      hits = block_given? ? nil : []
+
       i = 0
       while i < len_a
-        item_a = group_a[i]
-        shape_a = (item_a.is_a?(Rect) || item_a.is_a?(Circle) || item_a.is_a?(Polygon) || item_a.is_a?(Point)) ? item_a : (item_a.respond_to?(:collider) ? item_a.collider : nil)
+        item_a = arr_a[i]
+        shape_a = item_a.is_a?(Shape) ? item_a : (item_a.respond_to?(:collider) ? item_a.collider : nil)
         if shape_a
           j = 0
           while j < len_b
-            item_b = group_b[j]
-            shape_b = (item_b.is_a?(Rect) || item_b.is_a?(Circle) || item_b.is_a?(Polygon) || item_b.is_a?(Point)) ? item_b : (item_b.respond_to?(:collider) ? item_b.collider : nil)
+            item_b = arr_b[j]
+            shape_b = item_b.is_a?(Shape) ? item_b : (item_b.respond_to?(:collider) ? item_b.collider : nil)
             if shape_b && check(shape_a, shape_b)
-              yield(item_a, item_b) if block_given?
+              if block_given?
+                yield(item_a, item_b)
+              else
+                hits << [item_a, item_b]
+              end
             end
             j += 1
           end
         end
         i += 1
       end
+      hits
     end
 
     # ====================================================
