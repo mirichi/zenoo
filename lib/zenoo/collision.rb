@@ -109,6 +109,7 @@ module Zenoo
     # 幾何形状の基底クラス (ポリモーフィック静的型解決用共通インターフェース)
     class Shape
       attr_reader :anchor_x, :anchor_y, :pivot_x, :pivot_y, :offset_x, :offset_y
+      attr_accessor :parent
 
       def is_rounded; false; end
       def is_aabb; false; end
@@ -123,6 +124,99 @@ module Zenoo
       def bounding_radius; 0.0; end
       def dirty?; false; end
       def update_cache; end
+
+      def dirty_pos!; @dirty_pos = true; end
+      def dirty_geom!; @dirty_geom = true; @dirty_pos = true; end
+
+      def x
+        @parent ? @parent.x : @x
+      end
+
+      def x=(v)
+        vf = v.to_f
+        return if @x == vf
+        @x = vf
+        dirty_pos!
+      end
+
+      def y
+        @parent ? @parent.y : @y
+      end
+
+      def y=(v)
+        vf = v.to_f
+        return if @y == vf
+        @y = vf
+        dirty_pos!
+      end
+
+      def angle
+        @parent ? @parent.angle : @angle
+      end
+
+      def angle=(v)
+        vf = v.to_f
+        return if @angle == vf
+        @angle = vf
+        dirty_geom!
+      end
+
+      def scale_x
+        @parent ? @parent.scale_x : @scale_x
+      end
+
+      def scale_x=(v)
+        vf = v.to_f
+        return if @scale_x == vf
+        @scale_x = vf
+        dirty_geom!
+      end
+
+      def scale_y
+        @parent ? @parent.scale_y : @scale_y
+      end
+
+      def scale_y=(v)
+        vf = v.to_f
+        return if @scale_y == vf
+        @scale_y = vf
+        dirty_geom!
+      end
+
+      def scale=(v)
+        vf = v.to_f
+        return if @scale_x == vf && @scale_y == vf
+        @scale_x = vf
+        @scale_y = vf
+        dirty_geom!
+      end
+
+      # 親 Sprite が存在する場合のワールド重心座標を1パスで算出
+      def compute_parent_center(offset_x, offset_y, cos_v, sin_v, sx, sy)
+        p = @parent
+        pw = p.width
+        ph = p.height
+        pv_x = p.pivot_x
+        pv_y = p.pivot_y
+
+        tl_x = p.x - p.anchor_x * pw
+        tl_y = p.y - p.anchor_y * ph
+        wpv_x = tl_x + pv_x * pw
+        wpv_y = tl_y + pv_y * ph
+
+        rel_cx = (0.5 - pv_x) * pw + offset_x
+        rel_cy = (0.5 - pv_y) * ph + offset_y
+
+        if rel_cx.abs < 0.0001 && rel_cy.abs < 0.0001
+          [wpv_x, wpv_y]
+        else
+          s_rel_cx = rel_cx * sx
+          s_rel_cy = rel_cy * sy
+          rot_cx = s_rel_cx * cos_v - s_rel_cy * sin_v
+          rot_cy = s_rel_cx * sin_v + s_rel_cy * cos_v
+          [wpv_x + rot_cx, wpv_y + rot_cy]
+        end
+      end
 
       def center_x
         update_cache if dirty?
@@ -237,10 +331,11 @@ module Zenoo
 
     # 円 / 楕円 (楕円は不等半径・不等スケールの Circle として包含)
     class Circle < Shape
-      attr_reader :x, :y, :radius_x, :radius_y, :angle, :scale_x, :scale_y
+      attr_reader :radius_x, :radius_y
       attr_reader :bounding_radius, :is_true_circle, :effective_radius
 
-      def initialize(x, y, radius_x, radius_y = radius_x, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center)
+      def initialize(x = 0.0, y = 0.0, radius_x = 0.0, radius_y = radius_x, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, parent: nil)
+        @parent = parent
         @x = x.to_f
         @y = y.to_f
         @radius_x = radius_x.to_f
@@ -266,80 +361,52 @@ module Zenoo
 
       def shape_type; TYPE_CIRCLE; end
 
-      def x=(v)
-        vf = v.to_f
-        return if @x == vf
-        @x = vf
-        @dirty_pos = true
-      end
-
-      def y=(v)
-        vf = v.to_f
-        return if @y == vf
-        @y = vf
-        @dirty_pos = true
-      end
-
       def radius; @radius_x; end
       def radius=(val)
         vf = val.to_f
         return if @radius_x == vf && @radius_y == vf
         @radius_x = vf
         @radius_y = vf
-        @dirty_geom = true
+        dirty_geom!
       end
 
       def radius_x=(val)
         vf = val.to_f
         return if @radius_x == vf
         @radius_x = vf
-        @dirty_geom = true
+        dirty_geom!
       end
 
       def radius_y=(val)
         vf = val.to_f
         return if @radius_y == vf
         @radius_y = vf
-        @dirty_geom = true
+        dirty_geom!
       end
 
-      def angle=(val)
-        vf = val.to_f
-        return if @angle == vf
-        @angle = vf
-        @dirty_geom = true
-      end
-
-      def scale_x=(val)
-        vf = val.to_f
-        return if @scale_x == vf
-        @scale_x = vf
-        @dirty_geom = true
-      end
-
-      def scale_y=(val)
-        vf = val.to_f
-        return if @scale_y == vf
-        @scale_y = vf
-        @dirty_geom = true
-      end
+      def dirty_pos!; @dirty_pos = true; end
+      def dirty_geom!; @dirty_geom = true; @dirty_pos = true; end
 
       def dirty?
         @dirty_pos || @dirty_geom
       end
 
       def update_cache
+        cur_sx = scale_x
+        cur_sy = scale_y
+        cur_ang = angle
+
         if @dirty_geom
           @dirty_geom = false
           w = @radius_x * 2.0
           h = @radius_y * 2.0
 
-          sx = @scale_x.abs
-          sy = @scale_y.abs
+          sx = cur_sx.abs
+          sy = cur_sy.abs
           eff_rx = @radius_x * sx
           eff_ry = @radius_y * sy
 
-          rad = @angle * (Math::PI / 180.0)
+          rad = cur_ang * (Math::PI / 180.0)
           @cos = Math.cos(rad)
           @sin = Math.sin(rad)
 
@@ -352,10 +419,10 @@ module Zenoo
             @is_true_circle = false
             @bounding_radius = eff_rx > eff_ry ? eff_rx : eff_ry
 
-            @m00 = @cos * @scale_x
-            @m01 = -@sin * @scale_y
-            @m10 = @sin * @scale_x
-            @m11 = @cos * @scale_y
+            @m00 = @cos * cur_sx
+            @m01 = -@sin * cur_sy
+            @m10 = @sin * cur_sx
+            @m11 = @cos * cur_sy
 
             @rx2 = @radius_x * @radius_x
             @ry2 = @radius_y * @radius_y
@@ -365,26 +432,32 @@ module Zenoo
 
         if @dirty_pos
           @dirty_pos = false
-          w = @radius_x * 2.0
-          h = @radius_y * 2.0
-          tl_x = @x - @anchor_x * w
-          tl_y = @y - @anchor_y * h
-          wpv_x = tl_x + @pivot_x * w
-          wpv_y = tl_y + @pivot_y * h
-
-          rel_cx = (0.5 - @pivot_x) * w + @offset_x
-          rel_cy = (0.5 - @pivot_y) * h + @offset_y
-
-          if rel_cx.abs < 0.0001 && rel_cy.abs < 0.0001
-            @center_x = wpv_x
-            @center_y = wpv_y
+          if @parent
+            cx, cy = compute_parent_center(@offset_x, @offset_y, @cos, @sin, cur_sx, cur_sy)
+            @center_x = cx
+            @center_y = cy
           else
-            s_rel_cx = rel_cx * @scale_x
-            s_rel_cy = rel_cy * @scale_y
-            rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
-            rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
-            @center_x = wpv_x + rot_cx
-            @center_y = wpv_y + rot_cy
+            w = @radius_x * 2.0
+            h = @radius_y * 2.0
+            tl_x = @x - @anchor_x * w
+            tl_y = @y - @anchor_y * h
+            wpv_x = tl_x + @pivot_x * w
+            wpv_y = tl_y + @pivot_y * h
+
+            rel_cx = (0.5 - @pivot_x) * w + @offset_x
+            rel_cy = (0.5 - @pivot_y) * h + @offset_y
+
+            if rel_cx.abs < 0.0001 && rel_cy.abs < 0.0001
+              @center_x = wpv_x
+              @center_y = wpv_y
+            else
+              s_rel_cx = rel_cx * cur_sx
+              s_rel_cy = rel_cy * cur_sy
+              rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
+              rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
+              @center_x = wpv_x + rot_cx
+              @center_y = wpv_y + rot_cy
+            end
           end
         end
       end
@@ -426,9 +499,8 @@ module Zenoo
 
     # 点
     class Point < Shape
-      attr_reader :x, :y, :angle, :scale_x, :scale_y
-
-      def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center)
+      def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, parent: nil)
+        @parent = parent
         @x = x.to_f
         @y = y.to_f
         @angle = angle.to_f
@@ -451,18 +523,19 @@ module Zenoo
 
       def shape_type; TYPE_POINT; end
 
-      def x=(v); vf = v.to_f; return if @x == vf; @x = vf; @dirty_pos = true; end
-      def y=(v); vf = v.to_f; return if @y == vf; @y = vf; @dirty_pos = true; end
-      def angle=(v); vf = v.to_f; return if @angle == vf; @angle = vf; @dirty_angle = true; end
-      def scale_x=(v); vf = v.to_f; return if @scale_x == vf; @scale_x = vf; @dirty_pos = true; end
-      def scale_y=(v); vf = v.to_f; return if @scale_y == vf; @scale_y = vf; @dirty_pos = true; end
+      def dirty_pos!; @dirty_pos = true; end
+      def dirty_geom!; @dirty_angle = true; @dirty_pos = true; end
 
       def dirty?; @dirty_pos || @dirty_angle; end
 
       def update_cache
+        cur_ang = angle
+        cur_sx = scale_x
+        cur_sy = scale_y
+
         if @dirty_angle
           @dirty_angle = false
-          rad = @angle * (Math::PI / 180.0)
+          rad = cur_ang * (Math::PI / 180.0)
           @cos = Math.cos(rad)
           @sin = Math.sin(rad)
           @dirty_pos = true
@@ -470,18 +543,24 @@ module Zenoo
 
         if @dirty_pos
           @dirty_pos = false
-          if @offset_x == 0.0 && @offset_y == 0.0
-            @center_x = @x
-            @center_y = @y
+          if @parent
+            cx, cy = compute_parent_center(@offset_x, @offset_y, @cos || 1.0, @sin || 0.0, cur_sx, cur_sy)
+            @center_x = cx
+            @center_y = cy
           else
-            s_ox = @offset_x * @scale_x
-            s_oy = @offset_y * @scale_y
-            cos_v = @cos || 1.0
-            sin_v = @sin || 0.0
-            rot_x = s_ox * cos_v - s_oy * sin_v
-            rot_y = s_ox * sin_v + s_oy * cos_v
-            @center_x = @x + rot_x
-            @center_y = @y + rot_y
+            if @offset_x == 0.0 && @offset_y == 0.0
+              @center_x = @x
+              @center_y = @y
+            else
+              s_ox = @offset_x * cur_sx
+              s_oy = @offset_y * cur_sy
+              cos_v = @cos || 1.0
+              sin_v = @sin || 0.0
+              rot_x = s_ox * cos_v - s_oy * sin_v
+              rot_y = s_ox * sin_v + s_oy * cos_v
+              @center_x = @x + rot_x
+              @center_y = @y + rot_y
+            end
           end
         end
       end
@@ -495,11 +574,12 @@ module Zenoo
 
     # 矩形 / OBB / 角丸矩形 (カプセルを包含)
     class Rect < Shape
-      attr_reader :x, :y, :width, :height, :angle, :radius, :scale_x, :scale_y
+      attr_reader :radius
       attr_reader :half_w, :half_h, :core_half_w, :core_half_h
       attr_reader :is_aabb, :is_rounded, :is_uniform, :bounding_radius, :cos, :sin
 
-      def initialize(x, y, width, height, angle: 0.0, radius: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center)
+      def initialize(x = 0.0, y = 0.0, width = 0.0, height = 0.0, angle: 0.0, radius: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, parent: nil)
+        @parent = parent
         @x = x.to_f
         @y = y.to_f
         @width = width.to_f
@@ -531,18 +611,12 @@ module Zenoo
 
       def shape_type; TYPE_RECT; end
 
-      def x=(v)
-        vf = v.to_f
-        return if @x == vf
-        @x = vf
-        @dirty_pos = true
-      end
-
-      def y=(v)
-        vf = v.to_f
-        return if @y == vf
-        @y = vf
-        @dirty_pos = true
+      def width
+        if @parent && (@width == 0.0 || @width.nil?)
+          @parent.width
+        else
+          @width
+        end
       end
 
       def width=(v)
@@ -550,6 +624,14 @@ module Zenoo
         return if @width == vf
         @width = vf
         @dirty_size = true
+      end
+
+      def height
+        if @parent && (@height == 0.0 || @height.nil?)
+          @parent.height
+        else
+          @height
+        end
       end
 
       def height=(v)
@@ -566,41 +648,25 @@ module Zenoo
         @dirty_size = true
       end
 
-      def angle=(v)
-        vf = v.to_f
-        return if @angle == vf
-        @angle = vf
-        @dirty_angle = true
-      end
-
-      def scale_x=(v)
-        vf = v.to_f
-        return if @scale_x == vf
-        @scale_x = vf
-        @dirty_scale = true
-      end
-
-      def scale_y=(v)
-        vf = v.to_f
-        return if @scale_y == vf
-        @scale_y = vf
-        @dirty_scale = true
-      end
-
-      def set_dirty_geom
-        @dirty_angle = true
-        @dirty_pos = true
-      end
+      def dirty_pos!; @dirty_pos = true; end
+      def dirty_geom!; @dirty_angle = true; @dirty_scale = true; @dirty_pos = true; end
+      def dirty_size!; @dirty_size = true; dirty_geom!; end
 
       def dirty?
         @dirty_pos || @dirty_angle || @dirty_scale || @dirty_size
       end
 
       def update_cache
+        cur_w = width
+        cur_h = height
+        cur_sx = scale_x
+        cur_sy = scale_y
+        cur_ang = angle
+
         if @dirty_size
           @dirty_size = false
-          @half_w = @width * 0.5
-          @half_h = @height * 0.5
+          @half_w = cur_w * 0.5
+          @half_h = cur_h * 0.5
 
           # 角丸半径のクランプ
           max_r = @half_w < @half_h ? @half_w : @half_h
@@ -619,11 +685,11 @@ module Zenoo
         if @dirty_scale
           @dirty_scale = false
           # 等倍スケール判定
-          @is_uniform = ((@scale_x - 1.0).abs < 0.0001 && (@scale_y - 1.0).abs < 0.0001)
+          @is_uniform = ((cur_sx - 1.0).abs < 0.0001 && (cur_sy - 1.0).abs < 0.0001)
 
           # 外接円半径 (スケール後の半幅・半高さから厳密に計算)
-          scaled_hw = @half_w * @scale_x.abs
-          scaled_hh = @half_h * @scale_y.abs
+          scaled_hw = @half_w * cur_sx.abs
+          scaled_hh = @half_h * cur_sy.abs
           @bounding_radius = Math.sqrt(scaled_hw * scaled_hw + scaled_hh * scaled_hh)
           @dirty_angle = true
         end
@@ -631,49 +697,55 @@ module Zenoo
         if @dirty_angle
           @dirty_angle = false
           # AABB 判定 (非回転かつ等倍)
-          norm_ang = (@angle % 360.0).abs
+          norm_ang = (cur_ang % 360.0).abs
           is_axis_aligned = (norm_ang < 0.0001 || (norm_ang - 360.0).abs < 0.0001)
           @is_aabb = (is_axis_aligned && @is_uniform)
 
           if is_axis_aligned
             @cos = 1.0
             @sin = 0.0
-            @m00 = @scale_x
+            @m00 = cur_sx
             @m01 = 0.0
             @m10 = 0.0
-            @m11 = @scale_y
+            @m11 = cur_sy
           else
-            rad = @angle * (Math::PI / 180.0)
+            rad = cur_ang * (Math::PI / 180.0)
             @cos = Math.cos(rad)
             @sin = Math.sin(rad)
-            @m00 = @cos * @scale_x
-            @m01 = -@sin * @scale_y
-            @m10 = @sin * @scale_x
-            @m11 = @cos * @scale_y
+            @m00 = @cos * cur_sx
+            @m01 = -@sin * cur_sy
+            @m10 = @sin * cur_sx
+            @m11 = @cos * cur_sy
           end
           @dirty_pos = true
         end
 
         if @dirty_pos
           @dirty_pos = false
-          tl_x = @x - @anchor_x * @width
-          tl_y = @y - @anchor_y * @height
-          wpv_x = tl_x + @pivot_x * @width
-          wpv_y = tl_y + @pivot_y * @height
-
-          rel_cx = (0.5 - @pivot_x) * @width + @offset_x
-          rel_cy = (0.5 - @pivot_y) * @height + @offset_y
-
-          if rel_cx.abs < 0.0001 && rel_cy.abs < 0.0001
-            @center_x = wpv_x
-            @center_y = wpv_y
+          if @parent
+            cx, cy = compute_parent_center(@offset_x, @offset_y, @cos, @sin, cur_sx, cur_sy)
+            @center_x = cx
+            @center_y = cy
           else
-            s_rel_cx = rel_cx * @scale_x
-            s_rel_cy = rel_cy * @scale_y
-            rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
-            rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
-            @center_x = wpv_x + rot_cx
-            @center_y = wpv_y + rot_cy
+            tl_x = @x - @anchor_x * cur_w
+            tl_y = @y - @anchor_y * cur_h
+            wpv_x = tl_x + @pivot_x * cur_w
+            wpv_y = tl_y + @pivot_y * cur_h
+
+            rel_cx = (0.5 - @pivot_x) * cur_w + @offset_x
+            rel_cy = (0.5 - @pivot_y) * cur_h + @offset_y
+
+            if rel_cx.abs < 0.0001 && rel_cy.abs < 0.0001
+              @center_x = wpv_x
+              @center_y = wpv_y
+            else
+              s_rel_cx = rel_cx * cur_sx
+              s_rel_cy = rel_cy * cur_sy
+              rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
+              rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
+              @center_x = wpv_x + rot_cx
+              @center_y = wpv_y + rot_cy
+            end
           end
         end
       end
@@ -722,10 +794,10 @@ module Zenoo
 
     # 凸多角形 (Convex Polygon: 回転・不等スケーリング対応)
     class Polygon < Shape
-      attr_reader :x, :y, :angle, :scale_x, :scale_y
       attr_reader :vertices, :local_vertices, :bounding_radius
 
-      def initialize(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center)
+      def initialize(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, parent: nil)
+        @parent = parent
         @vertices = vertices.map { |v| [v[0].to_f, v[1].to_f] }
         @x = x.to_f
         @y = y.to_f
@@ -752,52 +824,21 @@ module Zenoo
 
       def shape_type; TYPE_POLYGON; end
 
-      def x=(v)
-        vf = v.to_f
-        return if @x == vf
-        @x = vf
-        @dirty_pos = true
-      end
-
-      def y=(v)
-        vf = v.to_f
-        return if @y == vf
-        @y = vf
-        @dirty_pos = true
-      end
-
-      def angle=(v)
-        vf = v.to_f
-        return if @angle == vf
-        @angle = vf
-        @dirty_angle = true
-      end
-
-      def scale_x=(v)
-        vf = v.to_f
-        return if @scale_x == vf
-        @scale_x = vf
-        @dirty_scale = true
-      end
-
-      def scale_y=(v)
-        vf = v.to_f
-        return if @scale_y == vf
-        @scale_y = vf
-        @dirty_scale = true
-      end
       def vertices=(v); @vertices = v.map { |pt| [pt[0].to_f, pt[1].to_f] }; @dirty_verts = true; end
 
-      def set_dirty_geom
-        @dirty_angle = true
-        @dirty_pos = true
-      end
+      def dirty_pos!; @dirty_pos = true; end
+      def dirty_geom!; @dirty_angle = true; @dirty_scale = true; @dirty_pos = true; end
+      def dirty_verts!; @dirty_verts = true; dirty_geom!; end
 
       def dirty?
         @dirty_pos || @dirty_angle || @dirty_scale || @dirty_verts
       end
 
       def update_cache
+        cur_ang = angle
+        cur_sx = scale_x
+        cur_sy = scale_y
+
         if @dirty_verts
           @dirty_verts = false
           sum_x = 0.0
@@ -843,11 +884,11 @@ module Zenoo
 
         if @dirty_scale
           @dirty_scale = false
-          sx = @scale_x.abs
-          sy = @scale_y.abs
+          sx = cur_sx.abs
+          sy = cur_sy.abs
           max_r_sq = 0.0
           i = 0
-          len = @local_vx.length
+          len = @local_vx ? @local_vx.length : 0
           while i < len
             slx = @local_vx[i] * sx
             sly = @local_vy[i] * sy
@@ -861,51 +902,57 @@ module Zenoo
 
         if @dirty_angle
           @dirty_angle = false
-          rad = @angle * (Math::PI / 180.0)
+          rad = cur_ang * (Math::PI / 180.0)
           @cos = Math.cos(rad)
           @sin = Math.sin(rad)
 
-          @m00 = @cos * @scale_x
-          @m01 = -@sin * @scale_y
-          @m10 = @sin * @scale_x
-          @m11 = @cos * @scale_y
+          @m00 = @cos * cur_sx
+          @m01 = -@sin * cur_sy
+          @m10 = @sin * cur_sx
+          @m11 = @cos * cur_sy
           @dirty_pos = true
         end
 
         if @dirty_pos
           @dirty_pos = false
-          if (@anchor_x - 0.5).abs < 0.0001 && (@anchor_y - 0.5).abs < 0.0001 &&
-             (@pivot_x - 0.5).abs < 0.0001 && (@pivot_y - 0.5).abs < 0.0001
-            # :center の場合は重心そのものをアンカー・ピボットとする
-            if @offset_x == 0.0 && @offset_y == 0.0
-              @center_x = @x
-              @center_y = @y
+          if @parent
+            cx, cy = compute_parent_center(@offset_x, @offset_y, @cos, @sin, cur_sx, cur_sy)
+            @center_x = cx
+            @center_y = cy
+          else
+            if (@anchor_x - 0.5).abs < 0.0001 && (@anchor_y - 0.5).abs < 0.0001 &&
+               (@pivot_x - 0.5).abs < 0.0001 && (@pivot_y - 0.5).abs < 0.0001
+              # :center の場合は重心そのものをアンカー・ピボットとする
+              if @offset_x == 0.0 && @offset_y == 0.0
+                @center_x = @x
+                @center_y = @y
+              else
+                s_rel_cx = @offset_x * cur_sx
+                s_rel_cy = @offset_y * cur_sy
+                rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
+                rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
+                @center_x = @x + rot_cx
+                @center_y = @y + rot_cy
+              end
             else
-              s_rel_cx = @offset_x * @scale_x
-              s_rel_cy = @offset_y * @scale_y
+              bw = @_bbox_w || 0.0
+              bh = @_bbox_h || 0.0
+              tl_x = @x - @anchor_x * bw
+              tl_y = @y - @anchor_y * bh
+              wpv_x = tl_x + @pivot_x * bw
+              wpv_y = tl_y + @pivot_y * bh
+
+              # 重心のピボットからの相対座標
+              rel_cx = ((@_local_cx || 0.0) - (@_bbox_min_x || 0.0)) - @pivot_x * bw + @offset_x
+              rel_cy = ((@_local_cy || 0.0) - (@_bbox_min_y || 0.0)) - @pivot_y * bh + @offset_y
+
+              s_rel_cx = rel_cx * cur_sx
+              s_rel_cy = rel_cy * cur_sy
               rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
               rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
-              @center_x = @x + rot_cx
-              @center_y = @y + rot_cy
+              @center_x = wpv_x + rot_cx
+              @center_y = wpv_y + rot_cy
             end
-          else
-            bw = @_bbox_w || 0.0
-            bh = @_bbox_h || 0.0
-            tl_x = @x - @anchor_x * bw
-            tl_y = @y - @anchor_y * bh
-            wpv_x = tl_x + @pivot_x * bw
-            wpv_y = tl_y + @pivot_y * bh
-
-            # 重心のピボットからの相対座標
-            rel_cx = ((@_local_cx || 0.0) - (@_bbox_min_x || 0.0)) - @pivot_x * bw + @offset_x
-            rel_cy = ((@_local_cy || 0.0) - (@_bbox_min_y || 0.0)) - @pivot_y * bh + @offset_y
-
-            s_rel_cx = rel_cx * @scale_x
-            s_rel_cy = rel_cy * @scale_y
-            rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
-            rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
-            @center_x = wpv_x + rot_cx
-            @center_y = wpv_y + rot_cy
           end
         end
       end
