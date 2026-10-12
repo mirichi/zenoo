@@ -9,21 +9,15 @@ require_relative '../lib/zenoo'
 # - [SPACE]: アイテムを連続スポーン  |  [C]: アイテム全消去  |  [R]: リセット
 # ==============================================================================
 
-class DroppedItem
-  attr_accessor :x, :y, :vx, :vy, :angle, :omega, :width, :height, :radius
-  attr_accessor :type, :color, :shape, :mass, :restitution, :friction, :sleeping
+class DroppedItem < PhysicsSprite
+  attr_accessor :width, :height, :radius, :type, :color, :sleeping
 
   def initialize(x, y, vx: 0.0, vy: 0.0, type: :rect)
-    @x = x.to_f
-    @y = y.to_f
-    @vx = vx.to_f
-    @vy = vy.to_f
-    @angle = rand(0..360).to_f
-    @omega = rand(-10.0..10.0)
+    angle = rand(0..360).to_f
+    omega = rand(-10.0..10.0)
+    super(x, y, vx: vx, vy: vy, omega: omega, mass: 1.0, restitution: 0.35, friction: 0.55, anchor: :center, pivot: :center)
+    self.angle = angle
     @type = type
-    @mass = 1.0
-    @restitution = 0.35 # 反発
-    @friction = 0.55    # 摩擦
     @sleeping = false
 
     case @type
@@ -31,13 +25,13 @@ class DroppedItem
       @width = rand(24..36).to_f
       @height = rand(24..36).to_f
       @color = [rand(180..255), rand(120..220), rand(70..160), 255]
-      @shape = Collision.rect(@x, @y, @width, @height, angle: @angle, anchor: :center)
+      set_collider(:rect, width: @width, height: @height)
     when :circle
       @radius = rand(14..20).to_f
       @width = @radius * 2.0
       @height = @radius * 2.0
       @color = [rand(80..180), rand(180..255), rand(180..255), 255]
-      @shape = Collision.circle(@x, @y, @radius, anchor: :center)
+      set_collider(:circle, radius: @radius)
     end
   end
 
@@ -48,45 +42,18 @@ class DroppedItem
     @vy += 0.45       # 重力
     @vx *= 0.992      # 空気抵抗
     @omega *= 0.985   # 転がり・回転減速
-    @x += @vx
-    @y += @vy
-    @angle += @omega
-
-    # Shape を更新 (アンカー中心)
-    @shape.x = @x
-    @shape.y = @y
-    @shape.angle = @angle
+    self.x += @vx
+    self.y += @vy
+    self.angle += @omega
 
     # 2. 地面・障害物との衝突解決
     obstacles.each do |obs|
-      hit = Collision.penetration(@shape, obs.shape)
+      hit = Collision.penetration(self, obs)
       next unless hit
 
-      # 3. 即時モード物理応答の計算
-      res = Physics.resolve_static(
-        hit,
-        x: @x, y: @y,
-        vx: @vx, vy: @vy,
-        omega: @omega,
-        mass: @mass,
-        shape: @shape,
-        static_shape: obs.shape,
-        restitution: @restitution,
-        friction: @friction
-      )
-
-      # 4. 反映
-      @x += res.push_x
-      @y += res.push_y
-      @angle += res.d_angle if res.d_angle != 0.0
-      @vx = res.vx
-      @vy = res.vy
-      @omega = res.omega
-
-      # Shape にも位置と角度を即座に再同期 (連鎖衝突用)
-      @shape.x = @x
-      @shape.y = @y
-      @shape.angle = @angle
+      # 3. 即時モード物理応答の計算 & 自身への反映
+      res = Physics.resolve_static(hit, self, obs)
+      res.apply_to(self)
     end
 
     # 速度と角速度が静止に達したらスリープ
@@ -108,9 +75,9 @@ class DroppedItem
     when :rect
       # Window.draw_rect は左上基準のため、中心からオフセットして描画
       Window.draw_rect(
-        @x - @width * 0.5, @y - @height * 0.5,
+        self.x - @width * 0.5, self.y - @height * 0.5,
         @width, @height,
-        angle: @angle,
+        angle: self.angle,
         pivot: :center,
         color: @color,
         border_width: 2,
@@ -120,39 +87,41 @@ class DroppedItem
       )
     when :circle
       Window.draw_circle(
-        @x, @y, @radius,
+        self.x, self.y, @radius,
         color: @color,
         border_width: 2,
         border_color: [255, 255, 255, 180]
       )
       # 回転が視認できるようにマーク線を描画
-      rad = @angle * (Math::PI / 180.0)
-      mx = @x + Math.cos(rad) * (@radius * 0.75)
-      my = @y + Math.sin(rad) * (@radius * 0.75)
-      Window.draw_line(@x, @y, mx, my, color: [20, 20, 30, 220], width: 2)
+      rad = self.angle * (Math::PI / 180.0)
+      mx = self.x + Math.cos(rad) * (@radius * 0.75)
+      my = self.y + Math.sin(rad) * (@radius * 0.75)
+      Window.draw_line(self.x, self.y, mx, my, color: [20, 20, 30, 220], width: 2)
     end
   end
 end
 
-class Obstacle
-  attr_accessor :x, :y, :width, :height, :angle, :radius, :color, :shape
+class Obstacle < Sprite
+  attr_accessor :radius, :color
 
   def initialize(x, y, w, h, angle: 0.0, radius: 4.0, color: [45, 65, 80, 255])
-    @x = x.to_f
-    @y = y.to_f
-    @width = w.to_f
-    @height = h.to_f
-    @angle = angle.to_f
+    super(x, y, anchor: :center, pivot: :center)
+    self.angle = angle
+    @width_val = w.to_f
+    @height_val = h.to_f
     @radius = radius.to_f
     @color = color
-    @shape = Collision.rect(@x, @y, @width, @height, angle: @angle, radius: @radius, anchor: :center)
+    set_collider(:rect, width: @width_val, height: @height_val, radius: @radius)
   end
+
+  def width; @width_val; end
+  def height; @height_val; end
 
   def draw
     Window.draw_rect(
-      @x - @width * 0.5, @y - @height * 0.5,
-      @width, @height,
-      angle: @angle,
+      self.x - width * 0.5, self.y - height * 0.5,
+      width, height,
+      angle: self.angle,
       radius: @radius,
       pivot: :center,
       color: @color,
@@ -226,42 +195,19 @@ class PhysicsDropDemo
         item_b = @items[j]
 
         # 高速ブロードフェーズ (外接円チェック)
-        r_sum = item_a.shape.bounding_radius + item_b.shape.bounding_radius
+        r_sum = item_a.collider.bounding_radius + item_b.collider.bounding_radius
         dx = item_b.x - item_a.x
         dy = item_b.y - item_a.y
         if dx * dx + dy * dy < r_sum * r_sum
-          hit = Collision.penetration(item_a.shape, item_b.shape)
+          hit = Collision.penetration(item_a, item_b)
           if hit
             # 衝突したらスリープ解除
             item_a.sleeping = false
             item_b.sleeping = false
 
-            # ★ Physics.resolve で 2 体の物理応答を取得！
-            res = Physics.resolve(
-              hit,
-              a: { x: item_a.x, y: item_a.y, vx: item_a.vx, vy: item_a.vy, omega: item_a.omega, shape: item_a.shape, mass: item_a.mass },
-              b: { x: item_b.x, y: item_b.y, vx: item_b.vx, vy: item_b.vy, omega: item_b.omega, shape: item_b.shape, mass: item_b.mass },
-              restitution: 0.45,
-              friction: 0.4
-            )
-
-            # 物体Aへの反映
-            item_a.x += res.a.push_x
-            item_a.y += res.a.push_y
-            item_a.vx = res.a.vx
-            item_a.vy = res.a.vy
-            item_a.omega = res.a.omega
-            item_a.shape.x = item_a.x
-            item_a.shape.y = item_a.y
-
-            # 物体Bへの反映
-            item_b.x += res.b.push_x
-            item_b.y += res.b.push_y
-            item_b.vx = res.b.vx
-            item_b.vy = res.b.vy
-            item_b.omega = res.b.omega
-            item_b.shape.x = item_b.x
-            item_b.shape.y = item_b.y
+            # ★ Physics.resolve で 2 体の物理応答を取得＆一括反映！
+            res = Physics.resolve(hit, item_a, item_b, restitution: 0.45, friction: 0.4)
+            res&.apply_to(item_a, item_b)
           end
         end
         j += 1

@@ -37,24 +37,26 @@ require_relative 'zenoo/camera'
 require_relative 'zenoo/easing'
 require_relative 'zenoo/tween'
 require_relative 'zenoo/sprite'
+require_relative 'zenoo/physics_sprite'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
-Window      = Zenoo::Window      unless defined?(Window)
-Canvas      = Zenoo::Canvas      unless defined?(Canvas)
-Input       = Zenoo::Input       unless defined?(Input)
-Image       = Zenoo::Image       unless defined?(Image)
-Shader      = Zenoo::Shader      unless defined?(Shader)
-Color       = Zenoo::Color       unless defined?(Color)
-Font        = Zenoo::Font        unless defined?(Font)
-GUI         = Zenoo::GUI         unless defined?(GUI)
-Audio       = Zenoo::Audio       unless defined?(Audio)
-Sound       = Zenoo::Sound       unless defined?(Sound)
-SoundEffect = Zenoo::SoundEffect unless defined?(SoundEffect)
-Collision   = Zenoo::Collision   unless defined?(Collision)
-Physics     = Zenoo::Physics     unless defined?(Physics)
-Camera2D    = Zenoo::Camera2D    unless defined?(Camera2D)
-Easing      = Zenoo::Easing      unless defined?(Easing)
-Tween       = Zenoo::Tween       unless defined?(Tween)
-Sprite      = Zenoo::Sprite      unless defined?(Sprite)
+Window        = Zenoo::Window        unless defined?(Window)
+Canvas        = Zenoo::Canvas        unless defined?(Canvas)
+Input         = Zenoo::Input         unless defined?(Input)
+Image         = Zenoo::Image         unless defined?(Image)
+Shader        = Zenoo::Shader        unless defined?(Shader)
+Color         = Zenoo::Color         unless defined?(Color)
+Font          = Zenoo::Font          unless defined?(Font)
+GUI           = Zenoo::GUI           unless defined?(GUI)
+Audio         = Zenoo::Audio         unless defined?(Audio)
+Sound         = Zenoo::Sound         unless defined?(Sound)
+SoundEffect   = Zenoo::SoundEffect   unless defined?(SoundEffect)
+Collision     = Zenoo::Collision     unless defined?(Collision)
+Physics       = Zenoo::Physics       unless defined?(Physics)
+Camera2D      = Zenoo::Camera2D      unless defined?(Camera2D)
+Easing        = Zenoo::Easing        unless defined?(Easing)
+Tween         = Zenoo::Tween         unless defined?(Tween)
+Sprite        = Zenoo::Sprite        unless defined?(Sprite)
+PhysicsSprite = Zenoo::PhysicsSprite unless defined?(PhysicsSprite)
 
 
