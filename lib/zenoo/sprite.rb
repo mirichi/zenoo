@@ -174,11 +174,11 @@ module Zenoo
         r = (radius || 0.0).to_f
         @collider_shape = Collision::Rect.new(0.0, 0.0, w, h, radius: r, offset_x: ox, offset_y: oy, parent: self)
       when :point
-        @collider_shape = Collision::Point.new(0.0, 0.0, offset_x: ox, offset_y: oy, parent: self)
+        @collider_shape = Collision::Point.new(offset_x: ox, offset_y: oy, parent: self)
       when :polygon
         @collider_shape = Collision::Polygon.new(vertices || [], offset_x: ox, offset_y: oy, parent: self)
       when :default
-        @collider_shape = Collision::Rect.new(0.0, 0.0, 0.0, 0.0, offset_x: ox, offset_y: oy, parent: self)
+        @collider_shape = Collision::Rect.new(offset_x: ox, offset_y: oy, parent: self)
       end
       self
     end
@@ -224,7 +224,7 @@ module Zenoo
     # 変形（位置・回転・拡大・ピボット）と同期した Collision::Shape を取得
     def collider
       unless @collider_shape
-        @collider_shape = Collision::Rect.new(0.0, 0.0, 0.0, 0.0, parent: self)
+        @collider_shape = Collision::Rect.new(parent: self)
       end
       @collider_shape.update_cache if @collider_shape.dirty?
       @collider_shape
@@ -274,6 +274,11 @@ module Zenoo
     # 単一または配列スプライトの一括描画 (DXRuby互換)
     def self.draw(sprites, camera: true, z: nil)
       Window.draw_sprite(sprites, camera: camera, z: z)
+    end
+
+    # スプライト同士・配列同士の一括衝突判定 (DXRuby互換)
+    def self.check(group_a, group_b, &block)
+      Collision.check_all(group_a, group_b, &block)
     end
   end
 end
