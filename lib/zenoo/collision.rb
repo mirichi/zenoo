@@ -1176,9 +1176,10 @@ module Zenoo
     end
 
     # 配列・オブジェクト同士の一括衝突判定 (DXRuby 互換: ブロック省略時は衝突ペア配列を返す)
-    def self.check_all(group_a, group_b)
+    def self.check_all(group_a, group_b = nil)
       arr_a = group_a.is_a?(Array) ? group_a : [group_a]
-      arr_b = group_b.is_a?(Array) ? group_b : [group_b]
+      same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
+      arr_b = same_group ? arr_a : (group_b.is_a?(Array) ? group_b : [group_b])
       len_a = arr_a.length
       len_b = arr_b.length
       hits = block_given? ? nil : []
@@ -1188,7 +1189,7 @@ module Zenoo
         item_a = arr_a[i]
         shape_a = item_a.is_a?(Shape) ? item_a : (item_a.respond_to?(:collider) ? item_a.collider : nil)
         if shape_a
-          j = 0
+          j = same_group ? (i + 1) : 0
           while j < len_b
             item_b = arr_b[j]
             shape_b = item_b.is_a?(Shape) ? item_b : (item_b.respond_to?(:collider) ? item_b.collider : nil)
@@ -1262,9 +1263,48 @@ module Zenoo
       penetration_generic_sat(shape_a, shape_b, dx, dy)
     end
 
+    # 配列・オブジェクト同士の一括めり込み量・押し出し (MTV) 判定
+    # ブロック省略時は [[item_a, item_b, hit], ...] の配列を返す
+    def self.penetration_all(group_a, group_b = nil)
+      arr_a = group_a.is_a?(Array) ? group_a : [group_a]
+      same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
+      arr_b = same_group ? arr_a : (group_b.is_a?(Array) ? group_b : [group_b])
+      len_a = arr_a.length
+      len_b = arr_b.length
+      hits = block_given? ? nil : []
+
+      i = 0
+      while i < len_a
+        item_a = arr_a[i]
+        shape_a = item_a.is_a?(Shape) ? item_a : (item_a.respond_to?(:collider) ? item_a.collider : nil)
+        if shape_a
+          j = same_group ? (i + 1) : 0
+          while j < len_b
+            item_b = arr_b[j]
+            shape_b = item_b.is_a?(Shape) ? item_b : (item_b.respond_to?(:collider) ? item_b.collider : nil)
+            if shape_b
+              hit = penetration(shape_a, shape_b)
+              if hit
+                if block_given?
+                  yield(item_a, item_b, hit)
+                else
+                  hits << [item_a, item_b, hit]
+                end
+              end
+            end
+            j += 1
+          end
+        end
+        i += 1
+      end
+      hits
+    end
+
     class << self
       alias overlap penetration
       alias intersect penetration
+      alias overlap_all penetration_all
+      alias intersect_all penetration_all
     end
 
     # 真円 vs 真円の押し出し
