@@ -118,35 +118,33 @@ module Zenoo
     # 即時物理応答計算 (動的オブジェクト vs 静的地形/壁)
     # ====================================================
     # @param hit [Zenoo::Collision::Hit] 衝突判定結果
-    # @param x [Float] 動的オブジェクトの重心X座標
-    # @param y [Float] 動的オブジェクトの重心Y座標
-    # @param vx [Float] 現在のX速度 (px/frame)
-    # @param vy [Float] 現在のY速度 (px/frame)
-    # @param omega [Float] 現在の角速度 (deg/frame)
-    # @param angle [Float, nil] 現在の角度 (deg, 省略時は shape から取得)
-    # @param mass [Float] 質量 (kg)
-    # @param inertia [Float, nil] 慣性モーメント (省略時は shape または 32x32矩形から自動推定)
-    # @param shape [Object, nil] 形状 (Sprite や Collision::Shape)
-    # @param static_shape [Object, nil] 静的障害物の形状 (オーバーハング・崖っぷち判定の高精度化)
-    # @param restitution [Float] 反発係数 (0.0〜1.0)
-    # @param friction [Float] 摩擦係数 (0.0〜1.0)
+    # @param a [PhysicsSprite, Sprite, Hash, Object] 動的オブジェクト
+    # @param b [Sprite, Collision::Shape, Hash, Object, nil] 静的障害物オブジェクト
+    # @param restitution [Float, nil] 反発係数 (省略時は a のプロパティまたは 0.3)
+    # @param friction [Float, nil] 摩擦係数 (省略時は a のプロパティまたは 0.5)
     # @param bounce_threshold [Float] 微小衝突時の反発カット閾値 (ジッター防止)
     # @return [Zenoo::Physics::Response] 反映すべき新値
     def self.resolve_static(
       hit,
-      x:, y:,
-      vx:, vy:,
-      omega: 0.0,
-      angle: nil,
-      mass: 1.0,
-      inertia: nil,
-      shape: nil,
-      static_shape: nil,
-      restitution: 0.3,
-      friction: 0.5,
-      bounce_threshold: 0.5
+      a = nil,
+      b = nil,
+      restitution: nil,
+      friction: nil,
+      bounce_threshold: 0.5,
+      **kwargs
     )
       return nil unless hit
+
+      target_a = a || kwargs[:a] || kwargs[:body]
+      target_a ||= kwargs if kwargs[:x] || kwargs[:vx]
+      target_b = b || kwargs[:b] || kwargs[:static_body] || kwargs[:static_shape]
+      return nil unless target_a
+
+      x, y, vx, vy, omega, angle, mass, shape, inertia = extract_body_params(target_a)
+      restitution = restitution ? restitution.to_f : (target_a.respond_to?(:restitution) ? target_a.restitution.to_f : 0.3)
+      friction = friction ? friction.to_f : (target_a.respond_to?(:friction) ? target_a.friction.to_f : 0.5)
+
+      static_shape = target_b ? (target_b.respond_to?(:collider) ? target_b.collider : target_b) : nil
 
       m = mass.to_f
       inv_m = m > 0.00001 ? 1.0 / m : 0.0
@@ -405,16 +403,29 @@ module Zenoo
     # @return [Zenoo::Physics::PairResponse] 物体Aと物体Bそれぞれの反映新値を含む結果
     def self.resolve(
       hit,
-      a:,
-      b:,
-      restitution: 0.5,
-      friction: 0.4,
-      bounce_threshold: 0.5
+      a = nil,
+      b = nil,
+      restitution: nil,
+      friction: nil,
+      bounce_threshold: 0.5,
+      **kwargs
     )
       return nil unless hit
 
-      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(a)
-      xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(b)
+      target_a = a || kwargs[:a]
+      target_b = b || kwargs[:b]
+      return nil unless target_a && target_b
+
+      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(target_a)
+      xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(target_b)
+
+      rest_a = target_a.respond_to?(:restitution) ? target_a.restitution.to_f : nil
+      rest_b = target_b.respond_to?(:restitution) ? target_b.restitution.to_f : nil
+      restitution = restitution ? restitution.to_f : ((rest_a && rest_b) ? [rest_a, rest_b].max : (rest_a || rest_b || 0.5))
+
+      fric_a = target_a.respond_to?(:friction) ? target_a.friction.to_f : nil
+      fric_b = target_b.respond_to?(:friction) ? target_b.friction.to_f : nil
+      friction = friction ? friction.to_f : ((fric_a && fric_b) ? Math.sqrt(fric_a * fric_b) : (fric_a || fric_b || 0.4))
 
       inv_ma = ma > 0.00001 ? 1.0 / ma : 0.0
       inv_mb = mb > 0.00001 ? 1.0 / mb : 0.0

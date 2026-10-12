@@ -47,47 +47,43 @@ class Spark
 end
 
 # 剛体物理オブジェクト
-class PhysicsBody
-  attr_accessor :name, :shape, :type, :x, :y, :vx, :vy, :angle, :omega
-  attr_accessor :mass, :restitution, :friction, :color, :border_color
+class PhysicsBody < PhysicsSprite
+  attr_accessor :name, :shape, :type, :border_color
   attr_accessor :init_x, :init_y, :init_vx, :init_vy, :init_angle, :init_omega
   attr_accessor :hit
 
   def initialize(name, shape, type, mass: 1.0, restitution: 0.88, friction: 0.35, color: nil, vx: 0.0, vy: 0.0, omega: 0.0)
+    super(shape.center_x, shape.center_y,
+          vx: vx, vy: vy, omega: omega,
+          mass: mass, restitution: restitution, friction: friction,
+          anchor: :center, pivot: :center)
     @name = name
     @shape = shape
+    self.collider = shape
+    self.angle = shape.angle.to_f
     @type = type
-    @x = shape.center_x
-    @y = shape.center_y
-    @vx = vx.to_f
-    @vy = vy.to_f
-    @angle = shape.angle.to_f
-    @omega = omega.to_f
-    @mass = mass.to_f
-    @restitution = restitution.to_f
-    @friction = friction.to_f
     @color = color || default_color_for(type)
     @border_color = [255, 255, 255, 220]
     @hit = false
 
-    @init_x = @x
-    @init_y = @y
+    @init_x = self.x
+    @init_y = self.y
     @init_vx = @vx
     @init_vy = @vy
-    @init_angle = @angle
+    @init_angle = self.angle
     @init_omega = @omega
   end
 
   def reset!
-    @x = @init_x
-    @y = @init_y
-    @vx = @init_vx
-    @vy = @init_vy
-    @angle = @init_angle
-    @omega = @init_omega
-    @shape.center_x = @x
-    @shape.center_y = @y
-    @shape.angle = @angle
+    self.x = @init_x
+    self.y = @init_y
+    self.vx = @init_vx
+    self.vy = @init_vy
+    self.angle = @init_angle
+    self.omega = @init_omega
+    @shape.center_x = self.x
+    @shape.center_y = self.y
+    @shape.angle = self.angle
     @hit = false
   end
 
@@ -110,14 +106,14 @@ class PhysicsBody
     @vy *= 0.9992
     @omega *= 0.9985
 
-    @x += @vx
-    @y += @vy
-    @angle += @omega
+    self.x += @vx
+    self.y += @vy
+    self.angle += @omega
 
     # Shape を同期 (常に重心位置に同期)
-    @shape.center_x = @x
-    @shape.center_y = @y
-    @shape.angle = @angle
+    @shape.center_x = self.x
+    @shape.center_y = self.y
+    @shape.angle = self.angle
   end
 
   def draw(is_active, is_hover)
@@ -476,13 +472,7 @@ class ZeroGravityDemo
             @hit_count += 1
 
             # ★ 即時モード 2体剛体衝突解決！
-            res = Physics.resolve(
-              hit,
-              a: { x: it_a.x, y: it_a.y, vx: it_a.vx, vy: it_a.vy, omega: it_a.omega, shape: it_a.shape, mass: it_a.mass },
-              b: { x: it_b.x, y: it_b.y, vx: it_b.vx, vy: it_b.vy, omega: it_b.omega, shape: it_b.shape, mass: it_b.mass },
-              restitution: 0.88, # 高弾性で軽快に跳ね返る
-              friction: 0.35     # 摩擦によるスピン交換
-            )
+            res = Physics.resolve(hit, it_a, it_b, restitution: 0.88, friction: 0.35)
 
             # 物体Aへの反映 (ドラッグ中でない場合のみ位置押し戻し)
             unless it_a == @active_item && @drag_mode == :move
@@ -523,16 +513,7 @@ class ZeroGravityDemo
         hit = Collision.penetration(it.shape, wall)
         next unless hit
 
-        res = Physics.resolve_static(
-          hit,
-          x: it.x, y: it.y,
-          vx: it.vx, vy: it.vy,
-          omega: it.omega,
-          shape: it.shape,
-          mass: it.mass,
-          restitution: 0.92, # 壁からの高反発
-          friction: 0.25
-        )
+        res = Physics.resolve_static(hit, it, wall, restitution: 0.92, friction: 0.25)
 
         unless it == @active_item && @drag_mode == :move
           it.x += res.push_x
