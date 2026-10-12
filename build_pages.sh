@@ -34,6 +34,7 @@ mkdir -p "${DOCS_DIR}/collision"
 mkdir -p "${DOCS_DIR}/tween"
 mkdir -p "${DOCS_DIR}/coords"
 mkdir -p "${DOCS_DIR}/billiards"
+mkdir -p "${DOCS_DIR}/zero_gravity"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -354,20 +355,38 @@ build_billiards() {
     echo "-> Billiards build done!"
 }
 
+build_zero_gravity() {
+    echo "=== Building Zero-Gravity 2D Physics Demo (${DOCS_DIR}/zero_gravity) ==="
+    mkdir -p "${DOCS_DIR}/zero_gravity"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_zero_gravity.rb -c -o "${DOCS_DIR}/zero_gravity/app.c"
+    strip_always_inline "${DOCS_DIR}/zero_gravity/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/zero_gravity/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/zero_gravity/index.html" \
+        --shell-file examples/web/shell_zero_gravity.html
+
+    patch_emscripten_js "${DOCS_DIR}/zero_gravity/index.js"
+    rm -f "${DOCS_DIR}/zero_gravity/app.c"
+    echo "-> Zero-Gravity build done!"
+}
+
 case "$TARGET" in
-    game)      build_game ;;
-    gui)       build_gui ;;
-    font)      build_font ;;
-    vector)    build_vector ;;
-    image)     build_image ;;
-    atlas)     build_atlas ;;
-    window)    build_window ;;
-    clip)      build_clip ;;
-    sound)     build_sound ;;
-    collision) build_collision ;;
-    tween)     build_tween ;;
-    coords)    build_coords ;;
-    billiards) build_billiards ;;
+    game)         build_game ;;
+    gui)          build_gui ;;
+    font)         build_font ;;
+    vector)       build_vector ;;
+    image)        build_image ;;
+    atlas)        build_atlas ;;
+    window)       build_window ;;
+    clip)         build_clip ;;
+    sound)        build_sound ;;
+    collision)    build_collision ;;
+    tween)        build_tween ;;
+    coords)       build_coords ;;
+    billiards)    build_billiards ;;
+    zero_gravity) build_zero_gravity ;;
     all)
         build_game
         sleep 0.5
@@ -394,10 +413,12 @@ case "$TARGET" in
         build_coords
         sleep 0.5
         build_billiards
+        sleep 0.5
+        build_zero_gravity
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|coords|billiards|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|coords|billiards|zero_gravity|all]"
         exit 1
         ;;
 esac
@@ -419,4 +440,5 @@ echo " Collision: ${DOCS_DIR}/collision/index.html"
 echo " Tween    : ${DOCS_DIR}/tween/index.html"
 echo " Coords   : ${DOCS_DIR}/coords/index.html"
 echo " Billiards: ${DOCS_DIR}/billiards/index.html"
+echo " Zero-Grav: ${DOCS_DIR}/zero_gravity/index.html"
 echo "=========================================================="

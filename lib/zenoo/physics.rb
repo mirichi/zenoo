@@ -97,21 +97,22 @@ module Zenoo
       target = shape_or_sprite
       target = target.collider if target.respond_to?(:collider) && target.collider
 
-      case target
-      when Collision::Rect
-        w = target.width * target.scale_x.abs
-        h = target.height * target.scale_y.abs
-        inertia_rect(w, h, mass: mass)
-      when Collision::Circle
-        r = target.bounding_radius
-        inertia_circle(r, mass: mass)
-      when Collision::Polygon
-        r = target.bounding_radius
-        0.5 * mass.to_f * (r * r)
-      else
-        # デフォルトは 32x32 矩形近似
-        inertia_rect(32.0, 32.0, mass: mass)
-      end
+      res = case target
+            when Collision::Rect
+              w = target.width * target.scale_x.abs
+              h = target.height * target.scale_y.abs
+              (w > 0.001 && h > 0.001) ? inertia_rect(w, h, mass: mass) : inertia_rect(32.0, 32.0, mass: mass)
+            when Collision::Circle
+              r = target.bounding_radius
+              r > 0.001 ? inertia_circle(r, mass: mass) : inertia_circle(16.0, mass: mass)
+            when Collision::Polygon
+              r = target.bounding_radius
+              r > 0.001 ? 0.5 * mass.to_f * (r * r) : inertia_rect(32.0, 32.0, mass: mass)
+            else
+              # デフォルトは 32x32 矩形近似
+              inertia_rect(32.0, 32.0, mass: mass)
+            end
+      res > 0.0001 ? res : inertia_rect(32.0, 32.0, mass: mass)
     end
 
     # ====================================================
@@ -618,6 +619,462 @@ module Zenoo
         inertia = body.respond_to?(:inertia) ? body.inertia : nil
       end
       [x, y, vx, vy, omega, angle, mass, shape, inertia]
+    end
+
+    # ====================================================
+    # 座標変換ヘルパー
+    # ====================================================
+
+    # 物体のローカル座標 [lx, ly] を現在のワールド座標 [wx, wy] に変換
+    def self.local_to_world(body, lx, ly)
+      x, y, _vx, _vy, _w, angle = extract_body_params(body)
+      rad = angle * DEG_TO_RAD
+      c = Math.cos(rad)
+      s = Math.sin(rad)
+      [x + lx.to_f * c - ly.to_f * s, y + lx.to_f * s + ly.to_f * c]
+    end
+
+    # ワールド座標 [wx, wy] を物体の現在のローカル座標 [lx, ly] に変換
+    def self.world_to_local(body, wx, wy)
+      x, y, _vx, _vy, _w, angle = extract_body_params(body)
+      rad = angle * DEG_TO_RAD
+      c = Math.cos(rad)
+      s = Math.sin(rad)
+      dx = wx.to_f - x
+      dy = wy.to_f - y
+      [dx * c + dy * s, -dx * s + dy * c]
+    end
+
+    # 物体 A から見た物体 B の相対オフセット [ox, oy] と相対角度 rel_angle (deg) を計算
+    def self.relative_offset(body_a, body_b)
+      bx = body_b.respond_to?(:x) ? body_b.x.to_f : 0.0
+      by = body_b.respond_to?(:y) ? body_b.y.to_f : 0.0
+      ba = body_b.respond_to?(:angle) ? body_b.angle.to_f : 0.0
+      aa = body_a.respond_to?(:angle) ? body_a.angle.to_f : 0.0
+      lx, ly = world_to_local(body_a, bx, by)
+      diff_ang = (ba - aa) % 360.0
+      diff_ang -= 360.0 if diff_ang > 180.0
+      diff_ang += 360.0 if diff_ang < -180.0
+      [[lx, ly], diff_ang]
+    end
+
+    # ====================================================
+    # 即時モード 拘束 (Constraints / Joints)
+    # ====================================================
+
+    # 1. 目標点 / マウスへの引っ張り拘束 (スプリング・トルクドラッグ)
+    # @param body [PhysicsSprite, Object] 対象物体
+    # @param tx [Float] 目標ワールドX座標 (マウスXなど)
+    # @param ty [Float] 目標ワールドY座標 (マウスYなど)
+    # @param anchor [Array<Float>, nil] 物体上のローカル接続点 [lx, ly] (省略時は重心 [0, 0])
+    # @param stiffness [Float] 引っ張りの強さ (0.0〜1.0, デフォルト 0.3)
+    # @param damping [Float] 速度減衰 (0.0〜1.0, デフォルト 0.85)
+    def self.constrain_point(body, tx, ty, anchor: nil, stiffness: 0.3, damping: 0.85)
+      return nil unless body
+
+      x, y, vx, vy, omega, angle, mass, shape, inertia = extract_body_params(body)
+      m = mass.to_f
+      return nil if m <= 0.00001
+
+      inert = inertia ? inertia.to_f : (shape ? inertia_of(shape, mass: m) : inertia_rect(32.0, 32.0, mass: m))
+      inv_m = 1.0 / m
+      inv_i = inert > 0.00001 ? 1.0 / inert : 0.0
+
+      # アンカー点の現在ワールド座標
+      rad = angle * DEG_TO_RAD
+      c = Math.cos(rad)
+      s = Math.sin(rad)
+      lx = anchor ? anchor[0].to_f : 0.0
+      ly = anchor ? anchor[1].to_f : 0.0
+
+      rx = lx * c - ly * s
+      ry = lx * s + ly * c
+      px = x + rx
+      py = y + ry
+
+      # 目標点とのズレ
+      dx = tx.to_f - px
+      dy = ty.to_f - py
+
+      k_stiff = stiffness.to_f.clamp(0.01, 1.0)
+      k_damp = damping.to_f.clamp(0.0, 1.0)
+
+      # 位置の直接引き寄せ (PBD)
+      push_x = dx * k_stiff
+      push_y = dy * k_stiff
+
+      # トルクによる回転
+      tau_pos = rx * push_y - ry * push_x
+      d_angle = (tau_pos * inv_i * RAD_TO_DEG) * 0.5
+
+      body.x += push_x if body.respond_to?(:x=)
+      body.y += push_y if body.respond_to?(:y=)
+      body.angle += d_angle if body.respond_to?(:angle=)
+
+      # 速度の更新 (追従インパルス + 減衰)
+      body.vx = (vx * k_damp) + (push_x * 0.5) if body.respond_to?(:vx=)
+      body.vy = (vy * k_damp) + (push_y * 0.5) if body.respond_to?(:vy=)
+      body.omega = (omega * k_damp) + (d_angle * 0.5) if body.respond_to?(:omega=)
+
+      true
+    end
+
+    def self.constrain_mouse(body, mx, my, **kwargs)
+      constrain_point(body, mx, my, **kwargs)
+    end
+
+    # 2. ピン結合・回転ジョイント (Revolute / Pin Joint)
+    # @param a [PhysicsSprite, Object] 物体A
+    # @param b [PhysicsSprite, Object, Array, nil] 物体B (nilまたは座標[x, y]の場合は空間の固定点)
+    # @param pivot [Array<Float>, nil] ワールド結合点座標 [px, py]
+    # @param anchor_a [Array<Float>, nil] 物体Aのローカル結合点 [lx, ly]
+    # @param anchor_b [Array<Float>, nil] 物体Bのローカル結合点 [lx, ly]
+    def self.constrain_pin(a, b = nil, pivot: nil, anchor_a: nil, anchor_b: nil)
+      return nil unless a
+
+      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(a)
+      rad_a = anga * DEG_TO_RAD
+      ca = Math.cos(rad_a)
+      sa = Math.sin(rad_a)
+
+      # anchor_a の決定: 指定があればそれ、無ければ重心 [0, 0]
+      lax = anchor_a ? anchor_a[0].to_f : 0.0
+      lay = anchor_a ? anchor_a[1].to_f : 0.0
+
+      rax = lax * ca - lay * sa
+      ray = lax * sa + lay * ca
+      pax = xa + rax
+      pay = ya + ray
+
+      is_fixed = b.nil? || b.is_a?(Array)
+      if is_fixed
+        pbx = b.is_a?(Array) ? b[0].to_f : (pivot ? pivot[0].to_f : pax)
+        pby = b.is_a?(Array) ? b[1].to_f : (pivot ? pivot[1].to_f : pay)
+        vbx = 0.0
+        vby = 0.0
+        wb = 0.0
+        rbx = 0.0
+        rby = 0.0
+        inv_mb = 0.0
+        inv_ib = 0.0
+      else
+        xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(b)
+        rad_b = angb * DEG_TO_RAD
+        cb = Math.cos(rad_b)
+        sb = Math.sin(rad_b)
+
+        lbx = anchor_b ? anchor_b[0].to_f : 0.0
+        lby = anchor_b ? anchor_b[1].to_f : 0.0
+
+        rbx = lbx * cb - lby * sb
+        rby = lbx * sb + lby * cb
+        pbx = xb + rbx
+        pby = yb + rby
+
+        mb_f = mb.to_f
+        inv_mb = mb_f > 0.00001 ? 1.0 / mb_f : 0.0
+        inert_b = ib ? ib.to_f : (shape_b ? inertia_of(shape_b, mass: mb_f) : inertia_rect(32.0, 32.0, mass: mb_f))
+        inv_ib = inert_b > 0.00001 ? 1.0 / inert_b : 0.0
+      end
+
+      ma_f = ma.to_f
+      inv_ma = ma_f > 0.00001 ? 1.0 / ma_f : 0.0
+      inert_a = ia ? ia.to_f : (shape_a ? inertia_of(shape_a, mass: ma_f) : inertia_rect(32.0, 32.0, mass: ma_f))
+      inv_ia = inert_a > 0.00001 ? 1.0 / inert_a : 0.0
+
+      inv_m_total = inv_ma + inv_mb
+      return nil if inv_m_total <= 0.000001
+
+      # 1. 位置ズレ (Position Drift) の直接補正
+      # ピン結合は角度を拘束しないため、アンカー点同士が一致するように平行移動するだけで厳密に一致する
+      dpx = pbx - pax
+      dpy = pby - pay
+
+      if is_fixed
+        a.x += dpx if a.respond_to?(:x=)
+        a.y += dpy if a.respond_to?(:y=)
+      else
+        ratio_a = inv_ma / inv_m_total
+        ratio_b = inv_mb / inv_m_total
+        a.x += dpx * ratio_a if a.respond_to?(:x=)
+        a.y += dpy * ratio_a if a.respond_to?(:y=)
+        b.x -= dpx * ratio_b if b.respond_to?(:x=)
+        b.y -= dpy * ratio_b if b.respond_to?(:y=)
+      end
+
+      # 2. 速度ズレ (Velocity Constraint) の力積解決
+      if is_fixed && lax.abs < 0.0001 && lay.abs < 0.0001
+        # 中心固定ピン: 線速度は完全にゼロ、角速度のみ自由
+        a.vx = 0.0 if a.respond_to?(:vx=)
+        a.vy = 0.0 if a.respond_to?(:vy=)
+      else
+        cur_anga = a.respond_to?(:angle) ? a.angle.to_f : anga
+        rad_a = cur_anga * DEG_TO_RAD
+        ca = Math.cos(rad_a)
+        sa = Math.sin(rad_a)
+        rax = lax * ca - lay * sa
+        ray = lax * sa + lay * ca
+
+        vax = a.respond_to?(:vx) ? a.vx.to_f : 0.0
+        vay = a.respond_to?(:vy) ? a.vy.to_f : 0.0
+        wa = a.respond_to?(:omega) ? a.omega.to_f : 0.0
+
+        if is_fixed
+          vbx = 0.0
+          vby = 0.0
+          wb = 0.0
+          rbx = 0.0
+          rby = 0.0
+        else
+          cur_angb = b.respond_to?(:angle) ? b.angle.to_f : angb
+          rad_b = cur_angb * DEG_TO_RAD
+          cb = Math.cos(rad_b)
+          sb = Math.sin(rad_b)
+          rbx = lbx * cb - lby * sb
+          rby = lbx * sb + lby * cb
+          vbx = b.respond_to?(:vx) ? b.vx.to_f : 0.0
+          vby = b.respond_to?(:vy) ? b.vy.to_f : 0.0
+          wb = b.respond_to?(:omega) ? b.omega.to_f : 0.0
+        end
+
+        w_rad_a = wa * DEG_TO_RAD
+        w_rad_b = wb * DEG_TO_RAD
+        vpa_x = vax - w_rad_a * ray
+        vpa_y = vay + w_rad_a * rax
+        vpb_x = vbx - w_rad_b * rby
+        vpb_y = vby + w_rad_b * rbx
+
+        rel_vx = vpa_x - vpb_x
+        rel_vy = vpa_y - vpb_y
+
+        k11 = inv_m_total + (ray * ray) * inv_ia + (rby * rby) * inv_ib
+        k22 = inv_m_total + (rax * rax) * inv_ia + (rbx * rbx) * inv_ib
+        k12 = -(rax * ray) * inv_ia - (rbx * rby) * inv_ib
+        det = k11 * k22 - k12 * k12
+
+        if det.abs > 0.000001
+          inv_det = 1.0 / det
+          jx_vel = -(k22 * rel_vx - k12 * rel_vy) * inv_det
+          jy_vel = -(-k12 * rel_vx + k11 * rel_vy) * inv_det
+
+          a.vx = vax + inv_ma * jx_vel if a.respond_to?(:vx=)
+          a.vy = vay + inv_ma * jy_vel if a.respond_to?(:vy=)
+          tau_a_vel = rax * jy_vel - ray * jx_vel
+          a.omega = wa + (tau_a_vel * inv_ia * RAD_TO_DEG) if a.respond_to?(:omega=)
+
+          unless is_fixed
+            b.vx = vbx - inv_mb * jx_vel if b.respond_to?(:vx=)
+            b.vy = vby - inv_mb * jy_vel if b.respond_to?(:vy=)
+            tau_b_vel = -(rbx * jy_vel - rby * jx_vel)
+            b.omega = wb + (tau_b_vel * inv_ib * RAD_TO_DEG) if b.respond_to?(:omega=)
+          end
+        end
+      end
+
+      true
+    end
+
+    # 3. 完全固定・溶接ジョイント (Weld / Fixed Constraint)
+    # 物体 A から見た物体 B の目標相対位置 (offset) と相対角度 (angle) を維持して一体化
+    # @param a [PhysicsSprite, Object] 基準物体A
+    # @param b [PhysicsSprite, Object] 結合物体B
+    # @param offset [Array<Float>] Aから見たBの目標ローカル位置 [ox, oy] (省略時は現在の相対位置)
+    # @param angle [Float, nil] Aから見たBの目標相対角度 (deg, 省略時は現在の角度差または0.0)
+    # @param stiffness [Float] 結合の硬さ (0.0〜1.0, デフォルト 1.0 = 完全固定)
+    def self.constrain_weld(a, b, offset: nil, angle: nil, stiffness: 1.0)
+      return nil unless a && b
+
+      if offset.nil?
+        offset, auto_ang = relative_offset(a, b)
+        angle ||= auto_ang
+      elsif offset.is_a?(Array) && offset.length >= 3 && angle.nil?
+        angle = offset[2].to_f
+      end
+
+      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(a)
+      xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(b)
+
+      ma_f = ma.to_f
+      mb_f = mb.to_f
+      inv_ma = ma_f > 0.00001 ? 1.0 / ma_f : 0.0
+      inv_mb = mb_f > 0.00001 ? 1.0 / mb_f : 0.0
+      inv_m_total = inv_ma + inv_mb
+      return nil if inv_m_total <= 0.000001
+
+      inert_a = ia ? ia.to_f : (shape_a ? inertia_of(shape_a, mass: ma_f) : inertia_rect(32.0, 32.0, mass: ma_f))
+      inert_b = ib ? ib.to_f : (shape_b ? inertia_of(shape_b, mass: mb_f) : inertia_rect(32.0, 32.0, mass: mb_f))
+      inv_ia = inert_a > 0.00001 ? 1.0 / inert_a : 0.0
+      inv_ib = inert_b > 0.00001 ? 1.0 / inert_b : 0.0
+      inv_i_total = inv_ia + inv_ib
+
+      k_stiff = stiffness.to_f.clamp(0.01, 1.0)
+
+      # 1. 角度の固定
+      target_rel_ang = angle ? angle.to_f : 0.0
+      target_ang_b = anga + target_rel_ang
+      diff_ang = (target_ang_b - angb) % 360.0
+      diff_ang -= 360.0 if diff_ang > 180.0
+      diff_ang += 360.0 if diff_ang < -180.0
+
+      if diff_ang.abs > 0.001 && inv_i_total > 0.000001
+        ratio_ang_a = (inv_ia / inv_i_total) * k_stiff
+        ratio_ang_b = (inv_ib / inv_i_total) * k_stiff
+        a.angle -= diff_ang * ratio_ang_a if a.respond_to?(:angle=)
+        b.angle += diff_ang * ratio_ang_b if b.respond_to?(:angle=)
+      end
+
+      # 2. 相対位置の固定
+      cur_anga = a.respond_to?(:angle) ? a.angle.to_f : anga
+      rad_a = cur_anga * DEG_TO_RAD
+      ca = Math.cos(rad_a)
+      sa = Math.sin(rad_a)
+
+      ox = offset ? offset[0].to_f : 0.0
+      oy = offset ? offset[1].to_f : 0.0
+      target_xb = a.x + (ox * ca - oy * sa)
+      target_yb = a.y + (ox * sa + oy * ca)
+
+      dx = target_xb - b.x
+      dy = target_yb - b.y
+
+      ratio_pos_a = (inv_ma / inv_m_total) * k_stiff
+      ratio_pos_b = (inv_mb / inv_m_total) * k_stiff
+
+      b.x += dx * ratio_pos_b if b.respond_to?(:x=)
+      b.y += dy * ratio_pos_b if b.respond_to?(:y=)
+      a.x -= dx * ratio_pos_a if a.respond_to?(:x=)
+      a.y -= dy * ratio_pos_a if a.respond_to?(:y=)
+
+      # 3. 速度・角速度の同期 (一体剛体運動)
+      total_mass = ma_f + mb_f
+      com_x = (ma_f * a.x + mb_f * b.x) / total_mass
+      com_y = (ma_f * a.y + mb_f * b.y) / total_mass
+
+      com_vx = (ma_f * vax + mb_f * vbx) / total_mass
+      com_vy = (ma_f * vay + mb_f * vby) / total_mass
+
+      ra_cx = a.x - com_x
+      ra_cy = a.y - com_y
+      rb_cx = b.x - com_x
+      rb_cy = b.y - com_y
+
+      total_inertia = inert_a + inert_b + ma_f * (ra_cx * ra_cx + ra_cy * ra_cy) + mb_f * (rb_cx * rb_cx + rb_cy * rb_cy)
+      if total_inertia > 0.00001
+        l_ang = (inert_a * wa + inert_b * wb) * DEG_TO_RAD
+        l_linear = (ra_cx * (ma_f * (vay - com_vy)) - ra_cy * (ma_f * (vax - com_vx))) +
+                   (rb_cx * (mb_f * (vby - com_vy)) - rb_cy * (mb_f * (vbx - com_vx)))
+        common_w_rad = (l_ang + l_linear) / total_inertia
+        common_w = common_w_rad * RAD_TO_DEG
+
+        a.omega = wa + (common_w - wa) * k_stiff if a.respond_to?(:omega=)
+        b.omega = wb + (common_w - wb) * k_stiff if b.respond_to?(:omega=)
+
+        a.vx = com_vx - (common_w_rad * ra_cy) if a.respond_to?(:vx=)
+        a.vy = com_vy + (common_w_rad * ra_cx) if a.respond_to?(:vy=)
+        b.vx = com_vx - (common_w_rad * rb_cy) if b.respond_to?(:vx=)
+        b.vy = com_vy + (common_w_rad * rb_cx) if b.respond_to?(:vy=)
+      end
+
+      true
+    end
+
+    # 4. 距離拘束・ロッド・ロープ (Distance / Rod / Rope Joint)
+    # @param a [PhysicsSprite, Object] 物体A
+    # @param b [PhysicsSprite, Object] 物体B
+    # @param length [Float, nil] 目標距離 (nil の場合は min/max、または現在の距離)
+    # @param min [Float, nil] 最小距離 (伸縮ロッド)
+    # @param max [Float, nil] 最大距離 (ロープ・糸)
+    # @param anchor_a [Array<Float>, nil] 物体Aのローカル接続点
+    # @param anchor_b [Array<Float>, nil] 物体Bのローカル接続点
+    def self.constrain_distance(a, b, length: nil, min: nil, max: nil, anchor_a: nil, anchor_b: nil)
+      return nil unless a && b
+
+      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(a)
+      xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(b)
+
+      pax, pay = local_to_world(a, anchor_a ? anchor_a[0].to_f : 0.0, anchor_a ? anchor_a[1].to_f : 0.0)
+      pbx, pby = local_to_world(b, anchor_b ? anchor_b[0].to_f : 0.0, anchor_b ? anchor_b[1].to_f : 0.0)
+
+      dx = pbx - pax
+      dy = pby - pay
+      dist = Math.sqrt(dx * dx + dy * dy)
+      return nil if dist <= 0.000001
+
+      nx = dx / dist
+      ny = dy / dist
+
+      target_len = length ? length.to_f : dist
+      target_min = min ? min.to_f : target_len
+      target_max = max ? max.to_f : target_len
+
+      diff = 0.0
+      if dist < target_min
+        diff = dist - target_min
+      elsif dist > target_max
+        diff = dist - target_max
+      else
+        return true
+      end
+
+      ma_f = ma.to_f
+      mb_f = mb.to_f
+      inv_ma = ma_f > 0.00001 ? 1.0 / ma_f : 0.0
+      inv_mb = mb_f > 0.00001 ? 1.0 / mb_f : 0.0
+      inv_m_total = inv_ma + inv_mb
+      return nil if inv_m_total <= 0.000001
+
+      inert_a = ia ? ia.to_f : (shape_a ? inertia_of(shape_a, mass: ma_f) : inertia_rect(32.0, 32.0, mass: ma_f))
+      inert_b = ib ? ib.to_f : (shape_b ? inertia_of(shape_b, mass: mb_f) : inertia_rect(32.0, 32.0, mass: mb_f))
+      inv_ia = inert_a > 0.00001 ? 1.0 / inert_a : 0.0
+      inv_ib = inert_b > 0.00001 ? 1.0 / inert_b : 0.0
+
+      rax = pax - xa
+      ray = pay - ya
+      rbx = pbx - xb
+      rby = pby - yb
+
+      ran = rax * ny - ray * nx
+      rbn = rbx * ny - rby * nx
+      k = inv_m_total + (ran * ran) * inv_ia + (rbn * rbn) * inv_ib
+      return nil if k <= 0.000001
+
+      # 位置補正
+      j_pos = diff / k
+      px_imp = j_pos * nx
+      py_imp = j_pos * ny
+
+      a.x += inv_ma * px_imp if a.respond_to?(:x=)
+      a.y += inv_ma * py_imp if a.respond_to?(:y=)
+      a.angle += ((rax * py_imp - ray * px_imp) * inv_ia * RAD_TO_DEG) if a.respond_to?(:angle=)
+
+      b.x -= inv_mb * px_imp if b.respond_to?(:x=)
+      b.y -= inv_mb * py_imp if b.respond_to?(:y=)
+      b.angle -= ((rbx * py_imp - rby * px_imp) * inv_ib * RAD_TO_DEG) if b.respond_to?(:angle=)
+
+      # 速度補正
+      w_rad_a = wa * DEG_TO_RAD
+      w_rad_b = wb * DEG_TO_RAD
+      vpa_x = vax - w_rad_a * ray
+      vpa_y = vay + w_rad_a * rax
+      vpb_x = vbx - w_rad_b * rby
+      vpb_y = vby + w_rad_b * rbx
+
+      rel_vn = (vpb_x - vpa_x) * nx + (vpb_y - vpa_y) * ny
+      if (diff > 0.0 && rel_vn > 0.0) || (diff < 0.0 && rel_vn < 0.0)
+        j_vel = rel_vn / k
+        vx_imp = j_vel * nx
+        vy_imp = j_vel * ny
+
+        a.vx = vax + inv_ma * vx_imp if a.respond_to?(:vx=)
+        a.vy = vay + inv_ma * vy_imp if a.respond_to?(:vy=)
+        a.omega = wa + ((rax * vy_imp - ray * px_imp) * inv_ia * RAD_TO_DEG) if a.respond_to?(:omega=)
+
+        b.vx = vbx - inv_mb * vx_imp if b.respond_to?(:vx=)
+        b.vy = vby - inv_mb * vy_imp if b.respond_to?(:vy=)
+        b.omega = wb - ((rbx * vy_imp - rby * px_imp) * inv_ib * RAD_TO_DEG) if b.respond_to?(:omega=)
+      end
+
+      true
     end
   end
 end

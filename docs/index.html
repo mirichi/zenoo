@@ -120,6 +120,9 @@
     .card.billiards::before {
       background: linear-gradient(90deg, #10b981, #059669);
     }
+    .card.zero-gravity::before {
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -282,6 +285,24 @@
       color: #fff;
     }
     .card.coords .btn-launch:hover {
+      background: #38bdf8;
+      color: #0b0d14;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    }
+    .card.billiards .btn-launch {
+      background: #059669;
+      color: #fff;
+    }
+    .card.billiards .btn-launch:hover {
+      background: #10b981;
+      color: #0b0d14;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+    }
+    .card.zero-gravity .btn-launch {
+      background: #0284c7;
+      color: #fff;
+    }
+    .card.zero-gravity .btn-launch:hover {
       background: #38bdf8;
       color: #0b0d14;
       box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
@@ -540,6 +561,24 @@
         </ul>
       </div>
       <a href="billiards/" class="btn-launch">ビリヤード起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Zero-Gravity 2D Rigid Body Physics Demo Card -->
+    <div class="card zero-gravity">
+      <div>
+        <div class="card-tag">Rigid Body Physics</div>
+        <h2>Zero-Gravity Physics</h2>
+        <p class="desc">
+          Zenoo::Physics による即時モード 2D 剛体物理シミュレーション。無重力空間で、OBB (回転矩形)、真円、楕円、角丸矩形 (カプセル)、多角形が飛び交い、リアルタイムに跳ね返り・摩擦スピンを交わします。
+        </p>
+        <ul class="features">
+          <li>PhysicsSprite による直感的な物理パラメータ管理 (質量・反発・摩擦)</li>
+          <li>Physics.resolve / resolve_static によるステートレス即時物理応答</li>
+          <li>SAT / MTV による高精度めり込み解消＆角支点オーバーハング計算</li>
+          <li>左ドラッグで掴んで投擲 (Fling)、右ドラッグでスピン回転操作</li>
+        </ul>
+      </div>
+      <a href="zero_gravity/" class="btn-launch">物理デモを起動 (Launch Demo) →</a>
     </div>
   </main>
 
