@@ -47,6 +47,31 @@ module Zenoo
     end
 
     # ====================================================
+    # 2体衝突物理応答結果オブジェクト
+    # ====================================================
+    class PairResponse
+      attr_accessor :a, :b, :impact, :hit
+
+      def initialize(a, b, impact: 0.0, hit: nil)
+        @a = a
+        @b = b
+        @impact = impact.to_f
+        @hit = hit
+      end
+
+      # 2つのターゲットに一括反映
+      def apply_to(target_a, target_b)
+        @a.apply_to(target_a)
+        @b.apply_to(target_b)
+        self
+      end
+
+      def inspect
+        "#<Zenoo::Physics::PairResponse impact=#{@impact.round(2)}\n  a: #{@a.inspect}\n  b: #{@b.inspect}>"
+      end
+    end
+
+    # ====================================================
     # 慣性モーメント (Moment of Inertia) 計算ヘルパー
     # ====================================================
 
@@ -366,6 +391,222 @@ module Zenoo
         tangent_impulse: jt,
         hit: hit
       )
+    end
+
+    # ====================================================
+    # 2体衝突即時物理応答計算 (動的オブジェクト vs 動的オブジェクト)
+    # ====================================================
+    # @param hit [Zenoo::Collision::Hit] 衝突判定結果
+    # @param a [Hash, Object] 物体Aのパラメータまたはオブジェクト ({ x:, y:, vx:, vy:, omega:, mass:, shape:, ... })
+    # @param b [Hash, Object] 物体Bのパラメータまたはオブジェクト
+    # @param restitution [Float] 反発係数 (0.0〜1.0)
+    # @param friction [Float] 摩擦係数 (0.0〜1.0)
+    # @param bounce_threshold [Float] 微小衝突時の反発カット閾値
+    # @return [Zenoo::Physics::PairResponse] 物体Aと物体Bそれぞれの反映新値を含む結果
+    def self.resolve(
+      hit,
+      a:,
+      b:,
+      restitution: 0.5,
+      friction: 0.4,
+      bounce_threshold: 0.5
+    )
+      return nil unless hit
+
+      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(a)
+      xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(b)
+
+      inv_ma = ma > 0.00001 ? 1.0 / ma : 0.0
+      inv_mb = mb > 0.00001 ? 1.0 / mb : 0.0
+      inv_m_total = inv_ma + inv_mb
+      return nil if inv_m_total <= 0.000001
+
+      inert_a = ia ? ia.to_f : (shape_a ? inertia_of(shape_a, mass: ma) : inertia_rect(32.0, 32.0, mass: ma))
+      inert_b = ib ? ib.to_f : (shape_b ? inertia_of(shape_b, mass: mb) : inertia_rect(32.0, 32.0, mass: mb))
+      inv_ia = inert_a > 0.00001 ? 1.0 / inert_a : 0.0
+      inv_ib = inert_b > 0.00001 ? 1.0 / inert_b : 0.0
+
+      # めり込み押し戻し (逆質量比で配分)
+      ratio_a = inv_ma / inv_m_total
+      ratio_b = inv_mb / inv_m_total
+
+      push_ax = hit.push_x * ratio_a
+      push_ay = hit.push_y * ratio_a
+      push_bx = -hit.push_x * ratio_b
+      push_by = -hit.push_y * ratio_b
+
+      # 法線 n (B -> A 向き), 接線 t
+      nx = hit.normal_x
+      ny = hit.normal_y
+      tx = -ny
+      ty = nx
+
+      # 接触点 P
+      col_a = shape_a.respond_to?(:collider) ? shape_a.collider : shape_a
+      col_b = shape_b.respond_to?(:collider) ? shape_b.collider : shape_b
+
+      if col_a && col_a.respond_to?(:support) && col_b && col_b.respond_to?(:support)
+        sp_a = col_a.support(-nx, -ny)
+        sp_b = col_b.support(nx, ny)
+        cx = (sp_a[0] + sp_b[0]) * 0.5
+        cy = (sp_a[1] + sp_b[1]) * 0.5
+      else
+        cx = hit.contact_x
+        cy = hit.contact_y
+      end
+
+      # トルクアーム rA, rB
+      rax = cx - xa
+      ray = cy - ya
+      rbx = cx - xb
+      rby = cy - yb
+
+      w_rad_a = wa * DEG_TO_RAD
+      w_rad_b = wb * DEG_TO_RAD
+
+      vpa_x = vax - w_rad_a * ray
+      vpa_y = vay + w_rad_a * rax
+
+      vpb_x = vbx - w_rad_b * rby
+      vpb_y = vby + w_rad_b * rbx
+
+      v_rel_x = vpa_x - vpb_x
+      v_rel_y = vpa_y - vpb_y
+
+      vn = v_rel_x * nx + v_rel_y * ny
+      vt = v_rel_x * tx + v_rel_y * ty
+
+      ran = rax * ny - ray * nx
+      rat = rax * ty - ray * tx
+      rbn = rbx * ny - rby * nx
+      rbt = rbx * ty - rby * tx
+
+      kn = inv_m_total + (ran * ran) * inv_ia + (rbn * rbn) * inv_ib
+      kt = inv_m_total + (rat * rat) * inv_ia + (rbt * rbt) * inv_ib
+
+      jn = 0.0
+      jt = 0.0
+
+      if vn < 0.0 && kn > 0.000001
+        e = (-vn < bounce_threshold) ? 0.0 : restitution.to_f
+        jn = -(1.0 + e) * vn / kn
+        jn = 0.0 if jn < 0.0
+      end
+
+      if kt > 0.000001 && jn > 0.0
+        jt_ideal = -vt / kt
+        max_jt = friction.to_f * jn
+        if jt_ideal > max_jt
+          jt = max_jt
+        elsif jt_ideal < -max_jt
+          jt = -max_jt
+        else
+          jt = jt_ideal
+        end
+      end
+
+      total_jx = jn * nx + jt * tx
+      total_jy = jn * ny + jt * ty
+
+      # 物体Aの更新 (+J)
+      new_vax = vax + inv_ma * total_jx
+      new_vay = vay + inv_ma * total_jy
+      tau_a = rax * total_jy - ray * total_jx
+      delta_wa_rad = inv_ia * tau_a
+      new_wa = wa + delta_wa_rad * RAD_TO_DEG
+
+      # 物体Bの更新 (-J)
+      new_vbx = vbx - inv_mb * total_jx
+      new_vby = vby - inv_mb * total_jy
+      tau_b = -(rbx * total_jy - rby * total_jx)
+      delta_wb_rad = inv_ib * tau_b
+      new_wb = wb + delta_wb_rad * RAD_TO_DEG
+
+      # 静止接触 (Resting contact) 安定化 ＆ 転がり抵抗ダンピング
+      if -vn < bounce_threshold
+        # 相対速度の法線成分 (跳ね離脱) をカット
+        v_rel_n = (new_vax - new_vbx) * nx + (new_vay - new_vby) * ny
+        if v_rel_n > 0.0
+          new_vax -= v_rel_n * nx * ratio_a
+          new_vay -= v_rel_n * ny * ratio_a
+          new_vbx += v_rel_n * nx * ratio_b
+          new_vby += v_rel_n * ny * ratio_b
+        end
+
+        # 転がり抵抗ダンピング (円やディスクが接地・乗っかり中に永久回転するのを防止)
+        new_wa *= 0.85
+        new_wb *= 0.85
+
+        # 微小角速度のデッドゾーン
+        new_wa = 0.0 if new_wa.abs < 0.4
+        new_wb = 0.0 if new_wb.abs < 0.4
+
+        # 微小相対速度のデッドゾーン
+        rel_vx = new_vax - new_vbx
+        rel_vy = new_vay - new_vby
+        if rel_vx.abs < 0.12 && rel_vy.abs < 0.12
+          common_vx = (new_vax + new_vbx) * 0.5
+          common_vy = (new_vay + new_vby) * 0.5
+          new_vax = common_vx
+          new_vay = common_vy
+          new_vbx = common_vx
+          new_vby = common_vy
+        end
+      end
+
+      impact = -vn > 0.0 ? -vn : 0.0
+
+      res_a = Response.new(
+        push_x: push_ax,
+        push_y: push_ay,
+        vx: new_vax,
+        vy: new_vay,
+        omega: new_wa,
+        impact: impact,
+        normal_impulse: jn,
+        tangent_impulse: jt,
+        hit: hit
+      )
+
+      res_b = Response.new(
+        push_x: push_bx,
+        push_y: push_by,
+        vx: new_vbx,
+        vy: new_vby,
+        omega: new_wb,
+        impact: impact,
+        normal_impulse: jn,
+        tangent_impulse: jt,
+        hit: hit
+      )
+
+      PairResponse.new(res_a, res_b, impact: impact, hit: hit)
+    end
+
+    # 物体パラメータの共通抽出ヘルパー (Hash または Object)
+    def self.extract_body_params(body)
+      if body.is_a?(Hash)
+        x = body[:x].to_f
+        y = body[:y].to_f
+        vx = body[:vx].to_f
+        vy = body[:vy].to_f
+        omega = (body[:omega] || 0.0).to_f
+        angle = (body[:angle] || 0.0).to_f
+        mass = (body[:mass] || 1.0).to_f
+        shape = body[:shape]
+        inertia = body[:inertia]
+      else
+        x = body.respond_to?(:x) ? body.x.to_f : 0.0
+        y = body.respond_to?(:y) ? body.y.to_f : 0.0
+        vx = body.respond_to?(:vx) ? body.vx.to_f : 0.0
+        vy = body.respond_to?(:vy) ? body.vy.to_f : 0.0
+        omega = body.respond_to?(:omega) ? body.omega.to_f : 0.0
+        angle = body.respond_to?(:angle) ? body.angle.to_f : 0.0
+        mass = body.respond_to?(:mass) ? body.mass.to_f : 1.0
+        shape = body.respond_to?(:shape) ? body.shape : (body.respond_to?(:collider) ? body.collider : nil)
+        inertia = body.respond_to?(:inertia) ? body.inertia : nil
+      end
+      [x, y, vx, vy, omega, angle, mass, shape, inertia]
     end
   end
 end

@@ -200,6 +200,26 @@ module Zenoo
         set_dirty_pos
       end
 
+      # 重心 (設定: アンカー位置に関わらず重心が指定座標になるよう x, y を平行移動)
+      def center_x=(val)
+        vf = val.to_f
+        diff = vf - center_x
+        @x += diff
+        set_dirty_pos
+      end
+
+      def center_y=(val)
+        vf = val.to_f
+        diff = vf - center_y
+        @y += diff
+        set_dirty_pos
+      end
+
+      def set_center(cx, cy)
+        self.center_x = cx
+        self.center_y = cy
+      end
+
       # 内部初期化用エイリアス
       alias set_anchor anchor=
       alias set_pivot pivot=
@@ -705,7 +725,7 @@ module Zenoo
       attr_reader :x, :y, :angle, :scale_x, :scale_y
       attr_reader :vertices, :local_vertices, :bounding_radius
 
-      def initialize(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center)
+      def initialize(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center)
         @vertices = vertices.map { |v| [v[0].to_f, v[1].to_f] }
         @x = x.to_f
         @y = y.to_f
@@ -716,8 +736,8 @@ module Zenoo
         @offset_y = offset_y.to_f
         @_support = [0.0, 0.0]
 
-        @anchor_x = 0.0
-        @anchor_y = 0.0
+        @anchor_x = 0.5
+        @anchor_y = 0.5
         @pivot_x = 0.5
         @pivot_y = 0.5
 
@@ -854,23 +874,39 @@ module Zenoo
 
         if @dirty_pos
           @dirty_pos = false
-          bw = @_bbox_w || 0.0
-          bh = @_bbox_h || 0.0
-          tl_x = @x - @anchor_x * bw
-          tl_y = @y - @anchor_y * bh
-          wpv_x = tl_x + @pivot_x * bw
-          wpv_y = tl_y + @pivot_y * bh
+          if (@anchor_x - 0.5).abs < 0.0001 && (@anchor_y - 0.5).abs < 0.0001 &&
+             (@pivot_x - 0.5).abs < 0.0001 && (@pivot_y - 0.5).abs < 0.0001
+            # :center の場合は重心そのものをアンカー・ピボットとする
+            if @offset_x == 0.0 && @offset_y == 0.0
+              @center_x = @x
+              @center_y = @y
+            else
+              s_rel_cx = @offset_x * @scale_x
+              s_rel_cy = @offset_y * @scale_y
+              rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
+              rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
+              @center_x = @x + rot_cx
+              @center_y = @y + rot_cy
+            end
+          else
+            bw = @_bbox_w || 0.0
+            bh = @_bbox_h || 0.0
+            tl_x = @x - @anchor_x * bw
+            tl_y = @y - @anchor_y * bh
+            wpv_x = tl_x + @pivot_x * bw
+            wpv_y = tl_y + @pivot_y * bh
 
-          # 重心のピボットからの相対座標
-          rel_cx = ((@_local_cx || 0.0) - (@_bbox_min_x || 0.0)) - @pivot_x * bw + @offset_x
-          rel_cy = ((@_local_cy || 0.0) - (@_bbox_min_y || 0.0)) - @pivot_y * bh + @offset_y
+            # 重心のピボットからの相対座標
+            rel_cx = ((@_local_cx || 0.0) - (@_bbox_min_x || 0.0)) - @pivot_x * bw + @offset_x
+            rel_cy = ((@_local_cy || 0.0) - (@_bbox_min_y || 0.0)) - @pivot_y * bh + @offset_y
 
-          s_rel_cx = rel_cx * @scale_x
-          s_rel_cy = rel_cy * @scale_y
-          rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
-          rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
-          @center_x = wpv_x + rot_cx
-          @center_y = wpv_y + rot_cy
+            s_rel_cx = rel_cx * @scale_x
+            s_rel_cy = rel_cy * @scale_y
+            rot_cx = s_rel_cx * @cos - s_rel_cy * @sin
+            rot_cy = s_rel_cx * @sin + s_rel_cy * @cos
+            @center_x = wpv_x + rot_cx
+            @center_y = wpv_y + rot_cy
+          end
         end
       end
 
@@ -1283,12 +1319,16 @@ module Zenoo
         nx = dx >= 0.0 ? -1.0 : 1.0
         ny = 0.0
         cx = a.center_x - nx * (a.half_w - depth * 0.5)
-        cy = (a.center_y + b.center_y) * 0.5
+        y_min = (a.center_y - a.half_h) > (b.center_y - b.half_h) ? (a.center_y - a.half_h) : (b.center_y - b.half_h)
+        y_max = (a.center_y + a.half_h) < (b.center_y + b.half_h) ? (a.center_y + a.half_h) : (b.center_y + b.half_h)
+        cy = (y_min + y_max) * 0.5
       else
         depth = oy
         nx = 0.0
         ny = dy >= 0.0 ? -1.0 : 1.0
-        cx = (a.center_x + b.center_x) * 0.5
+        x_min = (a.center_x - a.half_w) > (b.center_x - b.half_w) ? (a.center_x - a.half_w) : (b.center_x - b.half_w)
+        x_max = (a.center_x + a.half_w) < (b.center_x + b.half_w) ? (a.center_x + a.half_w) : (b.center_x + b.half_w)
+        cx = (x_min + x_max) * 0.5
         cy = a.center_y - ny * (a.half_h - depth * 0.5)
       end
       Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, cx, cy)
@@ -1414,65 +1454,16 @@ module Zenoo
         best_ny = b.cos * sign
       end
 
-      # 接触点 (両中心の中間から法線方向に補正)
-      cx = (a.center_x + b.center_x) * 0.5 - best_nx * (min_overlap * 0.5)
-      cy = (a.center_y + b.center_y) * 0.5 - best_ny * (min_overlap * 0.5)
+      # 接触点 (面 vs 頂点を正確に判定して真の接触点を導出)
+      cx, cy = calculate_contact_point(a, b, best_nx, best_ny, min_overlap)
 
       Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, 0.0, cx, cy)
     end
 
-    # 多角形等を含む汎用 2D SAT 押し出し
+    # 多角形・楕円等を含む汎用 2D SAT 押し出し
     def self.penetration_generic_sat(shape_a, shape_b, dx, dy)
-      verts_a = shape_a.respond_to?(:world_vertices) ? shape_a.world_vertices : nil
-      verts_b = shape_b.respond_to?(:world_vertices) ? shape_b.world_vertices : nil
-
-      is_circle_a = (shape_a.shape_type == TYPE_CIRCLE && shape_a.is_true_circle)
-      is_circle_b = (shape_b.shape_type == TYPE_CIRCLE && shape_b.is_true_circle)
-
-      # 頂点も円も取れない場合は nil
-      return nil unless (verts_a || is_circle_a) && (verts_b || is_circle_b)
-
-      axes = []
-
-      if verts_a
-        len_a = verts_a.length
-        len_a.times do |i|
-          p1 = verts_a[i]
-          p2 = verts_a[(i + 1) % len_a]
-          nx = -(p2[1] - p1[1])
-          ny = p2[0] - p1[0]
-          l = Math.sqrt(nx * nx + ny * ny)
-          axes << [nx / l, ny / l] if l > 0.000001
-        end
-      end
-
-      if verts_b
-        len_b = verts_b.length
-        len_b.times do |i|
-          p1 = verts_b[i]
-          p2 = verts_b[(i + 1) % len_b]
-          nx = -(p2[1] - p1[1])
-          ny = p2[0] - p1[0]
-          l = Math.sqrt(nx * nx + ny * ny)
-          axes << [nx / l, ny / l] if l > 0.000001
-        end
-      end
-
-      if is_circle_a && verts_b
-        verts_b.each do |v|
-          vx = v[0] - shape_a.center_x
-          vy = v[1] - shape_a.center_y
-          l = Math.sqrt(vx * vx + vy * vy)
-          axes << [vx / l, vy / l] if l > 0.000001
-        end
-      elsif is_circle_b && verts_a
-        verts_a.each do |v|
-          vx = v[0] - shape_b.center_x
-          vy = v[1] - shape_b.center_y
-          l = Math.sqrt(vx * vx + vy * vy)
-          axes << [vx / l, vy / l] if l > 0.000001
-        end
-      end
+      axes = collect_sat_axes(shape_a, shape_b)
+      return nil if axes.empty?
 
       min_overlap = 1.0e30
       best_nx = 0.0
@@ -1485,8 +1476,8 @@ module Zenoo
         ax = axis[0]
         ay = axis[1]
 
-        min_a, max_a = is_circle_a ? project_circle(ax, ay, shape_a) : project_polygon(ax, ay, verts_a)
-        min_b, max_b = is_circle_b ? project_circle(ax, ay, shape_b) : project_polygon(ax, ay, verts_b)
+        min_a, max_a = project_shape(ax, ay, shape_a)
+        min_b, max_b = project_shape(ax, ay, shape_b)
 
         overlap = (max_a < max_b ? max_a : max_b) - (min_a > min_b ? min_a : min_b)
         return nil if overlap <= 0.0
@@ -1504,11 +1495,141 @@ module Zenoo
         end
       end
 
-      # 接触点 (両中心の中間から法線方向に補正)
-      cx = (shape_a.center_x + shape_b.center_x) * 0.5 - best_nx * (min_overlap * 0.5)
-      cy = (shape_a.center_y + shape_b.center_y) * 0.5 - best_ny * (min_overlap * 0.5)
+      # 接触点 (面 vs 頂点を正確に判定して真の接触点を導出)
+      cx, cy = calculate_contact_point(shape_a, shape_b, best_nx, best_ny, min_overlap)
 
       Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, 0.0, cx, cy)
+    end
+
+    # 接触点導出 (法線コーン摂動により、どちらが「面 (Reference)」でどちらが「角 (Incident)」かを幾何学的に判定)
+    def self.calculate_contact_point(shape_a, shape_b, nx, ny, depth)
+      # 微小回転 (約 2.5度: cos=0.999048, sin=0.043619)
+      cw_nx = nx * 0.999048 + ny * 0.043619
+      cw_ny = -nx * 0.043619 + ny * 0.999048
+      ccw_nx = nx * 0.999048 - ny * 0.043619
+      ccw_ny = nx * 0.043619 + ny * 0.999048
+
+      # 物体 A (法線 -n 方向) の接触面の幅 (面なら幅が大きく、角なら 0 に近い)
+      p_a_cw = shape_a.support(-cw_nx, -cw_ny)
+      p_a_cw_x = p_a_cw[0]
+      p_a_cw_y = p_a_cw[1]
+      p_a_ccw = shape_a.support(-ccw_nx, -ccw_ny)
+      dx_a = p_a_cw_x - p_a_ccw[0]
+      dy_a = p_a_cw_y - p_a_ccw[1]
+      span_a = dx_a * dx_a + dy_a * dy_a
+
+      # 物体 B (法線 +n 方向) の接触面の幅
+      p_b_cw = shape_b.support(cw_nx, cw_ny)
+      p_b_cw_x = p_b_cw[0]
+      p_b_cw_y = p_b_cw[1]
+      p_b_ccw = shape_b.support(ccw_nx, ccw_ny)
+      dx_b = p_b_cw_x - p_b_ccw[0]
+      dy_b = p_b_cw_y - p_b_ccw[1]
+      span_b = dx_b * dx_b + dy_b * dy_b
+
+      half_d = depth * 0.5
+
+      if span_b < span_a - 4.0
+        # 物体 B の方がより鋭い角 (Incident Vertex: 物体 B の角が物体 A の面に刺さっている)
+        pb = shape_b.support(nx, ny)
+        [pb[0] - nx * half_d, pb[1] - ny * half_d]
+      elsif span_a < span_b - 4.0
+        # 物体 A の方がより鋭い角 (Incident Vertex: 物体 A の角が物体 B の面に刺さっている)
+        pa = shape_a.support(-nx, -ny)
+        [pa[0] + nx * half_d, pa[1] + ny * half_d]
+      else
+        # ほぼ同等 (面同士または点同士)
+        pa = shape_a.support(-nx, -ny)
+        pa_x = pa[0]
+        pa_y = pa[1]
+        pb = shape_b.support(nx, ny)
+        [(pa_x + pb[0]) * 0.5, (pa_y + pb[1]) * 0.5]
+      end
+    end
+
+    def self.project_shape(axis_x, axis_y, shape)
+      if shape.shape_type == TYPE_CIRCLE && shape.is_true_circle
+        project_circle(axis_x, axis_y, shape)
+      elsif shape.respond_to?(:world_vertices) && shape.world_vertices
+        project_polygon(axis_x, axis_y, shape.world_vertices)
+      else
+        # 楕円などの一般的な凸形状 (サポート写像による厳密射影)
+        p_max = shape.support(axis_x, axis_y)
+        p_max_x = p_max[0]
+        p_max_y = p_max[1]
+        p_min = shape.support(-axis_x, -axis_y)
+        d_max = axis_x * p_max_x + axis_y * p_max_y
+        d_min = axis_x * p_min[0] + axis_y * p_min[1]
+        d_min > d_max ? [d_max, d_min] : [d_min, d_max]
+      end
+    end
+
+    def self.collect_sat_axes(shape_a, shape_b)
+      axes = []
+      verts_a = shape_a.respond_to?(:world_vertices) ? shape_a.world_vertices : nil
+      verts_b = shape_b.respond_to?(:world_vertices) ? shape_b.world_vertices : nil
+
+      # エッジ法線
+      if verts_a
+        len = verts_a.length
+        len.times do |i|
+          p1 = verts_a[i]
+          p2 = verts_a[(i + 1) % len]
+          nx = -(p2[1] - p1[1])
+          ny = p2[0] - p1[0]
+          l = Math.sqrt(nx * nx + ny * ny)
+          axes << [nx / l, ny / l] if l > 0.000001
+        end
+      end
+
+      if verts_b
+        len = verts_b.length
+        len.times do |i|
+          p1 = verts_b[i]
+          p2 = verts_b[(i + 1) % len]
+          nx = -(p2[1] - p1[1])
+          ny = p2[0] - p1[0]
+          l = Math.sqrt(nx * nx + ny * ny)
+          axes << [nx / l, ny / l] if l > 0.000001
+        end
+      end
+
+      # 頂点から中心への軸 (円・楕円とポリゴン)
+      if shape_a.shape_type == TYPE_CIRCLE && verts_b
+        verts_b.each do |v|
+          vx = v[0] - shape_a.center_x
+          vy = v[1] - shape_a.center_y
+          l = Math.sqrt(vx * vx + vy * vy)
+          axes << [vx / l, vy / l] if l > 0.000001
+        end
+      end
+      if shape_b.shape_type == TYPE_CIRCLE && verts_a
+        verts_a.each do |v|
+          vx = v[0] - shape_b.center_x
+          vy = v[1] - shape_b.center_y
+          l = Math.sqrt(vx * vx + vy * vy)
+          axes << [vx / l, vy / l] if l > 0.000001
+        end
+      end
+
+      # 楕円の主軸 (長軸・短軸)
+      [shape_a, shape_b].each do |s|
+        if s.shape_type == TYPE_CIRCLE && !s.is_true_circle
+          rad = s.angle * (Math::PI / 180.0)
+          c = Math.cos(rad)
+          sn = Math.sin(rad)
+          axes << [c, sn]
+          axes << [-sn, c]
+        end
+      end
+
+      # 中心間軸
+      dx = shape_b.center_x - shape_a.center_x
+      dy = shape_b.center_y - shape_a.center_y
+      dist = Math.sqrt(dx * dx + dy * dy)
+      axes << [dx / dist, dy / dist] if dist > 0.000001
+
+      axes
     end
 
     def self.project_polygon(axis_x, axis_y, verts)
@@ -1571,7 +1692,7 @@ module Zenoo
     end
 
     # 多角形
-    def self.polygon(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center)
+    def self.polygon(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center)
       Polygon.new(vertices, x: x, y: y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot)
     end
   end
