@@ -32,12 +32,12 @@ module Zenoo
 
       # 位置と速度・角速度・角度への反映ショートカット
       def apply_to(target)
-        target.x += @push_x if target.respond_to?(:x=)
-        target.y += @push_y if target.respond_to?(:y=)
-        target.angle += @d_angle if @d_angle != 0.0 && target.respond_to?(:angle=)
-        target.vx = @vx if target.respond_to?(:vx=)
-        target.vy = @vy if target.respond_to?(:vy=)
-        target.omega = @omega if target.respond_to?(:omega=)
+        target.x += @push_x
+        target.y += @push_y
+        target.angle += @d_angle if @d_angle != 0.0
+        target.vx = @vx
+        target.vy = @vy
+        target.omega = @omega
         self
       end
 
@@ -125,29 +125,23 @@ module Zenoo
     # @param friction [Float, nil] 摩擦係数 (省略時は a のプロパティまたは 0.5)
     # @param bounce_threshold [Float] 微小衝突時の反発カット閾値 (ジッター防止)
     # @return [Zenoo::Physics::Response] 反映すべき新値
-    def self.resolve_static(
-      hit,
-      a = nil,
-      b = nil,
-      restitution: nil,
-      friction: nil,
-      bounce_threshold: 0.5,
-      **kwargs
-    )
-      return nil unless hit
+    def self.resolve_static(hit, a, b = nil, restitution: nil, friction: nil, bounce_threshold: 0.5)
+      return nil unless hit && a
 
-      target_a = a || kwargs[:a] || kwargs[:body]
-      target_a ||= kwargs if kwargs[:x] || kwargs[:vx]
-      target_b = b || kwargs[:b] || kwargs[:static_body] || kwargs[:static_shape]
-      return nil unless target_a
+      x = a.x.to_f
+      y = a.y.to_f
+      vx = a.vx.to_f
+      vy = a.vy.to_f
+      omega = a.omega.to_f
+      angle = a.angle.to_f
+      m = a.mass.to_f
+      shape = a.collider
+      inertia = a.inertia
+      restitution = restitution ? restitution.to_f : a.restitution.to_f
+      friction = friction ? friction.to_f : a.friction.to_f
 
-      x, y, vx, vy, omega, angle, mass, shape, inertia = extract_body_params(target_a)
-      restitution = restitution ? restitution.to_f : (target_a.respond_to?(:restitution) ? target_a.restitution.to_f : 0.3)
-      friction = friction ? friction.to_f : (target_a.respond_to?(:friction) ? target_a.friction.to_f : 0.5)
+      static_shape = b ? (b.respond_to?(:collider) ? b.collider : b) : nil
 
-      static_shape = target_b ? (target_b.respond_to?(:collider) ? target_b.collider : target_b) : nil
-
-      m = mass.to_f
       inv_m = m > 0.00001 ? 1.0 / m : 0.0
 
       # 慣性モーメントの決定
@@ -402,31 +396,31 @@ module Zenoo
     # @param friction [Float] 摩擦係数 (0.0〜1.0)
     # @param bounce_threshold [Float] 微小衝突時の反発カット閾値
     # @return [Zenoo::Physics::PairResponse] 物体Aと物体Bそれぞれの反映新値を含む結果
-    def self.resolve(
-      hit,
-      a = nil,
-      b = nil,
-      restitution: nil,
-      friction: nil,
-      bounce_threshold: 0.5,
-      **kwargs
-    )
-      return nil unless hit
+    def self.resolve(hit, a, b, restitution: nil, friction: nil, bounce_threshold: 0.5)
+      return nil unless hit && a && b
 
-      target_a = a || kwargs[:a]
-      target_b = b || kwargs[:b]
-      return nil unless target_a && target_b
+      xa = a.x.to_f
+      ya = a.y.to_f
+      vax = a.vx.to_f
+      vay = a.vy.to_f
+      wa = a.omega.to_f
+      anga = a.angle.to_f
+      ma = a.mass.to_f
+      shape_a = a.collider
+      ia = a.inertia
 
-      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(target_a)
-      xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(target_b)
+      xb = b.x.to_f
+      yb = b.y.to_f
+      vbx = b.vx.to_f
+      vby = b.vy.to_f
+      wb = b.omega.to_f
+      angb = b.angle.to_f
+      mb = b.mass.to_f
+      shape_b = b.collider
+      ib = b.inertia
 
-      rest_a = target_a.respond_to?(:restitution) ? target_a.restitution.to_f : nil
-      rest_b = target_b.respond_to?(:restitution) ? target_b.restitution.to_f : nil
-      restitution = restitution ? restitution.to_f : ((rest_a && rest_b) ? [rest_a, rest_b].max : (rest_a || rest_b || 0.5))
-
-      fric_a = target_a.respond_to?(:friction) ? target_a.friction.to_f : nil
-      fric_b = target_b.respond_to?(:friction) ? target_b.friction.to_f : nil
-      friction = friction ? friction.to_f : ((fric_a && fric_b) ? Math.sqrt(fric_a * fric_b) : (fric_a || fric_b || 0.4))
+      restitution = restitution ? restitution.to_f : [a.restitution.to_f, b.restitution.to_f].max
+      friction = friction ? friction.to_f : Math.sqrt(a.friction.to_f * b.friction.to_f)
 
       inv_ma = ma > 0.00001 ? 1.0 / ma : 0.0
       inv_mb = mb > 0.00001 ? 1.0 / mb : 0.0
@@ -595,31 +589,6 @@ module Zenoo
       PairResponse.new(res_a, res_b, impact: impact, hit: hit)
     end
 
-    # 物体パラメータの共通抽出ヘルパー (Hash または Object)
-    def self.extract_body_params(body)
-      if body.is_a?(Hash)
-        x = body[:x].to_f
-        y = body[:y].to_f
-        vx = body[:vx].to_f
-        vy = body[:vy].to_f
-        omega = (body[:omega] || 0.0).to_f
-        angle = (body[:angle] || 0.0).to_f
-        mass = (body[:mass] || 1.0).to_f
-        shape = body[:shape]
-        inertia = body[:inertia]
-      else
-        x = body.respond_to?(:x) ? body.x.to_f : 0.0
-        y = body.respond_to?(:y) ? body.y.to_f : 0.0
-        vx = body.respond_to?(:vx) ? body.vx.to_f : 0.0
-        vy = body.respond_to?(:vy) ? body.vy.to_f : 0.0
-        omega = body.respond_to?(:omega) ? body.omega.to_f : 0.0
-        angle = body.respond_to?(:angle) ? body.angle.to_f : 0.0
-        mass = body.respond_to?(:mass) ? body.mass.to_f : 1.0
-        shape = body.respond_to?(:shape) ? body.shape : (body.respond_to?(:collider) ? body.collider : nil)
-        inertia = body.respond_to?(:inertia) ? body.inertia : nil
-      end
-      [x, y, vx, vy, omega, angle, mass, shape, inertia]
-    end
 
     # ====================================================
     # 座標変換ヘルパー
@@ -627,32 +596,26 @@ module Zenoo
 
     # 物体のローカル座標 [lx, ly] を現在のワールド座標 [wx, wy] に変換
     def self.local_to_world(body, lx, ly)
-      x, y, _vx, _vy, _w, angle = extract_body_params(body)
-      rad = angle * DEG_TO_RAD
+      rad = body.angle.to_f * DEG_TO_RAD
       c = Math.cos(rad)
       s = Math.sin(rad)
-      [x + lx.to_f * c - ly.to_f * s, y + lx.to_f * s + ly.to_f * c]
+      [body.x.to_f + lx.to_f * c - ly.to_f * s, body.y.to_f + lx.to_f * s + ly.to_f * c]
     end
 
     # ワールド座標 [wx, wy] を物体の現在のローカル座標 [lx, ly] に変換
     def self.world_to_local(body, wx, wy)
-      x, y, _vx, _vy, _w, angle = extract_body_params(body)
-      rad = angle * DEG_TO_RAD
+      rad = body.angle.to_f * DEG_TO_RAD
       c = Math.cos(rad)
       s = Math.sin(rad)
-      dx = wx.to_f - x
-      dy = wy.to_f - y
+      dx = wx.to_f - body.x.to_f
+      dy = wy.to_f - body.y.to_f
       [dx * c + dy * s, -dx * s + dy * c]
     end
 
     # 物体 A から見た物体 B の相対オフセット [ox, oy] と相対角度 rel_angle (deg) を計算
     def self.relative_offset(body_a, body_b)
-      bx = body_b.respond_to?(:x) ? body_b.x.to_f : 0.0
-      by = body_b.respond_to?(:y) ? body_b.y.to_f : 0.0
-      ba = body_b.respond_to?(:angle) ? body_b.angle.to_f : 0.0
-      aa = body_a.respond_to?(:angle) ? body_a.angle.to_f : 0.0
-      lx, ly = world_to_local(body_a, bx, by)
-      diff_ang = (ba - aa) % 360.0
+      lx, ly = world_to_local(body_a, body_b.x, body_b.y)
+      diff_ang = (body_b.angle.to_f - body_a.angle.to_f) % 360.0
       diff_ang -= 360.0 if diff_ang > 180.0
       diff_ang += 360.0 if diff_ang < -180.0
       [[lx, ly], diff_ang]
@@ -672,9 +635,17 @@ module Zenoo
     def self.constrain_point(body, tx, ty, anchor: nil, stiffness: 0.3, damping: 0.85)
       return nil unless body
 
-      x, y, vx, vy, omega, angle, mass, shape, inertia = extract_body_params(body)
-      m = mass.to_f
+      m = body.mass.to_f
       return nil if m <= 0.00001
+
+      x = body.x.to_f
+      y = body.y.to_f
+      vx = body.vx.to_f
+      vy = body.vy.to_f
+      omega = body.omega.to_f
+      angle = body.angle.to_f
+      shape = body.collider
+      inertia = body.inertia
 
       inert = inertia ? inertia.to_f : (shape ? inertia_of(shape, mass: m) : inertia_rect(32.0, 32.0, mass: m))
       inv_m = 1.0 / m
@@ -707,20 +678,20 @@ module Zenoo
       tau_pos = rx * push_y - ry * push_x
       d_angle = (tau_pos * inv_i * RAD_TO_DEG) * 0.5
 
-      body.x += push_x if body.respond_to?(:x=)
-      body.y += push_y if body.respond_to?(:y=)
-      body.angle += d_angle if body.respond_to?(:angle=)
+      body.x += push_x
+      body.y += push_y
+      body.angle += d_angle
 
       # 速度の更新 (追従インパルス + 減衰)
-      body.vx = (vx * k_damp) + (push_x * 0.5) if body.respond_to?(:vx=)
-      body.vy = (vy * k_damp) + (push_y * 0.5) if body.respond_to?(:vy=)
-      body.omega = (omega * k_damp) + (d_angle * 0.5) if body.respond_to?(:omega=)
+      body.vx = (vx * k_damp) + (push_x * 0.5)
+      body.vy = (vy * k_damp) + (push_y * 0.5)
+      body.omega = (omega * k_damp) + (d_angle * 0.5)
 
       true
     end
 
-    def self.constrain_mouse(body, mx, my, **kwargs)
-      constrain_point(body, mx, my, **kwargs)
+    def self.constrain_mouse(body, mx, my, anchor: nil, stiffness: 0.3, damping: 0.85)
+      constrain_point(body, mx, my, anchor: anchor, stiffness: stiffness, damping: damping)
     end
 
     # 2. ピン結合・回転ジョイント (Revolute / Pin Joint)
@@ -732,7 +703,15 @@ module Zenoo
     def self.constrain_pin(a, b = nil, pivot: nil, anchor_a: nil, anchor_b: nil)
       return nil unless a
 
-      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(a)
+      xa = a.x.to_f
+      ya = a.y.to_f
+      vax = a.vx.to_f
+      vay = a.vy.to_f
+      wa = a.omega.to_f
+      anga = a.angle.to_f
+      ma = a.mass.to_f
+      shape_a = a.collider
+      ia = a.inertia
       rad_a = anga * DEG_TO_RAD
       ca = Math.cos(rad_a)
       sa = Math.sin(rad_a)
@@ -758,7 +737,15 @@ module Zenoo
         inv_mb = 0.0
         inv_ib = 0.0
       else
-        xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(b)
+        xb = b.x.to_f
+        yb = b.y.to_f
+        vbx = b.vx.to_f
+        vby = b.vy.to_f
+        wb = b.omega.to_f
+        angb = b.angle.to_f
+        mb = b.mass.to_f
+        shape_b = b.collider
+        ib = b.inertia
         rad_b = angb * DEG_TO_RAD
         cb = Math.cos(rad_b)
         sb = Math.sin(rad_b)
@@ -791,33 +778,33 @@ module Zenoo
       dpy = pby - pay
 
       if is_fixed
-        a.x += dpx if a.respond_to?(:x=)
-        a.y += dpy if a.respond_to?(:y=)
+        a.x += dpx
+        a.y += dpy
       else
         ratio_a = inv_ma / inv_m_total
         ratio_b = inv_mb / inv_m_total
-        a.x += dpx * ratio_a if a.respond_to?(:x=)
-        a.y += dpy * ratio_a if a.respond_to?(:y=)
-        b.x -= dpx * ratio_b if b.respond_to?(:x=)
-        b.y -= dpy * ratio_b if b.respond_to?(:y=)
+        a.x += dpx * ratio_a
+        a.y += dpy * ratio_a
+        b.x -= dpx * ratio_b
+        b.y -= dpy * ratio_b
       end
 
       # 2. 速度ズレ (Velocity Constraint) の力積解決
       if is_fixed && lax.abs < 0.0001 && lay.abs < 0.0001
         # 中心固定ピン: 線速度は完全にゼロ、角速度のみ自由
-        a.vx = 0.0 if a.respond_to?(:vx=)
-        a.vy = 0.0 if a.respond_to?(:vy=)
+        a.vx = 0.0
+        a.vy = 0.0
       else
-        cur_anga = a.respond_to?(:angle) ? a.angle.to_f : anga
+        cur_anga = a.angle.to_f
         rad_a = cur_anga * DEG_TO_RAD
         ca = Math.cos(rad_a)
         sa = Math.sin(rad_a)
         rax = lax * ca - lay * sa
         ray = lax * sa + lay * ca
 
-        vax = a.respond_to?(:vx) ? a.vx.to_f : 0.0
-        vay = a.respond_to?(:vy) ? a.vy.to_f : 0.0
-        wa = a.respond_to?(:omega) ? a.omega.to_f : 0.0
+        vax = a.vx.to_f
+        vay = a.vy.to_f
+        wa = a.omega.to_f
 
         if is_fixed
           vbx = 0.0
@@ -826,15 +813,15 @@ module Zenoo
           rbx = 0.0
           rby = 0.0
         else
-          cur_angb = b.respond_to?(:angle) ? b.angle.to_f : angb
+          cur_angb = b.angle.to_f
           rad_b = cur_angb * DEG_TO_RAD
           cb = Math.cos(rad_b)
           sb = Math.sin(rad_b)
           rbx = lbx * cb - lby * sb
           rby = lbx * sb + lby * cb
-          vbx = b.respond_to?(:vx) ? b.vx.to_f : 0.0
-          vby = b.respond_to?(:vy) ? b.vy.to_f : 0.0
-          wb = b.respond_to?(:omega) ? b.omega.to_f : 0.0
+          vbx = b.vx.to_f
+          vby = b.vy.to_f
+          wb = b.omega.to_f
         end
 
         w_rad_a = wa * DEG_TO_RAD
@@ -857,16 +844,16 @@ module Zenoo
           jx_vel = -(k22 * rel_vx - k12 * rel_vy) * inv_det
           jy_vel = -(-k12 * rel_vx + k11 * rel_vy) * inv_det
 
-          a.vx = vax + inv_ma * jx_vel if a.respond_to?(:vx=)
-          a.vy = vay + inv_ma * jy_vel if a.respond_to?(:vy=)
+          a.vx = vax + inv_ma * jx_vel
+          a.vy = vay + inv_ma * jy_vel
           tau_a_vel = rax * jy_vel - ray * jx_vel
-          a.omega = wa + (tau_a_vel * inv_ia * RAD_TO_DEG) if a.respond_to?(:omega=)
+          a.omega = wa + (tau_a_vel * inv_ia * RAD_TO_DEG)
 
           unless is_fixed
-            b.vx = vbx - inv_mb * jx_vel if b.respond_to?(:vx=)
-            b.vy = vby - inv_mb * jy_vel if b.respond_to?(:vy=)
+            b.vx = vbx - inv_mb * jx_vel
+            b.vy = vby - inv_mb * jy_vel
             tau_b_vel = -(rbx * jy_vel - rby * jx_vel)
-            b.omega = wb + (tau_b_vel * inv_ib * RAD_TO_DEG) if b.respond_to?(:omega=)
+            b.omega = wb + (tau_b_vel * inv_ib * RAD_TO_DEG)
           end
         end
       end
@@ -887,12 +874,27 @@ module Zenoo
       if offset.nil?
         offset, auto_ang = relative_offset(a, b)
         angle ||= auto_ang
-      elsif offset.is_a?(Array) && offset.length >= 3 && angle.nil?
-        angle = offset[2].to_f
       end
 
-      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(a)
-      xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(b)
+      xa = a.x.to_f
+      ya = a.y.to_f
+      vax = a.vx.to_f
+      vay = a.vy.to_f
+      wa = a.omega.to_f
+      anga = a.angle.to_f
+      ma = a.mass.to_f
+      shape_a = a.collider
+      ia = a.inertia
+
+      xb = b.x.to_f
+      yb = b.y.to_f
+      vbx = b.vx.to_f
+      vby = b.vy.to_f
+      wb = b.omega.to_f
+      angb = b.angle.to_f
+      mb = b.mass.to_f
+      shape_b = b.collider
+      ib = b.inertia
 
       ma_f = ma.to_f
       mb_f = mb.to_f
@@ -919,12 +921,12 @@ module Zenoo
       if diff_ang.abs > 0.001 && inv_i_total > 0.000001
         ratio_ang_a = (inv_ia / inv_i_total) * k_stiff
         ratio_ang_b = (inv_ib / inv_i_total) * k_stiff
-        a.angle -= diff_ang * ratio_ang_a if a.respond_to?(:angle=)
-        b.angle += diff_ang * ratio_ang_b if b.respond_to?(:angle=)
+        a.angle -= diff_ang * ratio_ang_a
+        b.angle += diff_ang * ratio_ang_b
       end
 
       # 2. 相対位置の固定
-      cur_anga = a.respond_to?(:angle) ? a.angle.to_f : anga
+      cur_anga = a.angle.to_f
       rad_a = cur_anga * DEG_TO_RAD
       ca = Math.cos(rad_a)
       sa = Math.sin(rad_a)
@@ -940,10 +942,10 @@ module Zenoo
       ratio_pos_a = (inv_ma / inv_m_total) * k_stiff
       ratio_pos_b = (inv_mb / inv_m_total) * k_stiff
 
-      b.x += dx * ratio_pos_b if b.respond_to?(:x=)
-      b.y += dy * ratio_pos_b if b.respond_to?(:y=)
-      a.x -= dx * ratio_pos_a if a.respond_to?(:x=)
-      a.y -= dy * ratio_pos_a if a.respond_to?(:y=)
+      b.x += dx * ratio_pos_b
+      b.y += dy * ratio_pos_b
+      a.x -= dx * ratio_pos_a
+      a.y -= dy * ratio_pos_a
 
       # 3. 速度・角速度の同期 (一体剛体運動)
       total_mass = ma_f + mb_f
@@ -966,13 +968,13 @@ module Zenoo
         common_w_rad = (l_ang + l_linear) / total_inertia
         common_w = common_w_rad * RAD_TO_DEG
 
-        a.omega = wa + (common_w - wa) * k_stiff if a.respond_to?(:omega=)
-        b.omega = wb + (common_w - wb) * k_stiff if b.respond_to?(:omega=)
+        a.omega = wa + (common_w - wa) * k_stiff
+        b.omega = wb + (common_w - wb) * k_stiff
 
-        a.vx = com_vx - (common_w_rad * ra_cy) if a.respond_to?(:vx=)
-        a.vy = com_vy + (common_w_rad * ra_cx) if a.respond_to?(:vy=)
-        b.vx = com_vx - (common_w_rad * rb_cy) if b.respond_to?(:vx=)
-        b.vy = com_vy + (common_w_rad * rb_cx) if b.respond_to?(:vy=)
+        a.vx = com_vx - (common_w_rad * ra_cy)
+        a.vy = com_vy + (common_w_rad * ra_cx)
+        b.vx = com_vx - (common_w_rad * rb_cy)
+        b.vy = com_vy + (common_w_rad * rb_cx)
       end
 
       true
@@ -989,8 +991,25 @@ module Zenoo
     def self.constrain_distance(a, b, length: nil, min: nil, max: nil, anchor_a: nil, anchor_b: nil)
       return nil unless a && b
 
-      xa, ya, vax, vay, wa, anga, ma, shape_a, ia = extract_body_params(a)
-      xb, yb, vbx, vby, wb, angb, mb, shape_b, ib = extract_body_params(b)
+      xa = a.x.to_f
+      ya = a.y.to_f
+      vax = a.vx.to_f
+      vay = a.vy.to_f
+      wa = a.omega.to_f
+      anga = a.angle.to_f
+      ma = a.mass.to_f
+      shape_a = a.collider
+      ia = a.inertia
+
+      xb = b.x.to_f
+      yb = b.y.to_f
+      vbx = b.vx.to_f
+      vby = b.vy.to_f
+      wb = b.omega.to_f
+      angb = b.angle.to_f
+      mb = b.mass.to_f
+      shape_b = b.collider
+      ib = b.inertia
 
       pax, pay = local_to_world(a, anchor_a ? anchor_a[0].to_f : 0.0, anchor_a ? anchor_a[1].to_f : 0.0)
       pbx, pby = local_to_world(b, anchor_b ? anchor_b[0].to_f : 0.0, anchor_b ? anchor_b[1].to_f : 0.0)
@@ -1043,13 +1062,13 @@ module Zenoo
       px_imp = j_pos * nx
       py_imp = j_pos * ny
 
-      a.x += inv_ma * px_imp if a.respond_to?(:x=)
-      a.y += inv_ma * py_imp if a.respond_to?(:y=)
-      a.angle += ((rax * py_imp - ray * px_imp) * inv_ia * RAD_TO_DEG) if a.respond_to?(:angle=)
+      a.x += inv_ma * px_imp
+      a.y += inv_ma * py_imp
+      a.angle += ((rax * py_imp - ray * px_imp) * inv_ia * RAD_TO_DEG)
 
-      b.x -= inv_mb * px_imp if b.respond_to?(:x=)
-      b.y -= inv_mb * py_imp if b.respond_to?(:y=)
-      b.angle -= ((rbx * py_imp - rby * px_imp) * inv_ib * RAD_TO_DEG) if b.respond_to?(:angle=)
+      b.x -= inv_mb * px_imp
+      b.y -= inv_mb * py_imp
+      b.angle -= ((rbx * py_imp - rby * px_imp) * inv_ib * RAD_TO_DEG)
 
       # 速度補正
       w_rad_a = wa * DEG_TO_RAD
@@ -1065,13 +1084,13 @@ module Zenoo
         vx_imp = j_vel * nx
         vy_imp = j_vel * ny
 
-        a.vx = vax + inv_ma * vx_imp if a.respond_to?(:vx=)
-        a.vy = vay + inv_ma * vy_imp if a.respond_to?(:vy=)
-        a.omega = wa + ((rax * vy_imp - ray * px_imp) * inv_ia * RAD_TO_DEG) if a.respond_to?(:omega=)
+        a.vx = vax + inv_ma * vx_imp
+        a.vy = vay + inv_ma * vy_imp
+        a.omega = wa + ((rax * vy_imp - ray * px_imp) * inv_ia * RAD_TO_DEG)
 
-        b.vx = vbx - inv_mb * vx_imp if b.respond_to?(:vx=)
-        b.vy = vby - inv_mb * vy_imp if b.respond_to?(:vy=)
-        b.omega = wb - ((rbx * vy_imp - rby * px_imp) * inv_ib * RAD_TO_DEG) if b.respond_to?(:omega=)
+        b.vx = vbx - inv_mb * vx_imp
+        b.vy = vby - inv_mb * vy_imp
+        b.omega = wb - ((rbx * vy_imp - rby * px_imp) * inv_ib * RAD_TO_DEG)
       end
 
       true
