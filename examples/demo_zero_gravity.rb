@@ -4,10 +4,15 @@ require_relative '../lib/zenoo'
 
 # ==============================================================================
 # Zenoo Zero-Gravity Immediate-Mode Physics Playground
-# - 無重力空間で、多彩な幾何図形（矩形・多角形・楕円・円・カプセル）が飛び交う剛体物理デモ
-# - [左ドラッグ]: 図形を掴んで動かす / 離すとマウスの勢いで投げ飛ばす！
+# - 無重力空間で、多彩な幾何図形と即時モード物理拘束 (Constraints) を体験できる剛体物理デモ
+# - [左ドラッグ]: 掴んだ点をマウスへ引っ張る (Mouse Joint / Fling 投擲)
 # - [右ドラッグ]: 図形を中心軸で直感的にスピン回転させる
-# - [SPACE]: 全図形にランダムな衝撃（拡散）  |  [S]: 全停止  |  [R]: リセット
+# - 拘束オブジェクト:
+#     1. ⚲ Pinned Spinner     : 空間の固定点に留められた回転バー
+#     2. ⚙ Welded Hammer      : 柄と頭部が完全固定された一体剛体ハンマー
+#     3. ⛓ Pinned Double Bar  : 関節でピン結合された2連バー
+#     4. 〰 Bolas Rope         : 最大距離ロープで繋がれた2連ボール
+# - [SPACE]: 全図形にランダム拡散衝撃  |  [S]: 全停止  |  [R]: リセット
 # - [N]: マウス位置に新しいランダム図形をスポーン  |  [C]: 全消去
 # ==============================================================================
 
@@ -48,7 +53,7 @@ end
 
 # 剛体物理オブジェクト
 class PhysicsBody < PhysicsSprite
-  attr_accessor :name, :shape, :type, :border_color
+  attr_accessor :name, :shape, :type, :color, :border_color
   attr_accessor :init_x, :init_y, :init_vx, :init_vy, :init_angle, :init_omega
   attr_accessor :hit
 
@@ -81,10 +86,14 @@ class PhysicsBody < PhysicsSprite
     self.vy = @init_vy
     self.angle = @init_angle
     self.omega = @init_omega
+    sync_shape!
+    @hit = false
+  end
+
+  def sync_shape!
     @shape.center_x = self.x
     @shape.center_y = self.y
     @shape.angle = self.angle
-    @hit = false
   end
 
   def default_color_for(type)
@@ -98,9 +107,7 @@ class PhysicsBody < PhysicsSprite
     end
   end
 
-  def update(is_grabbed)
-    return if is_grabbed
-
+  def update
     # 無重力空間の運動方程式 (ごくわずかな慣性抵抗のみ)
     @vx *= 0.9992
     @vy *= 0.9992
@@ -110,10 +117,7 @@ class PhysicsBody < PhysicsSprite
     self.y += @vy
     self.angle += @omega
 
-    # Shape を同期 (常に重心位置に同期)
-    @shape.center_x = self.x
-    @shape.center_y = self.y
-    @shape.angle = self.angle
+    sync_shape!
   end
 
   def draw(is_active, is_hover)
@@ -153,7 +157,7 @@ class PhysicsBody < PhysicsSprite
         c.close_path
         c.fill(body_col)
         c.stroke(border_col, border_w)
-        # 長軸に沿ったスピン可視化マーク線 (中心から長軸方向へ)
+        # 長軸に沿ったスピン可視化マーク線
         c.begin_path
         c.move_to(0, 0)
         c.line_to(rx * 0.7, 0)
@@ -223,16 +227,15 @@ class PhysicsBody < PhysicsSprite
 end
 
 class ZeroGravityDemo
-  attr_accessor :items, :walls, :sparks, :active_item, :drag_mode
-  attr_accessor :drag_offset_x, :drag_offset_y, :prev_mx, :prev_my, :mouse_vx, :mouse_vy
+  attr_accessor :items, :walls, :constraints, :sparks, :active_item, :drag_mode
+  attr_accessor :drag_anchor, :prev_mx, :prev_my, :mouse_vx, :mouse_vy
   attr_accessor :rotate_base_angle, :mouse_pt, :hit_count
 
   def initialize
     @mouse_pt = Collision.point(0.0, 0.0)
     @active_item = nil
     @drag_mode = nil
-    @drag_offset_x = 0.0
-    @drag_offset_y = 0.0
+    @drag_anchor = nil
     @prev_mx = 0.0
     @prev_my = 0.0
     @mouse_vx = 0.0
@@ -240,6 +243,8 @@ class ZeroGravityDemo
     @rotate_base_angle = 0.0
     @sparks = []
     @hit_count = 0
+    @items = []
+    @constraints = []
 
     create_walls
     create_items
@@ -248,40 +253,103 @@ class ZeroGravityDemo
   def create_walls
     # 画面外周のクッション壁 (上下左右)
     @walls = [
-      # 上壁
       Collision.rect(640, -10, 1360, 40, anchor: :center),
-      # 下壁
       Collision.rect(640, 730, 1360, 40, anchor: :center),
-      # 左壁
       Collision.rect(-10, 360, 40, 800, anchor: :center),
-      # 右壁
       Collision.rect(1290, 360, 40, 800, anchor: :center)
     ]
   end
 
   def create_items
-    @items = [
-      # 1. 回転矩形 (OBB) - 左上
-      PhysicsBody.new("Box A", Collision.rect(260, 200, 110, 70, angle: 25, anchor: :center), :rect, mass: 1.2, vx: 1.5, vy: 0.8, omega: 1.2),
+    @items.clear
+    @constraints.clear
 
-      # 2. 三角形 (Triangle Polygon) - 中央上
-      PhysicsBody.new("Triangle", Collision.polygon([[0.0, -50.0], [45.0, 38.0], [-45.0, 38.0]], x: 540, y: 190, angle: 30, anchor: :center), :polygon, mass: 0.9, vx: -1.2, vy: 1.0, omega: -2.0),
+    # --- 1. 単体図形 (プリミティブ＆ポリゴン) ---
+    # 回転矩形 (OBB) - 左上
+    @items << PhysicsBody.new("Box A", Collision.rect(180, 160, 95, 60, angle: 25, anchor: :center), :rect, mass: 1.2, vx: 1.2, vy: 0.6, omega: 1.0)
+    # 三角形 - 中央やや左
+    @items << PhysicsBody.new("Triangle", Collision.polygon([[0.0, -45.0], [40.0, 35.0], [-40.0, 35.0]], x: 460, y: 340, angle: 30, anchor: :center), :polygon, mass: 0.9, vx: -0.8, vy: 0.7, omega: -1.5)
+    # 楕円 - 右下
+    @items << PhysicsBody.new("Ellipse", Collision.circle(1100, 520, 70, 38, angle: -20, anchor: :center), :ellipse, mass: 1.1, vx: -1.2, vy: 0.5, omega: 1.2)
+    # カプセル - 左下
+    @items << PhysicsBody.new("Capsule", Collision.rect(200, 560, 120, 55, radius: 22, angle: 35, anchor: :center), :rounded_rect, mass: 1.3, vx: 0.8, vy: -1.0, omega: -0.8)
+    # 凸五角形 - 右上
+    @items << PhysicsBody.new("Pentagon", Collision.polygon([[0.0, -42.0], [40.0, -12.0], [25.0, 35.0], [-25.0, 35.0], [-40.0, -12.0]], x: 1080, y: 160, angle: 10, anchor: :center), :polygon, mass: 1.4, vx: -0.5, vy: -0.6, omega: 0.8)
 
-      # 3. 楕円 (Ellipse) - 右上
-      PhysicsBody.new("Ellipse", Collision.circle(840, 210, 75, 40, angle: -20, anchor: :center), :ellipse, mass: 1.1, vx: -1.8, vy: 0.6, omega: 1.5),
+    # --- 2. 拘束オブジェクト群 (Constraints) ---
 
-      # 4. カプセル (Rounded Rect) - 左下
-      PhysicsBody.new("Capsule", Collision.rect(320, 500, 130, 60, radius: 24, angle: 45, anchor: :center), :rounded_rect, mass: 1.3, vx: 1.0, vy: -1.4, omega: -1.0),
+    # ① 固定ピン留めスピナー (Pinned Spinner) - 画面上部中央
+    # 空間の固定点 [640, 150] を軸として自由に回転するバー
+    spinner = PhysicsBody.new("Spinner", Collision.rect(640, 150, 230, 24, angle: 0, anchor: :center), :rect, mass: 2.0, vx: 0.0, vy: 0.0, omega: 2.2)
+    spinner.color = [240, 190, 50, 230] # メタリックゴールド
+    @items << spinner
+    @constraints << {
+      type: :pin,
+      name: "Pinned Spinner",
+      a: spinner,
+      b: nil,
+      pivot: [640.0, 150.0],
+      anchor_a: [0.0, 0.0]
+    }
 
-      # 5. 凸五角形 (Pentagon Polygon) - 中央
-      PhysicsBody.new("Pentagon", Collision.polygon([[0.0, -48.0], [46.0, -15.0], [28.0, 40.0], [-28.0, 40.0], [-46.0, -15.0]], x: 640, y: 380, angle: 10, anchor: :center), :polygon, mass: 1.4, vx: 0.5, vy: -0.8, omega: 0.8),
+    # ② 完全固定溶接 (Welded Hammer) - 画面中央
+    # 柄 (Rect) と頭 (Rect) が一体化された偏心ハンマー
+    h_handle = PhysicsBody.new("Hammer Handle", Collision.rect(620, 370, 130, 20, angle: -20, anchor: :center), :rect, mass: 0.8, vx: 1.0, vy: -0.5, omega: 1.2)
+    h_handle.color = [60, 150, 240, 230] # ブルー
+    h_head = PhysicsBody.new("Hammer Head", Collision.rect(695, 342, 50, 75, angle: -20, anchor: :center), :rect, mass: 2.5, vx: 1.0, vy: -0.5, omega: 1.2)
+    h_head.color = [235, 70, 95, 230] # ルビーレッド
+    @items << h_handle
+    @items << h_head
+    rel_offset, rel_ang = h_handle.relative_offset(h_head)
+    @constraints << {
+      type: :weld,
+      name: "Welded Hammer",
+      a: h_handle,
+      b: h_head,
+      offset: rel_offset,
+      angle: rel_ang
+    }
 
-      # 6. 真円 (Circle) - 右下
-      PhysicsBody.new("Ball", Collision.circle(960, 480, 48, anchor: :center), :circle, mass: 1.0, vx: -2.0, vy: -1.2, omega: 2.2),
+    # ③ ピン結合ヌンチャク (Pinned Double Bar) - 画面右側
+    # 2つのバーが関節で接続され、自由に折れ曲がりながら運動
+    bar_a = PhysicsBody.new("Bar A", Collision.rect(860, 360, 95, 20, angle: 15, anchor: :center), :rect, mass: 1.0, vx: -0.8, vy: 1.2, omega: 2.0)
+    bar_a.color = [45, 205, 155, 230] # エメラルド
+    bar_b = PhysicsBody.new("Bar B", Collision.rect(948, 385, 95, 20, angle: 60, anchor: :center), :rect, mass: 1.0, vx: -0.8, vy: 1.2, omega: -1.5)
+    bar_b.color = [140, 225, 65, 230] # ライム
+    @items << bar_a
+    @items << bar_b
+    @constraints << {
+      type: :pin,
+      name: "Pinned Double Bar",
+      a: bar_a,
+      b: bar_b,
+      anchor_a: [47.5, 0.0],
+      anchor_b: [-47.5, 0.0]
+    }
 
-      # 7. 小型スピードボックス - 中央下
-      PhysicsBody.new("Mini Box", Collision.rect(640, 560, 50, 50, angle: 15, anchor: :center), :rect, mass: 0.7, vx: 2.4, vy: -1.8, omega: 3.5)
-    ]
+    # ④ ロープ拘束ボーラ (Distance Rope Balls) - 画面下部
+    # 2つの球が最大長ロープで繋がれ公転
+    bola_a = PhysicsBody.new("Bola A", Collision.circle(580, 560, 24, anchor: :center), :circle, mass: 1.1, vx: 0.0, vy: 2.4, omega: 1.0)
+    bola_a.color = [245, 130, 45, 230] # オレンジ
+    bola_b = PhysicsBody.new("Bola B", Collision.circle(700, 560, 24, anchor: :center), :circle, mass: 1.1, vx: 0.0, vy: -2.4, omega: -1.0)
+    bola_b.color = [50, 195, 235, 230] # スカイブルー
+    @items << bola_a
+    @items << bola_b
+    @constraints << {
+      type: :distance,
+      name: "Bolas Rope",
+      a: bola_a,
+      b: bola_b,
+      max: 130.0
+    }
+  end
+
+  # 直接結合された物体同士は相互衝突をスキップ
+  def connected?(a, b)
+    @constraints.any? do |c|
+      (c[:type] == :weld || c[:type] == :pin) &&
+        ((c[:a] == a && c[:b] == b) || (c[:a] == b && c[:b] == a))
+    end
   end
 
   def spawn_random_item(x, y)
@@ -301,7 +369,6 @@ class ZeroGravityDemo
             when :rounded_rect
               Collision.rect(x, y, rand(70..120), rand(50..70), radius: rand(15..25), angle: rand(0..360), anchor: :center)
             when :polygon
-              # ランダム凸多角形 (3角形〜6角形)
               sides = rand(3..6)
               r = rand(35..55)
               pts = (0...sides).map do |si|
@@ -345,7 +412,10 @@ class ZeroGravityDemo
 
     # キー操作
     create_items if Input.key_push?(:r) # [R] リセット
-    @items.clear if Input.key_push?(:c) # [C] 全消去
+    if Input.key_push?(:c)              # [C] 全消去
+      @items.clear
+      @constraints.clear
+    end
 
     # [SPACE] 全オブジェクト拡散インパルス
     if Input.key_push?(:space)
@@ -375,10 +445,8 @@ class ZeroGravityDemo
       if found
         @active_item = found
         @drag_mode = :move
-        @drag_offset_x = mx - @active_item.x
-        @drag_offset_y = my - @active_item.y
-        @active_item.vx = 0.0
-        @active_item.vy = 0.0
+        # クリックした位置のローカル座標をアンカーとして記憶
+        @drag_anchor = @active_item.world_to_local(mx, my)
       end
     end
 
@@ -397,18 +465,14 @@ class ZeroGravityDemo
     # 移動ドラッグ中
     if @drag_mode == :move && @active_item
       if Input.mouse_pressed?(:left)
-        target_x = mx - @drag_offset_x
-        target_y = my - @drag_offset_y
-        @active_item.x = target_x
-        @active_item.y = target_y
-        @active_item.shape.center_x = target_x
-        @active_item.shape.center_y = target_y
+        # 物理ドラッグ拘束は update_physics 内で毎フレーム適用される
       else
-        # マウスを離した瞬間：勢いよく投げ飛ばす！ (Fling)
-        @active_item.vx = @mouse_vx.clamp(-18.0, 18.0)
-        @active_item.vy = @mouse_vy.clamp(-18.0, 18.0)
+        # マウスを離した瞬間：掴んでいた速度・角速度 + マウス振りの勢いで投げ飛ばす！ (Fling)
+        @active_item.vx = (@active_item.vx * 0.4 + @mouse_vx * 0.6).clamp(-22.0, 22.0)
+        @active_item.vy = (@active_item.vy * 0.4 + @mouse_vy * 0.6).clamp(-22.0, 22.0)
         @drag_mode = nil
         @active_item = nil
+        @drag_anchor = nil
       end
     end
 
@@ -422,7 +486,7 @@ class ZeroGravityDemo
           new_ang = mouse_ang - @rotate_base_angle
           @active_item.omega = (new_ang - @active_item.angle) * 0.4
           @active_item.angle = new_ang
-          @active_item.shape.angle = new_ang
+          @active_item.sync_shape!
         end
       else
         @drag_mode = nil
@@ -431,24 +495,47 @@ class ZeroGravityDemo
     end
 
     # 全アイテムの自由運動
-    @items.each { |it| it.update(it == @active_item) }
+    @items.each(&:update)
 
-    # 物理シミュレーション (衝突判定＆即時剛体解決)
-    update_physics
+    # 物理シミュレーション (拘束解決 ＆ 衝突解決)
+    update_physics(mx, my)
 
     # パーティクル更新
     @sparks.each(&:update)
     @sparks.reject!(&:dead?)
   end
 
-  def update_physics
+  # 即時モード 拘束の適用
+  def apply_constraints(mx, my)
+    # 1. マウスドラッグ拘束 (掴んだ点をマウスカーソルへ追従・トルク回転)
+    if @drag_mode == :move && @active_item && @drag_anchor
+      @active_item.constrain_point(mx, my, anchor: @drag_anchor, stiffness: 0.55, damping: 0.88)
+    end
+
+    # 2. 定常拘束群
+    @constraints.each do |c|
+      case c[:type]
+      when :pin
+        c[:a].constrain_pin(c[:b], pivot: c[:pivot], anchor: c[:anchor_a], other_anchor: c[:anchor_b])
+      when :weld
+        c[:a].constrain_weld(c[:b], offset: c[:offset], angle: c[:angle], stiffness: 1.0)
+      when :distance
+        c[:a].constrain_distance(c[:b], length: c[:length], min: c[:min], max: c[:max], anchor: c[:anchor_a], other_anchor: c[:anchor_b])
+      end
+    end
+  end
+
+  def update_physics(mx, my)
+    # 拘束事前適用
+    apply_constraints(mx, my)
+    @items.each(&:sync_shape!)
+
     len = @items.length
 
     # 1. アイテム vs アイテム の相互衝突 (Physics.resolve)
     i = 0
     while i < len
-      it_a = @items[i]
-      it_a.hit = false
+      @items[i].hit = false
       i += 1
     end
 
@@ -459,6 +546,12 @@ class ZeroGravityDemo
       j = i + 1
       while j < len
         it_b = @items[j]
+
+        # 結合されたペアの自己衝突はスキップ
+        if connected?(it_a, it_b)
+          j += 1
+          next
+        end
 
         # 高速ブロードフェーズ (外接円チェック)
         r_sum = it_a.shape.bounding_radius + it_b.shape.bounding_radius
@@ -471,30 +564,22 @@ class ZeroGravityDemo
             it_b.hit = true
             @hit_count += 1
 
-            # ★ 即時モード 2体剛体衝突解決！
+            # 即時モード 2体剛体衝突解決！
             res = Physics.resolve(hit, it_a, it_b, restitution: 0.88, friction: 0.35)
 
-            # 物体Aへの反映 (ドラッグ中でない場合のみ位置押し戻し)
-            unless it_a == @active_item && @drag_mode == :move
-              it_a.x += res.a.push_x
-              it_a.y += res.a.push_y
-            end
+            it_a.x += res.a.push_x
+            it_a.y += res.a.push_y
             it_a.vx = res.a.vx
             it_a.vy = res.a.vy
             it_a.omega = res.a.omega
-            it_a.shape.center_x = it_a.x
-            it_a.shape.center_y = it_a.y
+            it_a.sync_shape!
 
-            # 物体Bへの反映
-            unless it_b == @active_item && @drag_mode == :move
-              it_b.x += res.b.push_x
-              it_b.y += res.b.push_y
-            end
+            it_b.x += res.b.push_x
+            it_b.y += res.b.push_y
             it_b.vx = res.b.vx
             it_b.vy = res.b.vy
             it_b.omega = res.b.omega
-            it_b.shape.center_x = it_b.x
-            it_b.shape.center_y = it_b.y
+            it_b.sync_shape!
 
             # 激しい衝突時は火花エフェクト
             if res.impact > 1.2
@@ -514,24 +599,77 @@ class ZeroGravityDemo
         next unless hit
 
         res = Physics.resolve_static(hit, it, wall, restitution: 0.92, friction: 0.25)
-
-        unless it == @active_item && @drag_mode == :move
-          it.x += res.push_x
-          it.y += res.push_y
-        end
+        it.x += res.push_x
+        it.y += res.push_y
         it.vx = res.vx
         it.vy = res.vy
         it.omega = res.omega
-        it.shape.center_x = it.x
-        it.shape.center_y = it.y
+        it.sync_shape!
 
         if res.impact > 1.5
-          # 画面枠線 (0..1280, 0..720) 上に美しく散るよう微小クランプ
           sx = hit.contact_x.clamp(2.0, 1278.0)
           sy = hit.contact_y.clamp(2.0, 718.0)
           spawn_sparks(sx, sy, [(res.impact * 2).to_i, 8].min, [140, 210, 255])
         end
       end
+    end
+
+    # 拘束事後適用 (衝突によるズレを最終補正)
+    apply_constraints(mx, my)
+    @items.each(&:sync_shape!)
+  end
+
+  # 拘束・ジョイントのビジュアル描画
+  def draw_constraints(mx, my)
+    @constraints.each do |c|
+      case c[:type]
+      when :pin
+        px, py = if c[:b]
+                   c[:a].local_to_world(c[:anchor_a][0], c[:anchor_a][1])
+                 else
+                   c[:pivot]
+                 end
+
+        unless c[:b]
+          # 固定ピンの壁留めベース十字
+          Window.draw_line(px - 10, py, px + 10, py, color: [160, 180, 210, 180], width: 2)
+          Window.draw_line(px, py - 10, px, py + 10, color: [160, 180, 210, 180], width: 2)
+        end
+
+        # ベアリングピン金具
+        Window.draw_circle(px, py, 7, color: [40, 50, 65, 255])
+        Window.draw_circle(px, py, 5, color: [220, 230, 245, 255])
+        Window.draw_circle(px, py, 2, color: [70, 80, 95, 255])
+
+      when :distance
+        pax, pay = c[:a].local_to_world(0.0, 0.0)
+        pbx, pby = c[:b].local_to_world(0.0, 0.0)
+        dist = Math.hypot(pbx - pax, pby - pay)
+        max_d = c[:max] || c[:length] || 100.0
+        tension = (dist / max_d).clamp(0.0, 1.0)
+        rope_alpha = (140 + tension * 115).to_i
+        rope_color = tension > 0.95 ? [255, 240, 120, rope_alpha] : [210, 205, 175, rope_alpha]
+
+        Window.draw_line(pax, pay, pbx, pby, color: rope_color, width: 2.5)
+        Window.draw_circle(pax, pay, 4, color: [240, 220, 160, 255])
+        Window.draw_circle(pbx, pby, 4, color: [240, 220, 160, 255])
+
+      when :weld
+        mid_x = (c[:a].x + c[:b].x) * 0.5
+        mid_y = (c[:a].y + c[:b].y) * 0.5
+        Window.draw_circle(mid_x, mid_y, 4, color: [255, 220, 80, 220])
+      end
+    end
+
+    # マウスドラッグ拘束 (Mouse Joint) の弾性ライン描画
+    if @drag_mode == :move && @active_item && @drag_anchor
+      ax, ay = @active_item.local_to_world(@drag_anchor[0], @drag_anchor[1])
+      Window.draw_line(ax, ay, mx, my, color: [100, 240, 255, 200], width: 2.5)
+      Window.draw_circle(ax, ay, 6, color: [40, 180, 240, 240], border_color: [255, 255, 255, 255], border_width: 1.5)
+      Window.draw_circle(mx, my, 7, color: [255, 240, 90, 255], border_color: [30, 30, 30, 200], border_width: 1.5)
+    elsif @drag_mode == :rotate && @active_item
+      Window.draw_line(@active_item.x, @active_item.y, mx, my, color: [255, 120, 180, 180], width: 2)
+      Window.draw_circle(mx, my, 6, color: [255, 90, 140, 255])
     end
   end
 
@@ -543,6 +681,9 @@ class ZeroGravityDemo
 
     hover_item = find_item_at(mx, my)
 
+    # 拘束のビジュアル描画
+    draw_constraints(mx, my)
+
     # オブジェクト描画
     @items.each do |it|
       it.draw(it == @active_item, it == hover_item)
@@ -551,23 +692,15 @@ class ZeroGravityDemo
     # パーティクル描画
     @sparks.each(&:draw)
 
-    # ドラッグ中のガイド線
-    if @drag_mode == :move && @active_item
-      Window.draw_line(@active_item.x, @active_item.y, mx, my, color: [100, 220, 255, 180], width: 2)
-      Window.draw_circle(mx, my, 6, color: [255, 240, 100, 255])
-    elsif @drag_mode == :rotate && @active_item
-      Window.draw_line(@active_item.x, @active_item.y, mx, my, color: [255, 120, 180, 180], width: 2)
-      Window.draw_circle(mx, my, 6, color: [255, 90, 140, 255])
-    end
-
     # UI 情報テキスト
-    Window.draw_text(30, 20, "Zenoo Zero-Gravity 2D Physics Playground", size: 22, color: [255, 255, 255, 255])
-    Window.draw_text(30, 48, "Pure Ruby Immediate-Mode Rigid Body Physics (Rect, Polygon, Ellipse, Circle)", size: 14, color: [140, 180, 220, 255])
-    Window.draw_text(30, 72, "[左ドラッグ]: 掴んで投げる (Fling)   |   [右ドラッグ]: スピン回転   |   [SPACE]: 拡散   |   [S]: 停止", size: 13, color: [255, 225, 100, 255])
-    Window.draw_text(30, 94, "[N]: ランダム図形生成   |   [R]: リセット   |   [C]: 全消去", size: 13, color: [180, 210, 235, 255])
+    Window.draw_text(30, 20, "Zenoo Zero-Gravity Physics Playground with Constraints", size: 22, color: [255, 255, 255, 255])
+    Window.draw_text(30, 48, "Pure Ruby Immediate-Mode Rigid Body Physics & Stateless Constraints", size: 14, color: [140, 180, 220, 255])
+    Window.draw_text(30, 72, "[左ドラッグ]: 掴んで動かす・投げる (Mouse Joint)   |   [右ドラッグ]: スピン回転   |   [SPACE]: 拡散   |   [S]: 停止", size: 13, color: [255, 225, 100, 255])
+    Window.draw_text(30, 94, "Constraints: ⚲ Pinned Spinner  |  ⚙ Welded Hammer  |  ⛓ Pinned Double Bar  |  〰 Bolas Rope", size: 13, color: [130, 230, 210, 255])
+    Window.draw_text(30, 116, "[N]: ランダム図形生成   |   [R]: リセット   |   [C]: 全消去", size: 13, color: [180, 210, 235, 255])
 
     status_col = @hit_count > 0 ? [255, 110, 110, 255] : [120, 230, 160, 255]
-    Window.draw_text(30, 680, "Objects: #{@items.length}   |   Collisions: #{@hit_count} pairs   |   FPS: #{Window.fps.round(1)}", size: 14, color: status_col)
+    Window.draw_text(30, 680, "Objects: #{@items.length}   |   Constraints: #{@constraints.length}   |   Collisions: #{@hit_count} pairs   |   FPS: #{Window.fps.round(1)}", size: 14, color: status_col)
   end
 
   def step_frame
@@ -580,17 +713,19 @@ class ZeroGravityDemo
   end
 end
 
-demo = ZeroGravityDemo.new
-test_frames = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
-frame_counter = 0
+if __FILE__ == $0
+  demo = ZeroGravityDemo.new
+  test_frames = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
+  frame_counter = 0
 
-Window.loop(1280, 720, "Zenoo Zero-Gravity Physics Playground") do
-  demo.step_frame
-  if test_frames > 0
-    frame_counter += 1
-    if frame_counter >= test_frames
-      puts "Zero-gravity physics demo completed successfully! (#{frame_counter} frames)"
-      exit
+  Window.loop(1280, 720, "Zenoo Zero-Gravity Physics Playground") do
+    demo.step_frame
+    if test_frames > 0
+      frame_counter += 1
+      if frame_counter >= test_frames
+        puts "Zero-gravity physics demo completed successfully! (#{frame_counter} frames)"
+        exit
+      end
     end
   end
 end
