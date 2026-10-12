@@ -9,7 +9,7 @@ require_relative '../lib/zenoo'
 # - [右ドラッグ]: 図形を中心軸で直感的にスピン回転させる
 # - 拘束オブジェクト:
 #     1. ⚲ Pinned Spinner     : 空間の固定点に留められた回転バー
-#     2. ⚙ Welded Hammer      : 柄と頭部が完全固定された一体剛体ハンマー
+#     2. ⚙ Welded Cross       : 2本のバーが直交固定された均整剛体クロス
 #     3. ⛓ Pinned Double Bar  : 関節でピン結合された2連バー
 #     4. 〰 Bolas Rope         : 最大距離ロープで繋がれた2連ボール
 # - [SPACE]: 全図形にランダム拡散衝撃  |  [S]: 全停止  |  [R]: リセット
@@ -292,20 +292,20 @@ class ZeroGravityDemo
       anchor_a: [0.0, 0.0]
     }
 
-    # ② 完全固定溶接 (Welded Hammer) - 画面中央
-    # 柄 (Rect) と頭 (Rect) が一体化された偏心ハンマー
-    h_handle = PhysicsBody.new("Hammer Handle", Collision.rect(620, 370, 130, 20, angle: -20, anchor: :center), :rect, mass: 0.8, vx: 1.0, vy: -0.5, omega: 1.2)
-    h_handle.color = [60, 150, 240, 230] # ブルー
-    h_head = PhysicsBody.new("Hammer Head", Collision.rect(695, 342, 50, 75, angle: -20, anchor: :center), :rect, mass: 2.5, vx: 1.0, vy: -0.5, omega: 1.2)
-    h_head.color = [235, 70, 95, 230] # ルビーレッド
-    @items << h_handle
-    @items << h_head
-    rel_offset, rel_ang = h_handle.relative_offset(h_head)
+    # ② 完全固定溶接 (Welded Cross) - 画面中央
+    # 2本の直交するバー (Rect) が中心で完全溶接された均整クロス剛体
+    cross_h = PhysicsBody.new("Cross Horizontal", Collision.rect(640, 360, 130, 24, angle: -20, anchor: :center), :rect, mass: 1.2, vx: 1.0, vy: -0.5, omega: 1.2)
+    cross_h.color = [60, 150, 240, 230] # ブルー
+    cross_v = PhysicsBody.new("Cross Vertical", Collision.rect(640, 360, 24, 130, angle: -20, anchor: :center), :rect, mass: 1.2, vx: 1.0, vy: -0.5, omega: 1.2)
+    cross_v.color = [235, 70, 95, 230] # ルビーレッド
+    @items << cross_h
+    @items << cross_v
+    rel_offset, rel_ang = cross_h.relative_offset(cross_v)
     @constraints << {
       type: :weld,
-      name: "Welded Hammer",
-      a: h_handle,
-      b: h_head,
+      name: "Welded Cross",
+      a: cross_h,
+      b: cross_v,
       offset: rel_offset,
       angle: rel_ang
     }
@@ -349,6 +349,22 @@ class ZeroGravityDemo
     @constraints.any? do |c|
       (c[:type] == :weld || c[:type] == :pin) &&
         ((c[:a] == a && c[:b] == b) || (c[:a] == b && c[:b] == a))
+    end
+  end
+
+  # 溶接（weld）された相棒オブジェクトへ押し戻し（平行移動）を連動伝搬
+  def push_connected(item, px, py)
+    @constraints.each do |c|
+      next unless c[:type] == :weld
+      if c[:a] == item
+        c[:b].x += px
+        c[:b].y += py
+        c[:b].sync_shape!
+      elsif c[:b] == item
+        c[:a].x += px
+        c[:a].y += py
+        c[:a].sync_shape!
+      end
     end
   end
 
@@ -526,97 +542,102 @@ class ZeroGravityDemo
   end
 
   def update_physics(mx, my)
-    # 拘束事前適用
-    apply_constraints(mx, my)
-    @items.each(&:sync_shape!)
-
     len = @items.length
-
-    # 1. アイテム vs アイテム の相互衝突 (Physics.resolve)
     i = 0
     while i < len
       @items[i].hit = false
       i += 1
     end
-
     @hit_count = 0
-    i = 0
-    while i < len
-      it_a = @items[i]
-      j = i + 1
-      while j < len
-        it_b = @items[j]
 
-        # 結合されたペアの自己衝突はスキップ
-        if connected?(it_a, it_b)
-          j += 1
-          next
-        end
+    # 2回反復ソルバー (拘束・衝突の多重解決でめり込み・ズレを完全解消)
+    2.times do |iter|
+      # 拘束事前適用
+      apply_constraints(mx, my)
+      @items.each(&:sync_shape!)
 
-        # 高速ブロードフェーズ (外接円チェック)
-        r_sum = it_a.shape.bounding_radius + it_b.shape.bounding_radius
-        dx = it_b.x - it_a.x
-        dy = it_b.y - it_a.y
-        if dx * dx + dy * dy < r_sum * r_sum
-          hit = Collision.penetration(it_a.shape, it_b.shape)
-          if hit
-            it_a.hit = true
-            it_b.hit = true
-            @hit_count += 1
+      # 1. アイテム vs アイテム の相互衝突 (Physics.resolve)
+      i = 0
+      while i < len
+        it_a = @items[i]
+        j = i + 1
+        while j < len
+          it_b = @items[j]
 
-            # 即時モード 2体剛体衝突解決！
-            res = Physics.resolve(hit, it_a, it_b, restitution: 0.88, friction: 0.35)
+          # 結合されたペアの自己衝突はスキップ
+          if connected?(it_a, it_b)
+            j += 1
+            next
+          end
 
-            it_a.x += res.a.push_x
-            it_a.y += res.a.push_y
-            it_a.vx = res.a.vx
-            it_a.vy = res.a.vy
-            it_a.omega = res.a.omega
-            it_a.sync_shape!
+          # 高速ブロードフェーズ (外接円チェック)
+          r_sum = it_a.shape.bounding_radius + it_b.shape.bounding_radius
+          dx = it_b.x - it_a.x
+          dy = it_b.y - it_a.y
+          if dx * dx + dy * dy < r_sum * r_sum
+            hit = Collision.penetration(it_a.shape, it_b.shape)
+            if hit
+              it_a.hit = true
+              it_b.hit = true
+              @hit_count += 1 if iter == 0
 
-            it_b.x += res.b.push_x
-            it_b.y += res.b.push_y
-            it_b.vx = res.b.vx
-            it_b.vy = res.b.vy
-            it_b.omega = res.b.omega
-            it_b.sync_shape!
+              # 即時モード 2体剛体衝突解決！
+              res = Physics.resolve(hit, it_a, it_b, restitution: 0.88, friction: 0.35)
 
-            # 激しい衝突時は火花エフェクト
-            if res.impact > 1.2
-              spawn_sparks(hit.contact_x, hit.contact_y, [(res.impact * 2).to_i, 12].min, [255, 220, 140])
+              it_a.x += res.a.push_x
+              it_a.y += res.a.push_y
+              it_a.vx = res.a.vx
+              it_a.vy = res.a.vy
+              it_a.omega = res.a.omega
+              it_a.sync_shape!
+              push_connected(it_a, res.a.push_x, res.a.push_y)
+
+              it_b.x += res.b.push_x
+              it_b.y += res.b.push_y
+              it_b.vx = res.b.vx
+              it_b.vy = res.b.vy
+              it_b.omega = res.b.omega
+              it_b.sync_shape!
+              push_connected(it_b, res.b.push_x, res.b.push_y)
+
+              # 激しい衝突時は火花エフェクト
+              if iter == 0 && res.impact > 1.2
+                spawn_sparks(hit.contact_x, hit.contact_y, [(res.impact * 2).to_i, 12].min, [255, 220, 140])
+              end
             end
           end
+          j += 1
         end
-        j += 1
+        i += 1
       end
-      i += 1
-    end
 
-    # 2. アイテム vs 外周壁 の衝突解決 (Physics.resolve_static)
-    @items.each do |it|
-      @walls.each do |wall|
-        hit = Collision.penetration(it.shape, wall)
-        next unless hit
+      # 2. アイテム vs 外周壁 の衝突解決 (Physics.resolve_static)
+      @items.each do |it|
+        @walls.each do |wall|
+          hit = Collision.penetration(it.shape, wall)
+          next unless hit
 
-        res = Physics.resolve_static(hit, it, wall, restitution: 0.92, friction: 0.25)
-        it.x += res.push_x
-        it.y += res.push_y
-        it.vx = res.vx
-        it.vy = res.vy
-        it.omega = res.omega
-        it.sync_shape!
+          res = Physics.resolve_static(hit, it, wall, restitution: 0.92, friction: 0.25)
+          it.x += res.push_x
+          it.y += res.push_y
+          it.vx = res.vx
+          it.vy = res.vy
+          it.omega = res.omega
+          it.sync_shape!
+          push_connected(it, res.push_x, res.push_y)
 
-        if res.impact > 1.5
-          sx = hit.contact_x.clamp(2.0, 1278.0)
-          sy = hit.contact_y.clamp(2.0, 718.0)
-          spawn_sparks(sx, sy, [(res.impact * 2).to_i, 8].min, [140, 210, 255])
+          if iter == 0 && res.impact > 1.5
+            sx = hit.contact_x.clamp(2.0, 1278.0)
+            sy = hit.contact_y.clamp(2.0, 718.0)
+            spawn_sparks(sx, sy, [(res.impact * 2).to_i, 8].min, [140, 210, 255])
+          end
         end
       end
-    end
 
-    # 拘束事後適用 (衝突によるズレを最終補正)
-    apply_constraints(mx, my)
-    @items.each(&:sync_shape!)
+      # 拘束事後適用 (衝突によるズレを最終補正)
+      apply_constraints(mx, my)
+      @items.each(&:sync_shape!)
+    end
   end
 
   # 拘束・ジョイントのビジュアル描画
@@ -696,7 +717,7 @@ class ZeroGravityDemo
     Window.draw_text(30, 20, "Zenoo Zero-Gravity Physics Playground with Constraints", size: 22, color: [255, 255, 255, 255])
     Window.draw_text(30, 48, "Pure Ruby Immediate-Mode Rigid Body Physics & Stateless Constraints", size: 14, color: [140, 180, 220, 255])
     Window.draw_text(30, 72, "[左ドラッグ]: 掴んで動かす・投げる (Mouse Joint)   |   [右ドラッグ]: スピン回転   |   [SPACE]: 拡散   |   [S]: 停止", size: 13, color: [255, 225, 100, 255])
-    Window.draw_text(30, 94, "Constraints: ⚲ Pinned Spinner  |  ⚙ Welded Hammer  |  ⛓ Pinned Double Bar  |  〰 Bolas Rope", size: 13, color: [130, 230, 210, 255])
+    Window.draw_text(30, 94, "Constraints: ⚲ Pinned Spinner  |  ⚙ Welded Cross  |  ⛓ Pinned Double Bar  |  〰 Bolas Rope", size: 13, color: [130, 230, 210, 255])
     Window.draw_text(30, 116, "[N]: ランダム図形生成   |   [R]: リセット   |   [C]: 全消去", size: 13, color: [180, 210, 235, 255])
 
     status_col = @hit_count > 0 ? [255, 110, 110, 255] : [120, 230, 160, 255]
