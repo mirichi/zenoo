@@ -244,21 +244,21 @@ module Zenoo
         return if @anchor_x == ax && @anchor_y == ay
         @anchor_x = ax
         @anchor_y = ay
-        set_dirty_pos
+        dirty_pos!
       end
 
       def anchor_x=(val)
         vf = val.to_f
         return if @anchor_x == vf
         @anchor_x = vf
-        set_dirty_pos
+        dirty_pos!
       end
 
       def anchor_y=(val)
         vf = val.to_f
         return if @anchor_y == vf
         @anchor_y = vf
-        set_dirty_pos
+        dirty_pos!
       end
 
       # ピボット (取得)
@@ -277,21 +277,21 @@ module Zenoo
         return if @pivot_x == px && @pivot_y == py
         @pivot_x = px
         @pivot_y = py
-        set_dirty_geom
+        dirty_geom!
       end
 
       def offset_x=(val)
         vf = val.to_f
         return if @offset_x == vf
         @offset_x = vf
-        set_dirty_pos
+        dirty_pos!
       end
 
       def offset_y=(val)
         vf = val.to_f
         return if @offset_y == vf
         @offset_y = vf
-        set_dirty_pos
+        dirty_pos!
       end
 
       # 重心 (設定: アンカー位置に関わらず重心が指定座標になるよう x, y を平行移動)
@@ -299,14 +299,14 @@ module Zenoo
         vf = val.to_f
         diff = vf - center_x
         @x += diff
-        set_dirty_pos
+        dirty_pos!
       end
 
       def center_y=(val)
         vf = val.to_f
         diff = vf - center_y
         @y += diff
-        set_dirty_pos
+        dirty_pos!
       end
 
       def set_center(cx, cy)
@@ -317,16 +317,6 @@ module Zenoo
       # 内部初期化用エイリアス
       alias set_anchor anchor=
       alias set_pivot pivot=
-
-      protected
-
-      def set_dirty_pos
-        @dirty_pos = true
-      end
-
-      def set_dirty_geom
-        @dirty_geom = true
-      end
     end
 
     # 円 / 楕円 (楕円は不等半径・不等スケールの Circle として包含)
