@@ -62,7 +62,7 @@ class DroppedItem
       hit = Collision.penetration(@shape, obs.shape)
       next unless hit
 
-      # 3. 即時モード物理応答の計算！
+      # 3. 即時モード物理応答の計算
       res = Physics.resolve_static(
         hit,
         x: @x, y: @y,
@@ -75,7 +75,7 @@ class DroppedItem
         friction: @friction
       )
 
-      # 4. 反映！
+      # 4. 反映
       @x += res.push_x
       @y += res.push_y
       @angle += res.d_angle if res.d_angle != 0.0
@@ -90,9 +90,14 @@ class DroppedItem
     end
 
     # 速度と角速度が静止に達したらスリープ
-    if @vx == 0.0 && @vy == 0.0 && @omega == 0.0
+    if @vx.abs < 0.08 && @vy.abs < 0.08 && @omega.abs < 0.15
       @sleep_counter = (@sleep_counter || 0) + 1
-      @sleeping = true if @sleep_counter >= 10
+      if @sleep_counter >= 8
+        @vx = 0.0
+        @vy = 0.0
+        @omega = 0.0
+        @sleeping = true
+      end
     else
       @sleep_counter = 0
     end
@@ -210,6 +215,59 @@ class PhysicsDropDemo
 
     # アイテム更新
     @items.each { |it| it.update(@obstacles) }
+
+    # アイテム同士の相互衝突解決 (動的 vs 動的)
+    len = @items.length
+    i = 0
+    while i < len
+      item_a = @items[i]
+      j = i + 1
+      while j < len
+        item_b = @items[j]
+
+        # 高速ブロードフェーズ (外接円チェック)
+        r_sum = item_a.shape.bounding_radius + item_b.shape.bounding_radius
+        dx = item_b.x - item_a.x
+        dy = item_b.y - item_a.y
+        if dx * dx + dy * dy < r_sum * r_sum
+          hit = Collision.penetration(item_a.shape, item_b.shape)
+          if hit
+            # 衝突したらスリープ解除
+            item_a.sleeping = false
+            item_b.sleeping = false
+
+            # ★ Physics.resolve で 2 体の物理応答を取得！
+            res = Physics.resolve(
+              hit,
+              a: { x: item_a.x, y: item_a.y, vx: item_a.vx, vy: item_a.vy, omega: item_a.omega, shape: item_a.shape, mass: item_a.mass },
+              b: { x: item_b.x, y: item_b.y, vx: item_b.vx, vy: item_b.vy, omega: item_b.omega, shape: item_b.shape, mass: item_b.mass },
+              restitution: 0.45,
+              friction: 0.4
+            )
+
+            # 物体Aへの反映
+            item_a.x += res.a.push_x
+            item_a.y += res.a.push_y
+            item_a.vx = res.a.vx
+            item_a.vy = res.a.vy
+            item_a.omega = res.a.omega
+            item_a.shape.x = item_a.x
+            item_a.shape.y = item_a.y
+
+            # 物体Bへの反映
+            item_b.x += res.b.push_x
+            item_b.y += res.b.push_y
+            item_b.vx = res.b.vx
+            item_b.vy = res.b.vy
+            item_b.omega = res.b.omega
+            item_b.shape.x = item_b.x
+            item_b.shape.y = item_b.y
+          end
+        end
+        j += 1
+      end
+      i += 1
+    end
 
     # 画面外へ落ちたアイテムを削除
     @items.reject! { |it| it.y > 800 }
