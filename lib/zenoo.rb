@@ -38,6 +38,7 @@ require_relative 'zenoo/easing'
 require_relative 'zenoo/tween'
 require_relative 'zenoo/sprite'
 require_relative 'zenoo/physics_sprite'
+require_relative 'zenoo/profiler'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
 Window        = Zenoo::Window        unless defined?(Window)
@@ -58,5 +59,6 @@ Easing        = Zenoo::Easing        unless defined?(Easing)
 Tween         = Zenoo::Tween         unless defined?(Tween)
 Sprite        = Zenoo::Sprite        unless defined?(Sprite)
 PhysicsSprite = Zenoo::PhysicsSprite unless defined?(PhysicsSprite)
+Profiler      = Zenoo::Profiler      unless defined?(Profiler)
 
 

@@ -777,6 +777,7 @@ class Game
     @crt_shader = nil
     @collision_mode = :exact # :exact (Collision GJK) または :simple (円判定)
     @collision_time_ms = 0.0
+    @show_profiler = false
     reset_world
     @game_state = STATE_TITLE
   end
@@ -1237,44 +1238,53 @@ class Game
   end
 
   def update_draw_frame
-    @sfx.tick
-    @state_timer += 1
-
-    case @game_state
-    when STATE_TITLE
-      update_title
-    when STATE_PLAY
-      update_play
-    when STATE_PAUSE
-      update_pause
-    when STATE_LEVELUP
-      update_levelup
-    when STATE_GAMEOVER
-      update_gameover
+    # プロファイラ表示トグル ([F3] または [TAB] キー)
+    if Input.key_push?(:f3) || Input.key_push?(:tab)
+      @show_profiler = !@show_profiler
     end
 
-    # カメラ更新 (ターゲット追従 & 画面シェイク減衰)
-    @camera.update
+    Profiler.measure(:update) do
+      @sfx.tick
+      @state_timer += 1
 
-    @damage_flash -= 1 if @damage_flash > 0
-    @levelup_flash -= 1 if @levelup_flash > 0
+      case @game_state
+      when STATE_TITLE
+        update_title
+      when STATE_PLAY
+        update_play
+      when STATE_PAUSE
+        update_pause
+      when STATE_LEVELUP
+        update_levelup
+      when STATE_GAMEOVER
+        update_gameover
+      end
 
-    # CRT エフェクトの初期化とトグル切り替え ([C] キー)
-    if @crt_shader.nil?
-      @crt_shader = Shader.new(CRT_FRAGMENT_SHADER)
-      Window.filter = @crt_shader if @crt_enabled
+      # カメラ更新 (ターゲット追従 & 画面シェイク減衰)
+      @camera.update
+
+      @damage_flash -= 1 if @damage_flash > 0
+      @levelup_flash -= 1 if @levelup_flash > 0
+
+      # CRT エフェクトの初期化とトグル切り替え ([C] キー)
+      if @crt_shader.nil?
+        @crt_shader = Shader.new(CRT_FRAGMENT_SHADER)
+        Window.filter = @crt_shader if @crt_enabled
+      end
+
+      if Input.key_push?(:c)
+        @crt_enabled = !@crt_enabled
+        Window.filter = @crt_enabled ? @crt_shader : nil
+      end
+
+      if Input.key_push?(:m)
+        @collision_mode = (@collision_mode == :exact ? :simple : :exact)
+      end
     end
 
-    if Input.key_push?(:c)
-      @crt_enabled = !@crt_enabled
-      Window.filter = @crt_enabled ? @crt_shader : nil
+    Profiler.measure(:render) do
+      draw_game
     end
-
-    if Input.key_push?(:m)
-      @collision_mode = (@collision_mode == :exact ? :simple : :exact)
-    end
-
-    draw_game
   end
 
   def change_state(state)
@@ -1325,8 +1335,10 @@ class Game
     @particles.each { |p| p.update }
     @damage_texts.each { |t| t.update }
 
-    # 3. 当たり判定
-    check_collisions
+    # 3. 当たり判定 (物理・衝突)
+    Profiler.measure(:physics) do
+      check_collisions
+    end
 
     # 4. オブジェクトの自然なGC回収 (delete_if)
     @bullets.delete_if { |b| b.dead }
@@ -1580,6 +1592,12 @@ class Game
     when STATE_GAMEOVER
       draw_gameover
     end
+
+    if @show_profiler
+      GUI.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 200) do
+        GUI.profile_graph(w: 290, h: 80, max_ms: 33.33)
+      end
+    end
   end
 
   # ワールド座標系での背景グリッド描画 (カメラの可視範囲のみ描画)
@@ -1656,7 +1674,7 @@ class Game
     val_100 = (@collision_time_ms * 100).to_i
     val_dec = val_100 % 100
     col_str = "#{val_100 / 100}.#{val_dec < 10 ? '0' : ''}#{val_dec}ms"
-    dbg_str = "FPS: #{Window.fps.to_i}  OBJ: #{entities_count}  COL: #{col_str} [M: #{mode_str}]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]"
+    dbg_str = "FPS: #{Window.fps.to_i}  OBJ: #{entities_count}  COL: #{col_str} [M: #{mode_str}]  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]"
     Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY)
   end
 

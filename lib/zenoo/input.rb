@@ -16,9 +16,13 @@ module Zenoo
       page_up: 266,
       page_down: 267,
       home: 268,
-      end: 269,
-      f11: 290,
+      end: 269
     }
+
+    # ファンクションキー (f1..f12)
+    (1..12).each do |i|
+      KEY_MAP[:"f#{i}"] = 289 + i
+    end
 
     # アルファベットキー (a..z)
     (?a..?z).each do |ch|
