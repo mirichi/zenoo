@@ -533,15 +533,13 @@ module Zenoo
     end
 
     def self.draw_image(x, y, image,
+                        anchor: :top_left,
+                        pivot: :center,
                         color: :white,
                         angle: 0.0,
                         scale: nil,
                         scale_x: 1.0,
                         scale_y: 1.0,
-                        center_x: 0.5,
-                        center_y: 0.5,
-                        pivot: nil,
-                        offset_mode: :top_left,
                         alpha: 255,
                         blend: :alpha,
                         shader: nil,
@@ -562,33 +560,37 @@ module Zenoo
         c_color = [c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f * af]
       end
 
+      # 画像サイズ
+      if src_rect
+        draw_w = src_rect[2].to_f
+        draw_h = src_rect[3].to_f
+      else
+        draw_w = image.width.to_f
+        draw_h = image.height.to_f
+      end
+
+      # アンカー (anchor: 配置基準点) から画像の左上原点 (tl_x, tl_y) を算出
+      anc_x, anc_y = Collision.parse_anchor(anchor)
+      tl_x = x.to_f - anc_x * draw_w
+      tl_y = y.to_f - anc_y * draw_h
+
+      # ピボット (pivot: 回転・拡縮の中心点 [0.0..1.0])
+      cx, cy = Collision.parse_pivot(pivot)
+
       if @has_camera && camera
         sx = (scale ? scale.to_f : scale_x.to_f) * @cam_zoom
         sy = (scale ? scale.to_f : scale_y.to_f) * @cam_zoom
-        ax = (x.to_f * @cam_zoom) + @cam_ox + @offset_x
-        ay = (y.to_f * @cam_zoom) + @cam_oy + @offset_y
+        ax = (tl_x * @cam_zoom) + @cam_ox + @offset_x
+        ay = (tl_y * @cam_zoom) + @cam_oy + @offset_y
       else
         sx = scale ? scale.to_f : scale_x.to_f
         sy = scale ? scale.to_f : scale_y.to_f
-        ax = x.to_f + @offset_x
-        ay = y.to_f + @offset_y
-      end
-
-      # ピボット (center_x, center_y, または pivot: :center, :top_left, :center_left 等)
-      if pivot
-        pv = Collision.parse_pivot(pivot)
-        cx = pv[0]
-        cy = pv[1]
-      else
-        cx = center_x.to_f
-        cy = center_y.to_f
+        ax = tl_x + @offset_x
+        ay = tl_y + @offset_y
       end
 
       # 角度（度数法からラジアンへ変換）
       rad = (angle ? angle.to_f : 0.0) * (Math::PI / 180.0)
-
-      # offset_mode: 0.0 (:top_left), 1.0 (:center)
-      off_mode = (offset_mode == :center) ? 1.0 : 0.0
 
       # blend mode
       b_mode = Backend.normalize_blend_mode(blend)
@@ -598,15 +600,11 @@ module Zenoo
         th = image.texture_height.to_f
         s_rx = image.x + src_rect[0].to_f
         s_ry = image.y + src_rect[1].to_f
-        draw_w = src_rect[2].to_f
-        draw_h = src_rect[3].to_f
         uv0 = tw > 0.0 ? s_rx / tw : 0.0
         uv1 = th > 0.0 ? s_ry / th : 0.0
         uv2 = tw > 0.0 ? draw_w / tw : 1.0
         uv3 = th > 0.0 ? draw_h / th : 1.0
       else
-        draw_w = image.width.to_f
-        draw_h = image.height.to_f
         tw = image.texture_width.to_f
         th = image.texture_height.to_f
         uv0 = tw > 0.0 ? image.x.to_f / tw : 0.0
@@ -615,11 +613,12 @@ module Zenoo
         uv3 = th > 0.0 ? draw_h / th : 1.0
       end
 
+      # シェーダーへは常に左上座標 (top_left) を渡し、off_mode = 0.0 とする
       data = [
         ax, ay, draw_w, draw_h,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
         uv0, uv1, uv2, uv3,
-        rad, sx, sy, off_mode,
+        rad, sx, sy, 0.0,
         cx, cy, 0.0, 0.0
       ].pack("f*")
 
@@ -652,15 +651,13 @@ module Zenoo
 
       return unless sprite.visible && sprite.image
 
-      tl_x = sprite.x - sprite.anchor_x * sprite.width
-      tl_y = sprite.y - sprite.anchor_y * sprite.height
-
       draw_image(
-        tl_x, tl_y, sprite.image,
+        sprite.x, sprite.y, sprite.image,
+        anchor: [sprite.anchor_x, sprite.anchor_y],
+        pivot: sprite.pivot,
         angle: sprite.angle,
         scale_x: sprite.scale_x,
         scale_y: sprite.scale_y,
-        pivot: sprite.pivot,
         alpha: sprite.alpha,
         color: sprite.color || :white,
         camera: camera,

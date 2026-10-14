@@ -333,7 +333,7 @@ class Ball
       Window.draw_image(
         @x, @y, atlas,
         scale: scale,
-        offset_mode: :center,
+        anchor: :center,
         shader: shader,
         uniforms: {
           u_quat: @quat,
