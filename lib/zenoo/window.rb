@@ -124,6 +124,7 @@ module Zenoo
         __draw_step(nil)
       end
     ensure
+      Zenoo::Profiler.end_frame if defined?(Zenoo::Profiler)
       Backend.current_target = nil
       Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
     end

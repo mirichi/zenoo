@@ -275,30 +275,34 @@ module Zenoo
       # パネル (コンテナ / ウィンドウ枠)
       # --------------------------------------------------
       def panel(title = "", w: 360.0, h: 400.0, padding: 16.0,
-                radius: -1.0, color: Color.new(24, 28, 38, 240),
-                border_width: 1.5, border_color: Color.new(60, 70, 90, 200),
-                shadow_blur: 16.0, shadow_color: Color.new(0, 0, 0, 150),
-                z: 0.0, title_size: 20, title_color: Color::WHITE, &block)
+                radius: -1.0, color: nil,
+                border_width: nil, border_color: nil,
+                shadow_blur: 8.0, shadow_color: Color.new(0, 0, 0, 120),
+                z: 0.0, title_size: 18, title_color: nil, &block)
         px  = @cursor_x
         py  = @cursor_y
         pw  = w.to_f
         ph  = h.to_f
         pad = padding.to_f
-        rad = (radius < 0.0) ? (@theme.corner_radius || 12.0).to_f : radius.to_f
+        rad = (radius < 0.0) ? (@theme.corner_radius || 4.0).to_f : radius.to_f
+
+        border_cfg = @theme.win_border_normal || @theme.border_normal
+        b_width = border_width ? border_width.to_f : (border_cfg ? border_cfg[0].to_f : 1.0)
+        b_color = border_color || (border_cfg ? border_cfg[1] : Color.new(70, 70, 75, 200))
 
         opts = {
           w: pw,
           h: ph,
           padding: pad,
           radius: rad,
-          color: color,
-          border_width: border_width.to_f,
-          border_color: border_color,
+          color: color || @theme.win_bg || Color.new(30, 30, 32, 245),
+          border_width: b_width,
+          border_color: b_color,
           shadow_blur: shadow_blur.to_f,
           shadow_color: shadow_color,
           z: z.to_f,
           title_size: title_size.to_i,
-          title_color: title_color
+          title_color: title_color || @theme.text_color
         }
 
         @renderer.draw_panel(px, py, pw, ph, title, @theme, opts)
@@ -405,16 +409,20 @@ module Zenoo
         end
 
         # 1. ウィンドウ全体の装飾描画 (外枠・タイトルバー)
-        border_color = is_active ? Color.new(0, 200, 255, 220) : Color.new(60, 70, 90, 180)
-        border_w = is_active ? 2.0 : 1.5
-        shadow_blur = is_active ? 20.0 : 10.0
-        shadow_color = is_active ? Color.new(0, 0, 0, 180) : Color.new(0, 0, 0, 120)
+        border_cfg = is_active ? (@theme.win_border_active || @theme.border_active) : (@theme.win_border_normal || @theme.border_normal)
+        border_w = border_cfg ? border_cfg[0].to_f : 1.0
+        border_color = border_cfg ? border_cfg[1] : Color.new(80, 80, 80)
+
+        shadow_blur = is_active ? 8.0 : 4.0
+        shadow_color = Color.new(0, 0, 0, is_active ? 140 : 100)
+        win_bg_col = @theme.win_bg || Color.new(30, 30, 32, 245)
+        win_radius = (@theme.corner_radius || 4.0).to_f
 
         # 背景カード
         Window.draw_rect(
           wx, wy, ww, wh,
-          radius: 12.0,
-          color: Color.new(22, 26, 36, 245),
+          radius: win_radius,
+          color: win_bg_col,
           border_width: border_w,
           border_color: border_color,
           shadow_blur: shadow_blur,
@@ -423,28 +431,29 @@ module Zenoo
         )
 
         # タイトルバー帯
-        title_bg = is_active ? Color.new(35, 45, 65, 230) : Color.new(28, 32, 44, 230)
+        title_bg = is_active ? (@theme.win_title_bg_active || Color.new(52, 52, 58)) : (@theme.win_title_bg || Color.new(42, 42, 45))
+        title_bar_radius = [win_radius - 1.0, 0.0].max
         Window.draw_rect(
-          wx + 2.0, wy + 2.0, ww - 4.0, title_bar_h,
-          radius: 10.0,
+          wx + 1.0, wy + 1.0, ww - 2.0, title_bar_h,
+          radius: title_bar_radius,
           color: title_bg,
           z: win_z + 1.0
         )
 
         # タイトルバー境界線
         Window.draw_line(
-          wx + 1.0, wy + title_bar_h + 2.0,
-          wx + ww - 1.0, wy + title_bar_h + 2.0,
+          wx + 1.0, wy + title_bar_h + 1.0,
+          wx + ww - 1.0, wy + title_bar_h + 1.0,
           color: border_color,
           z: win_z + 1.5
         )
 
         # タイトル文字列
         f_font = @theme.font || Font.default
-        f_size = 16
-        title_col = is_active ? Color::WHITE : Color.new(180, 190, 210)
+        f_size = 14
+        title_col = is_active ? (@theme.text_color || Color::WHITE) : (@theme.text_disabled || Color.new(160, 160, 165))
         Window.draw_text(
-          wx + 14.0, wy + (title_bar_h - f_size.to_f) / 2.0 + 2.0,
+          wx + 10.0, wy + (title_bar_h - f_size.to_f) / 2.0 + 1.0,
           win.title,
           font: f_font,
           size: f_size,
@@ -719,6 +728,138 @@ module Zenoo
       def clear_focus
         @focus_id = nil
         Input.set_ime_position(-1, -1)
+      end
+
+      # --------------------------------------------------
+      # プロファイルグラフ (Profile Graph / Frame Time Histogram)
+      # 各処理の実行時間 (ms) をカテゴリ別に積み上げ棒グラフとして描画
+      # --------------------------------------------------
+      # @param w [Float] グラフ横幅 (デフォルト 280.0)
+      # @param h [Float] グラフ高さ (デフォルト 80.0)
+      # @param max_ms [Float] グラフの縦軸上限ミリ秒 (デフォルト 33.33ms = 30FPS相当)
+      # @param show_legend [Boolean] 凡例の表示有無
+      # @param id [String] ウィジェットID
+      def profile_graph(w: 280.0, h: 80.0, max_ms: 33.33, show_legend: true, id: "")
+        rx = @cursor_x
+        ry = @cursor_y
+        rw = w.to_f
+        rh = h.to_f
+        f_font = @theme.font || Font.default
+
+        # 1. グラフ枠・背景の描画
+        graph_bg = Color.new(24, 24, 26, 230)
+        graph_border = Color.new(55, 55, 60, 200)
+        Window.draw_rect(rx, ry, rw, rh, color: graph_bg, border_color: graph_border, border_width: 1.0)
+
+        # 2. ガイドライン描画 (16.6ms / 60FPS 目標線)
+        target_60_y = ry + rh - (16.666 / max_ms) * rh
+        if target_60_y >= ry && target_60_y <= ry + rh
+          line_color = Color.new(80, 160, 180, 140)
+          Window.draw_line(rx + 1.0, target_60_y, rx + rw - 1.0, target_60_y, color: line_color, width: 1.0)
+          Window.draw_text(rx + 4.0, target_60_y - 12.0, "16.6ms (60fps)", font: f_font, size: 10, color: line_color)
+        end
+
+        # 3. ガイドライン描画 (33.3ms / 30FPS 目標線)
+        if max_ms > 33.33
+          target_30_y = ry + rh - (33.333 / max_ms) * rh
+          if target_30_y >= ry && target_30_y <= ry + rh
+            line_color_30 = Color.new(180, 80, 80, 140)
+            Window.draw_line(rx + 1.0, target_30_y, rx + rw - 1.0, target_30_y, color: line_color_30, width: 1.0)
+            Window.draw_text(rx + 4.0, target_30_y - 12.0, "33.3ms (30fps)", font: f_font, size: 10, color: line_color_30)
+          end
+        end
+
+        # 4. フレーム履歴の積み上げ棒グラフ描画
+        history = Profiler.history
+        bar_w = 2.0
+        max_bars = ((rw - 4.0) / bar_w).to_i
+        visible_frames = history.last(max_bars)
+
+        # マウスホバー判定
+        mx = gui_mouse_x
+        my = gui_mouse_y
+        is_hovered = can_interact? && in_rect?(mx, my, rx, ry, rw, rh)
+        hovered_idx = nil
+
+        if is_hovered && !visible_frames.empty?
+          # 右端からのインデックス
+          dist_from_right = (rx + rw - 2.0) - mx
+          if dist_from_right >= 0
+            idx_from_end = (dist_from_right / bar_w).to_i
+            hovered_idx = visible_frames.size - 1 - idx_from_end if idx_from_end < visible_frames.size
+          end
+        end
+
+        # 右端から左へ描画
+        visible_frames.each_with_index do |frame, i|
+          bx = rx + rw - 2.0 - (visible_frames.size - i) * bar_w
+          next if bx < rx + 1.0
+
+          # ホバーされているフレームは背景ハイライト
+          if i == hovered_idx
+            Window.draw_rect(bx, ry + 1.0, bar_w, rh - 2.0, color: Color.new(255, 255, 255, 60))
+          end
+
+          current_y = ry + rh - 1.0
+          frame.each do |category, ms|
+            h_cat = (ms.to_f / max_ms) * rh
+            h_cat = [h_cat, 0.0].max
+            # 上限でクリップ
+            h_cat = [h_cat, current_y - ry - 1.0].min if current_y - h_cat < ry + 1.0
+            break if h_cat <= 0.0
+
+            cat_color = Profiler.color_for(category)
+            Window.draw_rect(bx, current_y - h_cat, [bar_w - 0.5, 1.0].max, h_cat, color: cat_color)
+            current_y -= h_cat
+            break if current_y <= ry + 1.0
+          end
+        end
+
+        # 5. 上部ステータステキスト (FPS / 最新合計ms)
+        total_last = Profiler.last_total_ms
+        avg_last = Profiler.history.empty? ? 0.0 : (Profiler.history.last(30).map { |f| f.values.sum }.sum / [Profiler.history.size, 30].min)
+        status_text = "Avg: #{avg_last.round(1)}ms | Last: #{total_last.round(1)}ms | #{Window.fps.round(0)} FPS"
+        Window.draw_text(rx + rw - f_font.text_width(status_text, 11) - 6.0, ry + 4.0, status_text, font: f_font, size: 11, color: Color.new(200, 200, 200))
+
+        # 6. ホバー中の詳細情報ポップアップ / ラベル
+        if hovered_idx && visible_frames[hovered_idx]
+          target_frame = visible_frames[hovered_idx]
+          frame_tot = target_frame.values.sum.round(2)
+          hover_str = "Frame: #{frame_tot}ms (" + target_frame.map { |k, v| "#{k}:#{v.round(1)}" }.join(", ") + ")"
+          Window.draw_text(rx + 6.0, ry + 4.0, hover_str, font: f_font, size: 11, color: Color.new(255, 240, 100))
+        end
+
+        total_h = rh
+
+        # 7. 凡例 (Legend) の描画
+        if show_legend
+          legend_y = ry + rh + 6.0
+          legend_x = rx + 2.0
+          chip_size = 8.0
+          last_t = Profiler.last_times
+
+          Profiler.categories.each do |cat|
+            cat_col = Profiler.color_for(cat)
+            ms_val = (last_t[cat] || 0.0).round(1)
+            cat_label = "#{cat}: #{ms_val}ms"
+            label_w = f_font.text_width(cat_label, 11)
+
+            # 折り返し判定
+            if legend_x + chip_size + 4.0 + label_w > rx + rw
+              legend_x = rx + 2.0
+              legend_y += 14.0
+            end
+
+            Window.draw_rect(legend_x, legend_y + 1.0, chip_size, chip_size, color: cat_col)
+            Window.draw_text(legend_x + chip_size + 4.0, legend_y, cat_label, font: f_font, size: 11, color: Color.new(180, 185, 190))
+            legend_x += chip_size + 4.0 + label_w + 12.0
+          end
+
+          total_h = (legend_y + 14.0) - ry
+        end
+
+        advance_cursor(rw, total_h)
+        nil
       end
     end
   end
