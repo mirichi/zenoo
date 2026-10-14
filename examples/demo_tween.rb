@@ -175,7 +175,7 @@ Window.loop(1280, 720, "Zenoo - Tween & Easing Animation Demo") do
   Window.draw_text(730, 138, "Status: #{hero.status_text}", size: 16, color: :yellow)
 
   # キャラクターの描画 (GPU Instanced 回転・拡縮スプライト)
-  Window.draw_image(hero.x, hero.y, hero_img, angle: hero.angle, scale: hero.scale, pivot: :center, offset_mode: :center) if hero_img
+  Window.draw_image(hero.x, hero.y, hero_img, angle: hero.angle, scale: hero.scale, anchor: :center, pivot: :center) if hero_img
 
   # アクション再開ボタン
   btn_x = 730

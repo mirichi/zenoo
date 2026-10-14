@@ -515,7 +515,7 @@ class Enemy
 
   def draw
     sprite = Enemy.sprites[@type][@flash > 0]
-    Window.draw_image(@x, @y, sprite, angle: @rotation * (180.0 / Math::PI), pivot: :center, offset_mode: :center)
+    Window.draw_image(@x, @y, sprite, angle: @rotation * (180.0 / Math::PI), anchor: :center, pivot: :center)
 
     if @max_hp > 1
       bar_w = @radius * 2.0

@@ -8,8 +8,8 @@ require_relative '../lib/zenoo'
 # 実装された新機能:
 #   1. 回転 (angle: 角度度数法)
 #   2. 拡大縮小 & 反転 (scale:, scale_x:, scale_y:)
-#   3. ピボット位置指定 (pivot: :center, :top_left, [cx, cy])
-#   4. 基準位置モード (offset_mode: :top_left, :center)
+#   3. 配置アンカー指定 (anchor: :top_left, :center, :bottom_center, [ax, ay])
+#   4. ピボット位置指定 (pivot: :center, :top_left, [cx, cy])
 #   5. 不透明度 (alpha: 0..255)
 #   6. ブレンドモード (blend: :alpha, :add, :multiply, :none)
 # ==============================================================================
@@ -99,7 +99,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # タイトルヘッダー
   Window.draw_rect(24, 16, 1232, 54, radius: 10, color: [26, 32, 48, 255], border_width: 1, border_color: [60, 75, 110, 255])
   Window.draw_text(44, 28, "Zenoo: Window.draw_image Showcase", size: 22, color: :white)
-  Window.draw_text(600, 34, "GPU Instanced: Rotation / Scale / Flip / Pivot / offset_mode / Alpha / Blend", size: 14, color: [160, 180, 210, 255])
+  Window.draw_text(600, 34, "GPU Instanced: Rotation / Scale / Flip / Pivot / Anchor / Alpha / Blend", size: 14, color: [160, 180, 210, 255])
 
   # ----------------------------------------------------
   # パネル 1: 回転 (Rotation)
@@ -155,37 +155,37 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   Window.draw_text(p2_x + 160, p2_y + 225, "個別スケール (stretch)", size: 13, color: [180, 220, 255, 255])
 
   # ----------------------------------------------------
-  # パネル 3: offset_mode と ピボット (Pivot)
+  # パネル 3: アンカー (Anchor) と ピボット (Pivot)
   # ----------------------------------------------------
   p3_x, p3_y, p3_w, p3_h = 860, 86, 396, 290
   Window.draw_rect(p3_x, p3_y, p3_w, p3_h, radius: 12, color: [24, 28, 42, 255], border_width: 1, border_color: [50, 60, 85, 255])
-  Window.draw_text(p3_x + 18, p3_y + 14, "3. 基準点モード (offset_mode)", size: 17, color: :cyan)
+  Window.draw_text(p3_x + 18, p3_y + 14, "3. アンカー & ピボット (Anchor & Pivot)", size: 17, color: :cyan)
   Window.draw_text(p3_x + 18, p3_y + 36, "赤十字 (+) が指定した描画座標 (x, y)", size: 13, color: [150, 165, 190, 255])
 
-  # モード A: offset_mode: :top_left (デフォルト)
+  # モード A: anchor: :top_left (デフォルト)
   # (x, y) が矩形の左上。回転はその中心を軸に行う
   c1_x, c1_y = p3_x + 50, p3_y + 80
   # ガイド枠 & 十字線 (x, y)
   Window.draw_rect(c1_x, c1_y, 80, 80, color: [40, 50, 75, 120])
   Window.draw_line(c1_x - 8, c1_y, c1_x + 8, c1_y, color: :red)
   Window.draw_line(c1_x, c1_y - 8, c1_x, c1_y + 8, color: :red)
-  Window.draw_image(c1_x, c1_y, @ship_img, angle: rot_angle, offset_mode: :top_left)
-  Window.draw_text(c1_x - 5, p3_y + 175, ":top_left (左上配置)", size: 13, color: :white)
+  Window.draw_image(c1_x, c1_y, @ship_img, angle: rot_angle, anchor: :top_left)
+  Window.draw_text(c1_x - 5, p3_y + 175, "anchor: :top_left", size: 13, color: :white)
 
-  # モード B: offset_mode: :center
+  # モード B: anchor: :center
   # (x, y) そのものが画像の中心点となる
   c2_x, c2_y = p3_x + 270, p3_y + 120
   # 十字線 (x, y)
   Window.draw_line(c2_x - 14, c2_y, c2_x + 14, c2_y, color: :red)
   Window.draw_line(c2_x, c2_y - 14, c2_x, c2_y + 14, color: :red)
   Window.draw_circle(c2_x, c2_y, 40, color: [40, 50, 75, 100])
-  Window.draw_image(c2_x, c2_y, @ship_img, angle: rot_angle, offset_mode: :center)
-  Window.draw_text(c2_x - 45, p3_y + 175, ":center (中心配置)", size: 13, color: :white)
+  Window.draw_image(c2_x, c2_y, @ship_img, angle: rot_angle, anchor: :center)
+  Window.draw_text(c2_x - 45, p3_y + 175, "anchor: :center", size: 13, color: :white)
 
   # ピボット変更デモ (先端回転 vs 根元回転)
   tip_x, tip_y = p3_x + 90, p3_y + 225
   Window.draw_circle(tip_x, tip_y, 4, color: :yellow) # ピボット位置
-  Window.draw_image(tip_x, tip_y, @ship_img, angle: rot_angle * 1.5, scale: 0.6, pivot: [0.85, 0.5], offset_mode: :center)
+  Window.draw_image(tip_x, tip_y, @ship_img, angle: rot_angle * 1.5, scale: 0.6, pivot: [0.85, 0.5], anchor: :center)
   Window.draw_text(p3_x + 150, p3_y + 220, "先端ピボット [0.85, 0.5]", size: 13, color: :yellow)
   Window.draw_text(p3_x + 150, p3_y + 238, "剣先を振るような動き", size: 11, color: [140, 160, 190, 255])
 
