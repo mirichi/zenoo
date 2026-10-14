@@ -22,6 +22,17 @@ module Zenoo
       @friction = friction.to_f
     end
 
+    # 逆質量 (1 / mass)
+    def inv_mass
+      @mass > 0.00001 ? 1.0 / @mass : 0.0
+    end
+
+    # 逆慣性モーメント (1 / inertia)
+    def inv_inertia
+      inert = @inertia || Physics.inertia_of(collider, mass: @mass)
+      inert > 0.00001 ? 1.0 / inert : 0.0
+    end
+
     # 静的障害物との衝突物理応答を計算し、自身に即時反映
     def resolve_static(hit, static_body = nil, **kwargs)
       res = Physics.resolve_static(hit, self, static_body, **kwargs)

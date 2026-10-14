@@ -115,6 +115,50 @@ module Zenoo
       res > 0.0001 ? res : inertia_rect(32.0, 32.0, mass: mass)
     end
 
+    # 逆質量取得ヘルパー (Sprite, PhysicsSprite, Hash, Object 対応)
+    def self.inv_mass_of(body)
+      return 0.0 unless body
+      return body.inv_mass if body.respond_to?(:inv_mass)
+      m = body.respond_to?(:mass) ? body.mass.to_f : 1.0
+      m > 0.00001 ? 1.0 / m : 0.0
+    end
+
+    # 逆慣性モーメント取得ヘルパー
+    def self.inv_inertia_of(body, mass = nil)
+      return 0.0 unless body
+      return body.inv_inertia if body.respond_to?(:inv_inertia)
+      if body.respond_to?(:inertia) && body.inertia
+        inert = body.inertia.to_f
+      else
+        m = mass || (body.respond_to?(:mass) ? body.mass.to_f : 1.0)
+        shape = body.respond_to?(:collider) ? body.collider : nil
+        inert = inertia_of(shape, mass: m)
+      end
+      inert > 0.00001 ? 1.0 / inert : 0.0
+    end
+
+    # 接触点における法線インパルス jn、摩擦インパルス jt、および合計インパルス [jn, jt, total_jx, total_jy] を計算
+    def self.compute_contact_impulse(vn, vt, kn, kt, restitution, friction, nx, ny, tx, ty, bounce_threshold: 0.5)
+      jn = 0.0
+      jt = 0.0
+
+      if vn < 0.0 && kn > 0.000001
+        e = (-vn < bounce_threshold) ? 0.0 : restitution
+        jn = -(1.0 + e) * vn / kn
+        jn = 0.0 if jn < 0.0
+      end
+
+      if kt > 0.000001 && jn > 0.0
+        max_jt = friction * jn
+        jt = (-vt / kt).clamp(-max_jt, max_jt)
+      end
+
+      total_jx = jn * nx + jt * tx
+      total_jy = jn * ny + jt * ty
+
+      [jn, jt, total_jx, total_jy]
+    end
+
     # ====================================================
     # 即時物理応答計算 (動的オブジェクト vs 静的地形/壁)
     # ====================================================
@@ -134,25 +178,14 @@ module Zenoo
       vy = a.vy.to_f
       omega = a.omega.to_f
       angle = a.angle.to_f
-      m = a.mass.to_f
       shape = a.collider
-      inertia = a.inertia
       restitution = restitution ? restitution.to_f : a.restitution.to_f
       friction = friction ? friction.to_f : a.friction.to_f
 
+      inv_m = inv_mass_of(a)
+      inv_i = inv_inertia_of(a)
+
       static_shape = b ? (b.respond_to?(:collider) ? b.collider : b) : nil
-
-      inv_m = m > 0.00001 ? 1.0 / m : 0.0
-
-      # 慣性モーメントの決定
-      inert = if inertia
-                inertia.to_f
-              elsif shape
-                inertia_of(shape, mass: m)
-              else
-                inertia_rect(32.0, 32.0, mass: m)
-              end
-      inv_i = inert > 0.00001 ? 1.0 / inert : 0.0
 
       # 静的オブジェクトとの衝突なので、動的側が 100% 押し戻される
       push_x = hit.push_x
@@ -278,36 +311,13 @@ module Zenoo
       kn = inv_m + (rxn * rxn) * inv_i
       kt = inv_m + (rxt * rxt) * inv_i
 
-      jn = 0.0
-      jt = 0.0
-
       # 静止接触 (Resting Contact) 判定
       is_resting = -vn < bounce_threshold
 
-      # 法線インパルス計算 (接触点において地面へ向かって近づいている場合のみ)
-      if vn < 0.0 && kn > 0.000001
-        e = is_resting ? 0.0 : restitution.to_f
-        jn = -(1.0 + e) * vn / kn
-        jn = 0.0 if jn < 0.0
-      end
-
-      # 接線インパルス計算 (クーロン摩擦)
-      if kt > 0.000001 && jn > 0.0
-        # 接触点の接線速度をゼロにしようとする力積
-        jt_ideal = -vt / kt
-        max_jt = friction.to_f * jn
-        if jt_ideal > max_jt
-          jt = max_jt
-        elsif jt_ideal < -max_jt
-          jt = -max_jt
-        else
-          jt = jt_ideal
-        end
-      end
-
-      # 合計インパルス J = jn * n + jt * t
-      total_jx = jn * nx + jt * tx
-      total_jy = jn * ny + jt * ty
+      # 接触インパルスの計算
+      jn, jt, total_jx, total_jy = compute_contact_impulse(
+        vn, vt, kn, kt, restitution, friction, nx, ny, tx, ty, bounce_threshold: bounce_threshold
+      )
 
       # 並進速度の更新
       new_vx = vx.to_f + inv_m * total_jx
@@ -422,15 +432,13 @@ module Zenoo
       restitution = restitution ? restitution.to_f : [a.restitution.to_f, b.restitution.to_f].max
       friction = friction ? friction.to_f : Math.sqrt(a.friction.to_f * b.friction.to_f)
 
-      inv_ma = ma > 0.00001 ? 1.0 / ma : 0.0
-      inv_mb = mb > 0.00001 ? 1.0 / mb : 0.0
+      inv_ma = inv_mass_of(a)
+      inv_mb = inv_mass_of(b)
       inv_m_total = inv_ma + inv_mb
       return nil if inv_m_total <= 0.000001
 
-      inert_a = ia ? ia.to_f : (shape_a ? inertia_of(shape_a, mass: ma) : inertia_rect(32.0, 32.0, mass: ma))
-      inert_b = ib ? ib.to_f : (shape_b ? inertia_of(shape_b, mass: mb) : inertia_rect(32.0, 32.0, mass: mb))
-      inv_ia = inert_a > 0.00001 ? 1.0 / inert_a : 0.0
-      inv_ib = inert_b > 0.00001 ? 1.0 / inert_b : 0.0
+      inv_ia = inv_inertia_of(a)
+      inv_ib = inv_inertia_of(b)
 
       # めり込み押し戻し (逆質量比で配分)
       ratio_a = inv_ma / inv_m_total
@@ -490,29 +498,10 @@ module Zenoo
       kn = inv_m_total + (ran * ran) * inv_ia + (rbn * rbn) * inv_ib
       kt = inv_m_total + (rat * rat) * inv_ia + (rbt * rbt) * inv_ib
 
-      jn = 0.0
-      jt = 0.0
-
-      if vn < 0.0 && kn > 0.000001
-        e = (-vn < bounce_threshold) ? 0.0 : restitution.to_f
-        jn = -(1.0 + e) * vn / kn
-        jn = 0.0 if jn < 0.0
-      end
-
-      if kt > 0.000001 && jn > 0.0
-        jt_ideal = -vt / kt
-        max_jt = friction.to_f * jn
-        if jt_ideal > max_jt
-          jt = max_jt
-        elsif jt_ideal < -max_jt
-          jt = -max_jt
-        else
-          jt = jt_ideal
-        end
-      end
-
-      total_jx = jn * nx + jt * tx
-      total_jy = jn * ny + jt * ty
+      # 接触インパルスの計算
+      jn, jt, total_jx, total_jy = compute_contact_impulse(
+        vn, vt, kn, kt, restitution, friction, nx, ny, tx, ty, bounce_threshold: bounce_threshold
+      )
 
       # 物体Aの更新 (+J)
       new_vax = vax + inv_ma * total_jx
@@ -635,8 +624,9 @@ module Zenoo
     def self.constrain_point(body, tx, ty, anchor: nil, stiffness: 0.3, damping: 0.85)
       return nil unless body
 
-      m = body.mass.to_f
-      return nil if m <= 0.00001
+      inv_m = inv_mass_of(body)
+      return nil if inv_m <= 0.00001
+      inv_i = inv_inertia_of(body)
 
       x = body.x.to_f
       y = body.y.to_f
@@ -644,12 +634,6 @@ module Zenoo
       vy = body.vy.to_f
       omega = body.omega.to_f
       angle = body.angle.to_f
-      shape = body.collider
-      inertia = body.inertia
-
-      inert = inertia ? inertia.to_f : (shape ? inertia_of(shape, mass: m) : inertia_rect(32.0, 32.0, mass: m))
-      inv_m = 1.0 / m
-      inv_i = inert > 0.00001 ? 1.0 / inert : 0.0
 
       # アンカー点の現在ワールド座標
       rad = angle * DEG_TO_RAD
@@ -709,9 +693,6 @@ module Zenoo
       vay = a.vy.to_f
       wa = a.omega.to_f
       anga = a.angle.to_f
-      ma = a.mass.to_f
-      shape_a = a.collider
-      ia = a.inertia
       rad_a = anga * DEG_TO_RAD
       ca = Math.cos(rad_a)
       sa = Math.sin(rad_a)
@@ -743,9 +724,6 @@ module Zenoo
         vby = b.vy.to_f
         wb = b.omega.to_f
         angb = b.angle.to_f
-        mb = b.mass.to_f
-        shape_b = b.collider
-        ib = b.inertia
         rad_b = angb * DEG_TO_RAD
         cb = Math.cos(rad_b)
         sb = Math.sin(rad_b)
@@ -758,16 +736,12 @@ module Zenoo
         pbx = xb + rbx
         pby = yb + rby
 
-        mb_f = mb.to_f
-        inv_mb = mb_f > 0.00001 ? 1.0 / mb_f : 0.0
-        inert_b = ib ? ib.to_f : (shape_b ? inertia_of(shape_b, mass: mb_f) : inertia_rect(32.0, 32.0, mass: mb_f))
-        inv_ib = inert_b > 0.00001 ? 1.0 / inert_b : 0.0
+        inv_mb = inv_mass_of(b)
+        inv_ib = inv_inertia_of(b)
       end
 
-      ma_f = ma.to_f
-      inv_ma = ma_f > 0.00001 ? 1.0 / ma_f : 0.0
-      inert_a = ia ? ia.to_f : (shape_a ? inertia_of(shape_a, mass: ma_f) : inertia_rect(32.0, 32.0, mass: ma_f))
-      inv_ia = inert_a > 0.00001 ? 1.0 / inert_a : 0.0
+      inv_ma = inv_mass_of(a)
+      inv_ia = inv_inertia_of(a)
 
       inv_m_total = inv_ma + inv_mb
       return nil if inv_m_total <= 0.000001
@@ -795,35 +769,7 @@ module Zenoo
         a.vx = 0.0
         a.vy = 0.0
       else
-        cur_anga = a.angle.to_f
-        rad_a = cur_anga * DEG_TO_RAD
-        ca = Math.cos(rad_a)
-        sa = Math.sin(rad_a)
-        rax = lax * ca - lay * sa
-        ray = lax * sa + lay * ca
-
-        vax = a.vx.to_f
-        vay = a.vy.to_f
-        wa = a.omega.to_f
-
-        if is_fixed
-          vbx = 0.0
-          vby = 0.0
-          wb = 0.0
-          rbx = 0.0
-          rby = 0.0
-        else
-          cur_angb = b.angle.to_f
-          rad_b = cur_angb * DEG_TO_RAD
-          cb = Math.cos(rad_b)
-          sb = Math.sin(rad_b)
-          rbx = lbx * cb - lby * sb
-          rby = lbx * sb + lby * cb
-          vbx = b.vx.to_f
-          vby = b.vy.to_f
-          wb = b.omega.to_f
-        end
-
+        # 位置補正で角度は変化しないため、前半で計算した rax, ray, rbx, rby をそのまま再利用
         w_rad_a = wa * DEG_TO_RAD
         w_rad_b = wb * DEG_TO_RAD
         vpa_x = vax - w_rad_a * ray
@@ -896,18 +842,18 @@ module Zenoo
       shape_b = b.collider
       ib = b.inertia
 
-      ma_f = ma.to_f
-      mb_f = mb.to_f
-      inv_ma = ma_f > 0.00001 ? 1.0 / ma_f : 0.0
-      inv_mb = mb_f > 0.00001 ? 1.0 / mb_f : 0.0
+      ma_f = a.mass.to_f
+      mb_f = b.mass.to_f
+      inv_ma = inv_mass_of(a)
+      inv_mb = inv_mass_of(b)
       inv_m_total = inv_ma + inv_mb
       return nil if inv_m_total <= 0.000001
 
-      inert_a = ia ? ia.to_f : (shape_a ? inertia_of(shape_a, mass: ma_f) : inertia_rect(32.0, 32.0, mass: ma_f))
-      inert_b = ib ? ib.to_f : (shape_b ? inertia_of(shape_b, mass: mb_f) : inertia_rect(32.0, 32.0, mass: mb_f))
-      inv_ia = inert_a > 0.00001 ? 1.0 / inert_a : 0.0
-      inv_ib = inert_b > 0.00001 ? 1.0 / inert_b : 0.0
+      inv_ia = inv_inertia_of(a, ma_f)
+      inv_ib = inv_inertia_of(b, mb_f)
       inv_i_total = inv_ia + inv_ib
+      inert_a = inv_ia > 0.00001 ? 1.0 / inv_ia : 0.0
+      inert_b = inv_ib > 0.00001 ? 1.0 / inv_ib : 0.0
 
       k_stiff = stiffness.to_f.clamp(0.01, 1.0)
 
@@ -996,20 +942,11 @@ module Zenoo
       vax = a.vx.to_f
       vay = a.vy.to_f
       wa = a.omega.to_f
-      anga = a.angle.to_f
-      ma = a.mass.to_f
-      shape_a = a.collider
-      ia = a.inertia
-
       xb = b.x.to_f
       yb = b.y.to_f
       vbx = b.vx.to_f
       vby = b.vy.to_f
       wb = b.omega.to_f
-      angb = b.angle.to_f
-      mb = b.mass.to_f
-      shape_b = b.collider
-      ib = b.inertia
 
       pax, pay = local_to_world(a, anchor_a ? anchor_a[0].to_f : 0.0, anchor_a ? anchor_a[1].to_f : 0.0)
       pbx, pby = local_to_world(b, anchor_b ? anchor_b[0].to_f : 0.0, anchor_b ? anchor_b[1].to_f : 0.0)
@@ -1035,17 +972,13 @@ module Zenoo
         return true
       end
 
-      ma_f = ma.to_f
-      mb_f = mb.to_f
-      inv_ma = ma_f > 0.00001 ? 1.0 / ma_f : 0.0
-      inv_mb = mb_f > 0.00001 ? 1.0 / mb_f : 0.0
+      inv_ma = inv_mass_of(a)
+      inv_mb = inv_mass_of(b)
       inv_m_total = inv_ma + inv_mb
       return nil if inv_m_total <= 0.000001
 
-      inert_a = ia ? ia.to_f : (shape_a ? inertia_of(shape_a, mass: ma_f) : inertia_rect(32.0, 32.0, mass: ma_f))
-      inert_b = ib ? ib.to_f : (shape_b ? inertia_of(shape_b, mass: mb_f) : inertia_rect(32.0, 32.0, mass: mb_f))
-      inv_ia = inert_a > 0.00001 ? 1.0 / inert_a : 0.0
-      inv_ib = inert_b > 0.00001 ? 1.0 / inert_b : 0.0
+      inv_ia = inv_inertia_of(a)
+      inv_ib = inv_inertia_of(b)
 
       rax = pax - xa
       ray = pay - ya
@@ -1086,11 +1019,11 @@ module Zenoo
 
         a.vx = vax + inv_ma * vx_imp
         a.vy = vay + inv_ma * vy_imp
-        a.omega = wa + ((rax * vy_imp - ray * px_imp) * inv_ia * RAD_TO_DEG)
+        a.omega = wa + ((rax * vy_imp - ray * vx_imp) * inv_ia * RAD_TO_DEG)
 
         b.vx = vbx - inv_mb * vx_imp
         b.vy = vby - inv_mb * vy_imp
-        b.omega = wb - ((rbx * vy_imp - rby * px_imp) * inv_ib * RAD_TO_DEG)
+        b.omega = wb - ((rbx * vy_imp - rby * vx_imp) * inv_ib * RAD_TO_DEG)
       end
 
       true
