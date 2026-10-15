@@ -1175,11 +1175,25 @@ module Zenoo
       false
     end
 
-    # 配列・オブジェクト同士の一括衝突判定 (DXRuby 互換: ブロック省略時は衝突ペア配列を返す)
-    def self.check_all(group_a, group_b = nil)
-      arr_a = group_a.is_a?(Array) ? group_a : [group_a]
-      same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
-      arr_b = same_group ? arr_a : (group_b.is_a?(Array) ? group_b : [group_b])
+    # Sweep and Prune 用ヘルパー: アイテムから Shape と AABB (min_x, max_x) を抽出
+    def self.__extract_sap_entry(item, group_id = nil)
+      shape = item.is_a?(Shape) ? item : (item.respond_to?(:collider) ? item.collider : nil)
+      return nil unless shape
+
+      shape.update_cache if shape.respond_to?(:dirty?) && shape.dirty?
+      r = shape.bounding_radius.to_f
+      cx = shape.center_x.to_f
+      min_x = cx - r
+      max_x = cx + r
+      if group_id
+        [min_x, max_x, item, shape, group_id]
+      else
+        [min_x, max_x, item, shape]
+      end
+    end
+
+    # 小規模配列用の直接総当たり判定
+    def self.__check_all_direct(arr_a, arr_b, same_group)
       len_a = arr_a.length
       len_b = arr_b.length
       hits = block_given? ? nil : []
@@ -1204,6 +1218,132 @@ module Zenoo
           end
         end
         i += 1
+      end
+      hits
+    end
+
+    # 配列・オブジェクト同士の一括衝突判定 (DXRuby 互換: ブロック省略時は衝突ペア配列を返す)
+    # Sweep and Prune (X軸ソート＆スイープ) による O(N log N) 高速ブロードフェーズ
+    def self.check_all(group_a, group_b = nil, &block)
+      arr_a = group_a.is_a?(Array) ? group_a : [group_a]
+      same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
+      arr_b = same_group ? arr_a : (group_b.is_a?(Array) ? group_b : [group_b])
+      len_a = arr_a.length
+      len_b = arr_b.length
+
+      # 要素数が極小 (積が64未満) の場合はオーバーヘッドを避けるため直接判定
+      if len_a * len_b < 64
+        return __check_all_direct(arr_a, arr_b, same_group, &block)
+      end
+
+      hits = block_given? ? nil : []
+
+      if same_group
+        entries = []
+        i = 0
+        while i < len_a
+          entry = __extract_sap_entry(arr_a[i])
+          entries << entry if entry
+          i += 1
+        end
+
+        entries.sort_by! { |e| e[0] }
+        total = entries.length
+
+        i = 0
+        while i < total
+          e_a = entries[i]
+          max_a = e_a[1]
+          item_a = e_a[2]
+          shape_a = e_a[3]
+
+          j = i + 1
+          while j < total
+            e_b = entries[j]
+            break if e_b[0] > max_a
+
+            item_b = e_b[2]
+            shape_b = e_b[3]
+            if check(shape_a, shape_b)
+              if block_given?
+                yield(item_a, item_b)
+              else
+                hits << [item_a, item_b]
+              end
+            end
+            j += 1
+          end
+          i += 1
+        end
+      else
+        entries_a = []
+        i = 0
+        while i < len_a
+          entry = __extract_sap_entry(arr_a[i])
+          entries_a << entry if entry
+          i += 1
+        end
+
+        entries_b = []
+        max_w_b = 0.0
+        i = 0
+        while i < len_b
+          entry = __extract_sap_entry(arr_b[i])
+          if entry
+            w_b = entry[1] - entry[0]
+            max_w_b = w_b if w_b > max_w_b
+            entries_b << entry
+          end
+          i += 1
+        end
+
+        entries_a.sort_by! { |e| e[0] }
+        entries_b.sort_by! { |e| e[0] }
+        total_a = entries_a.length
+        total_b = entries_b.length
+
+        start_j = 0
+        i = 0
+        while i < total_a
+          e_a = entries_a[i]
+          min_a = e_a[0]
+          max_a = e_a[1]
+          item_a = e_a[2]
+          shape_a = e_a[3]
+
+          # 左側の切り捨て (Two Pointers): B の先頭要素が完全に A より左側にある間 start_j を進める
+          safe_cutoff = min_a - max_w_b
+          while start_j < total_b
+            e_b_start = entries_b[start_j]
+            if e_b_start[1] < min_a || e_b_start[0] < safe_cutoff
+              start_j += 1
+            else
+              break
+            end
+          end
+
+          j = start_j
+          while j < total_b
+            e_b = entries_b[j]
+            # 右側の打ち切り (Early Out)
+            break if e_b[0] > max_a
+
+            # X軸の重なり確認 (先頭に巨大キャラがいて start_j が進んでいなくても、左に外れたキャラはここで即スキップ)
+            if e_b[1] >= min_a
+              item_b = e_b[2]
+              shape_b = e_b[3]
+              if check(shape_a, shape_b)
+                if block_given?
+                  yield(item_a, item_b)
+                else
+                  hits << [item_a, item_b]
+                end
+              end
+            end
+            j += 1
+          end
+          i += 1
+        end
       end
       hits
     end
@@ -1263,12 +1403,8 @@ module Zenoo
       penetration_generic_sat(shape_a, shape_b, dx, dy)
     end
 
-    # 配列・オブジェクト同士の一括めり込み量・押し出し (MTV) 判定
-    # ブロック省略時は [[item_a, item_b, hit], ...] の配列を返す
-    def self.penetration_all(group_a, group_b = nil)
-      arr_a = group_a.is_a?(Array) ? group_a : [group_a]
-      same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
-      arr_b = same_group ? arr_a : (group_b.is_a?(Array) ? group_b : [group_b])
+    # 小規模配列用の直接めり込み量判定
+    def self.__penetration_all_direct(arr_a, arr_b, same_group)
       len_a = arr_a.length
       len_b = arr_b.length
       hits = block_given? ? nil : []
@@ -1296,6 +1432,133 @@ module Zenoo
           end
         end
         i += 1
+      end
+      hits
+    end
+
+    # 配列・オブジェクト同士の一括めり込み量・押し出し (MTV) 判定
+    # ブロック省略時は [[item_a, item_b, hit], ...] の配列を返す
+    # Sweep and Prune (X軸ソート＆スイープ) による高速ブロードフェーズ
+    def self.penetration_all(group_a, group_b = nil, &block)
+      arr_a = group_a.is_a?(Array) ? group_a : [group_a]
+      same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
+      arr_b = same_group ? arr_a : (group_b.is_a?(Array) ? group_b : [group_b])
+      len_a = arr_a.length
+      len_b = arr_b.length
+
+      if len_a * len_b < 64
+        return __penetration_all_direct(arr_a, arr_b, same_group, &block)
+      end
+
+      hits = block_given? ? nil : []
+
+      if same_group
+        entries = []
+        i = 0
+        while i < len_a
+          entry = __extract_sap_entry(arr_a[i])
+          entries << entry if entry
+          i += 1
+        end
+
+        entries.sort_by! { |e| e[0] }
+        total = entries.length
+
+        i = 0
+        while i < total
+          e_a = entries[i]
+          max_a = e_a[1]
+          item_a = e_a[2]
+          shape_a = e_a[3]
+
+          j = i + 1
+          while j < total
+            e_b = entries[j]
+            break if e_b[0] > max_a
+
+            item_b = e_b[2]
+            shape_b = e_b[3]
+            hit = penetration(shape_a, shape_b)
+            if hit
+              if block_given?
+                yield(item_a, item_b, hit)
+              else
+                hits << [item_a, item_b, hit]
+              end
+            end
+            j += 1
+          end
+          i += 1
+        end
+      else
+        entries_a = []
+        i = 0
+        while i < len_a
+          entry = __extract_sap_entry(arr_a[i])
+          entries_a << entry if entry
+          i += 1
+        end
+
+        entries_b = []
+        max_w_b = 0.0
+        i = 0
+        while i < len_b
+          entry = __extract_sap_entry(arr_b[i])
+          if entry
+            w_b = entry[1] - entry[0]
+            max_w_b = w_b if w_b > max_w_b
+            entries_b << entry
+          end
+          i += 1
+        end
+
+        entries_a.sort_by! { |e| e[0] }
+        entries_b.sort_by! { |e| e[0] }
+        total_a = entries_a.length
+        total_b = entries_b.length
+
+        start_j = 0
+        i = 0
+        while i < total_a
+          e_a = entries_a[i]
+          min_a = e_a[0]
+          max_a = e_a[1]
+          item_a = e_a[2]
+          shape_a = e_a[3]
+
+          # 左側の切り捨て (Two Pointers): B の先頭要素が完全に A より左側にある間 start_j を進める
+          safe_cutoff = min_a - max_w_b
+          while start_j < total_b
+            e_b_start = entries_b[start_j]
+            if e_b_start[1] < min_a || e_b_start[0] < safe_cutoff
+              start_j += 1
+            else
+              break
+            end
+          end
+
+          j = start_j
+          while j < total_b
+            e_b = entries_b[j]
+            # 右側の打ち切り (Early Out)
+            break if e_b[0] > max_a
+
+            if e_b[1] >= min_a
+              item_b = e_b[2]
+              shape_b = e_b[3]
+              hit = penetration(shape_a, shape_b)
+              if hit
+                if block_given?
+                  yield(item_a, item_b, hit)
+                else
+                  hits << [item_a, item_b, hit]
+                end
+              end
+            end
+            j += 1
+          end
+          i += 1
+        end
       end
       hits
     end
