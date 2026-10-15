@@ -226,6 +226,10 @@ module Zenoo
       flat_primitive_shader
     end
 
+    def self.textured_primitive_shader
+      @textured_primitive_shader ||= Shader.new(Shaders::TEXTURED_PRIMITIVE_VERTEX, Shaders::TEXTURED_PRIMITIVE_FRAGMENT)
+    end
+
     def self.card_shader
       @card_shader ||= Shader.new(Shaders::CARD_VERTEX, Shaders::CARD_FRAGMENT)
     end
@@ -785,6 +789,35 @@ module Zenoo
           z: z
         )
       end
+    end
+
+    # ----------------------------------------------------
+    # キャッシュ済み頂点バッファ (Mesh) 描画 API
+    # ----------------------------------------------------
+    def self.draw_mesh(mesh, z: 0.0, uniforms: nil, shader: nil, image: nil, blend: nil)
+      return unless mesh && mesh.data && mesh.count > 0
+
+      eff_pipeline = mesh.pipeline
+      eff_image = image || mesh.image
+      eff_shader = shader || mesh.shader || eff_pipeline.default_shader || (eff_image ? textured_primitive_shader : default_primitive_shader)
+      eff_blend = Backend.normalize_blend_mode(blend || mesh.blend)
+
+      eff_uniforms = if mesh.uniforms && uniforms
+                       mesh.uniforms.merge(uniforms)
+                     else
+                       uniforms || mesh.uniforms
+                     end
+
+      Backend.enqueue_draw(
+        eff_pipeline,
+        mesh.data,
+        mesh.count,
+        image: eff_image,
+        shader: eff_shader,
+        uniforms: eff_uniforms,
+        blend: eff_blend,
+        z: z
+      )
     end
 
     @sdf_font_shader = nil

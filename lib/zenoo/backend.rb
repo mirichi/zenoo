@@ -68,11 +68,15 @@ module Zenoo
     end
 
     module Pipelines
-      CARD      = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::CARD_INSTANCED, Divisor::CARD_INSTANCED, 4)
-      SPRITE    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::SPRITE_INSTANCED, Divisor::SPRITE_INSTANCED, 4)
-      FONT      = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::FONT_INSTANCED, Divisor::FONT_INSTANCED, 4)
-      TRIANGLES = Pipeline.new(Topology::TRIANGLES, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)
-      LINES     = Pipeline.new(Topology::LINES, Layout::LINE, Divisor::LINE, 0)
+      CARD                    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::CARD_INSTANCED, Divisor::CARD_INSTANCED, 4)
+      SPRITE                  = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::SPRITE_INSTANCED, Divisor::SPRITE_INSTANCED, 4)
+      FONT                    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::FONT_INSTANCED, Divisor::FONT_INSTANCED, 4)
+      TRIANGLES               = Pipeline.new(Topology::TRIANGLES, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)
+      TRIANGLE_STRIP          = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)
+      LINES                   = Pipeline.new(Topology::LINES, Layout::LINE, Divisor::LINE, 0)
+      POINTS                  = Pipeline.new(Topology::POINTS, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)
+      TEXTURED_TRIANGLES      = Pipeline.new(Topology::TRIANGLES, Layout::POS2_UV2_COLOR4, Divisor::POS2_UV2_COLOR4, 0)
+      TEXTURED_TRIANGLE_STRIP = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::POS2_UV2_COLOR4, Divisor::POS2_UV2_COLOR4, 0)
     end
 
 

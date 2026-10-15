@@ -138,6 +138,38 @@ module Zenoo
       }
     GLSL
 
+    # テクスチャ付きプリミティブ描画用頂点シェーダー (pos2, uv2, color4)
+    TEXTURED_PRIMITIVE_VERTEX = <<~'GLSL'
+      #version 330 core
+      layout (location = 0) in vec2 in_pos;
+      layout (location = 1) in vec2 in_uv;
+      layout (location = 2) in vec4 in_color;
+      uniform vec2 u_resolution;
+      uniform float u_flip_y;
+      out vec4 v_color;
+      out vec2 v_uv;
+      void main() {
+          vec2 ndc = (in_pos / u_resolution) * 2.0 - 1.0;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
+          gl_Position = vec4(ndc, 0.0, 1.0);
+          v_color = in_color;
+          v_uv = in_uv;
+      }
+    GLSL
+
+    # テクスチャ付きプリミティブ描画用フラグメントシェーダー
+    TEXTURED_PRIMITIVE_FRAGMENT = <<~'GLSL'
+      #version 330 core
+      in vec4 v_color;
+      in vec2 v_uv;
+      uniform sampler2D u_texture;
+      out vec4 fragColor;
+      void main() {
+          fragColor = v_color * texture(u_texture, v_uv);
+      }
+    GLSL
+
     # 互換用エイリアス
     PRIMITIVE_VERTEX = FLAT_PRIMITIVE_VERTEX
     PRIMITIVE_FRAGMENT = FLAT_PRIMITIVE_FRAGMENT
