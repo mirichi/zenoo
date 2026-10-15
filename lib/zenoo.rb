@@ -38,6 +38,7 @@ require_relative 'zenoo/easing'
 require_relative 'zenoo/tween'
 require_relative 'zenoo/sprite'
 require_relative 'zenoo/physics_sprite'
+require_relative 'zenoo/mesh'
 require_relative 'zenoo/profiler'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
@@ -45,6 +46,7 @@ Window        = Zenoo::Window        unless defined?(Window)
 Canvas        = Zenoo::Canvas        unless defined?(Canvas)
 Input         = Zenoo::Input         unless defined?(Input)
 Image         = Zenoo::Image         unless defined?(Image)
+Mesh          = Zenoo::Mesh          unless defined?(Mesh)
 Shader        = Zenoo::Shader        unless defined?(Shader)
 Color         = Zenoo::Color         unless defined?(Color)
 Font          = Zenoo::Font          unless defined?(Font)
