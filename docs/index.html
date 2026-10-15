@@ -123,6 +123,9 @@
     .card.zero-gravity::before {
       background: linear-gradient(90deg, #38bdf8, #818cf8);
     }
+    .card.particles::before {
+      background: linear-gradient(90deg, #f59e0b, #ef4444);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -147,6 +150,7 @@
     .card.collision .card-tag { color: #fb7185; }
     .card.tween .card-tag { color: #c084fc; }
     .card.coords .card-tag { color: #38bdf8; }
+    .card.particles .card-tag { color: #f59e0b; }
 
     .card h2 {
       font-size: 22px;
@@ -306,6 +310,14 @@
       background: #38bdf8;
       color: #0b0d14;
       box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    }
+    .card.particles .btn-launch {
+      background: #f59e0b;
+      color: #0b0d14;
+    }
+    .card.particles .btn-launch:hover {
+      background: #fbbf24;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -579,6 +591,24 @@
         </ul>
       </div>
       <a href="zero_gravity/" class="btn-launch">物理デモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- GPU Particle Storm Demo Card -->
+    <div class="card particles">
+      <div>
+        <div class="card-tag">GPU Instancing &amp; Shader</div>
+        <h2>GPU Particle Storm</h2>
+        <p class="desc">
+          OpenGL 3.3 / WebGL 2.0 インスタンシング描画による超大量パーティクルシミュレーション。10万〜20万個の粒子がマウスに引き寄せられ、衝撃波で飛び散るリアルタイムストームを驚異の 60fps でレンダリングします。
+        </p>
+        <ul class="features">
+          <li>10万〜20万パーティクルを 1 ドローコールで一括描画 (GPU Instancing)</li>
+          <li>頂点シェーダーによる引力・軌道回転・脈動サイズ・カラーグラデーション演算</li>
+          <li>マウス位置への重力吸引 &amp; [SPACE] / 左クリックでの衝撃波パルス爆発</li>
+          <li>キー [1], [2], [3] によるパーティクル数 (5万/10万/20万) リアルタイム切り替え</li>
+        </ul>
+      </div>
+      <a href="particles/" class="btn-launch">パーティクル起動 (Launch Demo) →</a>
     </div>
   </main>
 

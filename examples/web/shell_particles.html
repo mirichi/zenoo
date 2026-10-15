@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Zenoo GPU Particle Storm (Spinel Wasm)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 10px;
+      background-color: #080c14;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      min-height: 100dvh;
+      height: 100dvh;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #header {
+      margin-bottom: 8px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    h1 {
+      margin: 0 0 4px 0;
+      font-size: 18px;
+      color: #f59e0b;
+      letter-spacing: 1px;
+    }
+    p {
+      margin: 0;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    #canvas-container {
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #1e293b;
+      width: min(96vw, calc(72dvh * 16 / 9));
+      height: min(calc(96vw * 9 / 16), 72dvh);
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #000;
+      flex-shrink: 0;
+    }
+    canvas.emscripten {
+      display: block;
+      border: 0px none;
+      background-color: #000;
+      outline: none;
+      width: 100% !important;
+      height: 100% !important;
+      touch-action: none;
+    }
+    #controls-bar {
+      margin-top: 10px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .btn {
+      background: #0f172a;
+      border: 1px solid #f59e0b;
+      color: #f59e0b;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    .btn:active {
+      background: #f59e0b;
+      color: #0f172a;
+    }
+    .btn-back {
+      border-color: #a855f7;
+      color: #c084fc;
+    }
+    .btn-back:active {
+      background: #c084fc;
+      color: #0f172a;
+    }
+    #status {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #cbd5e1;
+      text-align: center;
+      min-height: 16px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>Zenoo: GPU Particle Storm</h1>
+    <p>WebGL 2.0 GPU Instancing &bull; 100,000+ Particles &bull; Spinel AOT Wasm</p>
+  </div>
+
+  <div id="canvas-container">
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  </div>
+
+  <div id="status">ダウンロード中...</div>
+
+  <div id="controls-bar">
+    <a href="../" class="btn btn-back">&larr; ポータルに戻る (Back to Portal)</a>
+    <button class="btn" id="btn-fullscreen">全画面 (Fullscreen)</button>
+  </div>
+
+  <script type='text/javascript'>
+    var statusElement = document.getElementById('status');
+    var canvasElement = document.getElementById('canvas');
+
+    function formatStatus(text) {
+      var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+(\.\d+)?)\)/);
+      if (m) {
+        var prefix = m[1].trim();
+        var loaded = parseFloat(m[2]);
+        var total = parseFloat(m[4]);
+        if (total > 1000 || loaded > 1000) {
+          if (total < loaded) total = loaded;
+          var fmt = function(b) {
+            if (b < 1024) return b + ' B';
+            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+            return (b / (1024 * 1024)).toFixed(1) + ' MB';
+          };
+          var pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+          return prefix + ' ' + fmt(loaded) + ' / ' + fmt(total) + ' (' + pct + '%)';
+        }
+      }
+      return text;
+    }
+
+    var Module = {
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
+      canvas: canvasElement,
+      setStatus: function(text) {
+        if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+        if (text === Module.setStatus.last.text) return;
+        Module.setStatus.last.text = text;
+        statusElement.innerText = text ? formatStatus(text) : "[マウス移動]: 吸引 | [SPACE / 左クリック]: 衝撃波パルス | [1]: 5万 | [2]: 10万 | [3]: 20万";
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads clear.');
+      }
+    };
+    Module.setStatus('Downloading...');
+    window.onerror = function() {
+      Module.setStatus('Exception thrown, see JavaScript console');
+    };
+
+    document.getElementById('btn-fullscreen').addEventListener('click', function() {
+      var container = document.getElementById('canvas-container');
+      if (!document.fullscreenElement) {
+        if (container.requestFullscreen) {
+          container.requestFullscreen();
+        } else if (container.webkitRequestFullscreen) {
+          container.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    });
+
+    // ポインターキャプチャ
+    canvasElement.addEventListener('pointerdown', function(e) {
+      try {
+        canvasElement.setPointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+    canvasElement.addEventListener('pointerup', function(e) {
+      try {
+        canvasElement.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+    canvasElement.addEventListener('pointercancel', function(e) {
+      try {
+        canvasElement.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    });
+
+    window.addEventListener('mousemove', function(e) {
+      if (e.target !== canvasElement && e.buttons !== 0) {
+        var ev = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          buttons: e.buttons,
+          clientX: e.clientX,
+          clientY: e.clientY
+        });
+        canvasElement.dispatchEvent(ev);
+      }
+    });
+
+    window.addEventListener('mouseup', function(e) {
+      if (e.target !== canvasElement) {
+        var ev = new MouseEvent('mouseup', {
+          bubbles: true,
+          cancelable: true,
+          button: e.button,
+          buttons: e.buttons,
+          clientX: e.clientX,
+          clientY: e.clientY
+        });
+        canvasElement.dispatchEvent(ev);
+      }
+    });
+
+    window.addEventListener('resize', function() {
+      window.scrollTo(0, 0);
+    });
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

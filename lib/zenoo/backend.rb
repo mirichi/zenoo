@@ -564,8 +564,8 @@ module Zenoo
                ncmd.uniforms == cur_uniforms &&
                ncmd.blend == cur_blend &&
                ncmd.clip == cur_clip
-              cur_data = cur_data.dup if cur_data.frozen?
-              cur_data << ncmd.data
+              cur_data = cur_data + ncmd.data
+              cmd.data = cur_data
               cur_count += ncmd.count
               ncmd.data = nil
               ncmd.image = nil
