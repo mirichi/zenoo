@@ -452,14 +452,16 @@ module Zenoo
         f_font = @theme.font || Font.default
         f_size = 14
         title_col = is_active ? (@theme.text_color || Color::WHITE) : (@theme.text_disabled || Color.new(160, 160, 165))
-        Window.draw_text(
-          wx + 10.0, wy + (title_bar_h - f_size.to_f) / 2.0 + 1.0,
-          win.title,
-          font: f_font,
-          size: f_size,
-          color: title_col,
-          z: win_z + 2.0
-        )
+        Profiler.measure(:gui_text) do
+          Window.draw_text(
+            wx + 10.0, wy + (title_bar_h - f_size.to_f) / 2.0 + 1.0,
+            win.title,
+            font: f_font,
+            size: f_size,
+            color: title_col,
+            z: win_z + 2.0
+          )
+        end
 
         # 2. コンテンツ領域のクリッピング & レイアウト
         content_x = wx + pad
@@ -756,7 +758,9 @@ module Zenoo
         if target_60_y >= ry && target_60_y <= ry + rh
           line_color = Color.new(80, 160, 180, 140)
           Window.draw_line(rx + 1.0, target_60_y, rx + rw - 1.0, target_60_y, color: line_color, width: 1.0)
-          Window.draw_text(rx + 4.0, target_60_y - 12.0, "16.6ms (60fps)", font: f_font, size: 10, color: line_color)
+          Profiler.measure(:gui_text) do
+            Window.draw_text(rx + 4.0, target_60_y - 12.0, "16.6ms (60fps)", font: f_font, size: 10, color: line_color)
+          end
         end
 
         # 3. ガイドライン描画 (33.3ms / 30FPS 目標線)
@@ -765,13 +769,15 @@ module Zenoo
           if target_30_y >= ry && target_30_y <= ry + rh
             line_color_30 = Color.new(180, 80, 80, 140)
             Window.draw_line(rx + 1.0, target_30_y, rx + rw - 1.0, target_30_y, color: line_color_30, width: 1.0)
-            Window.draw_text(rx + 4.0, target_30_y - 12.0, "33.3ms (30fps)", font: f_font, size: 10, color: line_color_30)
+            Profiler.measure(:gui_text) do
+              Window.draw_text(rx + 4.0, target_30_y - 12.0, "33.3ms (30fps)", font: f_font, size: 10, color: line_color_30)
+            end
           end
         end
 
-        # 4. フレーム履歴の積み上げ棒グラフ描画
+        # 4. フレーム履歴の積み上げ棒グラフ描画 (全バーを一括バッチ化して1回のenqueueで高速描画)
         history = Profiler.history
-        bar_w = 2.0
+        bar_w = 3.0
         max_bars = ((rw - 4.0) / bar_w).to_i
         visible_frames = history.last(max_bars)
 
@@ -790,72 +796,126 @@ module Zenoo
           end
         end
 
-        # 右端から左へ描画
+        # ホバーされているフレームは背景ハイライト
+        if hovered_idx && hovered_idx >= 0 && hovered_idx < visible_frames.size
+          hbx = rx + rw - 2.0 - (visible_frames.size - hovered_idx) * bar_w
+          Window.draw_rect(hbx, ry + 1.0, bar_w, rh - 2.0, color: Color.new(255, 255, 255, 60))
+        end
+
+        ox = Window.offset_x
+        oy = Window.offset_y
+
+        bars_batch = []
+        rect_count = 0
+        bw = [bar_w - 0.5, 1.0].max
+        bar_col_cache = @bar_color_cache ||= {}
+
+        # 右端から左へ描画データをバッチ構築
         visible_frames.each_with_index do |frame, i|
           bx = rx + rw - 2.0 - (visible_frames.size - i) * bar_w
           next if bx < rx + 1.0
 
-          # ホバーされているフレームは背景ハイライト
-          if i == hovered_idx
-            Window.draw_rect(bx, ry + 1.0, bar_w, rh - 2.0, color: Color.new(255, 255, 255, 60))
-          end
-
+          bx2 = bx + bw
           current_y = ry + rh - 1.0
+
+          abx = bx + ox
+          abx2 = bx2 + ox
+
           frame.each do |category, ms|
             h_cat = (ms.to_f / max_ms) * rh
-            h_cat = [h_cat, 0.0].max
-            # 上限でクリップ
-            h_cat = [h_cat, current_y - ry - 1.0].min if current_y - h_cat < ry + 1.0
+            h_cat = 0.0 if h_cat < 0.0
+            h_cat = current_y - ry - 1.0 if current_y - h_cat < ry + 1.0
             break if h_cat <= 0.0
 
-            cat_color = Profiler.color_for(category)
-            Window.draw_rect(bx, current_y - h_cat, [bar_w - 0.5, 1.0].max, h_cat, color: cat_color)
-            current_y -= h_cat
+            top_y = current_y - h_cat
+            col = bar_col_cache[category] ||= begin
+              cat_color = Profiler.color_for(category)
+              nc = Backend.normalize_color(cat_color)
+              [nc[0].to_f, nc[1].to_f, nc[2].to_f, nc[3].to_f]
+            end
+            cr, cg, cb, ca = col
+
+            atop_y = top_y + oy
+            acur_y = current_y + oy
+
+            bars_batch.push(
+              abx, atop_y, cr, cg, cb, ca,
+              abx, acur_y, cr, cg, cb, ca,
+              abx2, atop_y, cr, cg, cb, ca,
+              abx2, atop_y, cr, cg, cb, ca,
+              abx, acur_y, cr, cg, cb, ca,
+              abx2, acur_y, cr, cg, cb, ca
+            )
+            rect_count += 1
+            current_y = top_y
             break if current_y <= ry + 1.0
           end
+        end
+
+        if rect_count > 0
+          Backend.enqueue_draw(
+            Backend::Pipelines::TRIANGLES,
+            bars_batch.pack("f*"),
+            rect_count * 6,
+            shader: Window.flat_primitive_shader
+          )
         end
 
         # 5. 上部ステータステキスト (FPS / 最新合計ms)
         total_last = Profiler.last_total_ms
         avg_last = Profiler.history.empty? ? 0.0 : (Profiler.history.last(30).map { |f| f.values.sum }.sum / [Profiler.history.size, 30].min)
         status_text = "Avg: #{avg_last.round(1)}ms | Last: #{total_last.round(1)}ms | #{Window.fps.round(0)} FPS"
-        Window.draw_text(rx + rw - f_font.text_width(status_text, 11) - 6.0, ry + 4.0, status_text, font: f_font, size: 11, color: Color.new(200, 200, 200))
+        Profiler.measure(:gui_text) do
+          Window.draw_text(rx + rw - 6.0, ry + 4.0, status_text, font: f_font, size: 11, color: Color.new(200, 200, 200), align: :right)
+        end
 
         # 6. ホバー中の詳細情報ポップアップ / ラベル
         if hovered_idx && visible_frames[hovered_idx]
           target_frame = visible_frames[hovered_idx]
           frame_tot = target_frame.values.sum.round(2)
           hover_str = "Frame: #{frame_tot}ms (" + target_frame.map { |k, v| "#{k}:#{v.round(1)}" }.join(", ") + ")"
-          Window.draw_text(rx + 6.0, ry + 4.0, hover_str, font: f_font, size: 11, color: Color.new(255, 240, 100))
+          Profiler.measure(:gui_text) do
+            Window.draw_text(rx + 6.0, ry + 4.0, hover_str, font: f_font, size: 11, color: Color.new(255, 240, 100))
+          end
         end
 
         total_h = rh
 
-        # 7. 凡例 (Legend) の描画
+        # 7. 詳細内訳リスト (Legend) の描画 (直近30フレーム平均で重い順にソート)
         if show_legend
-          legend_y = ry + rh + 6.0
-          legend_x = rx + 2.0
+          avg_map = Profiler.average_times(30)
+          total_avg = [avg_map.values.sum, 0.0001].max
+          sorted_cats = Profiler.categories.sort_by { |cat| -(avg_map[cat] || 0.0) }
+
+          legend_y = ry + rh + 8.0
           chip_size = 8.0
-          last_t = Profiler.last_times
 
-          Profiler.categories.each do |cat|
+          sorted_cats.each do |cat|
+            avg_ms = avg_map[cat] || 0.0
+            last_ms = (Profiler.last_times[cat] || 0.0)
+            next if avg_ms < 0.005 && last_ms < 0.005 # ほぼゼロのセクションは非表示
+
+            pct = ((avg_ms / total_avg) * 100.0).round(0)
             cat_col = Profiler.color_for(cat)
-            ms_val = (last_t[cat] || 0.0).round(1)
-            cat_label = "#{cat}: #{ms_val}ms"
-            label_w = f_font.text_width(cat_label, 11)
 
-            # 折り返し判定
-            if legend_x + chip_size + 4.0 + label_w > rx + rw
-              legend_x = rx + 2.0
-              legend_y += 14.0
+            # 左側: カラーチップ
+            Window.draw_rect(rx + 4.0, legend_y + 2.0, chip_size, chip_size, color: cat_col)
+
+            # テキスト描画 (カテゴリ名 + ms・割合)
+            Profiler.measure(:gui_text) do
+              Window.draw_text(rx + 16.0, legend_y, cat.to_s, font: f_font, size: 11, color: Color.new(200, 205, 210))
+
+              val_100 = (avg_ms * 100).to_i
+              val_dec = val_100 % 100
+              val_str = "#{val_100 / 100}.#{val_dec < 10 ? '0' : ''}#{val_dec}ms"
+              ms_str = "#{val_str} (#{pct}%)"
+              Window.draw_text(rx + rw - 4.0, legend_y, ms_str, font: f_font, size: 11, color: Color.new(160, 210, 240), align: :right)
             end
 
-            Window.draw_rect(legend_x, legend_y + 1.0, chip_size, chip_size, color: cat_col)
-            Window.draw_text(legend_x + chip_size + 4.0, legend_y, cat_label, font: f_font, size: 11, color: Color.new(180, 185, 190))
-            legend_x += chip_size + 4.0 + label_w + 12.0
+            legend_y += 15.0
           end
 
-          total_h = (legend_y + 14.0) - ry
+          total_h = (legend_y + 4.0) - ry
         end
 
         advance_cursor(rw, total_h)

@@ -843,63 +843,48 @@ class Game
     end
   end
 
-  # 敵同士の重なり防止 (ソフト押し出し)
+  # 敵同士の重なり防止 (Sprite.check: Sweep and Prune によるソフト押し出し)
   def separate_enemies
-    n = @enemies.size
-    return if n < 2
+    Sprite.check(@enemies) do |e1, e2|
+      next if e1.dead || e2.dead
 
-    i = 0
-    while i < n
-      e1 = @enemies[i]
-      i += 1
-      next if e1.dead
+      dx = e2.x - e1.x
+      dy = e2.y - e1.y
+      d2 = dx * dx + dy * dy
+      next if d2 <= 0.0001
 
-      j = i
-      while j < n
-        e2 = @enemies[j]
-        j += 1
-        next if e2.dead
+      r_sum = e1.hit_radius + e2.hit_radius
+      d = Math.sqrt(d2)
+      overlap = r_sum - d
+      next if overlap <= 0.0
 
-        dx = e2.x - e1.x
-        r_sum = e1.hit_radius + e2.hit_radius
-        # AABB 高速枝刈り
-        next if dx.abs > r_sum
+      push = overlap * 0.25
+      inv_d = 1.0 / d
+      nx = dx * inv_d * push
+      ny = dy * inv_d * push
 
-        dy = e2.y - e1.y
-        next if dy.abs > r_sum
-
-        d2 = dx * dx + dy * dy
-        if d2 < r_sum * r_sum && d2 > 0.0001
-          d = Math.sqrt(d2)
-          overlap = r_sum - d
-          push = overlap * 0.25
-          nx = (dx / d) * push
-          ny = (dy / d) * push
-
-          if e1.is_boss
-            # ボスは動かず、相手のザコ敵を押し出す
-            e2.x += nx * 2.0
-            e2.y += ny * 2.0
-          elsif e2.is_boss
-            # ボスは動かず、相手のザコ敵を押し出す
-            e1.x -= nx * 2.0
-            e1.y -= ny * 2.0
-          elsif e1.max_hp > 5 && e2.max_hp <= 5
-            # エリート敵は動かず、ザコ敵が道を譲る
-            e2.x += nx * 2.0
-            e2.y += ny * 2.0
-          elsif e2.max_hp > 5 && e1.max_hp <= 5
-            # エリート敵は動かず、ザコ敵が道を譲る
-            e1.x -= nx * 2.0
-            e1.y -= ny * 2.0
-          else
-            # 同格同士: 半々で押し合う
-            e1.x -= nx
-            e1.y -= ny
-            e2.x += nx
-            e2.y += ny
-          end
-        end
+      if e1.is_boss
+        # ボスは動かず、相手のザコ敵を押し出す
+        e2.x += nx * 2.0
+        e2.y += ny * 2.0
+      elsif e2.is_boss
+        # ボスは動かず、相手のザコ敵を押し出す
+        e1.x -= nx * 2.0
+        e1.y -= ny * 2.0
+      elsif e1.max_hp > 5 && e2.max_hp <= 5
+        # エリート敵は動かず、ザコ敵が道を譲る
+        e2.x += nx * 2.0
+        e2.y += ny * 2.0
+      elsif e2.max_hp > 5 && e1.max_hp <= 5
+        # エリート敵は動かず、ザコ敵が道を譲る
+        e1.x -= nx * 2.0
+        e1.y -= ny * 2.0
+      else
+        # 同格同士: 半々で押し合う
+        e1.x -= nx
+        e1.y -= ny
+        e2.x += nx
+        e2.y += ny
       end
     end
   end
@@ -1225,16 +1210,29 @@ class Game
     # 1. 敵スポーン
     spawn_enemies unless @player_dead
 
-    # 2. オブジェクト更新
+    # 2. オブジェクト更新 (カテゴリ別にプロファイル計測)
     unless @player_dead
       @frames_alive += 1
-      @player.update(@bullets, @missiles, @enemies, @particles, @camera)
-      @sfx.play(Sfx::SHOT, 4) if @player.fired
+      Profiler.measure(:player) do
+        @player.update(@bullets, @missiles, @enemies, @particles, @camera)
+        @sfx.play(Sfx::SHOT, 4) if @player.fired
+      end
     end
+
     @bullets.each { |b| b.update }
-    @missiles.each { |m| m.update(@enemies) }
-    @enemies.each { |e| e.update(@player.x, @player.y) }
-    separate_enemies
+
+    Profiler.measure(:missile) do
+      @missiles.each { |m| m.update(@enemies) }
+    end
+
+    Profiler.measure(:enemy_move) do
+      @enemies.each { |e| e.update(@player.x, @player.y) }
+    end
+
+    Profiler.measure(:separate) do
+      separate_enemies
+    end
+
     @items.each { |i| i.update(@player.x, @player.y, @player.magnet_radius) }
     @particles.each { |p| p.update }
     @damage_texts.each { |t| t.update }
@@ -1244,13 +1242,15 @@ class Game
       check_collisions
     end
 
-    # 4. オブジェクトの自然なGC回収 (delete_if)
-    @bullets.delete_if { |b| b.dead }
-    @missiles.delete_if { |m| m.dead }
-    @enemies.delete_if { |e| e.dead }
-    @items.delete_if { |i| i.dead }
-    @particles.delete_if { |p| p.dead }
-    @damage_texts.delete_if { |t| t.dead }
+    # 4. オブジェクトの自然な回収 (delete_if)
+    Profiler.measure(:gc) do
+      @bullets.delete_if { |b| b.dead }
+      @missiles.delete_if { |m| m.dead }
+      @enemies.delete_if { |e| e.dead }
+      @items.delete_if { |i| i.dead }
+      @particles.delete_if { |p| p.dead }
+      @damage_texts.delete_if { |t| t.dead }
+    end
 
     # 5. 死亡演出 → リザルトへ
     if @player_dead
@@ -1486,7 +1486,9 @@ class Game
       Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 255, 255, @levelup_flash * 10))
     end
 
-    draw_hud
+    Profiler.measure(:hud) do
+      draw_hud
+    end
 
     case @game_state
     when STATE_PAUSE
@@ -1498,8 +1500,10 @@ class Game
     end
 
     if @show_profiler
-      GUI.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 200) do
-        GUI.profile_graph(w: 290, h: 80, max_ms: 33.33)
+      Profiler.measure(:gui) do
+        GUI.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 270) do
+          GUI.profile_graph(w: 290, h: 80, max_ms: 33.33)
+        end
       end
     end
   end

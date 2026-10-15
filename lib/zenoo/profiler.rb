@@ -13,12 +13,18 @@ module Zenoo
 
     # カテゴリ別デフォルト表示色パレット
     CATEGORY_COLORS = {
-      update:  Color.new(90, 200, 130),  # エメラルドグリーン
-      physics: Color.new(245, 175, 65),  # アンバー・オレンジ
-      render:  Color.new(75, 170, 245),  # スカイブルー
-      gui:     Color.new(185, 115, 235), # パープル
-      audio:   Color.new(240, 105, 130), # ローズ
-      other:   Color.new(160, 165, 175)  # シルバーグレー
+      update:     Color.new(90, 200, 130),  # エメラルドグリーン
+      physics:    Color.new(245, 175, 65),  # アンバー・オレンジ
+      separate:   Color.new(255, 95, 95),   # コーラル・レッド (押し出し処理)
+      enemy_move: Color.new(255, 190, 60),  # ウォーム・イエロー (敵移動)
+      missile:    Color.new(230, 110, 190), # ピンク/マゼンタ (ミサイル追尾)
+      player:     Color.new(100, 220, 180), # ターコイズ (自機処理)
+      render:     Color.new(75, 170, 245),  # スカイブルー
+      gui:        Color.new(185, 115, 235), # パープル (GUI全体)
+      gui_text:   Color.new(235, 150, 255), # 明るいパープル/マゼンタ (GUIテキスト描画)
+      hud:        Color.new(120, 220, 240), # スカイシアン (HUD描画)
+      audio:      Color.new(240, 105, 130), # ローズ
+      other:      Color.new(160, 165, 175)  # シルバーグレー
     }.freeze
 
     FALLBACK_PALETTE = [
@@ -35,6 +41,7 @@ module Zenoo
     @history = [] # 各フレームの { category => ms } の配列 (最新が末尾)
     @current_frame = Hash.new(0.0)
     @start_times = {}
+    @section_stack = [] # ネスト計測用スタック: 各要素は [category, t0, child_time]
     @colors = CATEGORY_COLORS.dup
     @registered_categories = []
     @frame_count = 0
@@ -42,19 +49,29 @@ module Zenoo
     class << self
       attr_accessor :enabled, :capacity
 
-      # カテゴリごとの実行時間をブロックで計測
-      # @param category [Symbol, String] 計測カテゴリ (例: :update, :physics, :render)
+      # カテゴリごとの実行時間をブロックで計測 (ネスト対応: 子セクションの時間は自動で除外され排他自己消費時間を記録)
+      # @param category [Symbol, String] 計測カテゴリ (例: :update, :physics, :render, :separate)
       def measure(category)
         return yield unless @enabled
 
         cat = category.to_sym
         register_category(cat)
         t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        entry = [cat, t0, 0.0]
+        @section_stack.push(entry)
         begin
           yield
         ensure
+          @section_stack.pop
           t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          @current_frame[cat] += (t1 - t0) * 1000.0
+          total_ms = (t1 - t0) * 1000.0
+          self_ms = total_ms - entry[2]
+          self_ms = 0.0 if self_ms < 0.0
+          @current_frame[cat] += self_ms
+
+          if (parent = @section_stack.last)
+            parent[2] += total_ms
+          end
         end
       end
 
@@ -87,6 +104,7 @@ module Zenoo
 
         @current_frame.clear
         @start_times.clear
+        @section_stack.clear
         @frame_count += 1
       end
 

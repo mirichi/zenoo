@@ -12,6 +12,8 @@ module Zenoo
       @path = path
       @native = Native::Font.load(path)
       @metrics_cache = {}
+      @advance_cache = {}
+      @glyph_cache = {}
     end
 
     # フォントメトリクスの取得 (ascent, descent, line_gap, line_height)
@@ -28,7 +30,7 @@ module Zenoo
       end
     end
 
-    # グリフの取得
+    # グリフの取得 (Ruby側でキャッシュして C拡張呼び出しと配列生成を最小化)
     # 返り値: [visible, u0, v0, u1, v1, x0, y0, x1, y1, advance_x] または nil
     def get_glyph(char_or_cp, size = 24.0, sdf = nil)
       cp = if char_or_cp.is_a?(String)
@@ -37,23 +39,39 @@ module Zenoo
              char_or_cp.to_i
            end
       s = size.to_f
-      if sdf == true
-        s = -s
-      elsif sdf == false
-        s = s + 10000.0
+      key = [cp, s, sdf]
+      @glyph_cache[key] ||= begin
+        actual_s = s
+        if sdf == true
+          actual_s = -s
+        elsif sdf == false
+          actual_s = s + 10000.0
+        end
+        @native.get_glyph(cp, actual_s)
       end
-      res = @native.get_glyph(cp, s)
-      res
     end
 
-    # 文字列の描画幅 (ピクセル単位) を計算
+    # 1文字の送り幅 (advance_x) の取得 (キャッシュ対応)
+    def advance_x(char_or_cp, size = 24.0)
+      s = size.to_f
+      key = [char_or_cp, s]
+      @advance_cache[key] ||= begin
+        g = get_glyph(char_or_cp, s)
+        g ? g[9].to_f : (s * 0.6)
+      end
+    end
+
+    # 文字列の描画幅 (ピクセル単位) を計算 (キャッシュ対応で高速)
     def text_width(text, size = 24.0)
       return 0.0 unless text
       s = size.to_f
       w = 0.0
       text.to_s.each_char do |ch|
-        g = get_glyph(ch, s)
-        w += g ? g[9] : s * 0.6
+        key = [ch, s]
+        w += (@advance_cache[key] ||= begin
+          g = get_glyph(ch, s)
+          g ? g[9].to_f : (s * 0.6)
+        end)
       end
       w
     end
