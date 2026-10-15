@@ -821,12 +821,11 @@ end
 # ------------------------------------------------------------------------------
 # メインループ
 # ------------------------------------------------------------------------------
-playground = nil
+playground = BilliardsPlayground.new
 test_frames = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_counter = 0
 
 Window.loop(1280, 720, "Zenoo Billiards & 3D Rolling Shader Demo") do
-  playground ||= BilliardsPlayground.new
   playground.step_frame
   if test_frames > 0
     frame_counter += 1

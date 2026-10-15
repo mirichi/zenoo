@@ -567,6 +567,11 @@ static VALUE win_get_time(VALUE self) {
     return DBL2NUM(zen_get_time());
 }
 
+static VALUE win_ensure_context(VALUE self) {
+    (void)self;
+    return zen_ensure_context() ? Qtrue : Qfalse;
+}
+
 static VALUE win_shutdown(VALUE self) {
     (void)self;
     zen_shutdown();
@@ -1017,6 +1022,7 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "delta_time", win_get_delta_time, 0);
     rb_define_singleton_method(mWindow, "time", win_get_time, 0);
     rb_define_singleton_method(mWindow, "shutdown", win_shutdown, 0);
+    rb_define_singleton_method(mWindow, "ensure_context", win_ensure_context, 0);
     rb_define_singleton_method(mWindow, "wasm?", win_wasm_p, 0);
 
     // 2. Input

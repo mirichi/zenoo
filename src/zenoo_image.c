@@ -31,6 +31,7 @@ void* zen__alloc(size_t size) {
 // ------------------------------------------
 ZenTexture* zen_texture_create(int width, int height) {
     if (width <= 0 || height <= 0) return NULL;
+    zen_ensure_context();
 
     ZenTexture* tex = (ZenTexture*)zen__alloc(sizeof(ZenTexture));
     if (!tex) return NULL;

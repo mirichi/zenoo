@@ -363,12 +363,9 @@ gallery_frame = 0
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
 
-atlas = nil
-slots = nil
+atlas, slots = build_texture_atlas
 
 Window.loop(1280, 720, "Zenoo Texture Atlas & sub_image Showcase") do
-  atlas, slots = build_texture_atlas if atlas.nil?
-
   dt = [Window.delta_time, 0.05].min
 
   # ギャラリーのアニメーション更新 (ゆっくり 0.4 秒周期)

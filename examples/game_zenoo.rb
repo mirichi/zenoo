@@ -1786,8 +1786,9 @@ class Game
 end
 
 # ==========================================
-# 7. メインループ
+# 7. 初期化 & メインループ
 # ==========================================
+Enemy.init_atlas
 game = Game.new
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
@@ -1795,7 +1796,6 @@ frame_count = 0
 game.game_state = STATE_PLAY if test_max > 0 && ENV['ZENOO_TEST_TITLE'] != '1'
 
 Window.loop(1280, 720, "Zenoo Survival Shooting Game") do
-  Enemy.init_atlas
   game.update_draw_frame
   if test_max > 0
     frame_count += 1

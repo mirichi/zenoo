@@ -100,10 +100,50 @@ const ZenViewport* zen__viewport(void) {
     return &s_viewport;
 }
 
+static int s_window_visible = 0;
+
 // ------------------------------------------
 // 初期化 & 終了
 // ------------------------------------------
-static int init_window(int width, int height, const char* title, GLFWmonitor* monitor, int win_width, int win_height) {
+static int init_window(int width, int height, const char* title, GLFWmonitor* monitor, int win_width, int win_height, int visible) {
+    if (s_window) {
+        // すでにウィンドウ(コンテキスト)が存在する場合は、サイズ・タイトル等の更新と可視化を行う
+        s_viewport.base_w = width;
+        s_viewport.base_h = height;
+
+        int create_w = (win_width > 0) ? win_width : width;
+        int create_h = (win_height > 0) ? win_height : height;
+
+        if (title && strlen(title) > 0) {
+            glfwSetWindowTitle(s_window, title);
+        }
+
+        if (monitor) {
+            glfwSetWindowMonitor(s_window, monitor, 0, 0, width, height, GLFW_DONT_CARE);
+            s_is_fullscreen = 1;
+        } else {
+            if (s_is_fullscreen) {
+                glfwSetWindowMonitor(s_window, NULL, s_saved_win_x, s_saved_win_y, create_w, create_h, 0);
+                s_is_fullscreen = 0;
+            } else {
+                glfwSetWindowSize(s_window, create_w, create_h);
+            }
+            s_saved_win_w = create_w;
+            s_saved_win_h = create_h;
+        }
+
+        int fb_w = create_w, fb_h = create_h;
+        glfwGetFramebufferSize(s_window, &fb_w, &fb_h);
+        update_viewport(fb_w, fb_h);
+
+        if (visible && !s_window_visible) {
+            glfwShowWindow(s_window);
+            glfwFocusWindow(s_window);
+            s_window_visible = 1;
+        }
+        return 1;
+    }
+
     glfwSetErrorCallback(glfw_error_callback);
 
 #ifdef _WIN32
@@ -136,8 +176,8 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #endif
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
-    glfwWindowHint(GLFW_FOCUSED, GLFW_TRUE);
+    glfwWindowHint(GLFW_VISIBLE, visible ? GLFW_TRUE : GLFW_FALSE);
+    glfwWindowHint(GLFW_FOCUSED, visible ? GLFW_TRUE : GLFW_FALSE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 
     s_viewport.base_w = width;
@@ -153,7 +193,7 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     s_window = glfwCreateWindow(create_w, create_h, title, monitor, NULL);
     if (!s_window) {
         glfwDefaultWindowHints();
-        glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
+        glfwWindowHint(GLFW_VISIBLE, visible ? GLFW_TRUE : GLFW_FALSE);
         s_window = glfwCreateWindow(create_w, create_h, title, monitor, NULL);
         if (!s_window) {
             fprintf(stderr, "[Zenoo] Failed to create GLFW window\n");
@@ -172,8 +212,13 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     update_viewport(fb_w, fb_h);
 
     glfwSetWindowShouldClose(s_window, GLFW_FALSE);
-    glfwShowWindow(s_window);
-    glfwFocusWindow(s_window);
+    if (visible) {
+        glfwShowWindow(s_window);
+        glfwFocusWindow(s_window);
+        s_window_visible = 1;
+    } else {
+        s_window_visible = 0;
+    }
     glfwMakeContextCurrent(s_window);
     glfwSwapInterval(s_vsync ? 1 : 0);
 
@@ -206,24 +251,29 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     return 1;
 }
 
+int zen_ensure_context(void) {
+    if (s_window) return 1;
+    return init_window(1280, 720, "Zenoo", NULL, 1280, 720, 0);
+}
+
 int zen_init(int width, int height, const char* title) {
     s_is_fullscreen = 0;
-    return init_window(width, height, title, NULL, width, height);
+    return init_window(width, height, title, NULL, width, height, 1);
 }
 
 int zen_init_scaled(int base_width, int base_height, const char* title, int window_width, int window_height) {
     s_is_fullscreen = 0;
-    return init_window(base_width, base_height, title, NULL, window_width, window_height);
+    return init_window(base_width, base_height, title, NULL, window_width, window_height, 1);
 }
 
 int zen_init_fullscreen(const char* title) {
-    if (!glfwInit()) return 0;
+    if (!zen_ensure_context()) return 0;
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : NULL;
     int w = mode ? mode->width : 1920;
     int h = mode ? mode->height : 1080;
     s_is_fullscreen = 1;
-    return init_window(w, h, title, monitor, w, h);
+    return init_window(w, h, title, monitor, w, h, 1);
 }
 
 void zen_shutdown(void) {
@@ -235,6 +285,7 @@ void zen_shutdown(void) {
     }
     glfwTerminate();
     s_frame_open = 0;
+    s_window_visible = 0;
 #ifdef _WIN32
     timeEndPeriod(1);
 #endif
