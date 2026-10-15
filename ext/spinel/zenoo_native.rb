@@ -64,6 +64,7 @@ module Zenoo
       native_func :delta_time, [], :float, "sp_zen_win_delta_time"
       native_func :time, [], :float, "sp_zen_win_time"
       native_func :shutdown, [], :nil, "sp_zen_win_shutdown"
+      native_func :ensure_context, [], :bool, "sp_zen_win_ensure_context"
       native_func :wasm?, [], :bool, "sp_zen_win_is_wasm"
       native_func :start_wasm_loop, [:any], :nil, "sp_zen_win_start_wasm_loop"
 

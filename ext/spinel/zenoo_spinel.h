@@ -60,6 +60,7 @@ void sp_zen_win_clear(uint32_t color);
 void sp_zen_win_start_wasm_loop(sp_RbVal proc_val);
 sp_bool sp_zen_win_is_wasm(void);
 void sp_zen_win_shutdown(void);
+sp_int sp_zen_win_ensure_context(void);
 const char* sp_zen_get_version(void);
 sp_int sp_zen_win_size_w(void);
 sp_int sp_zen_win_size_h(void);

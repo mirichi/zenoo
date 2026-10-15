@@ -247,6 +247,10 @@ void sp_zen_win_shutdown(void) {
     zen_shutdown();
 }
 
+sp_int sp_zen_win_ensure_context(void) {
+    return (sp_int)zen_ensure_context();
+}
+
 const char* sp_zen_get_version(void) {
     return zen_get_version();
 }

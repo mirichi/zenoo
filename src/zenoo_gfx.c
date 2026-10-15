@@ -162,6 +162,7 @@ void zen_clear(uint32_t color) {
 // レンダーターゲット切り替え
 // ------------------------------------------
 void zen_set_render_target(ZenImage* target) {
+    zen_ensure_context();
     s_current_render_target = target;
 
     if (target != NULL && target->texture != NULL) {
@@ -275,6 +276,7 @@ ZenShader* zen_shader_create(const char* vert_src, const char* frag_src) {
     if (!vert_src || !frag_src || strlen(vert_src) == 0 || strlen(frag_src) == 0) {
         return NULL;
     }
+    zen_ensure_context();
 
     GLuint vs = compile_shader(GL_VERTEX_SHADER, vert_src);
     if (!vs) return NULL;

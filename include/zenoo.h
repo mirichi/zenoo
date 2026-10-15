@@ -84,6 +84,7 @@ enum {
 // ==========================================
 // 1. システム & ライフサイクル API
 // ==========================================
+int  zen_ensure_context(void); // 必要に応じて非表示ウィンドウ&GLコンテキストを先行初期化
 int  zen_init(int width, int height, const char* title);
 int  zen_init_scaled(int base_width, int base_height, const char* title, int window_width, int window_height);
 int  zen_init_fullscreen(const char* title); // 全画面 (排他フルスクリーン) で初期化

@@ -67,79 +67,70 @@ end
 # 状態変数
 boxes = []
 hero = Hero.new
-hero_img = nil
-click_target = nil
-sfx_jump = nil
-sfx_land = nil
-sfx_spin = nil
-start_hero_combo = nil
-initialized = false
+
+# ----------------------------------------------------
+# 初期化 (Window.loop 前にテクスチャ・サウンドを生成)
+# ----------------------------------------------------
+# 効果音 (SoundEffect)
+sfx_jump = SoundEffect.sweep(300, 800, 0.15, type: :square, volume: 0.15)
+sfx_land = SoundEffect.tone(150, 0.1, type: :triangle, volume: 0.2)
+sfx_spin = SoundEffect.sweep(600, 1200, 0.2, type: :sine, volume: 0.15)
+
+# 回転確認用スプライトの生成 (FBOベイク: 上向きポインタ付きで回転が一目でわかるデザイン)
+hero_img = Zenoo::Image.new(64, 64)
+Zenoo::Image.render_to(hero_img) do
+  Zenoo::Window.clear([0, 0, 0, 0])
+  # メインボディ (ゴールド)
+  Zenoo::Window.draw_rect(8.0, 8.0, 48.0, 48.0, radius: 10.0, color: [255, 215, 0, 255], border_width: 2.0, border_color: :white)
+  # コアフレーム
+  Zenoo::Window.draw_rect(20.0, 20.0, 24.0, 24.0, radius: 6.0, color: [30, 40, 60, 255])
+  Zenoo::Window.draw_circle(32.0, 32.0, 8.0, color: [80, 220, 255, 255])
+  # 上向きヘッドマーカー (回転検知用の赤い突起ポインタ)
+  Zenoo::Window.draw_triangle(32.0, 0.0, 22.0, 12.0, 42.0, 12.0, color: [255, 60, 80, 255])
+end
+
+# イージング比較ボックスの生成と Tween 開始
+EASINGS.each_with_index do |item, idx|
+  ease = item[0]
+  label = item[1]
+  col = item[2]
+  b = AnimatedBox.new(220.0, 140.0 + idx * 60.0, label, col)
+  Tween.to(b, :x, to: 600.0, duration: 1.5, ease: ease).yoyo
+  boxes << b
+end
+
+# クリック追従ターゲット
+click_target = AnimatedBox.new(880.0, 530.0, "Target", [255, 80, 120, 255])
+click_target.box_size = 32.0
+
+# ヒーローコンボ関数
+start_hero_combo = proc do
+  Tween.kill(hero)
+  hero.x = 880.0
+  hero.y = 260.0
+  hero.scale = 1.0
+  hero.angle = 0.0
+  hero.status_text = "Ready"
+
+  Tween.to(hero, :y, to: 160.0, duration: 0.4, ease: :quad_out)
+       .call { sfx_jump.play }
+       .call { |t| hero.status_text = "Jumping!" }
+       .to(:y, to: 260.0, duration: 0.3, ease: :bounce_out)
+       .call { sfx_land.play; hero.status_text = "Landed!"; hero.scale = 1.35 }
+       .to(:scale, to: 1.0, duration: 0.2, ease: :quad_out)
+       .delay(0.2)
+       .call { sfx_spin.play; hero.status_text = "Spin Attack!" }
+       .to(:angle, to: 720.0, duration: 0.6, ease: :cubic_in_out)
+       .call { hero.angle = 0.0; hero.status_text = "Done! Click button to replay" }
+end
+
+# 初回コンボ開始
+start_hero_combo.call
 
 # ------------------------------------------------------------------------------
 # メインループ
 # ------------------------------------------------------------------------------
 Window.loop(1280, 720, "Zenoo - Tween & Easing Animation Demo") do
-  # ----------------------------------------------------
-  # 初回初期化 (OpenGL / WebGL コンテキスト生成後に安全に実行)
-  # ----------------------------------------------------
-  unless initialized
-    # 効果音 (SoundEffect)
-    sfx_jump = SoundEffect.sweep(300, 800, 0.15, type: :square, volume: 0.15)
-    sfx_land = SoundEffect.tone(150, 0.1, type: :triangle, volume: 0.2)
-    sfx_spin = SoundEffect.sweep(600, 1200, 0.2, type: :sine, volume: 0.15)
-
-    # 回転確認用スプライトの生成 (FBOベイク: 上向きポインタ付きで回転が一目でわかるデザイン)
-    hero_img = Zenoo::Image.new(64, 64)
-    Zenoo::Image.render_to(hero_img) do
-      Zenoo::Window.clear([0, 0, 0, 0])
-      # メインボディ (ゴールド)
-      Zenoo::Window.draw_rect(8.0, 8.0, 48.0, 48.0, radius: 10.0, color: [255, 215, 0, 255], border_width: 2.0, border_color: :white)
-      # コアフレーム
-      Zenoo::Window.draw_rect(20.0, 20.0, 24.0, 24.0, radius: 6.0, color: [30, 40, 60, 255])
-      Zenoo::Window.draw_circle(32.0, 32.0, 8.0, color: [80, 220, 255, 255])
-      # 上向きヘッドマーカー (回転検知用の赤い突起ポインタ)
-      Zenoo::Window.draw_triangle(32.0, 0.0, 22.0, 12.0, 42.0, 12.0, color: [255, 60, 80, 255])
-    end
-
-    # イージング比較ボックスの生成と Tween 開始
-    EASINGS.each_with_index do |item, idx|
-      ease = item[0]
-      label = item[1]
-      col = item[2]
-      b = AnimatedBox.new(220.0, 140.0 + idx * 60.0, label, col)
-      Tween.to(b, :x, to: 600.0, duration: 1.5, ease: ease).yoyo
-      boxes << b
-    end
-
-    # クリック追従ターゲット
-    click_target = AnimatedBox.new(880.0, 530.0, "Target", [255, 80, 120, 255])
-    click_target.box_size = 32.0
-
-    # ヒーローコンボ関数
-    start_hero_combo = proc do
-      Tween.kill(hero)
-      hero.x = 880.0
-      hero.y = 260.0
-      hero.scale = 1.0
-      hero.angle = 0.0
-      hero.status_text = "Ready"
-
-      Tween.to(hero, :y, to: 160.0, duration: 0.4, ease: :quad_out)
-           .call { sfx_jump.play }
-           .call { |t| hero.status_text = "Jumping!" }
-           .to(:y, to: 260.0, duration: 0.3, ease: :bounce_out)
-           .call { sfx_land.play; hero.status_text = "Landed!"; hero.scale = 1.35 }
-           .to(:scale, to: 1.0, duration: 0.2, ease: :quad_out)
-           .delay(0.2)
-           .call { sfx_spin.play; hero.status_text = "Spin Attack!" }
-           .to(:angle, to: 720.0, duration: 0.6, ease: :cubic_in_out)
-           .call { hero.angle = 0.0; hero.status_text = "Done! Click button to replay" }
-    end
-
-    # 初回コンボ開始
-    start_hero_combo.call
-    initialized = true
-  end
 
   t = Window.time
   mx, my = Input.mouse_pos

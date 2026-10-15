@@ -83,14 +83,16 @@ def create_disc_sprite
 end
 
 # ----------------------------------------------------
-# 2. メインループ
+# 2. 初期化 (Window.loop 前にテクスチャ生成)
+# ----------------------------------------------------
+@ship_img = create_spaceship_sprite
+@orb_img  = create_orb_sprite
+@disc_img = create_disc_sprite
+
+# ----------------------------------------------------
+# 3. メインループ
 # ----------------------------------------------------
 Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
-  # 初期化 (初回のみテクスチャ生成)
-  @ship_img ||= create_spaceship_sprite
-  @orb_img  ||= create_orb_sprite
-  @disc_img ||= create_disc_sprite
-
   t = Window.time
 
   # 背景描画

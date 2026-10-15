@@ -64,44 +64,44 @@ def create_orb_image
 end
 
 # ----------------------------------------------------
+# 初期化 (Window.loop 前に画像・スプライトを生成)
+# ----------------------------------------------------
+@ship_img = create_ship_image
+@gem_img  = create_gem_image
+@orb_img  = create_orb_image
+
+# プレイヤー
+@player = Sprite.new(600, 320, @ship_img)
+@player.pivot = :center
+
+# ターゲット群 (Rect と Circle コライダー混在)
+@targets = []
+recreate_targets = lambda do
+  @targets.clear
+  6.times do |i|
+    s = Sprite.new(200 + (i % 3) * 350, 150 + (i / 3) * 300, @gem_img)
+    s.pivot = :center
+    s.angle = rand(0..360)
+    s.scale = rand(0.9..1.3)
+    @targets << s
+  end
+  4.times do |i|
+    s = Sprite.new(350 + (i % 2) * 450, 220 + (i / 2) * 220, @orb_img)
+    s.pivot = :center
+    s.set_collider(:circle, radius: 26)
+    s.scale = rand(0.9..1.2)
+    @targets << s
+  end
+end
+
+recreate_targets.call
+@recreate_targets = recreate_targets
+@show_colliders = true
+
+# ----------------------------------------------------
 # メインループ
 # ----------------------------------------------------
 Window.loop(1280, 720, "Zenoo - Sprite & Collision Synchronization Demo") do
-  # 初期化 (初回フレームのみ)
-  unless @initialized
-    @ship_img = create_ship_image
-    @gem_img  = create_gem_image
-    @orb_img  = create_orb_image
-
-    # プレイヤー
-    @player = Sprite.new(600, 320, @ship_img)
-    @player.pivot = :center
-
-    # ターゲット群 (Rect と Circle コライダー混在)
-    @targets = []
-    recreate_targets = lambda do
-      @targets.clear
-      6.times do |i|
-        s = Sprite.new(200 + (i % 3) * 350, 150 + (i / 3) * 300, @gem_img)
-        s.pivot = :center
-        s.angle = rand(0..360)
-        s.scale = rand(0.9..1.3)
-        @targets << s
-      end
-      4.times do |i|
-        s = Sprite.new(350 + (i % 2) * 450, 220 + (i / 2) * 220, @orb_img)
-        s.pivot = :center
-        s.set_collider(:circle, radius: 26)
-        s.scale = rand(0.9..1.2)
-        @targets << s
-      end
-    end
-
-    recreate_targets.call
-    @recreate_targets = recreate_targets
-    @show_colliders = true
-    @initialized = true
-  end
 
   # 入力処理
   mx = Input.mouse_x
