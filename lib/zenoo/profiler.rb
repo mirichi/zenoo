@@ -11,18 +11,12 @@ module Zenoo
   module Profiler
     DEFAULT_CAPACITY = 120
 
-    # カテゴリ別デフォルト表示色パレット
+    # カテゴリ別デフォルト表示色パレット (エンジン共通の基本カテゴリ)
     CATEGORY_COLORS = {
       update:     Color.new(90, 200, 130),  # エメラルドグリーン
       physics:    Color.new(245, 175, 65),  # アンバー・オレンジ
-      separate:   Color.new(255, 95, 95),   # コーラル・レッド (押し出し処理)
-      enemy_move: Color.new(255, 190, 60),  # ウォーム・イエロー (敵移動)
-      missile:    Color.new(230, 110, 190), # ピンク/マゼンタ (ミサイル追尾)
-      player:     Color.new(100, 220, 180), # ターコイズ (自機処理)
       render:     Color.new(75, 170, 245),  # スカイブルー
-      gui:        Color.new(185, 115, 235), # パープル (GUI全体)
-      gui_text:   Color.new(235, 150, 255), # 明るいパープル/マゼンタ (GUIテキスト描画)
-      hud:        Color.new(120, 220, 240), # スカイシアン (HUD描画)
+      gui:        Color.new(185, 115, 235), # パープル
       audio:      Color.new(240, 105, 130), # ローズ
       other:      Color.new(160, 165, 175)  # シルバーグレー
     }.freeze
@@ -130,6 +124,14 @@ module Zenoo
       # カテゴリのカスタム表示色を設定
       def set_color(category, color)
         @colors[category.to_sym] = color
+      end
+
+      # 複数カテゴリの表示色を一括設定
+      def set_colors(color_hash = nil, **kwargs)
+        if color_hash.is_a?(Hash)
+          color_hash.each { |k, v| @colors[k.to_sym] = v }
+        end
+        kwargs.each { |k, v| @colors[k.to_sym] = v }
       end
 
       # 直近フレームのカテゴリ別時間 { category => ms }
