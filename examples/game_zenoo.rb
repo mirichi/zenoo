@@ -1231,14 +1231,10 @@ class Game
       @levelup_flash -= 1 if @levelup_flash > 0
 
       # CRT エフェクトの初期化とトグル切り替え ([C] キー)
-      if @crt_shader.nil?
-        @crt_shader = Shader.new(CRT_FRAGMENT_SHADER)
-        Window.filter = @crt_shader if @crt_enabled
-      end
+      @crt_shader ||= Shader.new(CRT_FRAGMENT_SHADER)
 
       if Input.key_push?(:c)
         @crt_enabled = !@crt_enabled
-        Window.filter = @crt_enabled ? @crt_shader : nil
       end
 
       if Input.key_push?(:m)
@@ -1526,8 +1522,32 @@ class Game
   end
 
   def draw_game
-    Window.clear(Color::BLACK)
+    if @crt_enabled
+      # CRT エフェクト有効時は自前のオフスクリーンバッファ (@game_screen) に描画し、
+      # CRT シェーダーを適用しながらメイン画面へ全画面描画する
+      @game_screen ||= Image.new(1280, 720)
+      Image.render_to(@game_screen) do
+        Window.clear(Color::BLACK)
+        render_game_scene
+      end
+      Window.clear(Color::BLACK)
+      Window.draw_image(0, 0, @game_screen, shader: @crt_shader)
+    else
+      Window.clear(Color::BLACK)
+      render_game_scene
+    end
 
+    # プロファイラGUIはCRTの歪みエフェクトを受けないよう、メイン画面の一番手前にクリアに描画
+    if @show_profiler
+      Profiler.measure(:gui) do
+        GUI.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 270) do
+          GUI.profile_graph(w: 290, h: 80, max_ms: 33.33)
+        end
+      end
+    end
+  end
+
+  def render_game_scene
     if @game_state == STATE_TITLE
       draw_title
       return
@@ -1572,14 +1592,6 @@ class Game
       draw_levelup_menu
     when STATE_GAMEOVER
       draw_gameover
-    end
-
-    if @show_profiler
-      Profiler.measure(:gui) do
-        GUI.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 270) do
-          GUI.profile_graph(w: 290, h: 80, max_ms: 33.33)
-        end
-      end
     end
   end
 
