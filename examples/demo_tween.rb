@@ -95,7 +95,7 @@ EASINGS.each_with_index do |item, idx|
   label = item[1]
   col = item[2]
   b = AnimatedBox.new(220.0, 140.0 + idx * 60.0, label, col)
-  Tween.to(b, :x, to: 600.0, duration: 1.5, ease: ease).yoyo
+  Tween.to(b, 1.5, x: 600.0, ease: ease).yoyo
   boxes << b
 end
 
@@ -112,15 +112,15 @@ start_hero_combo = proc do
   hero.angle = 0.0
   hero.status_text = "Ready"
 
-  Tween.to(hero, :y, to: 160.0, duration: 0.4, ease: :quad_out)
+  Tween.to(hero, 0.4, y: 160.0, ease: :quad_out)
        .call { sfx_jump.play }
        .call { |t| hero.status_text = "Jumping!" }
-       .to(:y, to: 260.0, duration: 0.3, ease: :bounce_out)
+       .to(0.3, y: 260.0, ease: :bounce_out)
        .call { sfx_land.play; hero.status_text = "Landed!"; hero.scale = 1.35 }
-       .to(:scale, to: 1.0, duration: 0.2, ease: :quad_out)
+       .to(0.2, scale: 1.0, ease: :quad_out)
        .delay(0.2)
        .call { sfx_spin.play; hero.status_text = "Spin Attack!" }
-       .to(:angle, to: 720.0, duration: 0.6, ease: :cubic_in_out)
+       .to(0.6, angle: 720.0, ease: :cubic_in_out)
        .call { hero.angle = 0.0; hero.status_text = "Done! Click button to replay" }
 end
 
@@ -193,12 +193,11 @@ Window.loop(1280, 720, "Zenoo - Tween & Easing Animation Demo") do
   # マウス入力チェック
   if Input.mouse_pressed?(:left) && click_target
     if mx >= 720 && mx <= 1240 && my >= 490 && my <= 660
-      # 前のTweenを上書きして目標地点へスムーズに移動
+      # 前のTweenを上書きして目標地点へスムーズに移動 (x, y を同時に Tween)
       Tween.kill(click_target)
       target_x = mx - click_target.box_size / 2.0
       target_y = my - click_target.box_size / 2.0
-      Tween.to(click_target, :x, to: target_x, duration: 0.6, ease: :back_out)
-      Tween.to(click_target, :y, to: target_y, duration: 0.6, ease: :back_out)
+      Tween.to(click_target, 0.6, x: target_x, y: target_y, ease: :back_out)
     end
   end
 

@@ -53,20 +53,18 @@ module Zenoo
         t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         entry = [cat, t0, 0.0]
         @section_stack.push(entry)
-        begin
-          yield
-        ensure
-          @section_stack.pop
-          t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          total_ms = (t1 - t0) * 1000.0
-          self_ms = total_ms - entry[2]
-          self_ms = 0.0 if self_ms < 0.0
-          @current_frame[cat] += self_ms
+        res = yield
+        @section_stack.pop
+        t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        total_ms = (t1 - t0) * 1000.0
+        self_ms = total_ms - entry[2]
+        self_ms = 0.0 if self_ms < 0.0
+        @current_frame[cat] += self_ms
 
-          if (parent = @section_stack.last)
-            parent[2] += total_ms
-          end
+        if (parent = @section_stack.last)
+          parent[2] += total_ms
         end
+        res
       end
 
       # 手動での計測開始
