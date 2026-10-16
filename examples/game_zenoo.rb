@@ -58,6 +58,17 @@ COLOR_HP_GRAY      = Color.new(130, 130, 130)
 COLOR_GRID_DARK    = Color.new(50, 50, 60)
 COLOR_MENU_BG      = Color.new(0, 0, 0, 180)
 COLOR_BUTTON_HOVER = Color.new(70, 70, 80)
+
+# ゲームデモ固有のプロファイラ表示色パレット
+Zenoo::Profiler.set_colors(
+  player:     Color.new(100, 220, 180), # ターコイズ (自機処理)
+  missile:    Color.new(230, 110, 190), # ピンク/マゼンタ (ミサイル追尾)
+  enemy_move: Color.new(255, 190, 60),  # ウォーム・イエロー (敵移動)
+  separate:   Color.new(255, 95, 95),   # コーラル・レッド (敵押し出し)
+  gc:         Color.new(160, 165, 175), # シルバーグレー (GC/クリーンアップ)
+  hud:        Color.new(120, 220, 240), # スカイシアン (HUD描画)
+  gui_text:   Color.new(235, 150, 255)  # 明るいパープル (GUIテキスト描画)
+)
 COLOR_TEXT_GRAY    = Color.new(140, 140, 140)
 COLOR_PURPLE       = Color.new(210, 60, 255)
 COLOR_EXP_GREEN    = Color.new(50, 255, 130)
@@ -843,44 +854,108 @@ class Game
     end
   end
 
-  # 敵同士の重なり防止 (Sprite.check: Sweep and Prune によるソフト押し出し)
+  # 敵同士の重なり防止 (2D 空間グリッドによる高速ソフト押し出し)
   def separate_enemies
-    Sprite.check(@enemies) do |e1, e2|
-      next if e1.dead || e2.dead
+    n = @enemies.size
+    return if n < 2
 
-      dx = e2.x - e1.x
-      dy = e2.y - e1.y
-      d2 = dx * dx + dy * dy
-      next if d2 <= 0.0001
+    # セルサイズ 64px で空間ハッシュ
+    inv_cell = 1.0 / 64.0
+    grid = {}
+    i = 0
+    while i < n
+      e = @enemies[i]
+      i += 1
+      next if e.dead
+      cx = (e.x * inv_cell).floor + 1000
+      cy = (e.y * inv_cell).floor + 1000
+      code = cy * 2000 + cx
+      (grid[code] ||= []) << e
+      if e.is_boss
+        # ボスは大型なので周囲セルにも登録
+        [-1, 0, 1].each do |dx|
+          [-1, 0, 1].each do |dy|
+            next if dx == 0 && dy == 0
+            (grid[(cy + dy) * 2000 + (cx + dx)] ||= []) << e
+          end
+        end
+      end
+    end
 
-      r_sum = e1.hit_radius + e2.hit_radius
+    # 隣接4セル方向 (自分 + 右、右下、下、左下で全ペア重複なし網羅)
+    offsets = [1, 2001, 2000, 1999]
+
+    grid.each do |code, cell_enemies|
+      c_len = cell_enemies.length
+      next if c_len == 0
+
+      # 1. 同一セル内のペア
+      i = 0
+      while i < c_len
+        e1 = cell_enemies[i]
+        i += 1
+        j = i
+        while j < c_len
+          e2 = cell_enemies[j]
+          j += 1
+          next if e1.equal?(e2)
+          resolve_enemy_overlap(e1, e2)
+        end
+      end
+
+      # 2. 隣接4セルとのペア
+      offsets.each do |off|
+        neighbor = grid[code + off]
+        next unless neighbor
+        n_len = neighbor.length
+        next if n_len == 0
+        i = 0
+        while i < c_len
+          e1 = cell_enemies[i]
+          i += 1
+          j = 0
+          while j < n_len
+            e2 = neighbor[j]
+            j += 1
+            next if e1.equal?(e2)
+            resolve_enemy_overlap(e1, e2)
+          end
+        end
+      end
+    end
+  end
+
+  # 敵同士のめり込み解消ヘルパー
+  def resolve_enemy_overlap(e1, e2)
+    dx = e2.x - e1.x
+    r_sum = e1.hit_radius + e2.hit_radius
+    return if dx.abs > r_sum
+    dy = e2.y - e1.y
+    return if dy.abs > r_sum
+
+    d2 = dx * dx + dy * dy
+    if d2 < r_sum * r_sum && d2 > 0.0001
       d = Math.sqrt(d2)
       overlap = r_sum - d
-      next if overlap <= 0.0
-
+      return if overlap <= 0.0
       push = overlap * 0.25
       inv_d = 1.0 / d
       nx = dx * inv_d * push
       ny = dy * inv_d * push
 
       if e1.is_boss
-        # ボスは動かず、相手のザコ敵を押し出す
         e2.x += nx * 2.0
         e2.y += ny * 2.0
       elsif e2.is_boss
-        # ボスは動かず、相手のザコ敵を押し出す
         e1.x -= nx * 2.0
         e1.y -= ny * 2.0
       elsif e1.max_hp > 5 && e2.max_hp <= 5
-        # エリート敵は動かず、ザコ敵が道を譲る
         e2.x += nx * 2.0
         e2.y += ny * 2.0
       elsif e2.max_hp > 5 && e1.max_hp <= 5
-        # エリート敵は動かず、ザコ敵が道を譲る
         e1.x -= nx * 2.0
         e1.y -= ny * 2.0
       else
-        # 同格同士: 半々で押し合う
         e1.x -= nx
         e1.y -= ny
         e2.x += nx
