@@ -20,36 +20,6 @@ module Zenoo
     @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
     @main_loop_block = nil
     @step_proc = nil
-    @filter = nil
-    @filter_uniforms = nil
-    @screen_buffer = nil
-
-    # 画面全体ポストプロセスフィルター (Shader オブジェクト、または nil で解除)
-    def self.filter
-      @filter
-    end
-
-    def self.filter=(shader)
-      @filter = shader
-    end
-
-    # フィルター用 Uniform パラメータ (Hash: { u_time: t, ... })
-    def self.filter_uniforms
-      @filter_uniforms
-    end
-
-    def self.filter_uniforms=(uniforms)
-      @filter_uniforms = uniforms
-    end
-
-    def self.__ensure_screen_buffer
-      w = Native::Window.size_w
-      h = Native::Window.size_h
-      if @screen_buffer.nil? || @screen_buffer.width != w || @screen_buffer.height != h
-        @screen_buffer = Zenoo::Image.new(w, h)
-      end
-      @screen_buffer
-    end
 
     # DXRuby風メインループ
     def self.loop(width = 1280, height = 720, title = "Zenoo", scale: 1.0, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, &block)
@@ -83,46 +53,20 @@ module Zenoo
       Zenoo::Input.__update_step if defined?(Zenoo::Input)
     end
 
-    def self.__draw_step(active_filter = nil)
-      if active_filter && @screen_buffer
-        # 1. オフスクリーンバッファへの描画を完了
-        Backend.flush_image(@screen_buffer)
-        Backend.clear_clips
-        @offset_x = 0.0
-        @offset_y = 0.0
-        Native::Renderer.reset_scissor
-
-        # 2. 描画先を画面（メインフレームバッファ）に戻す
-        Backend.current_target = nil
-        Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
-
-        # 3. 画面に @screen_buffer を active_filter（Shader）で全画面描画
-        draw_image(0, 0, @screen_buffer, shader: active_filter, uniforms: @filter_uniforms)
-        Backend.flush_screen
-      else
-        Backend.flush_screen
-        Backend.clear_clips
-        @offset_x = 0.0
-        @offset_y = 0.0
-        Native::Renderer.reset_scissor
-      end
+    def self.__draw_step
+      Backend.flush_screen
+      Backend.clear_clips
+      @offset_x = 0.0
+      @offset_y = 0.0
+      Native::Renderer.reset_scissor
     end
 
     def self.__step_frame
-      active_filter = @filter
-      if active_filter
-        buf = __ensure_screen_buffer
-        Backend.current_target = buf
-        draw_rect(0.0, 0.0, buf.width, buf.height, color: @bg_color)
-        __update_step
-        __draw_step(active_filter)
-      else
-        Backend.current_target = nil
-        Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
-        Native::Window.clear(@bg_color)
-        __update_step
-        __draw_step(nil)
-      end
+      Backend.current_target = nil
+      Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
+      Native::Window.clear(@bg_color)
+      __update_step
+      __draw_step
     ensure
       Zenoo::Profiler.end_frame if defined?(Zenoo::Profiler)
       Backend.current_target = nil
