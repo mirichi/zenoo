@@ -7,126 +7,183 @@ module Zenoo
   # Zenoo::Tween - 直感的・軽量なメソッドチェーン対応アニメーションシステム
   # ====================================================================
   # 主な特徴:
-  # 1. メソッドチェーンによる直列実行 (.to, .delay, .call, .loop, .yoyo)
-  # 2. .call { ... } による時間軸イベント（画像切替・SE再生・パーティクル等）の挿入
-  # 3. 豊富なイージング (:linear, :quad_out, :bounce_out, :elastic_out, :step 等)
-  # 4. オブジェクト指定一括停止 (Tween.kill(target)) や即時完了 (tween.finish)
+  # 1. クラスメソッド Tween.to(target, duration, ...) で対象をバインドし、
+  #    チェーン (.to, .delay, .call, .loop, .yoyo) で直列実行
+  # 2. 複数プロパティ（x, y, angle, alpha 等）の同時トゥイーンに対応
+  # 3. Spinel AOT コンパイルに最適化 (動的 send を完全排除し静的ディスパッチ)
+  # 4. register_property によるカスタムプロパティ（Getter/Setter Proc）の柔軟な拡張
+  # 5. .call { ... } による時間軸イベント（画像切替・SE再生・パーティクル等）の挿入
+  # 6. オブジェクト指定一括停止 (Tween.kill(target)) や即時完了 (tween.finish)
   # ====================================================================
   class Tween
     # ------------------------------------------------------------------
-    # クラスメソッド (グローバルマネージャ)
+    # クラスメソッド & グローバルマネージャ
     # ------------------------------------------------------------------
     @active_tweens = []
+    @custom_accessors = {} # { prop_sym => [getter_proc, setter_proc] }
 
-    def self.active_tweens
-      @active_tweens
-    end
+    class << self
+      attr_reader :active_tweens, :custom_accessors
 
-    # 対象オブジェクトのプロパティをアニメーション開始
-    # 例: Tween.to(player, :x, to: 400, duration: 1.0, ease: :bounce_out)
-    def self.to(target = nil, property = nil, to: nil, duration: 0.0, ease: :linear, delay: 0.0, from: nil)
-      tween = new
-      tween.to(target, property, to: to, duration: duration, ease: ease, delay: delay, from: from)
-      register(tween)
-      tween
-    end
-
-    # 数値範囲を補間してブロックへ渡す（直接描画やカスタム値更新用）
-    # 例: Tween.value(from: 0.0, to: 1.0, duration: 0.5) { |v| alpha = v }
-    def self.value(from:, to:, duration: 0.0, ease: :linear, delay: 0.0, steps: nil, round: nil, &block)
-      tween = new
-      tween.value(from: from, to: to, duration: duration, ease: ease, delay: delay, steps: steps, round: round, &block)
-      register(tween)
-      tween
-    end
-
-    # 待機から始まるチェーンを作成
-    # 例: Tween.delay(0.5).to(player, :y, to: 100)
-    def self.delay(duration)
-      tween = new
-      tween.delay(duration)
-      register(tween)
-      tween
-    end
-
-    # 即座（または遅延後）にブロックを実行するステップから始まるチェーンを作成
-    # 例: Tween.call { Sound.play(:start) }.delay(0.2).to(...)
-    def self.call(&block)
-      tween = new
-      tween.call(&block)
-      register(tween)
-      tween
-    end
-
-    # 対象オブジェクトに関わる全ての Tween を破棄・中断
-    def self.kill(target)
-      return if target.nil?
-      @active_tweens.each do |t|
-        t.stop if t.involves_target?(target)
+      # カスタムプロパティ用の Getter / Setter を Proc で登録
+      # @param name [Symbol, String] プロパティ名
+      # @param getter [Proc] ->(target) { target.foo }
+      # @param setter [Proc] ->(target, val) { target.foo = val }
+      def register_property(name, getter: nil, setter: nil)
+        @custom_accessors[name.to_sym] = [getter, setter]
       end
-    end
 
-    def self.stop_all(target = nil)
-      if target
-        kill(target)
-      else
-        clear
+      # 対象オブジェクトのプロパティをアニメーション開始 (クラスメソッドは target 必須)
+      # 例: Tween.to(player, 1.0, x: 400, y: 300, ease: :quad_out)
+      def to(target, duration, ease: :linear, delay: 0.0, from: nil, steps: nil, round: nil, **props)
+        tween = new(target)
+        tween.to(duration, ease: ease, delay: delay, from: from, steps: steps, round: round, **props)
+        register(tween)
+        tween
       end
-    end
 
-    # 全ての Tween を強制クリア
-    def self.clear
-      @active_tweens.each(&:stop)
-      @active_tweens.clear
-    end
+      # 待機から始まるチェーンを作成
+      # 例: Tween.delay(player, 0.5).to(1.0, x: 400)
+      def delay(target, duration)
+        tween = new(target)
+        tween.delay(duration)
+        register(tween)
+        tween
+      end
 
-    # 対象オブジェクトの全 Tween を最終状態にスキップして完了
-    def self.finish_all(target = nil)
-      if target
+      # 即座（または遅延後）にブロックを実行するステップから始まるチェーンを作成
+      def call(target = nil, &block)
+        tween = new(target)
+        tween.call(&block)
+        register(tween)
+        tween
+      end
+
+      # 数値範囲を補間してブロックへ渡す（直接描画やカスタム値更新用）
+      # 例: Tween.value(from: 0.0, to: 1.0, duration: 0.5) { |v| alpha = v }
+      def value(from:, to:, duration: 0.0, ease: :linear, delay: 0.0, steps: nil, round: nil, &block)
+        tween = new(nil)
+        tween.value(from: from, to: to, duration: duration, ease: ease, delay: delay, steps: steps, round: round, &block)
+        register(tween)
+        tween
+      end
+
+      # 対象オブジェクトに関わる全ての Tween を破棄・中断
+      def kill(target)
+        return if target.nil?
         @active_tweens.each do |t|
-          t.finish if t.involves_target?(target)
+          t.stop if t.involves_target?(target)
         end
-      else
-        @active_tweens.each(&:finish)
       end
-    end
 
-    # 全 Tween の一時停止 / 再開
-    def self.pause_all
-      @active_tweens.each(&:pause)
-    end
-
-    def self.resume_all
-      @active_tweens.each(&:resume)
-    end
-
-    # 現在アクティブな Tween 数
-    def self.count
-      @active_tweens.size
-    end
-
-    # マネージャに登録
-    def self.register(tween)
-      @active_tweens << tween unless @active_tweens.include?(tween)
-    end
-
-    # マネージャから解除
-    def self.unregister(tween)
-      @active_tweens.delete(tween)
-    end
-
-    # エンジン内部フレーム更新 (Window.__update_step から自動呼び出し)
-    def self.__update_step(dt)
-      return if @active_tweens.empty?
-
-      i = 0
-      while i < @active_tweens.size
-        t = @active_tweens[i]
-        t.__update(dt)
-        if t.completed?
-          @active_tweens.delete_at(i)
+      def stop_all(target = nil)
+        if target
+          kill(target)
         else
-          i += 1
+          clear
+        end
+      end
+
+      # 全ての Tween を強制クリア
+      def clear
+        @active_tweens.each(&:stop)
+        @active_tweens.clear
+      end
+
+      # 対象オブジェクトの全 Tween を最終状態にスキップして完了
+      def finish_all(target = nil)
+        if target
+          @active_tweens.each do |t|
+            t.finish if t.involves_target?(target)
+          end
+        else
+          @active_tweens.each(&:finish)
+        end
+      end
+
+      # 全 Tween の一時停止 / 再開
+      def pause_all
+        @active_tweens.each(&:pause)
+      end
+
+      def resume_all
+        @active_tweens.each(&:resume)
+      end
+
+      # 現在アクティブな Tween 数
+      def count
+        @active_tweens.size
+      end
+
+      # マネージャに登録
+      def register(tween)
+        @active_tweens << tween unless @active_tweens.include?(tween)
+      end
+
+      # マネージャから解除
+      def unregister(tween)
+        @active_tweens.delete(tween)
+      end
+
+      # エンジン内部フレーム更新 (Window.__update_step から自動呼び出し)
+      def __update_step(dt)
+        return if @active_tweens.empty?
+
+        i = 0
+        while i < @active_tweens.size
+          t = @active_tweens[i]
+          t.__update(dt)
+          if t.completed?
+            @active_tweens.delete_at(i)
+          else
+            i += 1
+          end
+        end
+      end
+
+      # ----------------------------------------------------------------
+      # プロパティ アクセス用ヘルパー (Spinel AOT 最適化)
+      # send を完全排除し、主要プロパティへの直接アクセスとカスタム Proc 呼び出し
+      # ----------------------------------------------------------------
+      def _get_prop(target, prop)
+        return 0.0 unless target
+        case prop
+        when :x then target.x
+        when :y then target.y
+        when :z then target.z
+        when :angle then target.angle
+        when :scale then target.scale
+        when :scale_x then target.scale_x
+        when :scale_y then target.scale_y
+        when :alpha then target.alpha
+        when :color then target.color
+        else
+          acc = @custom_accessors[prop]
+          if acc && acc[0]
+            acc[0].call(target)
+          else
+            0.0
+          end
+        end
+      end
+
+      def _set_prop(target, prop, val)
+        return unless target
+        case prop
+        when :x then target.x = val
+        when :y then target.y = val
+        when :z then target.z = val
+        when :angle then target.angle = val
+        when :scale then target.scale = val
+        when :scale_x then target.scale_x = val
+        when :scale_y then target.scale_y = val
+        when :alpha then target.alpha = val
+        when :color then target.color = val
+        else
+          acc = @custom_accessors[prop]
+          if acc && acc[1]
+            acc[1].call(target, val)
+          end
         end
       end
     end
@@ -134,9 +191,10 @@ module Zenoo
     # ------------------------------------------------------------------
     # インスタンス実装
     # ------------------------------------------------------------------
-    attr_reader :last_target
+    attr_reader :target
 
-    def initialize
+    def initialize(target = nil)
+      @target = target
       @steps = []
       @step_index = 0
       @step_elapsed = 0.0
@@ -147,35 +205,22 @@ module Zenoo
       @initial_loop = nil
       @yoyo = false
       @yoyo_reverse = false
-      @last_target = nil
       @on_complete = nil
     end
 
-    # チェーンの次のステップとしてプロパティ変更を追加
-    def to(target = :__keep__, property = nil, to: nil, duration: 0.0, ease: :linear, delay: 0.0, from: nil, steps: nil, round: nil)
-      # 引数の柔軟な解決 (t.to(:y, to: 200) のように target 省略を許容)
-      if target.is_a?(Symbol) && property.nil? && !to.nil?
-        property = target
-        target = @last_target
-      elsif target == :__keep__
-        target = @last_target
-      else
-        @last_target = target
-      end
-
-      # delay が指定されていれば先に delay ステップを追加
+    # チェーンの次のステップとしてプロパティ変更を追加 (インスタンスメソッドには target を渡さない)
+    # 例: tween.to(1.0, x: 400, y: 300, ease: :quad_out)
+    def to(duration, ease: :linear, delay: 0.0, from: nil, steps: nil, round: nil, **props)
       self.delay(delay) if delay && delay > 0
 
       @steps << {
         type: :property,
-        target: target,
-        property: property,
-        to: to,
         duration: [duration.to_f, 0.0].max,
         ease: ease,
         from: from,
         steps: steps,
-        round: round
+        round: round,
+        props: props
       }
       self
     end
@@ -190,7 +235,6 @@ module Zenoo
     end
 
     # チェーンの次のステップとしてブロック実行を追加
-    # ブロック引数 |t| には Tween 自身が渡される (引数なしブロックも可)
     def call(&block)
       @steps << {
         type: :call,
@@ -199,7 +243,7 @@ module Zenoo
       self
     end
 
-    # 数値補間ステップを追加
+    # 数値補間ステップを追加 (カスタム値更新用)
     def value(from:, to:, duration: 0.0, ease: :linear, delay: 0.0, steps: nil, round: nil, &block)
       self.delay(delay) if delay && delay > 0
       @steps << {
@@ -261,13 +305,14 @@ module Zenoo
     def finish
       return if @completed
 
-      # 残りの全プロパティステップの最終値を即時反映
       @steps.each do |step|
         case step[:type]
         when :property
-          val = step[:to]
-          val = val.round if val && (step[:round] == true || (step[:round].nil? && val.is_a?(Integer)))
-          step[:target]&.send("#{step[:property]}=", val)
+          props = step[:props]
+          props.each do |prop, to_val|
+            val = step[:round] ? to_val.round : to_val
+            Tween._set_prop(@target, prop, val)
+          end
         when :value
           val = step[:to]
           val = val.round if val && (step[:round] == true || (step[:round].nil? && val.is_a?(Integer)))
@@ -297,7 +342,7 @@ module Zenoo
 
     # この Tween が指定したターゲットに関与しているか判定
     def involves_target?(target)
-      @steps.any? { |s| s[:type] == :property && s[:target].equal?(target) }
+      @target.equal?(target)
     end
 
     # ------------------------------------------------------------------
@@ -306,7 +351,6 @@ module Zenoo
     def __update(dt)
       return if @completed || @paused
 
-      # 1 フレーム内に複数の瞬時ステップ (:call 等) が連続する場合があるため while で進行
       while !@completed && dt >= 0
         if @step_index >= @steps.size
           handle_loop_completion
@@ -316,7 +360,7 @@ module Zenoo
         step = current_step
         break unless step
         dt = process_step(step, dt)
-        break if dt.nil? # ステップが継続中の場合はフレーム終了
+        break if dt.nil?
       end
     end
 
@@ -328,7 +372,7 @@ module Zenoo
       when :call
         call_step_block(step[:block])
         advance_step
-        dt # 消費時間 0 なのでそのまま dt を次に渡す
+        dt
 
       when :delay
         @step_elapsed += dt
@@ -337,7 +381,7 @@ module Zenoo
           advance_step
           leftover
         else
-          nil # まだ待機中
+          nil
         end
 
       when :property
@@ -348,18 +392,20 @@ module Zenoo
         t = dur <= 0 ? 1.0 : [@step_elapsed / dur, 1.0].min
         progress = Easing.calc(step[:ease], t, step[:steps] || 1)
 
-        current_val = step[:actual_from] + (step[:actual_to] - step[:actual_from]) * progress
-        if step[:round] == true || (step[:round].nil? && step[:is_integer])
-          current_val = current_val.round
+        actual_props = step[:actual_props]
+        actual_props.each do |prop, range|
+          from_v, to_v = range
+          cur_val = from_v + (to_v - from_v) * progress
+          cur_val = cur_val.round if step[:round]
+          Tween._set_prop(@target, prop, cur_val)
         end
-        step[:target].send("#{step[:property]}=", current_val)
 
         if @step_elapsed >= dur
-          final_val = step[:actual_to]
-          if step[:round] == true || (step[:round].nil? && step[:is_integer])
-            final_val = final_val.round
+          actual_props.each do |prop, range|
+            to_v = range[1]
+            final_val = step[:round] ? to_v.round : to_v
+            Tween._set_prop(@target, prop, final_val)
           end
-          step[:target].send("#{step[:property]}=", final_val)
           leftover = dur <= 0 ? dt : (@step_elapsed - dur)
           advance_step
           leftover
@@ -407,33 +453,34 @@ module Zenoo
     end
 
     def init_property_step(step)
-      # 初回実行時に起点 (initial_from) を記録
-      unless step.key?(:initial_from)
-        from = step[:from]
-        if from.nil?
-          begin
-            from = step[:target].send(step[:property])
-          rescue StandardError
-            from = 0.0
-          end
+      unless step.key?(:initial_props)
+        init_map = {}
+        from_map = step[:from] || {}
+        step[:props].each do |prop, to_val|
+          val_from = from_map[prop]
+          val_from ||= Tween._get_prop(@target, prop)
+          init_map[prop] = [val_from.to_f, to_val.to_f]
         end
-        step[:is_integer] = (step[:to].is_a?(Integer) && (from.nil? || from.is_a?(Integer)))
-        step[:initial_from] = from.to_f
+        step[:initial_props] = init_map
       end
 
-      if @yoyo_reverse
-        step[:actual_from] = step[:to].to_f
-        step[:actual_to]   = step[:initial_from]
-      else
-        step[:actual_from] = step[:initial_from]
-        step[:actual_to]   = step[:to].to_f
+      # yoyo 反転の適用
+      actual_map = {}
+      step[:initial_props].each do |prop, range|
+        if @yoyo_reverse
+          actual_map[prop] = [range[1], range[0]]
+        else
+          actual_map[prop] = [range[0], range[1]]
+        end
       end
+      step[:actual_props] = actual_map
 
-      # steps が未指定で ease が :step の場合、整数の差分から自動推論
+      # steps の自動推論
       if step[:steps].nil?
         ease_sym = step[:ease].is_a?(Array) ? step[:ease][0] : step[:ease]
-        if ease_sym == :step
-          diff = (step[:actual_to] - step[:actual_from]).abs.round
+        if ease_sym == :step && !actual_map.empty?
+          first_range = actual_map.values.first
+          diff = (first_range[1] - first_range[0]).abs.round
           step[:steps] = diff > 0 ? diff : 1
         end
       end
@@ -455,7 +502,6 @@ module Zenoo
         step[:actual_to]   = step[:to].to_f
       end
 
-      # steps が未指定で ease が :step の場合、整数の差分から自動推論
       if step[:steps].nil?
         ease_sym = step[:ease].is_a?(Array) ? step[:ease][0] : step[:ease]
         if ease_sym == :step
@@ -484,13 +530,11 @@ module Zenoo
 
     def handle_loop_completion
       if @yoyo
-        # yoyo: 往復切り替え
         @yoyo_reverse = !@yoyo_reverse
         @step_index = 0
         @step_elapsed = 0.0
         @step_initialized = false
 
-        # 往復（1往復 = 順+逆）完了時のカウント減算
         if !@yoyo_reverse && @loop_mode.is_a?(Integer)
           @loop_mode -= 1
           if @loop_mode <= 0
@@ -499,18 +543,15 @@ module Zenoo
           end
         end
       elsif @loop_mode == :infinite
-        # 無限ループ
         @step_index = 0
         @step_elapsed = 0.0
         @step_initialized = false
       elsif @loop_mode.is_a?(Integer) && @loop_mode > 1
-        # 回数指定ループ
         @loop_mode -= 1
         @step_index = 0
         @step_elapsed = 0.0
         @step_initialized = false
       else
-        # 全工程終了
         @completed = true
         @on_complete&.call(self)
       end
