@@ -78,7 +78,13 @@ module Zenoo
     # 幾何形状の基底クラス (ポリモーフィック静的型解決用共通インターフェース)
     class Shape
       attr_reader :anchor_x, :anchor_y, :pivot_x, :pivot_y, :offset_x, :offset_y
-      attr_accessor :parent
+      attr_reader :parent
+
+      def parent=(p)
+        return if @parent.equal?(p)
+        @parent = p
+        dirty_geom!
+      end
 
       def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, parent: nil)
         @parent = parent
@@ -118,6 +124,7 @@ module Zenoo
 
       def dirty_pos!; @dirty_pos = true; end
       def dirty_geom!; @dirty_geom = true; @dirty_pos = true; end
+      def dirty_angle!; dirty_geom!; end
 
       def x
         @parent ? @parent.x : @x
@@ -149,7 +156,7 @@ module Zenoo
         vf = v.to_f
         return if @angle == vf
         @angle = vf
-        dirty_geom!
+        dirty_angle!
       end
 
       def scale_x
@@ -275,14 +282,14 @@ module Zenoo
         vf = val.to_f
         return if @offset_x == vf
         @offset_x = vf
-        dirty_pos!
+        dirty_geom!
       end
 
       def offset_y=(val)
         vf = val.to_f
         return if @offset_y == vf
         @offset_y = vf
-        dirty_pos!
+        dirty_geom!
       end
 
       # 重心 (設定: アンカー位置に関わらず重心が指定座標になるよう x, y を平行移動)
@@ -319,6 +326,7 @@ module Zenoo
         super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
         @radius_x = radius_x.to_f
         @radius_y = (radius_y || radius_x).to_f
+        @rotation_invariant = false
         update_cache
       end
 
@@ -349,6 +357,10 @@ module Zenoo
 
       def dirty_pos!; @dirty_pos = true; end
       def dirty_geom!; @dirty_geom = true; @dirty_pos = true; end
+      def dirty_angle!
+        return if @rotation_invariant
+        dirty_geom!
+      end
 
       def dirty?
         @dirty_pos || @dirty_geom
@@ -369,10 +381,6 @@ module Zenoo
           eff_rx = @radius_x * sx
           eff_ry = @radius_y * sy
 
-          rad = cur_ang * (Math::PI / 180.0)
-          @cos = Math.cos(rad)
-          @sin = Math.sin(rad)
-
           # 真円判定: 実効半径が等しい場合 (回転不変のため三角関数・行列計算をスキップ)
           if (eff_rx - eff_ry).abs < 0.0001
             @is_true_circle = true
@@ -381,14 +389,36 @@ module Zenoo
           else
             @is_true_circle = false
             @bounding_radius = eff_rx > eff_ry ? eff_rx : eff_ry
-
-            @m00 = @cos * cur_sx
-            @m01 = -@sin * cur_sy
-            @m10 = @sin * cur_sx
-            @m11 = @cos * cur_sy
-
             @rx2 = @radius_x * @radius_x
             @ry2 = @radius_y * @radius_y
+          end
+
+          # 回転不変判定: 真円かつ中心が親/自身の回転ピボット上にある場合
+          if @parent
+            pw = @parent.width
+            ph = @parent.height
+            rel_cx = (0.5 - @parent.pivot_x) * pw + @offset_x
+            rel_cy = (0.5 - @parent.pivot_y) * ph + @offset_y
+          else
+            rel_cx = (0.5 - @pivot_x) * w + @offset_x
+            rel_cy = (0.5 - @pivot_y) * h + @offset_y
+          end
+          center_on_pivot = (rel_cx.abs < 0.0001 && rel_cy.abs < 0.0001)
+          @rotation_invariant = (@is_true_circle && center_on_pivot)
+
+          if @rotation_invariant
+            @cos = 1.0
+            @sin = 0.0
+          else
+            rad = cur_ang * (Math::PI / 180.0)
+            @cos = Math.cos(rad)
+            @sin = Math.sin(rad)
+            unless @is_true_circle
+              @m00 = @cos * cur_sx
+              @m01 = -@sin * cur_sy
+              @m10 = @sin * cur_sx
+              @m11 = @cos * cur_sy
+            end
           end
           @dirty_pos = true
         end
@@ -464,6 +494,7 @@ module Zenoo
     class Point < Shape
       def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, parent: nil)
         super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
+        @rotation_invariant = false
         update_cache
       end
 
@@ -471,6 +502,10 @@ module Zenoo
 
       def dirty_pos!; @dirty_pos = true; end
       def dirty_geom!; @dirty_angle = true; @dirty_pos = true; end
+      def dirty_angle!
+        return if @rotation_invariant
+        dirty_geom!
+      end
 
       def dirty?; @dirty_pos || @dirty_angle; end
 
@@ -481,9 +516,25 @@ module Zenoo
 
         if @dirty_angle
           @dirty_angle = false
-          rad = cur_ang * (Math::PI / 180.0)
-          @cos = Math.cos(rad)
-          @sin = Math.sin(rad)
+          if @parent
+            pw = @parent.width
+            ph = @parent.height
+            rel_cx = (0.5 - @parent.pivot_x) * pw + @offset_x
+            rel_cy = (0.5 - @parent.pivot_y) * ph + @offset_y
+          else
+            rel_cx = @offset_x
+            rel_cy = @offset_y
+          end
+          @rotation_invariant = (rel_cx.abs < 0.0001 && rel_cy.abs < 0.0001)
+
+          if @rotation_invariant
+            @cos = 1.0
+            @sin = 0.0
+          else
+            rad = cur_ang * (Math::PI / 180.0)
+            @cos = Math.cos(rad)
+            @sin = Math.sin(rad)
+          end
           @dirty_pos = true
         end
 

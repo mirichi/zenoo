@@ -156,7 +156,6 @@ Zenoo::Profiler.set_colors(
   enemy_move: Color.new(255, 190, 60),  # ウォーム・イエロー (敵移動)
   separate:   Color.new(255, 95, 95),   # コーラル・レッド (敵押し出し)
   gc:         Color.new(160, 165, 175), # シルバーグレー (GC/クリーンアップ)
-  draw:       Color.new(255, 120, 200), # マゼンタ (Zenoo描画エンジン・GPUフラッシュ)
   hud:        Color.new(120, 220, 240), # スカイシアン (HUD描画)
   gui_text:   Color.new(235, 150, 255)  # 明るいパープル (GUIテキスト描画)
 )
@@ -598,17 +597,24 @@ class Enemy < Sprite
     set_collider(:circle, radius: @hit_radius)
   end
 
+  def flash=(v)
+    @flash = v
+    self.image = Enemy.sprites[@type][@flash > 0]
+  end
+
   def update(px, py)
     angle_rad = Math.atan2(py - self.y, px - self.x)
     self.x += @speed * Math.cos(angle_rad)
     self.y += @speed * Math.sin(angle_rad)
     @rotation += 0.03
     self.angle = @rotation * (180.0 / Math::PI)
-    @flash -= 1 if @flash > 0
+    if @flash > 0
+      @flash -= 1
+      self.image = Enemy.sprites[@type][false] if @flash == 0
+    end
   end
 
   def draw
-    self.image = Enemy.sprites[@type][@flash > 0]
     super
 
     if (@max_hp > 1 && @hp < @max_hp) || @is_boss
