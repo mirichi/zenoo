@@ -171,8 +171,12 @@ DANMAKU_FRAG = <<~'GLSL'
 GLSL
 
 # ------------------------------------------------------------------------------
-# 弾グループクラス (円環セクターによる当たり判定管理)
+# 補助描画関数: 黒アウトライン付きライン描画 (Spinel AOT 互換)
 # ------------------------------------------------------------------------------
+def draw_boxed_line(x1, y1, x2, y2, color, width, z = 50.0)
+  Window.draw_line(x1, y1, x2, y2, color: :black, width: width + 3.5, z: z - 0.5)
+  Window.draw_line(x1, y1, x2, y2, color: color, width: width, z: z)
+end
 class DanmakuGroup
   attr_accessor :origin_x, :origin_y
   attr_accessor :base_angle, :ang_vel
@@ -587,7 +591,7 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 60,000 GPU Danmaku & Annular Sector Collisio
   t_col_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
   # 毎フレーム必ず全グループの状態を完全クリア (前フレームの残骸を防止)
-  groups.each(&:clear_frame_state)
+  groups.each { |g| g.clear_frame_state }
 
   any_hit = false
   tested_groups = 0
@@ -651,12 +655,6 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 60,000 GPU Danmaku & Annular Sector Collisio
         line_w = 2.5
       end
 
-      # アウトライン付き線描画用ラムダ (黒の下敷き線で光を遮断し、芯線を目立たせる)
-      draw_boxed_line = ->(x1, y1, x2, y2) do
-        Window.draw_line(x1, y1, x2, y2, color: :black, width: line_w + 3.5, z: 49.5)
-        Window.draw_line(x1, y1, x2, y2, color: wire_col, width: line_w, z: 50.0)
-      end
-
       # 外円弧 (8分割)
       steps = 8
       d_ang = (a_end - a_start) / steps.to_f
@@ -666,7 +664,7 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 60,000 GPU Danmaku & Annular Sector Collisio
         ang = a_start + d_ang * (s + 1)
         cur_x = ox + Math.cos(ang) * r_max
         cur_y = oy + Math.sin(ang) * r_max
-        draw_boxed_line.call(prev_x, prev_y, cur_x, cur_y)
+        draw_boxed_line(prev_x, prev_y, cur_x, cur_y, wire_col, line_w)
         prev_x = cur_x
         prev_y = cur_y
       end
@@ -679,7 +677,7 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 60,000 GPU Danmaku & Annular Sector Collisio
           ang = a_start + d_ang * (s + 1)
           cur_x = ox + Math.cos(ang) * r_min
           cur_y = oy + Math.sin(ang) * r_min
-          draw_boxed_line.call(prev_x, prev_y, cur_x, cur_y)
+          draw_boxed_line(prev_x, prev_y, cur_x, cur_y, wire_col, line_w)
           prev_x = cur_x
           prev_y = cur_y
         end
@@ -690,13 +688,13 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 60,000 GPU Danmaku & Annular Sector Collisio
       y_in_s  = oy + Math.sin(a_start) * r_min
       x_out_s = ox + Math.cos(a_start) * r_max
       y_out_s = oy + Math.sin(a_start) * r_max
-      draw_boxed_line.call(x_in_s, y_in_s, x_out_s, y_out_s)
+      draw_boxed_line(x_in_s, y_in_s, x_out_s, y_out_s, wire_col, line_w)
 
       x_in_e  = ox + Math.cos(a_end) * r_min
       y_in_e  = oy + Math.sin(a_end) * r_min
       x_out_e = ox + Math.cos(a_end) * r_max
       y_out_e = oy + Math.sin(a_end) * r_max
-      draw_boxed_line.call(x_in_e, y_in_e, x_out_e, y_out_e)
+      draw_boxed_line(x_in_e, y_in_e, x_out_e, y_out_e, wire_col, line_w)
 
       # 実際に自機との距離判定を行った直近弾のレティクル (黒フチ + 蛍光グリーン十字)
       g.tested_bullet_positions.each do |bx, by|
