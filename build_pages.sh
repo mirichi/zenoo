@@ -36,6 +36,7 @@ mkdir -p "${DOCS_DIR}/coords"
 mkdir -p "${DOCS_DIR}/billiards"
 mkdir -p "${DOCS_DIR}/zero_gravity"
 mkdir -p "${DOCS_DIR}/particles"
+mkdir -p "${DOCS_DIR}/danmaku"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -405,6 +406,23 @@ build_particles() {
     echo "-> Particles build done!"
 }
 
+build_danmaku() {
+    echo "=== Building GPU Danmaku Storm Demo (${DOCS_DIR}/danmaku) ==="
+    mkdir -p "${DOCS_DIR}/danmaku"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_gpu_danmaku.rb -c -o "${DOCS_DIR}/danmaku/app.c"
+    strip_always_inline "${DOCS_DIR}/danmaku/app.c"
+
+    emcc "${COMMON_EMCC_FLAGS[@]}" \
+        "${DOCS_DIR}/danmaku/app.c" \
+        "${COMMON_OBJS[@]}" \
+        -o "${DOCS_DIR}/danmaku/index.html" \
+        --shell-file examples/web/shell_danmaku.html
+
+    patch_emscripten_js "${DOCS_DIR}/danmaku/index.js"
+    rm -f "${DOCS_DIR}/danmaku/app.c"
+    echo "-> Danmaku build done!"
+}
+
 case "$TARGET" in
     game)         build_game ;;
     gui)          build_gui ;;
@@ -421,6 +439,7 @@ case "$TARGET" in
     billiards)    build_billiards ;;
     zero_gravity) build_zero_gravity ;;
     particles)    build_particles ;;
+    danmaku)      build_danmaku ;;
     all)
         build_game
         sleep 0.5
@@ -451,10 +470,12 @@ case "$TARGET" in
         build_zero_gravity
         sleep 0.5
         build_particles
+        sleep 0.5
+        build_danmaku
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|all]"
         exit 1
         ;;
 esac
@@ -478,4 +499,5 @@ echo " Coords   : ${DOCS_DIR}/coords/index.html"
 echo " Billiards: ${DOCS_DIR}/billiards/index.html"
 echo " Zero-Grav: ${DOCS_DIR}/zero_gravity/index.html"
 echo " Particles: ${DOCS_DIR}/particles/index.html"
+echo " Danmaku  : ${DOCS_DIR}/danmaku/index.html"
 echo "=========================================================="

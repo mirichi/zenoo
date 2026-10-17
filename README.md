@@ -84,6 +84,7 @@ Web ブラウザ上で動作するインタラクティブデモは、GitHub Pag
 | **Billiards & 3D Rolling Shader** | `docs/billiards/` | めり込み解消 (MTV) 2D 剛体物理＆フラグメントシェーダーによる 3D クオータニオン転がり球体レンダリング |
 | **Zero-Gravity Physics** | `docs/zero_gravity/` | 即時モード 2D 剛体物理 (PhysicsSprite / SAT / MTV) による無重力反発・投擲・摩擦スピン |
 | **GPU Particle Storm** | `docs/particles/` | GPU Instancing による 10万〜20万パーティクル・リアルタイム引力＆衝撃波ストーム |
+| **GPU Danmaku Storm** | `docs/danmaku/` | GPU Instancing による 75,000発 弾幕 &amp; 円環セクター（Annular Sector）階層衝突判定 |
 
 ---
 

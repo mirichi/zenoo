@@ -126,6 +126,9 @@
     .card.particles::before {
       background: linear-gradient(90deg, #f59e0b, #ef4444);
     }
+    .card.danmaku::before {
+      background: linear-gradient(90deg, #ec4899, #8b5cf6);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -151,6 +154,7 @@
     .card.tween .card-tag { color: #c084fc; }
     .card.coords .card-tag { color: #38bdf8; }
     .card.particles .card-tag { color: #f59e0b; }
+    .card.danmaku .card-tag { color: #ec4899; }
 
     .card h2 {
       font-size: 22px;
@@ -318,6 +322,14 @@
     .card.particles .btn-launch:hover {
       background: #fbbf24;
       box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+    }
+    .card.danmaku .btn-launch {
+      background: #ec4899;
+      color: #fff;
+    }
+    .card.danmaku .btn-launch:hover {
+      background: #f472b6;
+      box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -609,6 +621,24 @@
         </ul>
       </div>
       <a href="particles/" class="btn-launch">パーティクル起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- GPU Danmaku Storm Demo Card -->
+    <div class="card danmaku">
+      <div>
+        <div class="card-tag">GPU Instancing &amp; Collision</div>
+        <h2>GPU Danmaku Storm</h2>
+        <p class="desc">
+          GPU インスタンシングによる 75,000発 クラスの超高密度弾幕STGデモ。円環セクター（Annular Sector: 距離範囲 &times; 扇状角度範囲）による階層的衝突判定により、CPU計算量をほぼゼロ（数十マイクロ秒）に抑えた高速な当たり判定を実現しています。
+        </p>
+        <ul class="features">
+          <li>75,000発の弾幕を 1 ドローコール・毎フレーム pack ゼロで一括描画</li>
+          <li>円環セクター幾何判定による 99% 枝刈り高速衝突判定 (Broadphase)</li>
+          <li>自機直近弾の O(1) インデックス逆算による精密判定 &amp; ロックオンレティクル表示</li>
+          <li>[WASD / マウスドラッグ] 移動、[Shift] 精密低速、[C] 円環セクター可視化、[SPACE] ボム</li>
+        </ul>
+      </div>
+      <a href="danmaku/" class="btn-launch">弾幕デモを起動 (Launch Demo) →</a>
     </div>
   </main>
 
