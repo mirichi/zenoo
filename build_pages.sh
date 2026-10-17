@@ -81,8 +81,23 @@ build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
 build_c_kernel_obj "src/zenoo_audio.c" "${CACHE_DIR}/zenoo_audio.o"
 build_c_kernel_obj "ext/spinel/zenoo_spinel.c" "${CACHE_DIR}/zenoo_spinel.o"
 
-OPT_LEVEL="${OPT_LEVEL:--O2}"
+# ビルドモード判定 (サイズより速度優先)
+#   BUILD_MODE=dev  (または fast) : -O1 (Clang最適化を軽量化し、ビルド時間を短縮)
+#   BUILD_MODE=release (デフォルト) : -O2 (実行速度重視の標準最適化)
+#   BUILD_MODE=max  (または o3)   : -O3 (最高速の実行速度)
+case "${BUILD_MODE:-release}" in
+    dev|fast)
+        OPT_LEVEL="${OPT_LEVEL:--O1}"
+        ;;
+    max|o3)
+        OPT_LEVEL="${OPT_LEVEL:--O3}"
+        ;;
+    *)
+        OPT_LEVEL="${OPT_LEVEL:--O2}"
+        ;;
+esac
 DEBUG_FLAGS="${DEBUG_FLAGS:--g0}"
+echo "=== Build Mode: ${BUILD_MODE:-release} (${OPT_LEVEL}) ==="
 
 COMMON_EMCC_FLAGS=(
     "${OPT_LEVEL}"

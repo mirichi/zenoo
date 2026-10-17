@@ -215,7 +215,17 @@ WSL2 または Linux 環境で以下を実行します：
 ```bash
 ./build_pages.sh
 ```
-`docs/` 配下に全 10 種類のデモとポータル（`index.html`）が一括生成されます。
+`docs/` 配下に全デモとポータル（`index.html`）が一括生成されます（特定ターゲットのみビルドする場合は `./build_pages.sh game` のように引数を指定）。
+
+#### Wasm ビルドモードの指定 (速度優先 / 開発イテレーション)
+
+環境変数 `BUILD_MODE` を指定することで、ビルド速度（開発イテレーション）と実行速度（リリース）を切り替えることができます：
+
+| モード | 指定例 | 最適化 | 特徴・用途 |
+|---|---|---|---|
+| **`dev`** / `fast` | `BUILD_MODE=dev ./build_pages.sh game` | `-O1` | **ビルド速度最優先**（ビルド時間が約 1/4 に短縮）。試行錯誤・デバッグ用 |
+| **`release`** (デフォルト) | `./build_pages.sh game` | `-O2` | **実行速度重視**。60 FPS を維持する本番用標準ビルド |
+| **`max`** / `o3` | `BUILD_MODE=max ./build_pages.sh game` | `-O3` | **最高実行速度**。重い計算を極限まで最適化 |
 
 > **Note (Wasm メモリ & Fiber 最適化)**:
 > ブラウザ上でのメモリ肥大化防止および Fiber スタックオーバーフロー回避のため、Spinel に Wasm 向けパッチを適用しています。詳細は patches/README.md を参照してください。
@@ -223,6 +233,10 @@ WSL2 または Linux 環境で以下を実行します：
 ### 任意の Ruby スクリプトを単体 Wasm ビルド
 
 ```bash
+# 開発モード (ビルド最速)
+BUILD_MODE=dev ./build_wasm.sh examples/game_zenoo.rb
+
+# リリースモード (実行速度最優先)
 ./build_wasm.sh examples/game_zenoo.rb
 
 # 実行確認 (ポート 8089 で build/wasm を配信)
