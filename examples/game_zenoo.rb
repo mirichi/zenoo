@@ -2,12 +2,65 @@
 
 require_relative '../lib/zenoo'
 
-# レトロCRTブラウン管シェーダー (スキャンライン・樽型歪み・色収差・ビネット)
+# 衝撃波 (Shockwave / Ripple Distortion) シェーダー
+# ボス撃破地点から同心円状に空間が歪み、RGB分散と波面ハイライトが発生
+SHOCKWAVE_FRAGMENT_SHADER = <<~'GLSL'
+#version 330 core
+in vec4 v_color;
+in vec2 v_uv;
+uniform sampler2D u_texture;
+uniform vec2 u_center;  // 衝撃波の中心座標 (0.0〜1.0)
+uniform float u_radius; // 波面の現在半径 (0.0〜1.5)
+uniform float u_force;  // 歪みの強さ (0.0〜0.1)
+out vec4 fragColor;
+
+void main() {
+    if (u_force <= 0.0001 || u_radius <= 0.0) {
+        fragColor = texture(u_texture, v_uv);
+        return;
+    }
+
+    vec2 aspect = vec2(1280.0 / 720.0, 1.0);
+    vec2 diff = (v_uv - u_center) * aspect;
+    float dist = length(diff);
+
+    // 波面の幅
+    float thickness = 0.12;
+
+    if (dist >= u_radius - thickness && dist <= u_radius + thickness) {
+        // -1.0 〜 +1.0
+        float edge = (dist - u_radius) / thickness;
+        // コサイン波による滑らかな山型
+        float diff_factor = cos(edge * 1.5707963);
+        diff_factor = diff_factor * diff_factor;
+
+        vec2 dir = normalize(diff) / aspect;
+        vec2 offset = dir * diff_factor * u_force;
+
+        // 色収差 (RGB波長ごとの屈折率分散)
+        float r = texture(u_texture, v_uv - offset * 1.15).r;
+        float g = texture(u_texture, v_uv - offset).g;
+        float b = texture(u_texture, v_uv - offset * 0.85).b;
+        vec3 col = vec3(r, g, b);
+
+        // 波面リングのハイライト発光
+        col += vec3(0.12, 0.15, 0.20) * diff_factor;
+
+        fragColor = vec4(col, 1.0);
+    } else {
+        fragColor = texture(u_texture, v_uv);
+    }
+}
+GLSL
+
+# レトロCRTブラウン管シェーダー (スキャンライン・樽型歪み・色収差・ビネット・受信障害グリッチ)
 CRT_FRAGMENT_SHADER = <<~'GLSL'
 #version 330 core
 in vec4 v_color;
 in vec2 v_uv;
 uniform sampler2D u_texture;
+uniform float u_time;
+uniform float u_glitch; // 0.0 (通常) 〜 1.0 (最大グリッチ)
 out vec4 fragColor;
 
 // 樽型歪み (CRTブラウン管の曲面ガラス)
@@ -15,6 +68,11 @@ vec2 crt_curve(vec2 uv) {
     vec2 cc = uv - 0.5;
     float dist = dot(cc, cc);
     return 0.5 + cc * (1.0 + 0.12 * dist + 0.06 * dist * dist);
+}
+
+// 疑似乱数 (砂嵐ノイズ用)
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void main() {
@@ -26,18 +84,49 @@ void main() {
         return;
     }
 
+    // --- 受信障害グリッチ演出 ---
+    vec2 glitch_uv = uv;
+    float chroma_offset = 0.0012;
+
+    if (u_glitch > 0.001) {
+        // 1. 水平テアリング (スキャンラインのブロック横ズレ)
+        float tear_line = sin(uv.y * 35.0 + u_time * 18.0) * sin(uv.y * 80.0 - u_time * 25.0);
+        float tear_trigger = step(0.60, abs(tear_line));
+        float tear_shift = sin(u_time * 40.0 + uv.y * 100.0) * 0.035 * u_glitch;
+        glitch_uv.x += tear_trigger * tear_shift;
+
+        // 2. 水平ジッター (同期の乱れ)
+        glitch_uv.x += (sin(u_time * 50.0 + uv.y * 200.0) * 0.004) * u_glitch;
+
+        // 3. 垂直同期の乱れ (上下の微小揺れ)
+        float v_jump = step(0.85, sin(u_time * 12.0)) * (sin(u_time * 30.0) * 0.02 * u_glitch);
+        glitch_uv.y += v_jump;
+
+        // 4. 色収差 (RGB分離) の大幅増大
+        chroma_offset += u_glitch * 0.015;
+    }
+
     // 色収差 (RGBチャンネル微小ズレ)
-    float r = texture(u_texture, crt_curve(v_uv - vec2(0.0012, 0.0))).r;
-    float g = texture(u_texture, uv).g;
-    float b = texture(u_texture, crt_curve(v_uv + vec2(0.0012, 0.0))).b;
+    float r = texture(u_texture, glitch_uv - vec2(chroma_offset, 0.0)).r;
+    float g = texture(u_texture, glitch_uv).g;
+    float b = texture(u_texture, glitch_uv + vec2(chroma_offset, 0.0)).b;
     vec3 col = vec3(r, g, b);
+
+    // 砂嵐ノイズ (Static snow)
+    if (u_glitch > 0.001) {
+        float snow = hash(uv * 3.0 + vec2(u_time * 15.0, u_time * 37.0));
+        col = mix(col, vec3(snow), u_glitch * 0.22);
+    }
 
     // スキャンライン (黒い横走査線)
     // 240本の走査線 (レトロアーケード/CRTスタイル)
     float scan = sin(uv.y * 240.0 * 6.2831853);
     float scan_weight = clamp(0.5 + 0.5 * scan, 0.0, 1.0);
-    // 黒い隙間をしっかり暗く (0.20)
-    col *= mix(0.20, 1.15, pow(scan_weight, 0.75));
+    float scan_dark = 0.20;
+    if (u_glitch > 0.001) {
+        scan_dark = mix(0.20, 0.05, u_glitch * abs(sin(u_time * 30.0)));
+    }
+    col *= mix(scan_dark, 1.15, pow(scan_weight, 0.75));
 
     // ブラウン管の微小発光 (黒い背景でも走査線の存在感が微かにわかる)
     col += vec3(0.010) * scan_weight;
@@ -51,6 +140,7 @@ void main() {
     fragColor = vec4(col, 1.0);
 }
 GLSL
+
 
 # 事前定義カラー定数
 COLOR_ORANGE       = Color.new(255, 161, 0)
@@ -774,9 +864,11 @@ class Game
     @title_timer = 0
     @crt_enabled = true
     @crt_shader = nil
+    @shockwave_shader = nil
     @collision_mode = :exact # :exact (Collision GJK) または :simple (円判定)
     @collision_time_ms = 0.0
     @show_profiler = false
+    @crt_time = 0.0
     reset_world
     @game_state = STATE_TITLE
   end
@@ -803,6 +895,15 @@ class Game
     @hitstop = 0         # ヒットストップ残りフレーム
     @damage_flash = 0    # 被弾時の赤フラッシュ残りフレーム
     @levelup_flash = 0   # レベルアップ時の白フラッシュ
+
+    # ポストエフェクト演出 (衝撃波 & グリッチ)
+    @shockwave_timer = 0
+    @shockwave_max_timer = 50
+    @shockwave_cx = 0.5
+    @shockwave_cy = 0.5
+    @shockwave_radius = 0.0
+    @shockwave_force = 0.0
+    @glitch_timer = 0
 
     # 戦績
     @frames_alive = 0
@@ -1146,6 +1247,22 @@ class Game
       add_hitstop(8)
       @sfx.play(Sfx::BOSS_KILL, 20)
       Input.vibrate_gamepad(0, 1.0, 0.6, 0.3)
+
+      # 画面ポストエフェクト (衝撃波歪み & CRT受信障害グリッチ)
+      # ボスのワールド座標をスクリーンUV座標 (0.0〜1.0) に変換
+      sx = (e.x - (@camera.x - 640.0)) / 1280.0
+      sy = (e.y - (@camera.y - 360.0)) / 720.0
+      sx = 0.05 if sx < 0.05
+      sx = 0.95 if sx > 0.95
+      sy = 0.05 if sy < 0.05
+      sy = 0.95 if sy > 0.95
+      @shockwave_cx = sx.to_f
+      @shockwave_cy = sy.to_f
+      @shockwave_max_timer = 50
+      @shockwave_timer = @shockwave_max_timer
+      @shockwave_radius = 0.0
+      @shockwave_force = 0.08
+      @glitch_timer = 70
     elsif e.max_hp > 5
       # エリート撃破
       25.times do
@@ -1230,11 +1347,26 @@ class Game
       @damage_flash -= 1 if @damage_flash > 0
       @levelup_flash -= 1 if @levelup_flash > 0
 
+      # ポストエフェクトタイマー更新 (衝撃波 & CRTグリッチ)
+      if @shockwave_timer > 0
+        @shockwave_timer -= 1
+        progress = 1.0 - (@shockwave_timer.to_f / @shockwave_max_timer.to_f)
+        @shockwave_radius = progress * 1.5
+        @shockwave_force = (1.0 - progress) * 0.08
+      end
+      @glitch_timer -= 1 if @glitch_timer > 0
+      @crt_time += 0.05
+
       # CRT エフェクトの初期化とトグル切り替え ([C] キー)
       @crt_shader ||= Shader.new(CRT_FRAGMENT_SHADER)
 
       if Input.key_push?(:c)
         @crt_enabled = !@crt_enabled
+      end
+
+      # デバッグ操作: [B] キーでボスを即座に召喚
+      if Input.key_push?(:b) && @game_state == STATE_PLAY
+        @enemies << Enemy.new(@player.x + 200.0, @player.y, :boss)
       end
 
       if Input.key_push?(:m)
@@ -1522,22 +1654,57 @@ class Game
   end
 
   def draw_game
-    if @crt_enabled
-      # CRT エフェクト有効時は自前のオフスクリーンバッファ (@game_screen) に描画し、
-      # CRT シェーダーを適用しながらメイン画面へ全画面描画する
+    # ポストエフェクト (衝撃波 / CRT) を適用するため、まずはゲーム画面を
+    # 自前のオフスクリーンバッファ (@game_screen) にレンダリング
+    if @crt_enabled || @shockwave_timer > 0
       @game_screen ||= Image.new(1280, 720)
       Image.render_to(@game_screen) do
         Window.clear(Color::BLACK)
         render_game_scene
       end
-      Window.clear(Color::BLACK)
-      Window.draw_image(0, 0, @game_screen, shader: @crt_shader)
+
+      current_source = @game_screen
+
+      # 第1段: 衝撃波エフェクト (ボス撃破時の歪み波面)
+      if @shockwave_timer > 0
+        @shockwave_shader ||= Shader.new(SHOCKWAVE_FRAGMENT_SHADER)
+        @shockwave_shader.set_vec2("u_center", @shockwave_cx.to_f, @shockwave_cy.to_f)
+        @shockwave_shader.set_float("u_radius", @shockwave_radius.to_f)
+        @shockwave_shader.set_float("u_force", @shockwave_force.to_f)
+
+        if @crt_enabled
+          # 衝撃波の後に CRT が控えている場合は中間バッファへ描画
+          @post_screen ||= Image.new(1280, 720)
+          Image.render_to(@post_screen) do
+            Window.clear(Color::BLACK)
+            Window.draw_image(0, 0, current_source, shader: @shockwave_shader)
+          end
+          current_source = @post_screen
+        else
+          # CRT 無効時はメイン画面へ直接描画
+          Window.clear(Color::BLACK)
+          Window.draw_image(0, 0, current_source, shader: @shockwave_shader)
+          current_source = nil
+        end
+      end
+
+      # 第2段: レトロCRTシェーダー + 受信障害グリッチ
+      if @crt_enabled && current_source
+        @crt_shader ||= Shader.new(CRT_FRAGMENT_SHADER)
+        @crt_shader.set_float("u_time", @crt_time.to_f)
+        glitch_val = @glitch_timer > 0 ? (@glitch_timer.to_f / 70.0) : 0.0
+        @crt_shader.set_float("u_glitch", glitch_val.to_f)
+
+        Window.clear(Color::BLACK)
+        Window.draw_image(0, 0, current_source, shader: @crt_shader)
+      end
     else
+      # エフェクトが一切ない場合は直接メイン画面にクリア＆レンダリング
       Window.clear(Color::BLACK)
       render_game_scene
     end
 
-    # プロファイラGUIはCRTの歪みエフェクトを受けないよう、メイン画面の一番手前にクリアに描画
+    # プロファイラGUIはポストエフェクトの歪みを受けないよう、メイン画面の一番手前にクリアに描画
     if @show_profiler
       Profiler.measure(:gui) do
         GUI.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 270) do
@@ -1668,7 +1835,7 @@ class Game
     val_100 = (@collision_time_ms * 100).to_i
     val_dec = val_100 % 100
     col_str = "#{val_100 / 100}.#{val_dec < 10 ? '0' : ''}#{val_dec}ms"
-    dbg_str = "FPS: #{Window.fps.to_i}  OBJ: #{entities_count}  COL: #{col_str} [Sprite.check / SAP]  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]"
+    dbg_str = "FPS: #{Window.fps.to_i}  OBJ: #{entities_count}  COL: #{col_str}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
     Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY)
   end
 
