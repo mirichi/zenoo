@@ -59,8 +59,23 @@ emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_audio.c -o "${CACHE_DIR}/zenoo_audio.o"
 emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" ext/spinel/zenoo_spinel.c -o "${CACHE_DIR}/zenoo_spinel.o"
 
-echo "=== [4/4] Linking Wasm + WebGL Application ==="
-emcc -O2 \
+# ビルドモード判定 (サイズより速度優先)
+#   BUILD_MODE=dev  (または fast) : -O1 (Clang最適化を軽量化し、ビルド時間を短縮)
+#   BUILD_MODE=release (デフォルト) : -O2 (実行速度重視の標準最適化)
+#   BUILD_MODE=max  (または o3)   : -O3 (最高速の実行速度)
+case "${BUILD_MODE:-release}" in
+    dev|fast)
+        OPT_LEVEL="${OPT_LEVEL:--O1}"
+        ;;
+    max|o3)
+        OPT_LEVEL="${OPT_LEVEL:--O3}"
+        ;;
+    *)
+        OPT_LEVEL="${OPT_LEVEL:--O2}"
+        ;;
+esac
+echo "=== [4/4] Linking Wasm + WebGL Application (Mode: ${BUILD_MODE:-release}, ${OPT_LEVEL}) ==="
+emcc ${OPT_LEVEL} \
     -s USE_GLFW=3 \
     -s MAX_WEBGL_VERSION=2 \
     -s MIN_WEBGL_VERSION=2 \
