@@ -530,9 +530,9 @@ class Enemy < Sprite
     end
   end
 
-  def initialize(px, py, type = :normal)
-    # 全方位楕円リングスポーン (カメラ外周 360 度から均等に包囲進軍)
-    spawn_ang = rand(360) * (Math::PI / 180.0)
+  def initialize(px, py, type = :normal, hp_mult = 1.0, spawn_ang = nil)
+    # 全方位楕円リングスポーン (カメラ外周 360 度から包囲進軍)
+    spawn_ang ||= rand(360) * (Math::PI / 180.0)
     rx = 750.0 + rand(120).to_f
     ry = 480.0 + rand(90).to_f
     ix = px + rx * Math.cos(spawn_ang)
@@ -550,8 +550,9 @@ class Enemy < Sprite
     when :fast
       @sides = 3
       @radius = 18.0
-      @hp = 1
-      @max_hp = 1
+      base_hp = 1
+      @hp = [1, (base_hp * hp_mult).round, hp_mult.to_i].max
+      @max_hp = @hp
       @base_speed = 3.4
       @color = Color::YELLOW
       @score_value = 10
@@ -559,8 +560,9 @@ class Enemy < Sprite
     when :elite
       @sides = 5
       @radius = 48.0
-      @hp = 20
-      @max_hp = 20
+      base_hp = 20
+      @hp = [(base_hp * hp_mult).round, 20].max
+      @max_hp = @hp
       @base_speed = 1.4
       @color = Color::RED
       @score_value = 50
@@ -568,8 +570,9 @@ class Enemy < Sprite
     when :boss
       @sides = 8
       @radius = 105.0
-      @hp = 160
-      @max_hp = 160
+      base_hp = 160
+      @hp = [(base_hp * hp_mult).round, 160].max
+      @max_hp = @hp
       @base_speed = 0.85
       @color = COLOR_PURPLE
       @score_value = 300
@@ -578,8 +581,9 @@ class Enemy < Sprite
     else
       @sides = 4
       @radius = 27.0
-      @hp = 3
-      @max_hp = 3
+      base_hp = 3
+      @hp = [(base_hp * hp_mult).round, 3].max
+      @max_hp = @hp
       @base_speed = 2.0
       @color = Color::BLUE
       @score_value = 20
@@ -595,6 +599,27 @@ class Enemy < Sprite
   def flash=(v)
     @flash = v
     self.image = Enemy.sprites[@type][@flash > 0]
+  end
+
+  # 画面外遠方に置き去りにされた敵を、回収位置と自機から計算して逆方向（逃げ先の前方）に即座に再配置
+  def relocate_opposite(px, py, hp_mult = 1.0)
+    # 敵から自機へ向かうベクトル（自機から見て敵の真逆方向）
+    opposite_ang = Math.atan2(py - self.y, px - self.x)
+    ang = opposite_ang + (rand(91) - 45) * (Math::PI / 180.0)
+    rx = 760.0 + rand(120).to_f
+    ry = 480.0 + rand(90).to_f
+    self.x = px + rx * Math.cos(ang)
+    self.y = py + ry * Math.sin(ang)
+
+    base_hp = case @type
+              when :fast  then 1
+              when :elite then 20
+              else 3
+              end
+    @hp = [base_hp, (base_hp * hp_mult).round, hp_mult.to_i].max
+    @max_hp = @hp
+    @flash = 0
+    self.image = Enemy.sprites[@type][false]
   end
 
   def update(px, py)
@@ -655,8 +680,8 @@ class Player < Sprite
     @missile_level = 0
     @missile_timer = 0
     @orbiters = []
-    @hp = 5
-    @max_hp = 5
+    @hp = 3
+    @max_hp = 3
     @invincible = 0 # 被弾後の無敵残りフレーム
     @exp = 0
     @level = 1
@@ -666,9 +691,14 @@ class Player < Sprite
 
   # 次のレベルに必要な経験値 (レベルが上がるにつれて段階的に増加)
   def exp_to_next
-    # 初期は50、レベルが上がるにつれて増加幅も大きくなる
+    # 初期は50、序盤はテンポよく上がり、敵大群が押し寄せるLv10以降は必要量を増やして連続停止を緩和
     lv = @level - 1
-    50 + lv * 40 + (lv * lv * 4)
+    req = 50 + lv * 40 + (lv * lv * 4)
+    if @level > 10
+      extra = @level - 10
+      req += extra * 100 + (extra * extra * 12)
+    end
+    req
   end
 
   # ダメージを受けたら true を返す (無敵中は false)
@@ -676,7 +706,7 @@ class Player < Sprite
     return false if @invincible > 0
     @hp -= amount
     @hp = 0 if @hp < 0
-    @invincible = 90
+    @invincible = 45
     true
   end
 
@@ -891,6 +921,8 @@ class Game
     @prev_mouse_y = -1.0
     @spawn_timer = 0
     @spawn_interval = 50.0
+    @enemy_stock = 0
+    @wave_minute = 0
     @boss_spawn_timer = 1200 # 20秒ごとに出現
 
     # 演出
@@ -932,28 +964,93 @@ class Game
     @hitstop = frames if frames > @hitstop
   end
 
+  # 経過時間に応じた敵HP倍率 (60秒 = 3600フレームごとに約50%増加)
+  def enemy_hp_multiplier
+    1.0 + (@frames_alive / 3600.0) * 0.5
+  end
+
+  # 経過時間に応じた敵同時上限数 (初期100体、1分=3600フレームごとに+100)
+  def max_enemies
+    100 + (@frames_alive / 3600) * 100
+  end
+
+  def spawn_one_enemy(hp_mult)
+    px = @player.x
+    py = @player.y
+    r = rand(100)
+    if r < 40
+      @enemies << Enemy.new(px, py, :fast, hp_mult)
+    elsif r < 80
+      @enemies << Enemy.new(px, py, :normal, hp_mult)
+    else
+      @enemies << Enemy.new(px, py, :elite, hp_mult)
+    end
+  end
+
   def spawn_enemies
-    if @spawn_interval > 4.0
-      @spawn_interval -= 0.015
+    # スポーン間隔の最短下限を 1.0 (毎フレーム=毎秒60体) まで加速
+    if @spawn_interval > 1.0
+      @spawn_interval -= 0.02
+    end
+
+    px = @player.x
+    py = @player.y
+    cull_sq = 1200.0 * 1200.0
+    hp_mult = enemy_hp_multiplier
+    limit = max_enemies
+
+    # 1分ごとの上限増加ウェーブ (1分: 黄色100体, 2分: 青100体, 3分: 赤100体, 4分: ボス)
+    current_min = @frames_alive / 3600
+    if current_min > @wave_minute
+      @wave_minute = current_min
+      wave_type = case current_min
+                  when 1 then :fast
+                  when 2 then :normal
+                  when 3 then :elite
+                  when 4 then :boss
+                  else
+                    cycle = ((current_min - 1) % 4) + 1
+                    [:fast, :normal, :elite, :boss][cycle - 1]
+                  end
+
+      count = (wave_type == :boss ? 30 : 100)
+      count.times do |i|
+        ang = (i.to_f / count.to_f) * (2.0 * Math::PI) + (rand(11) - 5) * (Math::PI / 180.0)
+        @enemies << Enemy.new(px, py, wave_type, hp_mult, ang)
+      end
+    end
+
+    # 画面外遠方 (半径1200px超) に置き去りにされた敵を回収し、逆方向 (逃げ先の前方) に即座に再配置 (ボスは維持)
+    @enemies.each do |e|
+      next if e.is_boss
+      dx = e.x - px
+      dy = e.y - py
+      if dx * dx + dy * dy > cull_sq
+        e.relocate_opposite(px, py, hp_mult)
+      end
+    end
+
+    # 上限枠に空きがあり、ストックがあるなら即座に補充
+    if @enemy_stock > 0 && @enemies.size < limit
+      slots = [limit - @enemies.size, @enemy_stock].min
+      slots.times { spawn_one_enemy(hp_mult) }
+      @enemy_stock -= slots
     end
 
     @spawn_timer -= 1
     if @spawn_timer <= 0
       @spawn_timer = @spawn_interval.to_i
-      r = rand(100)
-      if r < 40
-        @enemies << Enemy.new(@player.x, @player.y, :fast)
-      elsif r < 80
-        @enemies << Enemy.new(@player.x, @player.y, :normal)
+      if @enemies.size < limit
+        spawn_one_enemy(hp_mult)
       else
-        @enemies << Enemy.new(@player.x, @player.y, :elite)
+        @enemy_stock += 1
       end
     end
 
     @boss_spawn_timer -= 1
     if @boss_spawn_timer <= 0
       @boss_spawn_timer = 1500 # 25秒ごと
-      @enemies << Enemy.new(@player.x, @player.y, :boss)
+      @enemies << Enemy.new(px, py, :boss, hp_mult)
     end
   end
 
@@ -984,7 +1081,12 @@ class Game
       nx = dx * inv_d * push
       ny = dy * inv_d * push
 
-      if e1.is_boss
+      if e1.is_boss && e2.is_boss
+        e1.x -= nx
+        e1.y -= ny
+        e2.x += nx
+        e2.y += ny
+      elsif e1.is_boss
         e2.x += nx * 2.0
         e2.y += ny * 2.0
       elsif e2.is_boss
@@ -1178,7 +1280,8 @@ class Game
       12.times do
         @items << Item.new(e.x + (rand(80) - 40).to_f, e.y + (rand(80) - 40).to_f, 30)
       end
-      @items << Item.new(e.x, e.y, 0, 1)
+      # 回復ハートドロップ (10% の確率)
+      @items << Item.new(e.x, e.y, 0, 1) if rand(100) < 10
       add_shake(9.0)
       add_hitstop(8)
       @sfx.play(Sfx::BOSS_KILL, 20)
@@ -1199,7 +1302,7 @@ class Game
       @shockwave_radius = 0.0
       @shockwave_force = 0.08
       @glitch_timer = 70
-    elsif e.max_hp > 5
+    elsif e.type == :elite
       # エリート撃破
       25.times do
         ang = rand(360) * Math::PI / 180.0
@@ -1209,8 +1312,8 @@ class Game
       4.times do
         @items << Item.new(e.x + (rand(40) - 20).to_f, e.y + (rand(40) - 20).to_f, 20)
       end
-      # 20% の確率で回復ハートをドロップ
-      @items << Item.new(e.x, e.y, 0, 1) if rand(100) < 20
+      # 2% の確率で回復ハートをドロップ
+      @items << Item.new(e.x, e.y, 0, 1) if rand(100) < 2
       add_shake(3.0)
       add_hitstop(3)
       @sfx.play(Sfx::EXPLODE, 4)
@@ -1302,7 +1405,7 @@ class Game
 
       # デバッグ操作: [B] キーでボスを即座に召喚
       if Input.key_push?(:b) && @game_state == STATE_PLAY
-        @enemies << Enemy.new(@player.x + 200.0, @player.y, :boss)
+        @enemies << Enemy.new(@player.x + 200.0, @player.y, :boss, enemy_hp_multiplier)
       end
 
       if Input.key_push?(:m)
@@ -1389,6 +1492,15 @@ class Game
       @items.delete_if { |i| i.dead }
       @particles.delete_if { |p| p.dead }
       @damage_texts.delete_if { |t| t.dead }
+
+      # 敵を倒して空いた枠へ、ストックから即座にスポーン補充
+      limit = max_enemies
+      if @enemy_stock > 0 && @enemies.size < limit
+        slots = [limit - @enemies.size, @enemy_stock].min
+        hp_mult = enemy_hp_multiplier
+        slots.times { spawn_one_enemy(hp_mult) }
+        @enemy_stock -= slots
+      end
     end
 
     # 5. 死亡演出 → リザルトへ
@@ -1441,7 +1553,7 @@ class Game
     when 4 then @player.speed < 9.0
     when 5 then @player.fire_rate > 3
     when 6 then @player.magnet_radius < 460.0
-    else true # 最大HPアップは常に選択可能
+    else true # HP全回復は常に選択可能
     end
   end
 
@@ -1539,8 +1651,7 @@ class Game
       @player.fire_rate = 3 if @player.fire_rate < 3
     when 6 # 磁石範囲
       @player.magnet_radius += 60.0
-    when 7 # 最大HPアップ & 全回復
-      @player.max_hp += 1
+    when 7 # HP全回復
       @player.hp = @player.max_hp
     end
   end
@@ -1554,7 +1665,7 @@ class Game
     when 4 then "SPEED UP"
     when 5 then "FIRE RATE UP"
     when 6 then "MAGNET RADIUS"
-    else "VITALITY"
+    else "REPAIR"
     end
   end
 
@@ -1570,7 +1681,7 @@ class Game
       next_rate = 3 if next_rate < 3
       "Interval #{@player.fire_rate} -> #{next_rate} frames"
     when 6 then "Range #{@player.magnet_radius.to_i} -> #{@player.magnet_radius.to_i + 60}"
-    else "Max HP #{@player.max_hp} -> #{@player.max_hp + 1}  & full heal"
+    else "Recover HP to full (#{@player.hp} -> #{@player.max_hp})"
     end
   end
 
@@ -1767,7 +1878,8 @@ class Game
 
     # デバッグ情報
     pad_str = Input.gamepad_connected?(0) ? "[PAD: ON]" : "[PAD: OFF]"
-    dbg_str = "FPS: #{Window.fps.to_i}  ENEMY: #{@enemies.size}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
+    stock_str = @enemy_stock > 0 ? " (+#{@enemy_stock})" : ""
+    dbg_str = "FPS: #{Window.fps.to_i}  ENEMY: #{@enemies.size}#{stock_str}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
     Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY, z: 5.0)
   end
 
