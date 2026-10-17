@@ -46,7 +46,7 @@ module Zenoo
       vf = v.to_f
       return if @angle == vf
       @angle = vf
-      @collider_shape&.dirty_geom!
+      @collider_shape&.dirty_angle!
     end
 
     def scale_x=(v)
@@ -74,7 +74,7 @@ module Zenoo
     def pivot=(v)
       return if @pivot == v
       @pivot = v
-      @collider_shape&.dirty_pos!
+      @collider_shape&.dirty_geom!
     end
 
     def pivot_x
@@ -132,8 +132,17 @@ module Zenoo
     def visible=(v); @visible = !!v; end
 
     def image=(v)
-      return if @image == v
+      return if @image.equal?(v)
+      old_img = @image
       @image = v
+
+      # 画像サイズが変わっていないならコライダーは影響を受けない (アニメーションやフラッシュ切り替え時の再計算を排除)
+      old_w = old_img ? old_img.width : 0
+      old_h = old_img ? old_img.height : 0
+      new_w = v ? v.width : 0
+      new_h = v ? v.height : 0
+      return if old_w == new_w && old_h == new_h
+
       if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
         @collider_shape.dirty_size!
       else
