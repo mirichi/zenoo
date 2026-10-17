@@ -18,7 +18,6 @@ end
 # ==========================================
 require_relative 'zenoo/color'
 require_relative 'zenoo/backend'
-require_relative 'zenoo/layout'
 require_relative 'zenoo/font'
 require_relative 'zenoo/shaders/default_shaders'
 require_relative 'zenoo/shaders/sdf_card_shader'
