@@ -156,6 +156,7 @@ Zenoo::Profiler.set_colors(
   enemy_move: Color.new(255, 190, 60),  # ウォーム・イエロー (敵移動)
   separate:   Color.new(255, 95, 95),   # コーラル・レッド (敵押し出し)
   gc:         Color.new(160, 165, 175), # シルバーグレー (GC/クリーンアップ)
+  draw:       Color.new(255, 120, 200), # マゼンタ (Zenoo描画エンジン・GPUフラッシュ)
   hud:        Color.new(120, 220, 240), # スカイシアン (HUD描画)
   gui_text:   Color.new(235, 150, 255)  # 明るいパープル (GUIテキスト描画)
 )
@@ -164,6 +165,7 @@ COLOR_PURPLE       = Color.new(210, 60, 255)
 COLOR_EXP_GREEN    = Color.new(50, 255, 130)
 COLOR_HEART_RED    = Color.new(255, 70, 90)
 COLOR_EXP_BAR_BG   = Color.new(30, 40, 35)
+COLOR_BOSS_HP      = Color.new(255, 60, 100)
 
 # ゲーム状態
 STATE_PLAY     = 0 # プレイ中
@@ -609,14 +611,14 @@ class Enemy < Sprite
     self.image = Enemy.sprites[@type][@flash > 0]
     super
 
-    if @max_hp > 1
+    if (@max_hp > 1 && @hp < @max_hp) || @is_boss
       bar_w = @radius * 2.0
       bar_h = @is_boss ? 8.0 : 5.0
       bar_y = self.y - @radius - (@is_boss ? 18.0 : 12.0)
       hp_ratio = @hp.to_f / @max_hp
       hp_ratio = 0.0 if hp_ratio < 0.0
       Window.draw_rect(self.x - bar_w * 0.5, bar_y, bar_w, bar_h, color: COLOR_HP_GRAY, z: 1.0)
-      hp_color = @is_boss ? Color.new(255, 60, 100) : Color::GREEN
+      hp_color = @is_boss ? COLOR_BOSS_HP : Color::GREEN
       Window.draw_rect(self.x - bar_w * 0.5, bar_y, bar_w * hp_ratio, bar_h, color: hp_color, z: 1.0)
     end
   end
@@ -843,7 +845,7 @@ end
 # 6. メインゲーム (Game)
 # ==========================================
 class Game
-  attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled, :collision_mode, :collision_time_ms
+  attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled, :collision_mode
 
   def spawn_particle(p)
     @particles.shift if @particles.size >= MAX_PARTICLES
@@ -866,7 +868,6 @@ class Game
     @crt_shader = nil
     @shockwave_shader = nil
     @collision_mode = :exact # :exact (Collision GJK) または :simple (円判定)
-    @collision_time_ms = 0.0
     @show_profiler = false
     @crt_time = 0.0
     reset_world
@@ -955,74 +956,12 @@ class Game
     end
   end
 
-  # 敵同士の重なり防止 (2D 空間グリッドによる高速ソフト押し出し)
+  # 敵同士の重なり防止 (Sprite.each_pair_spatial によるゼロアロケーション高速ソフト押し出し)
   def separate_enemies
-    n = @enemies.size
-    return if n < 2
+    return if @enemies.size < 2
 
-    # セルサイズ 64px で空間ハッシュ
-    inv_cell = 1.0 / 64.0
-    grid = {}
-    i = 0
-    while i < n
-      e = @enemies[i]
-      i += 1
-      next if e.dead
-      cx = (e.x * inv_cell).floor + 1000
-      cy = (e.y * inv_cell).floor + 1000
-      code = cy * 2000 + cx
-      (grid[code] ||= []) << e
-      if e.is_boss
-        # ボスは大型なので周囲セルにも登録
-        [-1, 0, 1].each do |dx|
-          [-1, 0, 1].each do |dy|
-            next if dx == 0 && dy == 0
-            (grid[(cy + dy) * 2000 + (cx + dx)] ||= []) << e
-          end
-        end
-      end
-    end
-
-    # 隣接4セル方向 (自分 + 右、右下、下、左下で全ペア重複なし網羅)
-    offsets = [1, 2001, 2000, 1999]
-
-    grid.each do |code, cell_enemies|
-      c_len = cell_enemies.length
-      next if c_len == 0
-
-      # 1. 同一セル内のペア
-      i = 0
-      while i < c_len
-        e1 = cell_enemies[i]
-        i += 1
-        j = i
-        while j < c_len
-          e2 = cell_enemies[j]
-          j += 1
-          next if e1.equal?(e2)
-          resolve_enemy_overlap(e1, e2)
-        end
-      end
-
-      # 2. 隣接4セルとのペア
-      offsets.each do |off|
-        neighbor = grid[code + off]
-        next unless neighbor
-        n_len = neighbor.length
-        next if n_len == 0
-        i = 0
-        while i < c_len
-          e1 = cell_enemies[i]
-          i += 1
-          j = 0
-          while j < n_len
-            e2 = neighbor[j]
-            j += 1
-            next if e1.equal?(e2)
-            resolve_enemy_overlap(e1, e2)
-          end
-        end
-      end
+    Sprite.each_pair_spatial(@enemies, cell_size: 64.0) do |e1, e2|
+      resolve_enemy_overlap(e1, e2)
     end
   end
 
@@ -1066,7 +1005,6 @@ class Game
   end
 
   def check_collisions
-    t0 = Window.time
     contact_damage = 0
     boss_hit = false
 
@@ -1130,9 +1068,6 @@ class Game
         end
       end
     end
-
-    dt_ms = (Window.time - t0) * 1000.0
-    @collision_time_ms = @collision_time_ms * 0.9 + dt_ms * 0.1
   end
 
   def pick_heart(item)
@@ -1649,8 +1584,8 @@ class Game
     "#{m}:#{s_str}"
   end
 
-  def draw_centered(y, text, size, color, font = Font::SINCLAIR)
-    Window.draw_text(640.0, y, text, font: font, size: size, color: color, align: :center)
+  def draw_centered(y, text, size, color, font = Font::SINCLAIR, z: 0.0)
+    Window.draw_text(640.0, y, text, font: font, size: size, color: color, align: :center, z: z)
   end
 
   def draw_game
@@ -1742,10 +1677,10 @@ class Game
 
     # 画面空間描画 (被弾の赤フラッシュ / レベルアップの白フラッシュ / HUD)
     if @damage_flash > 0
-      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 0, 0, @damage_flash * 8))
+      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 0, 0, @damage_flash * 8), z: 10.0)
     end
     if @levelup_flash > 0
-      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 255, 255, @levelup_flash * 10))
+      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 255, 255, @levelup_flash * 10), z: 10.0)
     end
 
     Profiler.measure(:hud) do
@@ -1802,15 +1737,15 @@ class Game
   end
 
   def draw_hud
-    # HUD (UI)
+    # HUD (UI: z: 5.0 でワールドやHPバー(z: 1.0)より手前、メニュー(z: 10.0)より奥に配置)
     hud_str = "SCORE: #{@player.score}   TIME: #{time_str(@frames_alive)}   LV: #{@player.level}"
-    Window.draw_text(20.0, 20.0, hud_str, font: Font::SINCLAIR, size: 24, color: Color::WHITE)
+    Window.draw_text(20.0, 20.0, hud_str, font: Font::SINCLAIR, size: 24, color: Color::WHITE, z: 5.0)
 
     # HP (ハートブロック)
     @player.max_hp.times do |i|
       hx = 20.0 + i.to_f * 30.0
       c = i < @player.hp ? COLOR_HEART_RED : COLOR_HP_GRAY
-      Window.draw_rect(hx, 56.0, 24.0, 18.0, color: c)
+      Window.draw_rect(hx, 56.0, 24.0, 18.0, color: c, z: 5.0)
     end
 
     # コンボ表示 (右揃え align: :right)
@@ -1819,24 +1754,21 @@ class Game
       combo_str = "#{@combo} COMBO  x#{combo_multiplier}"
       w = Window.text_width(combo_str, font: Font::SINCLAIR, size: combo_size)
       ratio = @combo_timer.to_f / 120.0
-      Window.draw_text(1260.0, 20.0, combo_str, font: Font::SINCLAIR, size: combo_size, color: COLOR_ORANGE, align: :right)
-      Window.draw_rect(1260.0 - w, 24.0 + combo_size.to_f, w * ratio, 4.0, color: COLOR_ORANGE)
+      Window.draw_text(1260.0, 20.0, combo_str, font: Font::SINCLAIR, size: combo_size, color: COLOR_ORANGE, align: :right, z: 5.0)
+      Window.draw_rect(1260.0 - w, 24.0 + combo_size.to_f, w * ratio, 4.0, color: COLOR_ORANGE, z: 5.0)
     end
 
     # EXPバー (画面下端)
     exp_ratio = @player.exp.to_f / @player.exp_to_next
     exp_ratio = 1.0 if exp_ratio > 1.0
-    Window.draw_rect(0.0, 710.0, 1280.0, 10.0, color: COLOR_EXP_BAR_BG)
-    Window.draw_rect(0.0, 710.0, 1280.0 * exp_ratio, 10.0, color: COLOR_EXP_GREEN)
+    Window.draw_rect(0.0, 710.0, 1280.0, 10.0, color: COLOR_EXP_BAR_BG, z: 5.0)
+    Window.draw_rect(0.0, 710.0, 1280.0 * exp_ratio, 10.0, color: COLOR_EXP_GREEN, z: 5.0)
 
     # デバッグ情報
     entities_count = @bullets.size + @missiles.size + @enemies.size + @items.size + @particles.size + @damage_texts.size
     pad_str = Input.gamepad_connected?(0) ? "[PAD: ON]" : "[PAD: OFF]"
-    val_100 = (@collision_time_ms * 100).to_i
-    val_dec = val_100 % 100
-    col_str = "#{val_100 / 100}.#{val_dec < 10 ? '0' : ''}#{val_dec}ms"
-    dbg_str = "FPS: #{Window.fps.to_i}  OBJ: #{entities_count}  COL: #{col_str}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
-    Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY)
+    dbg_str = "FPS: #{Window.fps.to_i}  OBJ: #{entities_count}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
+    Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY, z: 5.0)
   end
 
   def draw_title
@@ -1872,8 +1804,8 @@ class Game
   end
 
   def draw_pause_menu
-    Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG)
-    draw_centered(130.0, "=== PAUSED ===", 40, Color::WHITE)
+    Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG, z: 10.0)
+    draw_centered(130.0, "=== PAUSED ===", 40, Color::WHITE, Font::SINCLAIR, z: 10.0)
 
     lines = [
       "LEVEL      : #{@player.level}",
@@ -1887,41 +1819,41 @@ class Game
       "MAGNET     : #{@player.magnet_radius.to_i}"
     ]
     lines.each_with_index do |line, i|
-      Window.draw_text(460.0, 210.0 + i.to_f * 34.0, line, font: Font::SINCLAIR, size: 22, color: Color::WHITE)
+      Window.draw_text(460.0, 210.0 + i.to_f * 34.0, line, font: Font::SINCLAIR, size: 22, color: Color::WHITE, z: 10.0)
     end
 
-    draw_centered(560.0, "ESC / START / Right Click / (B) to Resume", 20, Color::WHITE)
-    draw_centered(595.0, "Q / (Y) to Title    [C] CRT: #{@crt_enabled ? 'ON' : 'OFF'}    Collision: [Sprite.check / SAP]", 18, COLOR_TEXT_GRAY)
+    draw_centered(560.0, "ESC / START / Right Click / (B) to Resume", 20, Color::WHITE, Font::SINCLAIR, z: 10.0)
+    draw_centered(595.0, "Q / (Y) to Title    [C] CRT: #{@crt_enabled ? 'ON' : 'OFF'}    Collision: [Sprite.check / SAP]", 18, COLOR_TEXT_GRAY, Font::SINCLAIR, z: 10.0)
   end
 
   def draw_levelup_menu
-    Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG)
-    draw_centered(130.0, "LEVEL UP!", 56, COLOR_EXP_GREEN)
-    draw_centered(200.0, "Choose one upgrade", 20, COLOR_TEXT_GRAY)
+    Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG, z: 10.0)
+    draw_centered(130.0, "LEVEL UP!", 56, COLOR_EXP_GREEN, Font::SINCLAIR, z: 10.0)
+    draw_centered(200.0, "Choose one upgrade", 20, COLOR_TEXT_GRAY, Font::SINCLAIR, z: 10.0)
 
     @choices.each_with_index do |idx, i|
       top = levelup_row_top(i)
       is_selected = (@menu_cursor == i)
 
       if is_selected
-        Window.draw_rect(240.0, top, 800.0, 80.0, color: COLOR_BUTTON_HOVER)
-        Window.draw_rect(236.0, top, 4.0, 80.0, color: Color::CYAN)
+        Window.draw_rect(240.0, top, 800.0, 80.0, color: COLOR_BUTTON_HOVER, z: 10.0)
+        Window.draw_rect(236.0, top, 4.0, 80.0, color: Color::CYAN, z: 10.0)
       else
-        Window.draw_rect(240.0, top, 800.0, 80.0, color: Color.new(30, 30, 38, 220))
+        Window.draw_rect(240.0, top, 800.0, 80.0, color: Color.new(30, 30, 38, 220), z: 10.0)
       end
 
       title_color = is_selected ? Color::CYAN : Color::WHITE
       prefix = is_selected ? "> " : "  "
-      Window.draw_text(260.0, top + 14.0, "#{prefix}#{upgrade_title(idx)}", font: Font::SINCLAIR, size: 26, color: title_color)
-      Window.draw_text(300.0, top + 48.0, upgrade_desc(idx), font: Font::SINCLAIR, size: 18, color: COLOR_TEXT_GRAY)
+      Window.draw_text(260.0, top + 14.0, "#{prefix}#{upgrade_title(idx)}", font: Font::SINCLAIR, size: 26, color: title_color, z: 10.0)
+      Window.draw_text(300.0, top + 48.0, upgrade_desc(idx), font: Font::SINCLAIR, size: 18, color: COLOR_TEXT_GRAY, z: 10.0)
     end
 
-    draw_centered(570.0, "[UP/DOWN/Stick] Select   [A / ENTER / Click] Choose", 20, Color::WHITE)
+    draw_centered(570.0, "[UP/DOWN/Stick] Select   [A / ENTER / Click] Choose", 20, Color::WHITE, Font::SINCLAIR, z: 10.0)
   end
 
   def draw_gameover
-    Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG)
-    draw_centered(110.0, "GAME OVER", 64, COLOR_HEART_RED)
+    Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG, z: 10.0)
+    draw_centered(110.0, "GAME OVER", 64, COLOR_HEART_RED, Font::SINCLAIR, z: 10.0)
 
     lines = [
       "TIME       : #{time_str(@frames_alive)}",
@@ -1932,15 +1864,15 @@ class Game
       "BEST       : #{@best_score}"
     ]
     lines.each_with_index do |line, i|
-      Window.draw_text(470.0, 220.0 + i.to_f * 40.0, line, font: Font::SINCLAIR, size: 26, color: Color::WHITE)
+      Window.draw_text(470.0, 220.0 + i.to_f * 40.0, line, font: Font::SINCLAIR, size: 26, color: Color::WHITE, z: 10.0)
     end
 
     if @new_record && (@state_timer / 15) % 2 == 0
-      draw_centered(480.0, "NEW RECORD!", 32, COLOR_ORANGE)
+      draw_centered(480.0, "NEW RECORD!", 32, COLOR_ORANGE, Font::SINCLAIR, z: 10.0)
     end
 
     if @state_timer > 45 && (@state_timer / 30) % 2 == 0
-      draw_centered(570.0, "PRESS ENTER / A / CLICK TO RETRY", 26, Color::CYAN)
+      draw_centered(570.0, "PRESS ENTER / A / CLICK TO RETRY", 26, Color::CYAN, Font::SINCLAIR, z: 10.0)
     end
   end
 end
@@ -1954,13 +1886,24 @@ test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
 # 自動テスト時はタイトルを飛ばしてプレイ状態から開始 (ZENOO_TEST_TITLE 指定時はタイトルをテスト)
 game.game_state = STATE_PLAY if test_max > 0 && ENV['ZENOO_TEST_TITLE'] != '1'
+if ENV['ZENOO_TEST_ENEMIES']
+  ENV['ZENOO_TEST_ENEMIES'].to_i.times do
+    game.enemies << Enemy.new(game.player.x, game.player.y, :normal)
+  end
+end
 
 Window.loop(1280, 720, "Zenoo Survival Shooting Game") do
   game.update_draw_frame
   if test_max > 0
     frame_count += 1
     if frame_count >= test_max
-      puts "Game test completed successfully! (#{frame_count} frames)"
+      puts "Game test completed successfully! (#{frame_count} frames, enemies=#{game.enemies.size})"
+      puts "=== Profiler Average Times (ms) over last 60 frames ==="
+      times = Zenoo::Profiler.average_times(60)
+      times.each do |cat, ms|
+        printf("  %-15s: %6.2f ms\n", cat, ms)
+      end
+      printf("  %-15s: %6.2f ms\n", "TOTAL", times.values.sum)
       exit
     end
   end
