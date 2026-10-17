@@ -1979,5 +1979,244 @@ module Zenoo
     def self.polygon(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center)
       Polygon.new(vertices, x: x, y: y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot)
     end
+
+    # ====================================================
+    # 空間ハッシュ (Spatial Hash) ワークスペース
+    # ====================================================
+    # 大量オブジェクトの総当たり・ブロードフェーズを O(N) で高速処理する内部バッファ。
+    # 配列プール機構により、毎フレームの Array / Hash 生成をゼロに抑えて再利用します。
+    # Spinel / Clang 最適化のため ensure は一切使用せず、フラットなシーケンシャル制御と
+    # while ループで構築されています。
+    class SpatialWorkspace
+      STRIDE = 4000
+      HALF_STRIDE = 2000
+      OFFSETS = [1, 4001, 4000, 3999].freeze
+
+      def initialize
+        @cell_size = 64.0
+        @inv_cell = 1.0 / 64.0
+        @grid = {}
+        @cell_pool = []
+        @active_codes = []
+      end
+
+      def prepare(cell_size, bounds = nil)
+        clear if @active_codes.length > 0
+        cs = (cell_size || 64.0).to_f
+        cs = 8.0 if cs < 8.0
+        @cell_size = cs
+        @inv_cell = 1.0 / cs
+      end
+
+      def clear
+        codes = @active_codes
+        grid = @grid
+        pool = @cell_pool
+        i = 0
+        len = codes.length
+        while i < len
+          arr = grid[codes[i]]
+          if arr
+            arr.clear
+            pool.push(arr)
+          end
+          i += 1
+        end
+        grid.clear
+        codes.clear
+      end
+
+      def build(group)
+        items = group.is_a?(Array) ? group : [group]
+        n = items.length
+        inv = @inv_cell
+        cs = @cell_size
+        grid = @grid
+        pool = @cell_pool
+        codes = @active_codes
+        i = 0
+        while i < n
+          item = items[i]
+          i += 1
+          next unless item
+          next if item.respond_to?(:dead) && item.dead
+
+          # 高速座標・半径取得 (動的メソッド呼び出しとキャッシュ同期のオーバーヘッドをバイパス)
+          x = item.x.to_f
+          y = item.y.to_f
+          r = if item.respond_to?(:hit_radius)
+                item.hit_radius.to_f
+              elsif item.respond_to?(:radius)
+                item.radius.to_f
+              elsif (c = item.instance_variable_get(:@collider_shape))
+                c.bounding_radius.to_f
+              else
+                16.0
+              end
+
+          cx = (x * inv).floor + HALF_STRIDE
+          cy = (y * inv).floor + HALF_STRIDE
+          code = cy * STRIDE + cx
+
+          # インライン追加 (メソッド呼び出しオーバーヘッド排除)
+          arr = grid[code]
+          unless arr
+            arr = pool.pop || []
+            grid[code] = arr
+            codes.push(code)
+          end
+          arr.push(item)
+
+          # セルサイズ以上の超大型オブジェクト (ボス等) のみ周囲セルにも登録
+          # (中型敵の多重登録によるペア数爆発を抑止)
+          is_boss = item.respond_to?(:is_boss) && item.is_boss
+          if is_boss || r >= cs
+            min_gx = ((x - r) * inv).floor + HALF_STRIDE
+            max_gx = ((x + r) * inv).floor + HALF_STRIDE
+            min_gy = ((y - r) * inv).floor + HALF_STRIDE
+            max_gy = ((y + r) * inv).floor + HALF_STRIDE
+
+            gy = min_gy
+            while gy <= max_gy
+              gx = min_gx
+              while gx <= max_gx
+                if gx != cx || gy != cy
+                  c_code = gy * STRIDE + gx
+                  c_arr = grid[c_code]
+                  unless c_arr
+                    c_arr = pool.pop || []
+                    grid[c_code] = c_arr
+                    codes.push(c_code)
+                  end
+                  c_arr.push(item)
+                end
+                gx += 1
+              end
+              gy += 1
+            end
+          end
+        end
+      end
+
+      # 近傍ペア列挙 (ブロードフェーズ)
+      def each_pair
+        return unless block_given?
+        codes_len = @active_codes.length
+        c_idx = 0
+        offsets = OFFSETS
+
+        while c_idx < codes_len
+          code = @active_codes[c_idx]
+          c_idx += 1
+          cell_enemies = @grid[code]
+          next unless cell_enemies
+          c_len = cell_enemies.length
+          next if c_len == 0
+
+          # 1. 同一セル内のペア
+          i = 0
+          while i < c_len
+            e1 = cell_enemies[i]
+            i += 1
+            j = i
+            while j < c_len
+              e2 = cell_enemies[j]
+              j += 1
+              next if e1.equal?(e2)
+              yield(e1, e2)
+            end
+          end
+
+          # 2. 隣接4セルとのペア
+          k = 0
+          while k < 4
+            off = offsets[k]
+            k += 1
+            neighbor = @grid[code + off]
+            next unless neighbor
+            n_len = neighbor.length
+            next if n_len == 0
+            i = 0
+            while i < c_len
+              e1 = cell_enemies[i]
+              i += 1
+              j = 0
+              while j < n_len
+                e2 = neighbor[j]
+                j += 1
+                next if e1.equal?(e2)
+                yield(e1, e2)
+              end
+            end
+          end
+        end
+      end
+
+      # 衝突判定込みペア列挙 (ナローフェーズ)
+      def each_collision
+        hits = block_given? ? nil : []
+        each_pair do |e1, e2|
+          s1 = e1.is_a?(Shape) ? e1 : (e1.respond_to?(:collider) ? e1.collider : nil)
+          s2 = e2.is_a?(Shape) ? e2 : (e2.respond_to?(:collider) ? e2.collider : nil)
+          if s1 && s2 && Collision.check(s1, s2)
+            if block_given?
+              yield(e1, e2)
+            else
+              hits.push([e1, e2])
+            end
+          end
+        end
+        hits
+      end
+
+      # めり込み量 (MTV) 計算込みペア列挙
+      def each_penetration
+        hits = block_given? ? nil : []
+        each_pair do |e1, e2|
+          hit = Collision.penetration(e1, e2)
+          if hit
+            if block_given?
+              yield(e1, e2, hit)
+            else
+              hits.push([e1, e2, hit])
+            end
+          end
+        end
+        hits
+      end
+    end
+
+    @spatial_workspace = SpatialWorkspace.new
+
+    # 空間ハッシュによる近傍ペア列挙 (ブロードフェーズ)
+    # ensure を使用せず、Clang 最適化を阻害しないシーケンシャル実行
+    def self.each_pair_spatial(group, cell_size: 64.0, bounds: nil, &block)
+      ws = @spatial_workspace
+      ws.prepare(cell_size, bounds)
+      ws.build(group)
+      res = ws.each_pair(&block)
+      ws.clear
+      res
+    end
+
+    # 空間ハッシュによる一括衝突判定 (ナローフェーズ幾何チェック込み)
+    def self.check_spatial(group, cell_size: 64.0, bounds: nil, &block)
+      ws = @spatial_workspace
+      ws.prepare(cell_size, bounds)
+      ws.build(group)
+      res = ws.each_collision(&block)
+      ws.clear
+      res
+    end
+
+    # 空間ハッシュによる一括めり込み量 (MTV) 判定
+    def self.penetration_spatial(group, cell_size: 64.0, bounds: nil, &block)
+      ws = @spatial_workspace
+      ws.prepare(cell_size, bounds)
+      ws.build(group)
+      res = ws.each_penetration(&block)
+      ws.clear
+      res
+    end
   end
 end

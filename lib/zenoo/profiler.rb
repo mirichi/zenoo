@@ -16,6 +16,7 @@ module Zenoo
       update:     Color.new(90, 200, 130),  # エメラルドグリーン
       physics:    Color.new(245, 175, 65),  # アンバー・オレンジ
       render:     Color.new(75, 170, 245),  # スカイブルー
+      draw:       Color.new(255, 120, 200), # マゼンタ (描画エンジン・GPUフラッシュ)
       gui:        Color.new(185, 115, 235), # パープル
       audio:      Color.new(240, 105, 130), # ローズ
       other:      Color.new(160, 165, 175)  # シルバーグレー

@@ -54,17 +54,31 @@ module Zenoo
     end
 
     def self.__draw_step
-      Backend.flush_screen
-      Backend.clear_clips
-      @offset_x = 0.0
-      @offset_y = 0.0
-      Native::Renderer.reset_scissor
+      if defined?(Zenoo::Profiler) && Zenoo::Profiler.enabled
+        Zenoo::Profiler.measure(:draw) do
+          Backend.flush_screen
+          Backend.clear_clips
+          @offset_x = 0.0
+          @offset_y = 0.0
+          Native::Renderer.reset_scissor
+        end
+      else
+        Backend.flush_screen
+        Backend.clear_clips
+        @offset_x = 0.0
+        @offset_y = 0.0
+        Native::Renderer.reset_scissor
+      end
     end
 
     def self.__step_frame
       Backend.current_target = nil
       Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
-      Native::Window.clear(@bg_color)
+      if defined?(Zenoo::Profiler) && Zenoo::Profiler.enabled
+        Zenoo::Profiler.measure(:draw) { Native::Window.clear(@bg_color) }
+      else
+        Native::Window.clear(@bg_color)
+      end
       __update_step
       __draw_step
     ensure

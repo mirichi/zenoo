@@ -354,6 +354,7 @@ module Zenoo
     @pending_images = []
     @clip_stack = []        # ClipContext のスタック
     @clip_context_pool = [] # 再利用可能な ClipContext プール
+    @batch_buffer = String.new(encoding: Encoding::BINARY) # バッチ結合用再利用バッファ (Mesh等の元データを破壊しない)
 
     def self.current_clip
       @clip_stack.last&.rect
@@ -511,6 +512,16 @@ module Zenoo
     def self.execute_commands(pool, count)
       return if count == 0
 
+      if defined?(Zenoo::Profiler) && Zenoo::Profiler.enabled
+        Zenoo::Profiler.measure(:draw) do
+          __execute_commands_internal(pool, count)
+        end
+      else
+        __execute_commands_internal(pool, count)
+      end
+    end
+
+    def self.__execute_commands_internal(pool, count)
       $last_draw_calls = 0
       active_gl_clip = :initial
 
@@ -548,7 +559,9 @@ module Zenoo
                     cur_pipeline.topology == Topology::POINTS
 
         next_idx = i + 1
+        final_data = cur_data
         if can_batch
+          batched = false
           while next_idx < count
             ncmd = pool[next_idx]
             if ncmd.image && has_pending_draws?(ncmd.image)
@@ -564,8 +577,12 @@ module Zenoo
                ncmd.uniforms == cur_uniforms &&
                ncmd.blend == cur_blend &&
                ncmd.clip == cur_clip
-              cur_data = cur_data + ncmd.data
-              cmd.data = cur_data
+              unless batched
+                @batch_buffer.clear
+                @batch_buffer << cur_data
+                batched = true
+              end
+              @batch_buffer << ncmd.data
               cur_count += ncmd.count
               ncmd.data = nil
               ncmd.image = nil
@@ -579,6 +596,7 @@ module Zenoo
               break
             end
           end
+          final_data = @batch_buffer if batched
         end
 
         Native::Renderer.set_blend_mode(cur_blend)
@@ -590,7 +608,7 @@ module Zenoo
           cur_pipeline.layout,
           cur_pipeline.divisors,
           cur_pipeline.base_vertex_count,
-          cur_data,
+          final_data,
           cur_count,
           cur_image,
           cur_shader

@@ -295,5 +295,20 @@ module Zenoo
     def self.penetration(group_a, group_b = nil, &block)
       Collision.penetration_all(group_a, group_b, &block)
     end
+
+    # 空間ハッシュによる近傍ペア列挙 (ブロードフェーズ / 大量オブジェクト総当たり用)
+    def self.each_pair_spatial(sprites, cell_size: 64.0, bounds: nil, &block)
+      Collision.each_pair_spatial(sprites, cell_size: cell_size, bounds: bounds, &block)
+    end
+
+    # 空間ハッシュによる一括衝突判定
+    def self.check_spatial(sprites, cell_size: 64.0, bounds: nil, &block)
+      Collision.check_spatial(sprites, cell_size: cell_size, bounds: bounds, &block)
+    end
+
+    # 空間ハッシュによる一括めり込み量 (MTV) 判定
+    def self.penetration_spatial(sprites, cell_size: 64.0, bounds: nil, &block)
+      Collision.penetration_spatial(sprites, cell_size: cell_size, bounds: bounds, &block)
+    end
   end
 end
