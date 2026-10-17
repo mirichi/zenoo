@@ -20,6 +20,9 @@ module Zenoo
     @bg_color = (18 << 24) | (20 << 16) | (30 << 8) | 255
     @main_loop_block = nil
     @step_proc = nil
+    @fps = 60.0
+    @fps_frames = 0
+    @fps_accum = 0.0
 
     # DXRuby風メインループ
     def self.loop(width = 1280, height = 720, title = "Zenoo", scale: 1.0, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, &block)
@@ -72,6 +75,7 @@ module Zenoo
     end
 
     def self.__step_frame
+      __update_fps
       Backend.current_target = nil
       Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
       if defined?(Zenoo::Profiler) && Zenoo::Profiler.enabled
@@ -146,11 +150,20 @@ module Zenoo
     end
 
     def self.fps
+      @fps || 60.0
+    end
+
+    def self.__update_fps
       dt = delta_time
-      if dt > 0.001 && dt < 1.0
-        1.0 / dt
-      else
-        60.0
+      return if dt <= 0.0001 || dt > 1.0
+      @fps_frames = (@fps_frames || 0) + 1
+      @fps_accum = (@fps_accum || 0.0) + dt
+      if @fps_accum >= 0.25
+        measured = @fps_frames.to_f / @fps_accum
+        current = @fps || 60.0
+        @fps = current * 0.2 + measured * 0.8
+        @fps_frames = 0
+        @fps_accum = 0.0
       end
     end
 
