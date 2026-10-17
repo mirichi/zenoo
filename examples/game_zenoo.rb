@@ -531,20 +531,12 @@ class Enemy < Sprite
   end
 
   def initialize(px, py, type = :normal)
-    edge = rand(4)
-    if edge == 0
-      ix = px + (rand(1400) - 700).to_f
-      iy = py - 420.0
-    elsif edge == 1
-      ix = px + (rand(1400) - 700).to_f
-      iy = py + 420.0
-    elsif edge == 2
-      ix = px - 720.0
-      iy = py + (rand(900) - 450).to_f
-    else
-      ix = px + 720.0
-      iy = py + (rand(900) - 450).to_f
-    end
+    # 全方位楕円リングスポーン (カメラ外周 360 度から均等に包囲進軍)
+    spawn_ang = rand(360) * (Math::PI / 180.0)
+    rx = 750.0 + rand(120).to_f
+    ry = 480.0 + rand(90).to_f
+    ix = px + rx * Math.cos(spawn_ang)
+    iy = py + ry * Math.sin(spawn_ang)
 
     super(ix, iy, Enemy.sprites[type][false], anchor: :center, pivot: :center)
 
@@ -560,7 +552,7 @@ class Enemy < Sprite
       @radius = 12.0
       @hp = 1
       @max_hp = 1
-      @speed = 3.4
+      @base_speed = 3.4
       @color = Color::YELLOW
       @score_value = 10
       @hit_radius = 10.0
@@ -569,7 +561,7 @@ class Enemy < Sprite
       @radius = 32.0
       @hp = 20
       @max_hp = 20
-      @speed = 1.4
+      @base_speed = 1.4
       @color = Color::RED
       @score_value = 50
       @hit_radius = @radius * Math.cos(Math::PI / @sides)
@@ -578,7 +570,7 @@ class Enemy < Sprite
       @radius = 70.0
       @hp = 160
       @max_hp = 160
-      @speed = 0.85
+      @base_speed = 0.85
       @color = COLOR_PURPLE
       @score_value = 300
       @is_boss = true
@@ -588,11 +580,26 @@ class Enemy < Sprite
       @radius = 18.0
       @hp = 3
       @max_hp = 3
-      @speed = 2.0
+      @base_speed = 2.0
       @color = Color::BLUE
       @score_value = 20
       @hit_radius = @radius * Math.cos(Math::PI / @sides)
     end
+
+    # 1. 速度の個体差 (±15% のゆらぎ: 前後の重なり分散)
+    @speed = @is_boss ? @base_speed : (@base_speed * (0.85 + rand(31) * 0.01))
+
+    # 2. プレイヤー目標地点の分散スロット (プレイヤー足元の1点ではなく周囲16〜48pxの円周上に分散)
+    # これにより到達時にも1点に重ならず自機の周囲を取り囲む円陣を形成
+    target_ang = rand(360) * (Math::PI / 180.0)
+    target_dist = @is_boss ? 0.0 : (16.0 + rand(33).to_f)
+    @target_offset_x = target_dist * Math.cos(target_ang)
+    @target_offset_y = target_dist * Math.sin(target_ang)
+
+    # 3. わずかな蛇行・ゆらぎ (重なりを散らす有機的な大群移動)
+    @wobble_phase = rand(360) * (Math::PI / 180.0)
+    @wobble_speed = 0.05 + rand(20) * 0.002
+    @wobble_amount = @is_boss ? 0.0 : (0.12 + rand(10) * 0.01)
 
     set_collider(:circle, radius: @hit_radius)
   end
@@ -603,9 +610,17 @@ class Enemy < Sprite
   end
 
   def update(px, py)
-    angle_rad = Math.atan2(py - self.y, px - self.x)
-    self.x += @speed * Math.cos(angle_rad)
-    self.y += @speed * Math.sin(angle_rad)
+    # 目標オフセットを加味した目標座標
+    tx = px + @target_offset_x
+    ty = py + @target_offset_y
+    angle_rad = Math.atan2(ty - self.y, tx - self.x)
+
+    # わずかな蛇行 (横方向のゆらぎ)
+    @wobble_phase += @wobble_speed
+    move_angle = angle_rad + Math.sin(@wobble_phase) * @wobble_amount
+
+    self.x += @speed * Math.cos(move_angle)
+    self.y += @speed * Math.sin(move_angle)
     @rotation += 0.03
     self.angle = @rotation * (180.0 / Math::PI)
     if @flash > 0
@@ -962,7 +977,7 @@ class Game
     end
   end
 
-  # 敵同士の重なり防止 (Sprite.each_pair_spatial によるゼロアロケーション高速ソフト押し出し)
+  # 敵同士の重なり防止
   def separate_enemies
     return if @enemies.size < 2
 
@@ -984,7 +999,7 @@ class Game
       d = Math.sqrt(d2)
       overlap = r_sum - d
       return if overlap <= 0.0
-      push = overlap * 0.25
+      push = overlap * 0.5
       inv_d = 1.0 / d
       nx = dx * inv_d * push
       ny = dy * inv_d * push
@@ -1771,9 +1786,8 @@ class Game
     Window.draw_rect(0.0, 710.0, 1280.0 * exp_ratio, 10.0, color: COLOR_EXP_GREEN, z: 5.0)
 
     # デバッグ情報
-    entities_count = @bullets.size + @missiles.size + @enemies.size + @items.size + @particles.size + @damage_texts.size
     pad_str = Input.gamepad_connected?(0) ? "[PAD: ON]" : "[PAD: OFF]"
-    dbg_str = "FPS: #{Window.fps.to_i}  OBJ: #{entities_count}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
+    dbg_str = "FPS: #{Window.fps.to_i}  ENEMY: #{@enemies.size}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
     Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY, z: 5.0)
   end
 
