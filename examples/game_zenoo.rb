@@ -386,7 +386,7 @@ class Orbiter < Sprite
     super(0.0, 0.0, anchor: :center, pivot: :center)
     @index = index
     @total = total
-    @radius = 85.0
+    @radius = 125.0
     @angle_rad = index * (2.0 * Math::PI / total)
     @speed = 0.08
     @damage = 2
@@ -475,20 +475,20 @@ class Enemy < Sprite
   def self.init_atlas
     return if @atlas
 
-    @atlas = Image.new(512, 256)
+    @atlas = Image.new(512, 512)
     @sprites = {}
 
     configs = {
-      fast:   { sides: 3, radius: 12.0, color: Color::YELLOW, is_boss: false, size: 48,  x0: 0,   y: 0 },
-      normal: { sides: 4, radius: 18.0, color: Color::BLUE,   is_boss: false, size: 48,  x0: 96,  y: 0 },
-      elite:  { sides: 5, radius: 32.0, color: Color::RED,    is_boss: false, size: 80,  x0: 192, y: 0 },
-      boss:   { sides: 8, radius: 70.0, color: COLOR_PURPLE,  is_boss: true,  size: 160, x0: 0,   y: 80 }
+      fast:   { sides: 3, radius: 18.0,  color: Color::YELLOW, is_boss: false, size: 72,  x0: 0,   y: 0 },
+      normal: { sides: 4, radius: 27.0,  color: Color::BLUE,   is_boss: false, size: 72,  x0: 144, y: 0 },
+      elite:  { sides: 5, radius: 48.0,  color: Color::RED,    is_boss: false, size: 120, x0: 0,   y: 72 },
+      boss:   { sides: 8, radius: 105.0, color: COLOR_PURPLE,  is_boss: true,  size: 240, x0: 0,   y: 192 }
     }
 
     configs.each do |type, cfg|
       sz = cfg[:size]
       y = cfg[:y]
-      line_w = cfg[:is_boss] ? 2.0 : 1.0
+      line_w = cfg[:is_boss] ? 3.0 : 1.5
 
       # 通常スロット
       s_normal = @atlas.sub_image(cfg[:x0], y, sz, sz)
@@ -549,16 +549,16 @@ class Enemy < Sprite
     case type
     when :fast
       @sides = 3
-      @radius = 12.0
+      @radius = 18.0
       @hp = 1
       @max_hp = 1
       @base_speed = 3.4
       @color = Color::YELLOW
       @score_value = 10
-      @hit_radius = 10.0
+      @hit_radius = 15.0
     when :elite
       @sides = 5
-      @radius = 32.0
+      @radius = 48.0
       @hp = 20
       @max_hp = 20
       @base_speed = 1.4
@@ -567,7 +567,7 @@ class Enemy < Sprite
       @hit_radius = @radius * Math.cos(Math::PI / @sides)
     when :boss
       @sides = 8
-      @radius = 70.0
+      @radius = 105.0
       @hp = 160
       @max_hp = 160
       @base_speed = 0.85
@@ -577,7 +577,7 @@ class Enemy < Sprite
       @hit_radius = @radius * Math.cos(Math::PI / @sides)
     else
       @sides = 4
-      @radius = 18.0
+      @radius = 27.0
       @hp = 3
       @max_hp = 3
       @base_speed = 2.0
@@ -586,20 +586,8 @@ class Enemy < Sprite
       @hit_radius = @radius * Math.cos(Math::PI / @sides)
     end
 
-    # 1. 速度の個体差 (±15% のゆらぎ: 前後の重なり分散)
+    # 速度の個体差 (±15% のゆらぎ: 前後の重なり分散)
     @speed = @is_boss ? @base_speed : (@base_speed * (0.85 + rand(31) * 0.01))
-
-    # 2. プレイヤー目標地点の分散スロット (プレイヤー足元の1点ではなく周囲16〜48pxの円周上に分散)
-    # これにより到達時にも1点に重ならず自機の周囲を取り囲む円陣を形成
-    target_ang = rand(360) * (Math::PI / 180.0)
-    target_dist = @is_boss ? 0.0 : (16.0 + rand(33).to_f)
-    @target_offset_x = target_dist * Math.cos(target_ang)
-    @target_offset_y = target_dist * Math.sin(target_ang)
-
-    # 3. わずかな蛇行・ゆらぎ (重なりを散らす有機的な大群移動)
-    @wobble_phase = rand(360) * (Math::PI / 180.0)
-    @wobble_speed = 0.05 + rand(20) * 0.002
-    @wobble_amount = @is_boss ? 0.0 : (0.12 + rand(10) * 0.01)
 
     set_collider(:circle, radius: @hit_radius)
   end
@@ -610,17 +598,9 @@ class Enemy < Sprite
   end
 
   def update(px, py)
-    # 目標オフセットを加味した目標座標
-    tx = px + @target_offset_x
-    ty = py + @target_offset_y
-    angle_rad = Math.atan2(ty - self.y, tx - self.x)
-
-    # わずかな蛇行 (横方向のゆらぎ)
-    @wobble_phase += @wobble_speed
-    move_angle = angle_rad + Math.sin(@wobble_phase) * @wobble_amount
-
-    self.x += @speed * Math.cos(move_angle)
-    self.y += @speed * Math.sin(move_angle)
+    angle_rad = Math.atan2(py - self.y, px - self.x)
+    self.x += @speed * Math.cos(angle_rad)
+    self.y += @speed * Math.sin(angle_rad)
     @rotation += 0.03
     self.angle = @rotation * (180.0 / Math::PI)
     if @flash > 0
@@ -634,8 +614,8 @@ class Enemy < Sprite
 
     if (@max_hp > 1 && @hp < @max_hp) || @is_boss
       bar_w = @radius * 2.0
-      bar_h = @is_boss ? 8.0 : 5.0
-      bar_y = self.y - @radius - (@is_boss ? 18.0 : 12.0)
+      bar_h = @is_boss ? 10.0 : 6.0
+      bar_y = self.y - @radius - (@is_boss ? 24.0 : 16.0)
       hp_ratio = @hp.to_f / @max_hp
       hp_ratio = 0.0 if hp_ratio < 0.0
       Window.draw_rect(self.x - bar_w * 0.5, bar_y, bar_w, bar_h, color: COLOR_HP_GRAY, z: 1.0)
@@ -655,21 +635,21 @@ class Player < Sprite
                 :hp, :max_hp, :invincible, :exp, :level, :fired, :hit_radius
 
   def rebuild_shape
-    # 正三角形 (外接半径 28.0) の内接円 (14.0) 程度のコンパクトな当たり判定
-    @hit_radius = 12.0
+    # 正三角形 (外接半径 42.0) の内接円 (21.0) 程度のコンパクトな当たり判定
+    @hit_radius = 18.0
     set_collider(:circle, radius: @hit_radius)
   end
 
   def initialize(x, y)
     super(x, y, nil, anchor: :center, pivot: :center)
-    @radius = 28.0
+    @radius = 42.0
     @sides = 3
     @rotation = 0.0
     @speed = 5.0
     @fire_timer = 0
     @fire_rate = 10
     @score = 0
-    @magnet_radius = 160.0
+    @magnet_radius = 200.0
     @shot_level = 1
     @orbiter_count = 0
     @missile_level = 0
@@ -853,8 +833,8 @@ class Player < Sprite
         vy2 = self.y + @radius * Math.sin(angle2)
 
         Window.draw_triangle(self.x, self.y, vx2, vy2, vx1, vy1, color: body_color)
-        Window.draw_line(vx1, vy1, vx2, vy2, color: Color::WHITE)
-        Window.draw_rect(vx1 - 2.0, vy1 - 2.0, 4.0, 4.0, color: Color::WHITE)
+        Window.draw_line(vx1, vy1, vx2, vy2, color: Color::WHITE, width: 1.5)
+        Window.draw_rect(vx1 - 3.0, vy1 - 3.0, 6.0, 6.0, color: Color::WHITE)
       end
     end
 
@@ -981,7 +961,7 @@ class Game
   def separate_enemies
     return if @enemies.size < 2
 
-    Sprite.each_pair_spatial(@enemies, cell_size: 64.0) do |e1, e2|
+    Sprite.each_pair_spatial(@enemies, cell_size: 96.0) do |e1, e2|
       resolve_enemy_overlap(e1, e2)
     end
   end
@@ -999,7 +979,7 @@ class Game
       d = Math.sqrt(d2)
       overlap = r_sum - d
       return if overlap <= 0.0
-      push = overlap * 0.5
+      push = overlap * 0.4
       inv_d = 1.0 / d
       nx = dx * inv_d * push
       ny = dy * inv_d * push
