@@ -11,7 +11,7 @@
 #include "zenoo_internal.h"
 
 static void (*s_gc_callback)(void) = NULL;
-static int s_default_texture_filter = ZEN_FILTER_LINEAR;
+static int s_default_texture_filter = ZEN_FILTER_NEAREST;
 
 void zen_set_gc_trigger_callback(void (*callback)(void)) {
     s_gc_callback = callback;
@@ -85,7 +85,7 @@ void zen_image_set_filter(ZenImage* image, int filter) {
 }
 
 int zen_image_get_filter(const ZenImage* image) {
-    if (!image || !image->texture) return ZEN_FILTER_LINEAR;
+    if (!image || !image->texture) return ZEN_FILTER_NEAREST;
     return image->texture->filter;
 }
 
@@ -127,9 +127,10 @@ ZenImage* zen_image_create_format(int width, int height, int format) {
 
     ZenTexture* tex = zen_texture_create(width, height);
     if (!tex) return NULL;
-    tex->filter = s_default_texture_filter;
+    int init_filter = (format == ZEN_IMAGE_FORMAT_R8) ? ZEN_FILTER_LINEAR : s_default_texture_filter;
+    tex->filter = init_filter;
 
-    GLint gl_f = (s_default_texture_filter == ZEN_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
+    GLint gl_f = (init_filter == ZEN_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
     glBindTexture(GL_TEXTURE_2D, tex->id);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_f);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_f);

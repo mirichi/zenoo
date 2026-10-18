@@ -2,7 +2,7 @@
 
 module Zenoo
   class Font
-    SDF_BASE_SIZE = 72.0
+    SDF_BASE_SIZE = 64.0
 
     attr_reader :path, :native
 
@@ -39,7 +39,9 @@ module Zenoo
              char_or_cp.to_i
            end
       s = size.to_f
-      key = [cp, s, sdf]
+      r_scale = (defined?(Backend) && Backend.current_target) ? 1.0 : (defined?(Native::Window) ? Native::Window.scale.round(2) : 1.0)
+      r_scale = 1.0 if r_scale < 1.0
+      key = [cp, s, sdf, r_scale]
       @glyph_cache[key] ||= begin
         actual_s = s
         if sdf == true

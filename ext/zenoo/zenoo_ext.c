@@ -453,8 +453,8 @@ static VALUE win_init(int argc, VALUE* argv, VALUE self) {
     int h = NUM2INT(rb_h);
     const char* title = NIL_P(rb_title) ? "Zenoo" : StringValueCStr(rb_title);
     int fullscreen = RTEST(rb_fullscreen);
-    int win_w = NIL_P(rb_win_w) ? w : NUM2INT(rb_win_w);
-    int win_h = NIL_P(rb_win_h) ? h : NUM2INT(rb_win_h);
+    int win_w = NIL_P(rb_win_w) ? 0 : NUM2INT(rb_win_w);
+    int win_h = NIL_P(rb_win_h) ? 0 : NUM2INT(rb_win_h);
 
     if (!NIL_P(rb_scale_mode)) {
         zen_set_scale_mode(parse_scale_mode(rb_scale_mode));
