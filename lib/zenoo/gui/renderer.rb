@@ -45,6 +45,28 @@ module Zenoo
         end
       end
 
+      # フローティングウィンドウ装飾 (外枠・タイトルバー) 描画
+      def draw_window(x, y, w, h, title, active, theme, opts = {})
+        win_z       = (opts[:z] || 0.0).to_f
+        title_bar_h = (opts[:title_bar_h] || 36.0).to_f
+        bg_col      = theme.win_bg || Color.new(30, 30, 32, 245)
+        border_cfg  = active ? (theme.win_border_active || theme.border_active) : (theme.win_border_normal || theme.border_normal)
+        border_w    = border_cfg ? border_cfg[0].to_f : 1.0
+        border_col  = border_cfg ? border_cfg[1] : Color.new(80, 80, 80)
+        title_bg    = active ? (theme.win_title_bg_active || Color.new(52, 52, 58)) : (theme.win_title_bg || Color.new(42, 42, 45))
+
+        Window.draw_rect(x, y, w, h, color: bg_col, border_width: border_w, border_color: border_col, z: win_z)
+        Window.draw_rect(x + 1.0, y + 1.0, w - 2.0, title_bar_h, color: title_bg, z: win_z + 1.0)
+        Window.draw_line(x + 1.0, y + title_bar_h + 1.0, x + w - 1.0, y + title_bar_h + 1.0, color: border_col, z: win_z + 1.5)
+
+        if title && !title.to_s.empty?
+          f_font = theme.font || Font.default
+          f_size = 14
+          title_col = active ? (theme.text_color || Color::WHITE) : (theme.text_disabled || Color.new(160, 160, 165))
+          Window.draw_text(x + 10.0, y + (title_bar_h - f_size.to_f) / 2.0 + 1.0, title.to_s, font: f_font, size: f_size, color: title_col, z: win_z + 2.0)
+        end
+      end
+
       # ----------------------------------------------------
       # 当たり判定 (Hit-Test)
       # レンダラーの描画形状に合わせてオーバーライド可能

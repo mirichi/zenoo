@@ -38,18 +38,18 @@ class WindowDemoApp
 
   def draw_color_adjuster
     # ----------------------------------------------------
-    # 2. ウィンドウ 1: Color Adjuster
+    # 2. ウィンドウ 1: Color Adjuster (w: 省略でウィンドウ幅へ自動フィット)
     # ----------------------------------------------------
     GUI.window("Color Adjuster", x: 60.0, y: 180.0, w: 340.0, h: 320.0) do
       GUI.label("Adjust window background color:", size: 15, color: Color.new(170, 190, 220))
 
-      @bg_r = GUI.slider("Red",   @bg_r, 10.0, 80.0, w: 300.0, h: 38.0)
-      @bg_g = GUI.slider("Green", @bg_g, 10.0, 80.0, w: 300.0, h: 38.0)
-      @bg_b = GUI.slider("Blue",  @bg_b, 10.0, 80.0, w: 300.0, h: 38.0)
+      @bg_r = GUI.slider("Red",   @bg_r, 10.0, 80.0, h: 38.0)
+      @bg_g = GUI.slider("Green", @bg_g, 10.0, 80.0, h: 38.0)
+      @bg_b = GUI.slider("Blue",  @bg_b, 10.0, 80.0, h: 38.0)
 
-      GUI.row(spacing: 10) do
-        @counter += 1 if GUI.button("Counter (+1)", w: 145.0, h: 40.0)
-        @counter = 0  if GUI.button("Reset (0)",   w: 145.0, h: 40.0)
+      GUI.row(cols: 2, spacing: 10) do
+        @counter += 1 if GUI.button("Counter (+1)", h: 40.0)
+        @counter = 0  if GUI.button("Reset (0)",   h: 40.0)
       end
       GUI.label("Count: #{@counter}", size: 18, color: Color.new(0, 220, 255))
       nil
@@ -69,7 +69,8 @@ class WindowDemoApp
       GUI.label("Active Window : #{active_title}", size: 15, color: Color.new(255, 180, 0))
       GUI.label("Hovered Window: #{hovered_title}", size: 15, color: Color.new(150, 220, 255))
 
-      GUI.label("--- Window Z-Layers ---", size: 15, color: Color.new(160, 170, 190))
+      GUI.divider
+      GUI.label("Window Z-Layers", size: 15, color: Color.new(160, 170, 190))
       GUI.window_order.each do |wid|
         win = GUI.windows[wid]
         is_top = (wid == GUI.window_order.last)
@@ -78,8 +79,9 @@ class WindowDemoApp
         GUI.label(" - #{win.title}: Z=#{win.z.to_i}#{tag} at (#{win.x.to_i}, #{win.y.to_i})", size: 14, color: col)
       end
 
-      GUI.label("--- Text Input ---", size: 15, color: Color::WHITE)
-      @user_text = GUI.text_box("Input", @user_text, w: 340.0, h: 40.0)
+      GUI.divider
+      GUI.label("Text Input", size: 15, color: Color::WHITE)
+      @user_text = GUI.text_box("Input", @user_text, h: 40.0)
       nil
     end
   end

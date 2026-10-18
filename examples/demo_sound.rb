@@ -70,23 +70,23 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
   GUI.panel("Dynamic Sound Effects (PCM)", w: 490.0, h: 560.0) do
     GUI.label("Generated on-the-fly with mathematical waveforms", size: 13, color: Color.new(150, 160, 180))
 
-    GUI.row(spacing: 12) do
-      if Input.key_push?(:"1") || GUI.button("[1] Sine (440Hz)", w: 220.0, h: 42.0)
+    GUI.row(cols: 2, spacing: 12) do
+      if Input.key_push?(:"1") || GUI.button("[1] Sine (440Hz)", h: 42.0)
         sound_sine.play
         current_status = "Playing Sine wave tone (440Hz)"
       end
-      if Input.key_push?(:"2") || GUI.button("[2] Square (440Hz)", w: 220.0, h: 42.0)
+      if Input.key_push?(:"2") || GUI.button("[2] Square (440Hz)", h: 42.0)
         sound_square.play
         current_status = "Playing Square wave tone (440Hz)"
       end
     end
 
-    GUI.row(spacing: 12) do
-      if Input.key_push?(:"3") || GUI.button("[3] Triangle (440Hz)", w: 220.0, h: 42.0)
+    GUI.row(cols: 2, spacing: 12) do
+      if Input.key_push?(:"3") || GUI.button("[3] Triangle (440Hz)", h: 42.0)
         sound_triangle.play
         current_status = "Playing Triangle wave tone (440Hz)"
       end
-      if Input.key_push?(:"4") || GUI.button("[4] Sawtooth (440Hz)", w: 220.0, h: 42.0)
+      if Input.key_push?(:"4") || GUI.button("[4] Sawtooth (440Hz)", h: 42.0)
         sound_saw.play
         current_status = "Playing Sawtooth wave tone (440Hz)"
       end
@@ -94,12 +94,12 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
 
     GUI.label("Chirps / Sweeps (Dynamic Pitch Bend):", size: 14, color: Color.new(220, 200, 120))
 
-    GUI.row(spacing: 12) do
-      if Input.key_push?(:"5") || GUI.button("[5] Laser (Down)", w: 220.0, h: 42.0)
+    GUI.row(cols: 2, spacing: 12) do
+      if Input.key_push?(:"5") || GUI.button("[5] Laser (Down)", h: 42.0)
         sound_laser.play
         current_status = "Playing Laser sweep (900Hz -> 200Hz)"
       end
-      if Input.key_push?(:"6") || GUI.button("[6] Jump (Up)", w: 220.0, h: 42.0)
+      if Input.key_push?(:"6") || GUI.button("[6] Jump (Up)", h: 42.0)
         sound_jump.play
         current_status = "Playing Jump sweep (250Hz -> 700Hz)"
       end
@@ -107,7 +107,7 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
 
     GUI.label("Noise (Perlin / White Noise):", size: 14, color: Color.new(220, 200, 120))
 
-    if Input.key_push?(:"7") || GUI.button("[7] Explosion (Noise)", w: 452.0, h: 42.0)
+    if Input.key_push?(:"7") || GUI.button("[7] Explosion (Noise)", h: 42.0)
       sound_boom.play
       current_status = "Playing White Noise explosion sound"
     end
@@ -122,16 +122,16 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
       ogg_state = bgm_ogg.playing? ? "Playing" : "Stopped"
       GUI.label("Sample OGG: #{ogg_state} (#{bgm_ogg.time.to_f.round(1)}s / #{bgm_ogg.length.to_f.round(1)}s)", size: 14, color: Color.new(240, 180, 100))
 
-      GUI.row(spacing: 10) do
-        if GUI.button("Play OGG", w: 140.0, h: 40.0)
+      GUI.row(cols: 3, spacing: 10) do
+        if GUI.button("Play OGG", h: 40.0)
           bgm_ogg.play
           current_status = "Playing sample.ogg"
         end
-        if GUI.button("Pause", w: 140.0, h: 40.0)
+        if GUI.button("Pause", h: 40.0)
           bgm_ogg.pause
           current_status = "Paused sample.ogg"
         end
-        if GUI.button("Stop", w: 140.0, h: 40.0)
+        if GUI.button("Stop", h: 40.0)
           bgm_ogg.stop
           current_status = "Stopped sample.ogg"
         end
@@ -139,18 +139,19 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
     end
 
     if bgm_wav
-      GUI.row(spacing: 10) do
-        if GUI.button("Play WAV (SFX)", w: 140.0, h: 36.0)
+      GUI.row(cols: 3, spacing: 10) do
+        if GUI.button("Play WAV (SFX)", h: 36.0)
           bgm_wav.play
           current_status = "Playing sample.wav"
         end
       end
     end
 
-    GUI.label("--- Sound & Engine Parameters ---", size: 14, color: Color.new(180, 180, 200))
+    GUI.divider
+    GUI.label("Sound & Engine Parameters", size: 14, color: Color.new(180, 180, 200))
 
     GUI.label("Master Volume: #{(master_vol * 100).to_i}%", size: 13, color: Color.new(200, 210, 225))
-    new_vol = GUI.slider("Master Vol", master_vol, 0.0, 1.0, w: 452.0)
+    new_vol = GUI.slider("Master Vol", master_vol, 0.0, 1.0)
     if (new_vol.to_f - master_vol).abs > 0.01
       master_vol = new_vol.to_f
       Audio.master_volume = master_vol
@@ -158,21 +159,21 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
 
     if bgm_ogg
       GUI.label("BGM Volume: #{(bgm_vol * 100).to_i}%", size: 13, color: Color.new(200, 210, 225))
-      new_bvol = GUI.slider("BGM Vol", bgm_vol, 0.0, 2.0, w: 452.0)
+      new_bvol = GUI.slider("BGM Vol", bgm_vol, 0.0, 2.0)
       if (new_bvol.to_f - bgm_vol).abs > 0.01
         bgm_vol = new_bvol.to_f
         bgm_ogg.volume = bgm_vol
       end
 
       GUI.label("BGM Pitch: #{bgm_pitch.round(2)}x", size: 13, color: Color.new(200, 210, 225))
-      new_pitch = GUI.slider("Pitch", bgm_pitch, 0.5, 2.0, w: 452.0)
+      new_pitch = GUI.slider("Pitch", bgm_pitch, 0.5, 2.0)
       if (new_pitch.to_f - bgm_pitch).abs > 0.01
         bgm_pitch = new_pitch.to_f
         bgm_ogg.pitch = bgm_pitch
       end
 
       GUI.label("BGM Pan: #{bgm_pan.round(2)} (Left: -1.0, Right: +1.0)", size: 13, color: Color.new(200, 210, 225))
-      new_pan = GUI.slider("Pan", bgm_pan, -1.0, 1.0, w: 452.0)
+      new_pan = GUI.slider("Pan", bgm_pan, -1.0, 1.0)
       if (new_pan.to_f - bgm_pan).abs > 0.01
         bgm_pan = new_pan.to_f
         bgm_ogg.pan = bgm_pan

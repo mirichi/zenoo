@@ -326,6 +326,72 @@ module Zenoo
           Window.draw_text(rx + pad, ry + pad, title.to_s, font: f_font, size: title_size, color: title_col)
         end
       end
+
+      # フローティングウィンドウ (外枠・タイトルバー) 描画
+      def draw_window(x, y, w, h, title, active, theme, opts = {})
+        wx          = x.to_f
+        wy          = y.to_f
+        ww          = w.to_f
+        wh          = h.to_f
+        win_z       = (opts[:z] || 0.0).to_f
+        title_bar_h = (opts[:title_bar_h] || 36.0).to_f
+
+        border_cfg   = active ? (theme.win_border_active || theme.border_active) : (theme.win_border_normal || theme.border_normal)
+        border_w     = border_cfg ? border_cfg[0].to_f : 1.0
+        border_color = border_cfg ? border_cfg[1] : Color.new(80, 80, 80)
+
+        shadow_blur  = active ? 8.0 : 4.0
+        shadow_color = Color.new(0, 0, 0, active ? 140 : 100)
+        win_bg_col   = theme.win_bg || Color.new(30, 30, 32, 245)
+        win_radius   = (theme.corner_radius || 4.0).to_f
+
+        # 背景カード
+        Window.draw_rect(
+          wx, wy, ww, wh,
+          radius: win_radius,
+          color: win_bg_col,
+          border_width: border_w,
+          border_color: border_color,
+          shadow_blur: shadow_blur,
+          shadow_color: shadow_color,
+          z: win_z
+        )
+
+        # タイトルバー帯
+        title_bg = active ? (theme.win_title_bg_active || Color.new(52, 52, 58)) : (theme.win_title_bg || Color.new(42, 42, 45))
+        title_bar_radius = [win_radius - 1.0, 0.0].max
+        Window.draw_rect(
+          wx + 1.0, wy + 1.0, ww - 2.0, title_bar_h,
+          radius: title_bar_radius,
+          color: title_bg,
+          z: win_z + 1.0
+        )
+
+        # タイトルバー境界線
+        Window.draw_line(
+          wx + 1.0, wy + title_bar_h + 1.0,
+          wx + ww - 1.0, wy + title_bar_h + 1.0,
+          color: border_color,
+          z: win_z + 1.5
+        )
+
+        # タイトル文字列
+        if title && !title.to_s.empty?
+          f_font = theme.font || Font.default
+          f_size = 14
+          title_col = active ? (theme.text_color || Color::WHITE) : (theme.text_disabled || Color.new(160, 160, 165))
+          Profiler.measure(:gui_text) do
+            Window.draw_text(
+              wx + 10.0, wy + (title_bar_h - f_size.to_f) / 2.0 + 1.0,
+              title.to_s,
+              font: f_font,
+              size: f_size,
+              color: title_col,
+              z: win_z + 2.0
+            )
+          end
+        end
+      end
     end
   end
 end
