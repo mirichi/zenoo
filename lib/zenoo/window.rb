@@ -33,6 +33,7 @@ module Zenoo
       Native::Window.vsync = (vsync ? 1 : 0)
       Native::Window.target_fps = 60
       Font.atlas_image if defined?(Font) && Font.respond_to?(:atlas_image)
+      __recalculate_camera_cache
 
       @main_loop_block = block
 
@@ -49,6 +50,7 @@ module Zenoo
     end
 
     def self.__update_step
+      __recalculate_camera_cache
       Zenoo::Tween.__update_step(delta_time) if defined?(Zenoo::Tween)
       Zenoo::GUI.begin_frame if defined?(Zenoo::GUI)
       @main_loop_block.call if @main_loop_block
@@ -57,6 +59,7 @@ module Zenoo
     end
 
     def self.__draw_step
+      __recalculate_camera_cache
       if defined?(Zenoo::Profiler) && Zenoo::Profiler.enabled
         Zenoo::Profiler.measure(:draw) do
           Backend.flush_screen
@@ -203,6 +206,22 @@ module Zenoo
 
     def self.card_shader
       @card_shader ||= Shader.new(Shaders::CARD_VERTEX, Shaders::CARD_FRAGMENT)
+    end
+
+    def self.tilemap_shader
+      @tilemap_shader ||= Shader.new(Shaders::TILEMAP_VERTEX, Shaders::TILEMAP_FRAGMENT)
+    end
+
+    def self.mesh_flat_shader
+      @mesh_flat_shader ||= Shader.new(Shaders::MESH_FLAT_VERTEX, Shaders::FLAT_PRIMITIVE_FRAGMENT)
+    end
+
+    def self.mesh_textured_shader
+      @mesh_textured_shader ||= Shader.new(Shaders::MESH_TEXTURED_VERTEX, Shaders::TEXTURED_PRIMITIVE_FRAGMENT)
+    end
+
+    def self.mesh_sprite_shader
+      @mesh_sprite_shader ||= Shader.new(Shaders::MESH_SPRITE_VERTEX, Shaders::DEFAULT_SPRITE_FRAGMENT)
     end
 
     # ブロック内でのシェーダー適用スコープ (RAII / ensure で確実に元の状態に戻る)
@@ -552,16 +571,19 @@ module Zenoo
       # ピボット (pivot: 回転・拡縮の中心点 [0.0..1.0])
       cx, cy = Collision.parse_pivot(pivot)
 
+      sx = scale ? scale.to_f : scale_x.to_f
+      sy = scale ? scale.to_f : scale_y.to_f
+
       if @has_camera && camera
-        sx = (scale ? scale.to_f : scale_x.to_f) * @cam_zoom
-        sy = (scale ? scale.to_f : scale_y.to_f) * @cam_zoom
         ax = (tl_x * @cam_zoom) + @cam_ox + @offset_x
         ay = (tl_y * @cam_zoom) + @cam_oy + @offset_y
+        zw = draw_w * @cam_zoom
+        zh = draw_h * @cam_zoom
       else
-        sx = scale ? scale.to_f : scale_x.to_f
-        sy = scale ? scale.to_f : scale_y.to_f
         ax = tl_x + @offset_x
         ay = tl_y + @offset_y
+        zw = draw_w
+        zh = draw_h
       end
 
       # 角度（度数法からラジアンへ変換）
@@ -590,7 +612,7 @@ module Zenoo
 
       # シェーダーへは常に左上座標 (top_left) を渡し、off_mode = 0.0 とする
       data = [
-        ax, ay, draw_w, draw_h,
+        ax, ay, zw, zh,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
         uv0, uv1, uv2, uv3,
         rad, sx, sy, 0.0,
@@ -765,19 +787,112 @@ module Zenoo
     # ----------------------------------------------------
     # キャッシュ済み頂点バッファ (Mesh) 描画 API
     # ----------------------------------------------------
-    def self.draw_mesh(mesh, z: 0.0, uniforms: nil, shader: nil, image: nil, blend: nil)
+    def self.compute_view_transform(x = 0.0, y = 0.0, scale_x = 1.0, scale_y = 1.0, camera: true, parallax_x: 1.0, parallax_y: 1.0)
+      mx = x.to_f
+      my = y.to_f
+      sx = scale_x.to_f
+      sy = scale_y.to_f
+
+      if @has_camera && camera
+        cz = @cam_zoom
+        px = parallax_x.to_f
+        py = parallax_y.to_f
+        if (px - 1.0).abs < 0.0001 && (py - 1.0).abs < 0.0001
+          tx = (mx * cz) + @cam_ox + @offset_x
+          ty = (my * cz) + @cam_oy + @offset_y
+        else
+          cam = @camera
+          cx = cam.screen_center_x - (cam.x + cam.shake_x) * px * cz
+          cy = cam.screen_center_y - (cam.y + cam.shake_y) * py * cz
+          tx = (mx * cz) + cx + @offset_x
+          ty = (my * cz) + cy + @offset_y
+        end
+        [tx, ty, sx * cz, sy * cz]
+      else
+        [mx + @offset_x, my + @offset_y, sx, sy]
+      end
+    end
+
+    def self.default_mesh_shader_for(pipeline, image)
+      if pipeline == Backend::Pipelines::TILEMAP
+        tilemap_shader
+      elsif pipeline == Backend::Pipelines::SPRITE
+        mesh_sprite_shader
+      elsif pipeline == Backend::Pipelines::TEXTURED_TRIANGLES || pipeline == Backend::Pipelines::TEXTURED_TRIANGLE_STRIP
+        mesh_textured_shader
+      elsif pipeline == Backend::Pipelines::CARD
+        card_shader
+      elsif image
+        mesh_textured_shader
+      else
+        mesh_flat_shader
+      end
+    end
+
+    DEFAULT_WHITE_F4 = [1.0, 1.0, 1.0, 1.0].freeze
+
+    def self.draw_mesh(mesh,
+                       x: nil,
+                       y: nil,
+                       scale_x: nil,
+                       scale_y: nil,
+                       color: nil,
+                       alpha: nil,
+                       camera: nil,
+                       parallax_x: nil,
+                       parallax_y: nil,
+                       z: 0.0,
+                       uniforms: nil,
+                       shader: nil,
+                       image: nil,
+                       blend: nil)
       return unless mesh && mesh.data && mesh.count > 0
 
       eff_pipeline = mesh.pipeline
       eff_image = image || mesh.image
-      eff_shader = shader || mesh.shader || eff_pipeline.default_shader || (eff_image ? textured_primitive_shader : default_primitive_shader)
+      eff_shader = shader || mesh.shader || eff_pipeline.default_shader || default_mesh_shader_for(eff_pipeline, eff_image)
       eff_blend = Backend.normalize_blend_mode(blend || mesh.blend)
 
-      eff_uniforms = if mesh.uniforms && uniforms
-                       mesh.uniforms.merge(uniforms)
-                     else
-                       uniforms || mesh.uniforms
-                     end
+      base_uniforms = if mesh.uniforms && uniforms
+                        mesh.uniforms.merge(uniforms)
+                      else
+                        uniforms || mesh.uniforms
+                      end
+
+      if base_uniforms && base_uniforms.key?(:u_view) && base_uniforms.key?(:u_color)
+        eff_uniforms = base_uniforms
+      else
+        mx  = x.nil? ? (mesh.respond_to?(:x) ? mesh.x : 0.0) : x.to_f
+        my  = y.nil? ? (mesh.respond_to?(:y) ? mesh.y : 0.0) : y.to_f
+        msx = scale_x.nil? ? (mesh.respond_to?(:scale_x) ? mesh.scale_x : 1.0) : scale_x.to_f
+        msy = scale_y.nil? ? (mesh.respond_to?(:scale_y) ? mesh.scale_y : 1.0) : scale_y.to_f
+        mcam = camera.nil? ? (mesh.respond_to?(:camera) ? mesh.camera : true) : camera
+        mpx = parallax_x.nil? ? (mesh.respond_to?(:parallax_x) ? mesh.parallax_x : 1.0) : parallax_x.to_f
+        mpy = parallax_y.nil? ? (mesh.respond_to?(:parallax_y) ? mesh.parallax_y : 1.0) : parallax_y.to_f
+
+        u_view = compute_view_transform(mx, my, msx, msy, camera: mcam, parallax_x: mpx, parallax_y: mpy)
+
+        mcol = color.nil? ? (mesh.respond_to?(:color) ? mesh.color : nil) : color
+        malp = alpha.nil? ? (mesh.respond_to?(:alpha) ? mesh.alpha : 255) : alpha
+        af = malp.is_a?(Float) && malp <= 1.0 ? malp : (malp.to_f / 255.0).clamp(0.0, 1.0)
+
+        u_color = if mcol.nil? && (af - 1.0).abs < 0.0001
+                    DEFAULT_WHITE_F4
+                  elsif mcol.nil?
+                    [1.0, 1.0, 1.0, af]
+                  else
+                    c = Backend.normalize_color(mcol)
+                    [c[0].to_f, c[1].to_f, c[2].to_f, c[3].to_f * af]
+                  end
+
+        if base_uniforms
+          eff_uniforms = base_uniforms.dup
+          eff_uniforms[:u_view] ||= u_view
+          eff_uniforms[:u_color] ||= u_color
+        else
+          eff_uniforms = { u_view: u_view, u_color: u_color }
+        end
+      end
 
       Backend.enqueue_draw(
         eff_pipeline,
