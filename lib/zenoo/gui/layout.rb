@@ -50,6 +50,7 @@ module Zenoo
       def cursor_x=(val)
         @current.cursor_x = val.to_f
         @current.line_start_x = @current.cursor_x unless @current.in_row
+        val
       end
 
       def cursor_y
@@ -58,6 +59,7 @@ module Zenoo
 
       def cursor_y=(val)
         @current.cursor_y = val.to_f
+        val
       end
 
       def cursor(x = nil, y = nil)
@@ -79,6 +81,7 @@ module Zenoo
       def spacing_x=(val)
         @current.spacing_x = val.to_f
         @default_spacing_x = @current.spacing_x if @scope_stack.empty?
+        val
       end
 
       def spacing_y
@@ -88,6 +91,7 @@ module Zenoo
       def spacing_y=(val)
         @current.spacing_y = val.to_f
         @default_spacing_y = @current.spacing_y if @scope_stack.empty?
+        val
       end
 
       def spacing(x = nil, y = nil)

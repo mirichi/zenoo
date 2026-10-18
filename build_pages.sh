@@ -46,42 +46,6 @@ touch "${DOCS_DIR}/.nojekyll"
 # ポータルページを配置
 cp examples/web/portal.html "${DOCS_DIR}/index.html"
 
-echo "=== [2/5] Building Common Spinel Runtime for Wasm ==="
-for f in "${SPINEL_DIR}"/lib/*.c; do
-    bn=$(basename "$f" .c)
-    obj="${CACHE_DIR}/rt/${bn}.o"
-    if [ ! -f "$obj" ] || [ "$f" -nt "$obj" ]; then
-        emcc -c -O2 -I"${SPINEL_DIR}/lib" -I"${SPINEL_DIR}/lib/regexp" "$f" -o "$obj"
-    fi
-done
-
-for f in "${SPINEL_DIR}"/lib/regexp/*.c; do
-    bn=$(basename "$f" .c)
-    obj="${CACHE_DIR}/regexp/${bn}.o"
-    if [ ! -f "$obj" ] || [ "$f" -nt "$obj" ]; then
-        emcc -c -O2 -I"${SPINEL_DIR}/lib/regexp" -I"${SPINEL_DIR}/lib/regexp/shim" "$f" -o "$obj"
-    fi
-done
-
-emar rcs "${CACHE_DIR}/libspinel_rt.a" "${CACHE_DIR}/rt"/*.o "${CACHE_DIR}/regexp"/*.o
-
-echo "=== [3/5] Building Common Zenoo C Kernel ==="
-build_c_kernel_obj() {
-    src="$1"
-    obj="$2"
-    if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ]; then
-        emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj"
-    fi
-}
-build_c_kernel_obj "src/zenoo_window.c" "${CACHE_DIR}/zenoo_window.o"
-build_c_kernel_obj "src/zenoo_input.c" "${CACHE_DIR}/zenoo_input.o"
-build_c_kernel_obj "src/zenoo_vibration.c" "${CACHE_DIR}/zenoo_vibration.o"
-build_c_kernel_obj "src/zenoo_image.c" "${CACHE_DIR}/zenoo_image.o"
-build_c_kernel_obj "src/zenoo_gfx.c" "${CACHE_DIR}/zenoo_gfx.o"
-build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
-build_c_kernel_obj "src/zenoo_audio.c" "${CACHE_DIR}/zenoo_audio.o"
-build_c_kernel_obj "ext/spinel/zenoo_spinel.c" "${CACHE_DIR}/zenoo_spinel.o"
-
 # ビルドモード判定 (サイズより速度優先)
 #   BUILD_MODE=dev  (または fast) : -O1 (Clang最適化を軽量化し、ビルド時間を短縮)
 #   BUILD_MODE=release (デフォルト) : -O2 (実行速度重視の標準最適化)
@@ -100,6 +64,42 @@ esac
 DEBUG_FLAGS="${DEBUG_FLAGS:--g0}"
 echo "=== Build Mode: ${BUILD_MODE:-release} (${OPT_LEVEL}) ==="
 
+echo "=== [2/5] Building Common Spinel Runtime for Wasm ==="
+for f in "${SPINEL_DIR}"/lib/*.c; do
+    bn=$(basename "$f" .c)
+    obj="${CACHE_DIR}/rt/${bn}.o"
+    if [ ! -f "$obj" ] || [ "$f" -nt "$obj" ]; then
+        emcc -c "${OPT_LEVEL}" -I"${SPINEL_DIR}/lib" -I"${SPINEL_DIR}/lib/regexp" "$f" -o "$obj"
+    fi
+done
+
+for f in "${SPINEL_DIR}"/lib/regexp/*.c; do
+    bn=$(basename "$f" .c)
+    obj="${CACHE_DIR}/regexp/${bn}.o"
+    if [ ! -f "$obj" ] || [ "$f" -nt "$obj" ]; then
+        emcc -c "${OPT_LEVEL}" -I"${SPINEL_DIR}/lib/regexp" -I"${SPINEL_DIR}/lib/regexp/shim" "$f" -o "$obj"
+    fi
+done
+
+emar rcs "${CACHE_DIR}/libspinel_rt.a" "${CACHE_DIR}/rt"/*.o "${CACHE_DIR}/regexp"/*.o
+
+echo "=== [3/5] Building Common Zenoo C Kernel ==="
+build_c_kernel_obj() {
+    src="$1"
+    obj="$2"
+    if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ]; then
+        emcc -c "${OPT_LEVEL}" -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj"
+    fi
+}
+build_c_kernel_obj "src/zenoo_window.c" "${CACHE_DIR}/zenoo_window.o"
+build_c_kernel_obj "src/zenoo_input.c" "${CACHE_DIR}/zenoo_input.o"
+build_c_kernel_obj "src/zenoo_vibration.c" "${CACHE_DIR}/zenoo_vibration.o"
+build_c_kernel_obj "src/zenoo_image.c" "${CACHE_DIR}/zenoo_image.o"
+build_c_kernel_obj "src/zenoo_gfx.c" "${CACHE_DIR}/zenoo_gfx.o"
+build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
+build_c_kernel_obj "src/zenoo_audio.c" "${CACHE_DIR}/zenoo_audio.o"
+build_c_kernel_obj "ext/spinel/zenoo_spinel.c" "${CACHE_DIR}/zenoo_spinel.o"
+
 COMMON_EMCC_FLAGS=(
     "${OPT_LEVEL}"
     ${DEBUG_FLAGS}
@@ -111,6 +111,7 @@ COMMON_EMCC_FLAGS=(
     -s ALLOW_MEMORY_GROWTH=1
     -s NO_EXIT_RUNTIME=1
     -s WASM=1
+    -s MINIFY_HTML=0
     -s EXPORTED_FUNCTIONS="['_main','_zen_push_char']"
     --preload-file assets@/assets
     -fmacro-prefix-map="${PWD}"=.

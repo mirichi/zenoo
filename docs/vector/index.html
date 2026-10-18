@@ -1,1 +1,389 @@
-<!doctypehtml><html lang=ja><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"name=viewport><title>Zenoo Vector Graphics Showcase (Spinel Wasm)</title><style>*{box-sizing:border-box;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}body{margin:0;padding:10px;background-color:#0d0f18;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;height:100dvh;overflow:hidden;touch-action:none}#header{margin-bottom:8px;text-align:center;flex-shrink:0}h1{margin:0 0 4px 0;font-size:18px;color:#0fc;letter-spacing:1px}p{margin:0;font-size:11px;color:#8892b0}#canvas-container{position:relative;box-shadow:0 10px 30px rgba(0,0,0,.8);border-radius:8px;overflow:hidden;border:1px solid #233554;width:min(96vw,calc(72dvh * 16 / 9));height:min(calc(96vw * 9 / 16),72dvh);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background-color:#000;flex-shrink:0}canvas.emscripten{display:block;border:0 none;background-color:#000;outline:0;width:100%!important;height:100%!important;touch-action:none}#controls-bar{margin-top:10px;display:flex;gap:12px;align-items:center;flex-shrink:0}.btn{background:#1e293b;border:1px solid #38bdf8;color:#38bdf8;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;text-decoration:none;display:inline-flex;align-items:center}.btn:active{background:#38bdf8;color:#0f172a}.btn-back{border-color:#a855f7;color:#c084fc}.btn-back:active{background:#c084fc;color:#0f172a}#status{margin-top:8px;font-size:11px;color:#64ffda;flex-shrink:0}#portrait-hint{display:none}@media (orientation:portrait) and (max-width:600px){#portrait-hint{display:block;margin-top:6px;font-size:11px;color:#facc15;background:rgba(250,204,21,.1);padding:4px 10px;border-radius:4px;border:1px dashed rgba(250,204,21,.3)}#canvas-container{width:98vw;height:calc(98vw * 9 / 16)}}@media (orientation:landscape) and (max-height:550px){body{padding:0;justify-content:center}#header,#portrait-hint,#status{display:none!important}#canvas-container{width:min(100vw,calc(100dvh * 16 / 9));height:min(100dvh,calc(100vw * 9 / 16));max-width:100vw;max-height:100dvh;border-radius:0;border:none;box-shadow:none}#controls-bar{position:fixed;top:8px;right:8px;left:8px;margin-top:0;justify-content:space-between;pointer-events:none;z-index:9999}#controls-bar>*{pointer-events:auto}.btn{background:rgba(15,23,42,.75);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:6px 12px;font-size:11px;border-radius:20px;opacity:.75;transition:opacity .2s}.btn:active,.btn:hover{opacity:1}}</style></head><body><div id=header><h1>ZENOO VECTOR GRAPHICS SHOWCASE</h1><p>HTML5 Canvas 2D Style API & Shader Gradients | Powered by Spinel AOT & WebGL 2.0</p></div><div id=canvas-container><canvas class=emscripten height=720 id=canvas oncontextmenu=event.preventDefault() tabindex=-1 width=1280></canvas></div><div id=controls-bar><a class="btn btn-back"href=../ >← ポータルに戻る</a> <button class=btn id=btn-fullscreen>全画面</button></div><div id=status>Loading WebAssembly module...</div><div id=portrait-hint>📱 スマホを横向きにすると画面いっぱいに遊べます</div><script>var statusElement=document.getElementById("status"),canvasElement=document.getElementById("canvas");function formatStatus(t){if(!t)return"";var e=t.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);if(e){var n=e[1].trim(),o=parseFloat(e[2]),a=parseInt(e[4],10);if(a>1e3||o>1e3){a<o&&(a=o);var i=function(t){return t<1024?t+" B":t<1048576?(t/1024).toFixed(1)+" KB":(t/1048576).toFixed(1)+" MB"},s=a>0?Math.round(o/a*100):0;return n+" "+i(o)+" / "+i(a)+" ("+s+"%)"}}return t}var Module={print:function(t){console.log(t)},printErr:function(t){console.error(t)},canvas:canvasElement,setStatus:function(t){Module.setStatus.last||(Module.setStatus.last={time:Date.now(),text:""}),t!==Module.setStatus.last.text&&(Module.setStatus.last.text=t,statusElement.innerText=t?formatStatus(t):"SDF動的アトラス & 高品質日本語・袋文字・8x8レトロフォント描画デモ")},totalDependencies:0,monitorRunDependencies:function(t){this.totalDependencies=Math.max(this.totalDependencies,t),Module.setStatus(t?"Preparing... ("+(this.totalDependencies-t)+"/"+this.totalDependencies+")":"All downloads clear.")}};Module.setStatus("Downloading..."),window.onerror=function(){Module.setStatus("Exception thrown, see JavaScript console")};var isTwoFingerTouch=!1,touchSuppressUntil=0,lastTwoFingerPos={x:0,y:0};function getTouchesCenter(t){return t.length<2?{x:t[0].clientX,y:t[0].clientY}:{x:(t[0].clientX+t[1].clientX)/2,y:(t[0].clientY+t[1].clientY)/2}}function dispatchMouseEvent(t,e,n,o,a){var i=new MouseEvent(t,{bubbles:!0,cancelable:!0,view:window,button:e,buttons:n,clientX:o,clientY:a});canvasElement.dispatchEvent(i)}function handleTouchStart(t){if(t.target===canvasElement&&t.preventDefault(),t.touches.length>=2){dispatchMouseEvent("mouseup",0,0,t.touches[0].clientX,t.touches[0].clientY);var e=getTouchesCenter(t.touches);lastTwoFingerPos=e,isTwoFingerTouch=!0,touchSuppressUntil=Date.now()+200,dispatchMouseEvent("mousedown",2,2,e.x,e.y)}}function handleTouchMove(t){if(t.target===canvasElement&&t.preventDefault(),isTwoFingerTouch&&t.touches.length>=2){var e=getTouchesCenter(t.touches);lastTwoFingerPos=e,dispatchMouseEvent("mousemove",2,2,e.x,e.y)}}function handleTouchEnd(t){t.target===canvasElement&&t.preventDefault(),isTwoFingerTouch&&t.touches.length<2&&(isTwoFingerTouch=!1,dispatchMouseEvent("mouseup",2,0,lastTwoFingerPos.x,lastTwoFingerPos.y),touchSuppressUntil=Date.now()+250)}document.addEventListener("touchstart",handleTouchStart,{passive:!1}),document.addEventListener("touchmove",handleTouchMove,{passive:!1}),document.addEventListener("touchend",handleTouchEnd,{passive:!1}),document.addEventListener("touchcancel",handleTouchEnd,{passive:!1}),canvasElement.addEventListener("mousedown",(function(t){0===t.button&&Date.now()<touchSuppressUntil&&(t.stopImmediatePropagation(),t.preventDefault())}),!0);var btnMenu=document.getElementById("btn-menu");function stopAllVibration(){try{if(navigator.getGamepads)for(var t=navigator.getGamepads(),e=0;e<t.length;e++){var n=t[e];n&&n.vibrationActuator&&(n.vibrationActuator.reset&&n.vibrationActuator.reset().catch((function(){})),n.vibrationActuator.playEffect&&n.vibrationActuator.playEffect("dual-rumble",{startDelay:0,duration:1,weakMagnitude:0,strongMagnitude:0}).catch((function(){})))}navigator.vibrate&&navigator.vibrate(0)}catch(t){}}btnMenu&&btnMenu.addEventListener("click",(function(t){t.preventDefault();var e=canvasElement.getBoundingClientRect(),n=e.left+e.width/2,o=e.top+e.height/2,a=new MouseEvent("mousedown",{bubbles:!0,cancelable:!0,clientX:n,clientY:o,button:2}),i=new MouseEvent("mouseup",{bubbles:!0,cancelable:!0,clientX:n,clientY:o,button:2});canvasElement.dispatchEvent(a),canvasElement.dispatchEvent(i)})),document.getElementById("btn-fullscreen").addEventListener("click",(function(t){t.preventDefault(),document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch((function(t){}))}));var backBtn=document.querySelector(".btn-back");backBtn&&backBtn.addEventListener("click",(function(){stopAllVibration()})),window.addEventListener("pagehide",stopAllVibration),window.addEventListener("beforeunload",stopAllVibration),document.addEventListener("visibilitychange",(function(){"hidden"===document.visibilityState&&stopAllVibration()}))</script><script async src=index.js></script></body></html>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Zenoo Vector Graphics Showcase (Spinel Wasm)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 10px;
+      background-color: #0d0f18;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      min-height: 100dvh;
+      height: 100dvh;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #header {
+      margin-bottom: 8px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    h1 {
+      margin: 0 0 4px 0;
+      font-size: 18px;
+      color: #00ffcc;
+      letter-spacing: 1px;
+    }
+    p {
+      margin: 0;
+      font-size: 11px;
+      color: #8892b0;
+    }
+    #canvas-container {
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #233554;
+      width: min(96vw, calc(72dvh * 16 / 9));
+      height: min(calc(96vw * 9 / 16), 72dvh);
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #000;
+      flex-shrink: 0;
+    }
+    canvas.emscripten {
+      display: block;
+      border: 0px none;
+      background-color: #000;
+      outline: none;
+      width: 100% !important;
+      height: 100% !important;
+      touch-action: none;
+    }
+    #controls-bar {
+      margin-top: 10px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .btn {
+      background: #1e293b;
+      border: 1px solid #38bdf8;
+      color: #38bdf8;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    .btn:active {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+    .btn-back {
+      border-color: #a855f7;
+      color: #c084fc;
+    }
+    .btn-back:active {
+      background: #c084fc;
+      color: #0f172a;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #64ffda;
+      flex-shrink: 0;
+    }
+    #portrait-hint {
+      display: none;
+    }
+    @media (orientation: portrait) and (max-width: 600px) {
+      #portrait-hint {
+        display: block;
+        margin-top: 6px;
+        font-size: 11px;
+        color: #facc15;
+        background: rgba(250, 204, 21, 0.1);
+        padding: 4px 10px;
+        border-radius: 4px;
+        border: 1px dashed rgba(250, 204, 21, 0.3);
+      }
+      #canvas-container {
+        width: 98vw;
+        height: calc(98vw * 9 / 16);
+      }
+    }
+    @media (orientation: landscape) and (max-height: 550px) {
+      body {
+        padding: 0;
+        justify-content: center;
+      }
+      #header, #status, #portrait-hint {
+        display: none !important;
+      }
+      #canvas-container {
+        width: min(100vw, calc(100dvh * 16 / 9));
+        height: min(100dvh, calc(100vw * 9 / 16));
+        max-width: 100vw;
+        max-height: 100dvh;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+      }
+      #controls-bar {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        left: 8px;
+        margin-top: 0;
+        justify-content: space-between;
+        pointer-events: none;
+        z-index: 9999;
+      }
+      #controls-bar > * {
+        pointer-events: auto;
+      }
+      .btn {
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        padding: 6px 12px;
+        font-size: 11px;
+        border-radius: 20px;
+        opacity: 0.75;
+        transition: opacity 0.2s;
+      }
+      .btn:hover, .btn:active {
+        opacity: 1.0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>ZENOO VECTOR GRAPHICS SHOWCASE</h1>
+    <p>HTML5 Canvas 2D Style API &amp; Shader Gradients | Powered by Spinel AOT &amp; WebGL 2.0</p>
+  </div>
+  <div id="canvas-container">
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" width="1280" height="720"></canvas>
+  </div>
+  <div id="controls-bar">
+    <a href="../" class="btn btn-back">← ポータルに戻る</a>
+    <button class="btn" id="btn-fullscreen">全画面</button>
+  </div>
+  <div id="status">Loading WebAssembly module...</div>
+  <div id="portrait-hint">📱 スマホを横向きにすると画面いっぱいに遊べます</div>
+
+  <script type='text/javascript'>
+    var statusElement = document.getElementById('status');
+    var canvasElement = document.getElementById('canvas');
+
+    function formatStatus(text) {
+      if (!text) return '';
+      var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+      if (m) {
+        var prefix = m[1].trim();
+        var loaded = parseFloat(m[2]);
+        var total = parseInt(m[4], 10);
+        if (total > 1000 || loaded > 1000) {
+          if (total < loaded) total = loaded;
+          var fmt = function(b) {
+            if (b < 1024) return b + ' B';
+            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+            return (b / (1024 * 1024)).toFixed(1) + ' MB';
+          };
+          var pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+          return prefix + ' ' + fmt(loaded) + ' / ' + fmt(total) + ' (' + pct + '%)';
+        }
+      }
+      return text;
+    }
+
+    var Module = {
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
+      canvas: canvasElement,
+      setStatus: function(text) {
+        if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+        if (text === Module.setStatus.last.text) return;
+        Module.setStatus.last.text = text;
+        statusElement.innerText = text ? formatStatus(text) : "SDF動的アトラス & 高品質日本語・袋文字・8x8レトロフォント描画デモ";
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads clear.');
+      }
+    };
+    Module.setStatus('Downloading...');
+    window.onerror = function() {
+      Module.setStatus('Exception thrown, see JavaScript console');
+    };
+
+    // ----------------------------------------------------
+    // タッチ操作サポート (2本指タップで右クリック)
+    // ----------------------------------------------------
+    var isTwoFingerTouch = false;
+    var touchSuppressUntil = 0;
+    var lastTwoFingerPos = { x: 0, y: 0 };
+
+    function getTouchesCenter(touches) {
+      if (touches.length < 2) return { x: touches[0].clientX, y: touches[0].clientY };
+      return {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2
+      };
+    }
+
+    function dispatchMouseEvent(type, button, buttons, x, y) {
+      var ev = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        button: button,
+        buttons: buttons,
+        clientX: x,
+        clientY: y
+      });
+      canvasElement.dispatchEvent(ev);
+    }
+
+    function handleTouchStart(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (e.touches.length >= 2) {
+        // 2本指タッチ検知: 1本目の左クリックをキャンセル
+        dispatchMouseEvent('mouseup', 0, 0, e.touches[0].clientX, e.touches[0].clientY);
+
+        var center = getTouchesCenter(e.touches);
+        lastTwoFingerPos = center;
+        isTwoFingerTouch = true;
+        touchSuppressUntil = Date.now() + 200;
+
+        // 右クリック押下 (button: 2) を発火
+        dispatchMouseEvent('mousedown', 2, 2, center.x, center.y);
+      }
+    }
+
+    function handleTouchMove(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (isTwoFingerTouch && e.touches.length >= 2) {
+        var center = getTouchesCenter(e.touches);
+        lastTwoFingerPos = center;
+        dispatchMouseEvent('mousemove', 2, 2, center.x, center.y);
+      }
+    }
+
+    function handleTouchEnd(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (isTwoFingerTouch) {
+        if (e.touches.length < 2) {
+          isTwoFingerTouch = false;
+          // 右クリック離上 (button: 2) を発火
+          dispatchMouseEvent('mouseup', 2, 0, lastTwoFingerPos.x, lastTwoFingerPos.y);
+          touchSuppressUntil = Date.now() + 250; // 2本指解除直後の片手誤タップを防止
+        }
+      }
+    }
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    // 2本指解除直後の synthetic 左クリックを抑止
+    canvasElement.addEventListener('mousedown', function(e) {
+      if (e.button === 0 && Date.now() < touchSuppressUntil) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }
+    }, true);
+
+    // MENU ボタン（右クリックまたはESCイベントを発火）
+    var btnMenu = document.getElementById('btn-menu');
+    if (btnMenu) {
+      btnMenu.addEventListener('click', function(e) {
+        e.preventDefault();
+        var rect = canvasElement.getBoundingClientRect();
+        var cx = rect.left + rect.width / 2;
+        var cy = rect.top + rect.height / 2;
+        var down = new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2 });
+        var up = new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2 });
+        canvasElement.dispatchEvent(down);
+        canvasElement.dispatchEvent(up);
+      });
+    }
+
+    // 全画面ボタン
+    document.getElementById('btn-fullscreen').addEventListener('click', function(e) {
+      e.preventDefault();
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(function(err) {});
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    // ----------------------------------------------------
+    // パッド・端末振動の確実な停止 (ポータル離脱時 / ページ非表示時)
+    // ----------------------------------------------------
+    function stopAllVibration() {
+      try {
+        if (navigator.getGamepads) {
+          var gamepads = navigator.getGamepads();
+          for (var i = 0; i < gamepads.length; i++) {
+            var gp = gamepads[i];
+            if (gp && gp.vibrationActuator) {
+              if (gp.vibrationActuator.reset) gp.vibrationActuator.reset().catch(function(){});
+              if (gp.vibrationActuator.playEffect) {
+                gp.vibrationActuator.playEffect('dual-rumble', {
+                  startDelay: 0,
+                  duration: 1,
+                  weakMagnitude: 0,
+                  strongMagnitude: 0
+                }).catch(function(){});
+              }
+            }
+          }
+        }
+        if (navigator.vibrate) {
+          navigator.vibrate(0);
+        }
+      } catch (err) {}
+    }
+
+    var backBtn = document.querySelector('.btn-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', function() {
+        stopAllVibration();
+      });
+    }
+
+    window.addEventListener('pagehide', stopAllVibration);
+    window.addEventListener('beforeunload', stopAllVibration);
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'hidden') {
+        stopAllVibration();
+      }
+    });
+  </script>
+  <script async type="text/javascript" src="index.js"></script>
+</body>
+</html>

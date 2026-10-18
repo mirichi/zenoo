@@ -74,7 +74,7 @@ module Zenoo
         @mouse_push = Input.mouse_push?(:left)
         @mouse_rel  = Input.mouse_release?(:left)
         @hot_id     = nil
-        @blink_time += Window.delta_time
+        @blink_time = (@blink_time || 0.0) + Window.delta_time
 
         @win_mgr.begin_frame(@mouse_x, @mouse_y, @mouse_down, @mouse_push)
         @layout.reset
@@ -100,6 +100,7 @@ module Zenoo
 
       def cursor_x=(val)
         @layout.cursor_x = val
+        val
       end
 
       def cursor_y
@@ -108,6 +109,7 @@ module Zenoo
 
       def cursor_y=(val)
         @layout.cursor_y = val
+        val
       end
 
       def spacing(x = nil, y = nil)
@@ -120,6 +122,7 @@ module Zenoo
 
       def spacing_x=(val)
         @layout.spacing_x = val
+        val
       end
 
       def spacing_y
@@ -128,6 +131,7 @@ module Zenoo
 
       def spacing_y=(val)
         @layout.spacing_y = val
+        val
       end
 
       def advance_cursor(w, h)
@@ -391,8 +395,9 @@ module Zenoo
           is_focused = (@focus_id == widget_id)
         end
 
-        blink_on = (@blink_time % 1.0) < 0.5
-        @renderer.draw_text_box(rx, ry, rw, rh, cur_text, is_focused, @cursor_pos, blink_on, @theme)
+        bt = @blink_time || 0.0
+        blink_on = (bt % 1.0) < 0.5
+        @renderer.draw_text_box(rx, ry, rw, rh, cur_text, is_focused, @cursor_pos || 0, blink_on, @theme)
         @layout.advance(rw, rh)
         cur_text
       end
