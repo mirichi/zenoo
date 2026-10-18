@@ -4,8 +4,8 @@ module Zenoo
   # 2D ゲーム用カメラクラス
   # スクロール追従、画面シェイク、スクリーン/ワールド座標相互変換を管理します。
   class Camera2D
-    attr_accessor :x, :y, :zoom
-    attr_accessor :offset_x, :offset_y
+    attr_reader :x, :y, :zoom
+    attr_reader :offset_x, :offset_y
     attr_accessor :smooth_speed
     attr_reader :shake_x, :shake_y, :shake_intensity
 
@@ -26,6 +26,31 @@ module Zenoo
       @shake_y = 0.0
     end
 
+    def x=(v)
+      @x = v.to_f
+      Window.__recalculate_camera_cache if defined?(Window)
+    end
+
+    def y=(v)
+      @y = v.to_f
+      Window.__recalculate_camera_cache if defined?(Window)
+    end
+
+    def zoom=(v)
+      @zoom = v.to_f
+      Window.__recalculate_camera_cache if defined?(Window)
+    end
+
+    def offset_x=(v)
+      @offset_x = v ? v.to_f : nil
+      Window.__recalculate_camera_cache if defined?(Window)
+    end
+
+    def offset_y=(v)
+      @offset_y = v ? v.to_f : nil
+      Window.__recalculate_camera_cache if defined?(Window)
+    end
+
     # 注視対象 (x, y メソッドを持つオブジェクト、または [x, y] 配列)
     def target
       @target
@@ -42,6 +67,7 @@ module Zenoo
       @shake_intensity = intensity.to_f
       @shake_duration = duration.to_f
       @shake_timer = duration.to_f
+      Window.__recalculate_camera_cache if defined?(Window)
     end
 
     # 毎フレームの更新 (ターゲット追従とシェイク減衰)
@@ -87,6 +113,8 @@ module Zenoo
         @shake_x = 0.0
         @shake_y = 0.0
       end
+
+      Window.__recalculate_camera_cache if defined?(Window)
     end
 
     # カメラのスクリーン中心座標

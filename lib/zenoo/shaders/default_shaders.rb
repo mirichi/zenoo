@@ -173,5 +173,132 @@ module Zenoo
     # 互換用エイリアス
     PRIMITIVE_VERTEX = FLAT_PRIMITIVE_VERTEX
     PRIMITIVE_FRAGMENT = FLAT_PRIMITIVE_FRAGMENT
+
+    # ====================================================================
+    # Tilemap Instancing 用シェーダー (8 floats/tile: pos_size4, uv4)
+    # - in_pos_size: x, y, w, h (w < 0.0 の場合は対角反転＝UVのXY軸入れ替え)
+    # - in_uv: u, v, uw, vh (反転時は負の uw, vh で表現)
+    # - u_view: tx, ty, scale_x, scale_y (カメラ・オフセット・スケール変換)
+    # - u_color: レイヤー乗算カラー & 不透明度 (r, g, b, a)
+    # ====================================================================
+    TILEMAP_VERTEX = <<~'GLSL'
+      #version 330 core
+      layout (location = 0) in vec4 in_pos_size;
+      layout (location = 1) in vec4 in_uv;
+      uniform vec2 u_resolution;
+      uniform float u_flip_y;
+      uniform vec4 u_view;
+      uniform vec4 u_color;
+      out vec4 v_color;
+      out vec2 v_uv;
+      void main() {
+          vec2 unit = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
+          float raw_w = in_pos_size.z;
+          vec2 size = vec2(abs(raw_w), in_pos_size.w);
+          vec2 local_pos = in_pos_size.xy + unit * size;
+
+          vec2 view_scale = (u_view.z == 0.0 && u_view.w == 0.0) ? vec2(1.0, 1.0) : u_view.zw;
+          vec2 pos = local_pos * view_scale + u_view.xy;
+
+          vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
+          gl_Position = vec4(ndc, 0.0, 1.0);
+
+          vec4 tint = (u_color.a == 0.0 && u_color.r == 0.0 && u_color.g == 0.0 && u_color.b == 0.0) ? vec4(1.0) : u_color;
+          v_color = tint;
+
+          vec2 uv_unit = (raw_w < 0.0) ? unit.yx : unit;
+          v_uv = in_uv.xy + uv_unit * in_uv.zw;
+      }
+    GLSL
+
+    TILEMAP_FRAGMENT = DEFAULT_SPRITE_FRAGMENT
+
+    # ====================================================================
+    # 汎用 Mesh カメラ・オフセット追従用シェーダー (u_view, u_color 対応)
+    # ====================================================================
+    MESH_FLAT_VERTEX = <<~'GLSL'
+      #version 330 core
+      layout (location = 0) in vec2 in_pos;
+      layout (location = 1) in vec4 in_color;
+      uniform vec2 u_resolution;
+      uniform float u_flip_y;
+      uniform vec4 u_view;
+      uniform vec4 u_color;
+      out vec4 v_color;
+      void main() {
+          vec2 view_scale = (u_view.z == 0.0 && u_view.w == 0.0) ? vec2(1.0, 1.0) : u_view.zw;
+          vec2 pos = in_pos * view_scale + u_view.xy;
+          vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
+          gl_Position = vec4(ndc, 0.0, 1.0);
+          vec4 tint = (u_color.a == 0.0 && u_color.r == 0.0 && u_color.g == 0.0 && u_color.b == 0.0) ? vec4(1.0) : u_color;
+          v_color = in_color * tint;
+      }
+    GLSL
+
+    MESH_TEXTURED_VERTEX = <<~'GLSL'
+      #version 330 core
+      layout (location = 0) in vec2 in_pos;
+      layout (location = 1) in vec2 in_uv;
+      layout (location = 2) in vec4 in_color;
+      uniform vec2 u_resolution;
+      uniform float u_flip_y;
+      uniform vec4 u_view;
+      uniform vec4 u_color;
+      out vec4 v_color;
+      out vec2 v_uv;
+      void main() {
+          vec2 view_scale = (u_view.z == 0.0 && u_view.w == 0.0) ? vec2(1.0, 1.0) : u_view.zw;
+          vec2 pos = in_pos * view_scale + u_view.xy;
+          vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
+          gl_Position = vec4(ndc, 0.0, 1.0);
+          vec4 tint = (u_color.a == 0.0 && u_color.r == 0.0 && u_color.g == 0.0 && u_color.b == 0.0) ? vec4(1.0) : u_color;
+          v_color = in_color * tint;
+          v_uv = in_uv;
+      }
+    GLSL
+
+    MESH_SPRITE_VERTEX = <<~'GLSL'
+      #version 330 core
+      layout (location = 0) in vec4 in_bounds;
+      layout (location = 1) in vec4 in_color;
+      layout (location = 2) in vec4 in_uv;
+      layout (location = 3) in vec4 in_transform;
+      layout (location = 4) in vec4 in_pivot;
+      uniform vec2 u_resolution;
+      uniform float u_flip_y;
+      uniform vec4 u_view;
+      uniform vec4 u_color;
+      out vec4 v_color;
+      out vec2 v_uv;
+      void main() {
+          vec2 in_unit_pos = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
+          vec2 size = in_bounds.zw;
+          vec2 pivot = in_pivot.xy;
+          vec2 rel = (in_unit_pos - pivot) * size * in_transform.yz;
+          float rad = in_transform.x;
+          float c = cos(rad);
+          float s = sin(rad);
+          vec2 rot = vec2(rel.x * c - rel.y * s, rel.x * s + rel.y * c);
+          vec2 base_pos = in_bounds.xy + mix(pivot * size, vec2(0.0), in_transform.w);
+          vec2 local_pos = base_pos + rot;
+
+          vec2 view_scale = (u_view.z == 0.0 && u_view.w == 0.0) ? vec2(1.0, 1.0) : u_view.zw;
+          vec2 pos = local_pos * view_scale + u_view.xy;
+
+          vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
+          float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
+          ndc.y = ndc.y * flip;
+          gl_Position = vec4(ndc, 0.0, 1.0);
+          vec4 tint = (u_color.a == 0.0 && u_color.r == 0.0 && u_color.g == 0.0 && u_color.b == 0.0) ? vec4(1.0) : u_color;
+          v_color = in_color * tint;
+          v_uv = in_uv.xy + in_unit_pos * in_uv.zw;
+      }
+    GLSL
   end
 end
