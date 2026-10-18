@@ -29,9 +29,10 @@ module Zenoo
       KEY_MAP[ch.to_sym] = ch.upcase.ord
     end
 
-    # 数字キー (0..9)
+    # 数字キー (0..9, num0..num9)
     (?0..?9).each do |ch|
       KEY_MAP[ch.to_sym] = ch.ord
+      KEY_MAP[:"num#{ch}"] = ch.ord
     end
 
     MOUSE_MAP = {
@@ -51,6 +52,10 @@ module Zenoo
     # 押されている状態 (持続)
     def self.key_pressed?(key)
       Native::Input.key_pressed?(resolve_key(key))
+    end
+
+    def self.key_down?(key)
+      key_pressed?(key)
     end
 
     # 押した瞬間 (トリガー)
@@ -93,6 +98,10 @@ module Zenoo
 
     def self.mouse_pressed?(button = :left)
       Native::Input.mouse_pressed?(resolve_mouse(button))
+    end
+
+    def self.mouse_down?(button = :left)
+      mouse_pressed?(button)
     end
 
     def self.mouse_push?(button = :left)
@@ -151,6 +160,10 @@ module Zenoo
 
     def self.gamepad_button_pressed?(button, id = 0)
       Native::Input.gamepad_button_pressed?(id.to_i, resolve_gamepad_button(button))
+    end
+
+    def self.gamepad_button_down?(button, id = 0)
+      gamepad_button_pressed?(button, id)
     end
 
     def self.gamepad_button_push?(button, id = 0)
@@ -366,6 +379,10 @@ module Zenoo
       end
 
       false
+    end
+
+    def self.action_down?(name, id = 0)
+      action_pressed?(name, id)
     end
 
     # アクションが押された瞬間か (トリガー)
