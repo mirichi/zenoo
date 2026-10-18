@@ -1,0 +1,144 @@
+diff --git a/src/analyze.c b/src/analyze.c
+index 99d50b7ae..953844398 100644
+--- a/src/analyze.c
++++ b/src/analyze.c
+@@ -4360,9 +4360,31 @@ static int qc_is_class_write(const QCWrite *w, const QCWrite *os, int on) {
+   for (int j = 0; j < on; j++) if (os[j].node == w->node) return 1;
+   return 0;
+ }
+-static int qc_leaf_elsewhere(const QCWrite *w, const QCWrite *os, int on) {
++static int qc_is_class_alias(const NodeTable *nt, const QCWrite *cw, const QCWrite *kw) {
++  int val = nt_ref(nt, kw->node, "value");
++  if (val < 0) return 0;
++  NodeKind vk = nt_kind(nt, val);
++  if (vk != NK_ConstantPathNode && vk != NK_ConstantReadNode) return 0;
++  const char *leaf = nt_str(nt, val, "name");
++  if (!leaf || !sp_streq(leaf, cw->name)) return 0;
++  if (vk == NK_ConstantPathNode) {
++    char chain[QC_MAXDEPTH + 1][64]; int abs_anchor = 0;
++    int cl = qc_read_chain(nt, val, chain, &abs_anchor);
++    if (cl == cw->depth + 1) {
++      int ok = 1;
++      for (int i = 0; i < cw->depth; i++) {
++        if (!sp_streq(chain[i], cw->path[i])) { ok = 0; break; }
++      }
++      if (ok) return 1;
++    }
++  }
++  return 0;
++}
++
++static int qc_leaf_elsewhere(const NodeTable *nt, const QCWrite *w, const QCWrite *os, int on) {
+   for (int j = 0; j < on; j++) {
+     if (os[j].node == w->node || !sp_streq(os[j].name, w->name)) continue;
++    if (qc_is_class_alias(nt, w, &os[j]) || qc_is_class_alias(nt, &os[j], w)) continue;
+     if (os[j].depth != w->depth) return 1;
+     for (int k = 0; k < w->depth; k++) if (!sp_streq(os[j].path[k], w->path[k])) return 1;
+   }
+@@ -4396,7 +4418,7 @@ void qualify_colliding_consts(Compiler *c) {
+        class-defining write (`Point = Struct.new`) is the class pass's to
+        qualify, as a class. */
+     if (!collide && ws[i].depth > 0 && !qc_is_class_write(&ws[i], cws, cwn) &&
+-        qc_leaf_elsewhere(&ws[i], cws, cwn)) collide = 1;
++        qc_leaf_elsewhere(nt, &ws[i], cws, cwn)) collide = 1;
+     if (!collide) { ws[i] = ws[--wn]; i--; continue; }
+     any = 1;
+   }
+@@ -4489,9 +4511,16 @@ void qc_collect_class_writes(Compiler *c, int node, char (*path)[64], int depth,
+   qc_pop_header(own, NULL);
+ }
+ 
+-/* whether a `native_struct "A::B::Leaf", ...` declaration names `leaf` under
+-   a qualified path */
+-static int qc_native_leaf_declared(Compiler *c, const char *leaf) {
++/* whether a `native_struct "A::B::Leaf", ...` declaration names `w->name` under
++   a qualified path other than `w`'s own path */
++static int qc_native_leaf_declared_elsewhere(Compiler *c, const QCWrite *w) {
++  char rn[512]; rn[0] = 0;
++  for (int k = 0; k < w->depth; k++) {
++    strncat(rn, w->path[k], sizeof rn - strlen(rn) - 1);
++    strncat(rn, "::", sizeof rn - strlen(rn) - 1);
++  }
++  strncat(rn, w->name, sizeof rn - strlen(rn) - 1);
++
+   const NodeTable *nt = c->nt;
+   NT_FOREACH_KIND(nt, NK_CallNode, id) {
+     const char *nm = nt_str(nt, id, "name");
+@@ -4502,7 +4531,7 @@ static int qc_native_leaf_declared(Compiler *c, const char *leaf) {
+     const char *cn = nt_str(nt, av[0], "content");
+     const char *sep = cn ? strrchr(cn, ':') : NULL;
+     if (!sep || sep == cn || sep[-1] != ':') continue;
+-    if (sp_streq(sep + 1, leaf)) return 1;
++    if (sp_streq(sep + 1, w->name) && !sp_streq(cn, rn)) return 1;
+   }
+   return 0;
+ }
+@@ -4568,7 +4597,7 @@ void qualify_colliding_classes(Compiler *c) {
+        `native_struct "X509::Store"`), which registers under its leaf: a
+        nested `class Store` elsewhere (activesupport's Cache::Store) shares
+        that key and was refused as a merge; qualified, it is its own class. */
+-    if (!collide && ws[i].depth > 0 && qc_native_leaf_declared(c, ws[i].name)) collide = 1;
++    if (!collide && ws[i].depth > 0 && qc_native_leaf_declared_elsewhere(c, &ws[i])) collide = 1;
+     /* ... and the builtin classes the id table does not carry (Encoding is
+        a tag of its own, not a class id): walk_scope refuses a nested
+        `module Encoding` -- activesupport's ActiveSupport::JSON::Encoding --
+@@ -4597,7 +4626,7 @@ void qualify_colliding_classes(Compiler *c) {
+     }
+     /* ... and a nested class sharing its leaf with a plain constant written
+        elsewhere, which keeps the bare leaf as its key */
+-    if (!collide && ws[i].depth > 0 && qc_leaf_elsewhere(&ws[i], kws, kwn)) collide = 1;
++    if (!collide && ws[i].depth > 0 && qc_leaf_elsewhere(nt, &ws[i], kws, kwn)) collide = 1;
+     /* ... and when the qualified name is one the program gives a class or
+        module of its own (`class Foo__Mutex` beside `class Foo::Mutex`),
+        the name takes a leading underscore, as often as it needs to be
+diff --git a/src/analyze_scope.c b/src/analyze_scope.c
+index dbbb04d0a..60816760d 100644
+--- a/src/analyze_scope.c
++++ b/src/analyze_scope.c
+@@ -4706,7 +4706,16 @@ void register_ffi_decls(Compiler *c) {
+          `b.class` and sp_class_to_s render it as CRuby does. */
+       const char *leaf = strrchr(clsname, ':');
+       leaf = leaf ? leaf + 1 : clsname;
+-      int ex = comp_class_index(c, leaf);
++      const char *target_clsname = leaf;
++      NT_FOREACH_KIND(nt, NK_ClassNode, ucn) {
++        int ucp = nt_ref(nt, ucn, "constant_path");
++        const char *rn = ucp >= 0 ? nt_str(nt, ucp, "qc_ruby_name") : NULL;
++        if (rn && sp_streq(rn, clsname)) {
++          const char *nm = nt_str(nt, ucp, "name");
++          if (nm) { target_clsname = nm; break; }
++        }
++      }
++      int ex = comp_class_index(c, target_clsname);
+       /* Any class body spelled under the BARE leaf (`class Buffer`) shares
+          the leaf key with a qualified declaration ("IO::Buffer"), and the
+          leaf-keyed class table would silently merge the user's class into
+@@ -4761,7 +4770,7 @@ void register_ffi_decls(Compiler *c) {
+       }
+       int cid;
+       if (ex >= 0) cid = ex;
+-      else { comp_class_new(c, leaf, -1); cid = c->nclasses - 1; }
++      else { comp_class_new(c, target_clsname, -1); cid = c->nclasses - 1; }
+       if (native_cid < 0) native_cid = cid;
+       ClassInfo *nc = &c->classes[cid];
+       nc->is_native_class = 1;
+@@ -4890,7 +4899,18 @@ void register_ffi_decls(Compiler *c) {
+         const char *sname = an >= 1 ? ffi_arg_str(nt, args[0]) : NULL;
+         const char *sleaf = sname ? strrchr(sname, ':') : NULL;
+         sleaf = sleaf ? sleaf + 1 : sname;
+-        int scid = sleaf ? comp_class_index(c, sleaf) : -1;
++        const char *target_sname = sleaf;
++        if (sname) {
++          NT_FOREACH_KIND(nt, NK_ClassNode, ucn) {
++            int ucp = nt_ref(nt, ucn, "constant_path");
++            const char *rn = ucp >= 0 ? nt_str(nt, ucp, "qc_ruby_name") : NULL;
++            if (rn && sp_streq(rn, sname)) {
++              const char *nm = nt_str(nt, ucp, "name");
++              if (nm) { target_sname = nm; break; }
++            }
++          }
++        }
++        int scid = target_sname ? comp_class_index(c, target_sname) : -1;
+         if (scid >= 0) native_cid = scid;
+         continue;
+       }
