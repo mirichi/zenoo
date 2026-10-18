@@ -21,11 +21,11 @@ gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c ext/spinel/zenoo_sp
 ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_window.o build/zenoo_input.o build/zenoo_vibration.o build/zenoo_image.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_audio.o build/zenoo_spinel.o
 echo "  -> build/libzenoo_spinel.a created successfully."
 
-TARGET_RB="${1:-examples/demo_spinel_interactive.rb}"
+TARGET_RB="${1:-examples/demo_gui.rb}"
 OUT_BIN="build/$(basename "${TARGET_RB}" .rb)"
 
 echo "=== [2/2] AOT Compiling Ruby app: ${TARGET_RB} ==="
-"$SPINEL_BIN" -Ilib "${TARGET_RB}" -o "${OUT_BIN}" \
+"$SPINEL_BIN" --no-inline-hot -Ilib "${TARGET_RB}" -o "${OUT_BIN}" \
     --link build/libzenoo_spinel.a \
     --link -lglfw \
     --link -lGL \
