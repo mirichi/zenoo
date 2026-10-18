@@ -56,7 +56,7 @@ module Zenoo
       native_func :os_size_h, [], :int, "sp_zen_win_os_size_h"
       native_func :raw_scale_mode=, [:int], :nil, "sp_zen_win_set_scale_mode"
       native_func :raw_scale_mode, [], :int, "sp_zen_win_get_scale_mode"
-      native_func :scale=, [:float], :nil, "sp_zen_win_set_scale"
+      native_func :raw_set_scale, [:float], :nil, "sp_zen_win_set_scale"
       native_func :scale, [], :float, "sp_zen_win_get_scale"
       native_func :set_window_size, [:int, :int], :nil, "sp_zen_win_set_window_size"
       native_func :vsync=, [:int], :nil, "sp_zen_win_vsync_set"
@@ -71,6 +71,10 @@ module Zenoo
       def self.scale_mode=(val)
         mode = (val == :integer || val == 1) ? 1 : 0
         Zenoo::Native::Window.raw_scale_mode = mode
+      end
+
+      def self.scale=(val)
+        Zenoo::Native::Window.raw_set_scale(val.to_f)
       end
 
       def self.scale_mode
@@ -255,11 +259,11 @@ class Zenoo::Native::Font
 
   def metrics(size)
     s = size.to_f
-    [metrics_ascent(s), metrics_descent(s), metrics_line_gap(s)]
+    [self.metrics_ascent(s), self.metrics_descent(s), self.metrics_line_gap(s)]
   end
 
   def get_glyph(cp, size)
-    ok = query_glyph(cp.to_i, size.to_f)
+    ok = self.query_glyph(cp.to_i, size.to_f)
     return nil unless ok
 
     [
