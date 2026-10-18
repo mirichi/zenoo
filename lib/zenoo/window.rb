@@ -24,10 +24,10 @@ module Zenoo
     @fps_frames = 0
     @fps_accum = 0.0
 
-    # DXRuby風メインループ
-    def self.loop(width = 1280, height = 720, title = "Zenoo", scale: 1.0, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, &block)
-      win_w = (window_width || (width * scale)).to_i
-      win_h = (window_height || (height * scale)).to_i
+    # DXRuby風メインループ (scale: nil の場合はモニターのDPIスケールを自動検出)
+    def self.loop(width = 1280, height = 720, title = "Zenoo", scale: nil, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, &block)
+      win_w = window_width ? window_width.to_i : (scale ? (width * scale).to_i : 0)
+      win_h = window_height ? window_height.to_i : (scale ? (height * scale).to_i : 0)
       Native::Window.init(width, height, title, fullscreen, win_w, win_h, scale_mode)
       Native::Window.scale_mode = scale_mode if Native::Window.respond_to?(:scale_mode=)
       Native::Window.vsync = (vsync ? 1 : 0)
@@ -1116,8 +1116,12 @@ module Zenoo
       metrics = target_font.metrics(f_size)
       ascent = metrics[:ascent]
 
-      pen_x = (x.to_f + @offset_x).round
-      pen_y = (y.to_f + @offset_y + ascent).round.to_f
+      vp_scale = Backend.current_target ? 1.0 : Native::Window.scale.to_f
+      vp_scale = 1.0 if vp_scale < 1.0
+      inv_vp_scale = 1.0 / vp_scale
+
+      pen_x = ((x.to_f + @offset_x) * vp_scale).round * inv_vp_scale
+      pen_y = ((y.to_f + @offset_y + ascent) * vp_scale).round * inv_vp_scale
 
       str = text.to_s
       chars = str.chars
@@ -1140,9 +1144,15 @@ module Zenoo
 
         if glyph_data && glyph_data[0] # visible == true
           _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
-          is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
-          gx = (pen_x + x0).round.to_f
-          gy = (pen_y + y0).round.to_f
+          if is_bitmap == true || is_bitmap == 1
+            is_bmp = 1.0
+            gx = (pen_x * vp_scale).round * inv_vp_scale + x0.to_f
+            gy = pen_y + y0.to_f
+          else
+            is_bmp = 0.0
+            gx = (pen_x + x0).to_f
+            gy = (pen_y + y0).to_f
+          end
           gw = (x1 - x0).to_f
           gh = (y1 - y0).to_f
 
@@ -1152,7 +1162,7 @@ module Zenoo
             p0_0, p0_1, p0_2, p0_3,
             p1_0, p1_1, p1_2, p1_3,
             p2_0, p2_1, p2_2, p2_3,
-            s_atlas_weight, is_bmp, 0.0, 0.0,
+            s_atlas_weight, is_bmp, s_weight, 0.0,
             u0.to_f, v0.to_f, (u1 - u0).to_f, (v1 - v0).to_f
           )
           glyph_count += 1
@@ -1217,14 +1227,18 @@ module Zenoo
       p0 = [s_atlas_outline_w, s_atlas_blur, s_atlas_dx, s_atlas_dy]
       p1 = outline_c
       p2 = s_c
-      p3 = [s_atlas_weight, 0.0, 0.0, 0.0]
+      p3 = [s_atlas_weight, 0.0, s_weight, 0.0]
       shader = sdf_font_shader
 
       metrics = target_font.metrics(f_size)
       ascent = metrics[:ascent]
 
-      pen_x = (x.to_f + @offset_x).round
-      pen_y = (y.to_f + @offset_y + ascent).round.to_f
+      vp_scale = Backend.current_target ? 1.0 : Native::Window.scale.to_f
+      vp_scale = 1.0 if vp_scale < 1.0
+      inv_vp_scale = 1.0 / vp_scale
+
+      pen_x = ((x.to_f + @offset_x) * vp_scale).round * inv_vp_scale
+      pen_y = ((y.to_f + @offset_y + ascent) * vp_scale).round * inv_vp_scale
 
       str = text.to_s
       chars = str.chars
@@ -1243,9 +1257,15 @@ module Zenoo
 
         if glyph_data && glyph_data[0] # visible == true
           _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
-          is_bmp = (is_bitmap == true || is_bitmap == 1) ? 1.0 : 0.0
-          gx = (pen_x + x0).round
-          gy = (pen_y + y0).round
+          if is_bitmap == true || is_bitmap == 1
+            is_bmp = 1.0
+            gx = (pen_x * vp_scale).round * inv_vp_scale + x0.to_f
+            gy = pen_y + y0.to_f
+          else
+            is_bmp = 0.0
+            gx = (pen_x + x0).to_f
+            gy = (pen_y + y0).to_f
+          end
           gw = x1 - x0
           gh = y1 - y0
           uv = [u0, v0, u1 - u0, v1 - v0]
@@ -1272,7 +1292,7 @@ module Zenoo
             cur_color = (ctx.color.equal?(c_color)) ? c_color : Backend.normalize_color(ctx.color)
             cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
             cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : Backend.normalize_color(ctx.outline_color)
-            cur_p3 = (ctx.weight == s_weight) ? [s_atlas_weight, is_bmp, 0.0, 0.0] : [ctx.weight * scale_ratio, is_bmp, 0.0, 0.0]
+            cur_p3 = (ctx.weight == s_weight) ? [s_atlas_weight, is_bmp, s_weight, 0.0] : [ctx.weight * scale_ratio, is_bmp, ctx.weight.to_f, 0.0]
 
             batch.push(
               cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
