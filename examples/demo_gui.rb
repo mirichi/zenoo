@@ -194,7 +194,6 @@ r_val = 20.0
 g_val = 28.0
 b_val = 40.0
 radius_val = 12.0
-slider_w = 360.0
 input_name = "Zenoo Developer"
 input_message = "Rubyで2Dゲーム開発！"
 
@@ -212,40 +211,40 @@ Window.loop(1280, 720, "Zenoo Immediate Mode GUI Demo") do
   # 画面全体の2カラムレイアウト (GUI.row で2つのパネルを横並び)
   GUI.row(spacing: 30) do
     # ----------------------------------------------------
-    # 左側: コントロールパネル (GUI.panel + 自動レイアウト)
+    # 左側: コントロールパネル (w: 省略でパネル幅に自動フィット)
     # ----------------------------------------------------
     GUI.panel("=== Zenoo GUI Demo ===", w: 380.0, h: 680.0) do
       GUI.label("FPS: #{Window.fps.to_i}", size: 16, color: Color.new(160, 170, 190))
 
-      # --- ボタン群 (GUI.row で横並び) ---
-      btn_half_w = 168.0
-      GUI.row(spacing: 12) do
-        counter += 1 if GUI.button("Count (+1)", w: btn_half_w, h: 46.0)
-        counter = 0  if GUI.button("Reset (0)",  w: btn_half_w, h: 46.0)
+      # --- ボタン群 (cols: 2 で横幅を自動2等分) ---
+      GUI.row(cols: 2, spacing: 12) do
+        counter += 1 if GUI.button("Count (+1)", h: 46.0)
+        counter = 0  if GUI.button("Reset (0)",  h: 46.0)
       end
 
-      # レンダラー差し替えボタン
+      # レンダラー差し替えボタン (横幅自動フィット)
       renderer_btn_text = using_custom ? "Style: Classic Chamfer -> Modern Card" : "Style: Modern Card -> Classic Chamfer"
-      if GUI.button(renderer_btn_text, w: 348.0, h: 46.0)
+      if GUI.button(renderer_btn_text, h: 46.0)
         using_custom = !using_custom
         GUI.renderer = using_custom ? flat_renderer : card_renderer
       end
 
       GUI.label("Counter: #{counter}", size: 20, color: Color.new(0, 220, 255))
 
-      # --- スライダー群 (自動縦並び) ---
-      GUI.label("--- Color & Style ---", size: 18, color: Color::WHITE)
+      # --- スライダー群 (自動縦並び & 横幅自動フィット) ---
+      GUI.divider
+      GUI.label("Color & Style", size: 18, color: Color::WHITE)
 
-      r_val = GUI.slider("Red Channel",   r_val, 0.0, 255.0, w: 348.0, h: 42.0)
-      g_val = GUI.slider("Green Channel", g_val, 0.0, 255.0, w: 348.0, h: 42.0)
-      b_val = GUI.slider("Blue Channel",  b_val, 0.0, 255.0, w: 348.0, h: 42.0)
+      r_val = GUI.slider("Red Channel",   r_val, 0.0, 255.0, h: 42.0)
+      g_val = GUI.slider("Green Channel", g_val, 0.0, 255.0, h: 42.0)
+      b_val = GUI.slider("Blue Channel",  b_val, 0.0, 255.0, h: 42.0)
 
-      radius_val = GUI.slider("Corner Radius", radius_val, 0.0, 30.0, w: 348.0, h: 42.0)
+      radius_val = GUI.slider("Corner Radius", radius_val, 0.0, 30.0, h: 42.0)
       GUI.theme.corner_radius = radius_val.to_f
     end
 
     # ----------------------------------------------------
-    # 右側: リアルタイム・プレビューパネル (GUI.panel + 自動レイアウト)
+    # 右側: リアルタイム・プレビューパネル
     # ----------------------------------------------------
     GUI.panel("Live Card Preview", w: 810.0, h: 680.0,
               radius: radius_val,
@@ -275,7 +274,8 @@ Window.loop(1280, 720, "Zenoo Immediate Mode GUI Demo") do
                 title_size: 16)
 
       # --- テキストボックス入力デモ ---
-      GUI.label("--- Text Input (IMGUI TextBox) ---", size: 20, color: Color::WHITE)
+      GUI.divider
+      GUI.label("Text Input (IMGUI TextBox)", size: 20, color: Color::WHITE)
       GUI.label("クリックでフォーカス、英数字・日本語入力、Backspace、左右キー移動対応:", size: 15, color: Color.new(160, 170, 190))
 
       GUI.row(spacing: 20) do
