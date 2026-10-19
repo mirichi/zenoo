@@ -11,10 +11,13 @@ module Zenoo
   # ==========================================
   native_struct "Zenoo::Image", "sp_ZenImage", "sp_ZenImage_free"
   native_new [:int, :int], "sp_ZenImage_new"
+  native_new [:int, :int, :int], "sp_ZenImage_new_msaa"
   native_new [:int, :int, :int, :int], "sp_ZenImage_new_format_internal"
   native_new [:string],    "sp_ZenImage_load"
   native_method :width,  [], :int, "sp_ZenImage_width"
   native_method :height, [], :int, "sp_ZenImage_height"
+  native_method :msaa?,  [], :bool, "sp_ZenImage_msaa"
+  native_method :msaa_samples, [], :int, "sp_ZenImage_msaa_samples"
   native_method :set_as_render_target, [], :nil, "sp_ZenImage_set_as_render_target"
   native_method :sub_image, [:int, :int, :int, :int], :self, "sp_ZenImage_sub_image"
   native_method :x, [], :int, "sp_ZenImage_x"
@@ -172,6 +175,10 @@ module Zenoo
       def self.create_r8(w, h)
         create_format(w, h, 1)
       end
+
+      def self.create_msaa(w, h, samples = 4)
+        Zenoo::Image.new(w.to_i, h.to_i, samples.to_i)
+      end
     end
 
     # ==========================================
@@ -245,6 +252,10 @@ class Zenoo::Image
 
   def self.load(path)
     new(path)
+  end
+
+  def self.create_msaa(w, h, samples = 4)
+    new(w.to_i, h.to_i, samples.to_i)
   end
 end
 

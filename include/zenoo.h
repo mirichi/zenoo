@@ -200,6 +200,9 @@ struct ZenImage {
     int height;          // この Image の論理高さ (切り出し高さ)
     uint32_t fbo;        // オフスクリーン描画用 FBO
     int has_fbo;
+    uint32_t msaa_fbo;   // MSAA用 FBO (0なら未生成)
+    uint32_t msaa_rbo;   // MSAA用 レンダーバッファ (0なら未生成)
+    int msaa_samples;   // MSAAサンプル数 (0なら無効、通常4)
 };
 typedef struct ZenImage ZenImage;
 
@@ -220,10 +223,12 @@ enum ZenImageFormat {
 // 画像生成 & ロード & サブ画像切り出し
 ZenImage* zen_image_create(int width, int height);
 ZenImage* zen_image_create_format(int width, int height, int format);
+ZenImage* zen_image_create_msaa(int width, int height, int samples);
 ZenImage* zen_image_load(const char* filepath);
 ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pixels);
 ZenImage* zen_image_sub_image(ZenImage* parent, int x, int y, int width, int height);
 void      zen_image_destroy(ZenImage* image);
+void      zen_image_resolve_msaa(ZenImage* image);
 void      zen_image_get_size(const ZenImage* image, int* width, int* height);
 void      zen_image_get_bounds(const ZenImage* image, int* x, int* y, int* w, int* h);
 void      zen_image_get_texture_size(const ZenImage* image, int* tex_w, int* tex_h);

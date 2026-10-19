@@ -9,6 +9,7 @@
 
 static GLuint s_dynamic_vao = 0;
 static GLuint s_dynamic_vbo = 0;
+static size_t s_dynamic_vbo_capacity = 0;
 
 static GLuint s_white_texture = 0;
 static GLuint s_active_texture = 0;
@@ -97,6 +98,7 @@ void zen__gfx_shutdown(void) {
         glDeleteVertexArrays(1, &s_dynamic_vao);
         s_dynamic_vao = 0;
     }
+    s_dynamic_vbo_capacity = 0;
     s_current_render_target = NULL;
 }
 
@@ -159,21 +161,85 @@ void zen_clear(uint32_t color) {
 }
 
 // ------------------------------------------
-// レンダーターゲット切り替え
+// レンダーターゲット切り替え & MSAA解決 (Resolve)
 // ------------------------------------------
+void zen_image_resolve_msaa(ZenImage* image) {
+    if (!image || image->msaa_samples <= 0 || image->msaa_fbo == 0 || !image->has_fbo) {
+        return;
+    }
+    int tw = image->texture ? image->texture->width : image->width;
+    int th = image->texture ? image->texture->height : image->height;
+
+    glDisable(GL_SCISSOR_TEST);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, image->msaa_fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, image->fbo);
+    glBlitFramebuffer(0, 0, tw, th, 0, 0, tw, th, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+    if (s_current_render_target == image) {
+        glBindFramebuffer(GL_FRAMEBUFFER, image->msaa_fbo);
+    } else if (s_current_render_target != NULL) {
+        if (s_current_render_target->msaa_samples > 0 && s_current_render_target->msaa_fbo != 0) {
+            glBindFramebuffer(GL_FRAMEBUFFER, s_current_render_target->msaa_fbo);
+        } else {
+            glBindFramebuffer(GL_FRAMEBUFFER, s_current_render_target->fbo);
+        }
+    } else {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+}
+
 void zen_set_render_target(ZenImage* target) {
     zen_ensure_context();
+
+    // 直前のターゲットがMSAAを使用していたら、テクスチャへ解決(Resolve)する
+    if (s_current_render_target != NULL && s_current_render_target != target) {
+        if (s_current_render_target->msaa_samples > 0 && s_current_render_target->msaa_fbo != 0) {
+            zen_image_resolve_msaa(s_current_render_target);
+        }
+    }
+
     s_current_render_target = target;
 
     if (target != NULL && target->texture != NULL) {
+        // 1. 通常 FBO の確保 (テクスチャのアタッチ)
         if (!target->has_fbo) {
             glGenFramebuffers(1, &target->fbo);
             glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->texture->id, 0);
             target->has_fbo = 1;
+        }
+
+        // 2. MSAA が有効な場合
+        if (target->msaa_samples > 0) {
+            int tw = target->texture->width;
+            int th = target->texture->height;
+            if (target->msaa_fbo == 0) {
+                static GLint s_max_samples = 0;
+                if (s_max_samples <= 0) {
+                    glGetIntegerv(GL_MAX_SAMPLES, &s_max_samples);
+                    if (s_max_samples < 2) s_max_samples = 2;
+                }
+                GLsizei samples = (GLsizei)target->msaa_samples;
+                if (samples > s_max_samples) {
+                    samples = (GLsizei)s_max_samples;
+                }
+                if (samples < 2) samples = 2;
+                target->msaa_samples = (int)samples;
+
+                glGenFramebuffers(1, &target->msaa_fbo);
+                glGenRenderbuffers(1, &target->msaa_rbo);
+                glBindRenderbuffer(GL_RENDERBUFFER, target->msaa_rbo);
+                glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_RGBA8, tw, th);
+                glBindFramebuffer(GL_FRAMEBUFFER, target->msaa_fbo);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, target->msaa_rbo);
+            } else {
+                glBindFramebuffer(GL_FRAMEBUFFER, target->msaa_fbo);
+            }
         } else {
             glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
         }
+
         int tw = target->texture->width;
         int th = target->texture->height;
         glViewport(0, 0, tw, th);
@@ -270,6 +336,9 @@ void zen_reset_scissor(void) {
 // ------------------------------------------
 struct ZenShader {
     GLuint program_id;
+    GLint  loc_resolution;
+    GLint  loc_flip_y;
+    GLint  loc_texture;
 };
 
 ZenShader* zen_shader_create(const char* vert_src, const char* frag_src) {
@@ -312,6 +381,9 @@ ZenShader* zen_shader_create(const char* vert_src, const char* frag_src) {
         return NULL;
     }
     shader->program_id = prog;
+    shader->loc_resolution = glGetUniformLocation(prog, "u_resolution");
+    shader->loc_flip_y     = glGetUniformLocation(prog, "u_flip_y");
+    shader->loc_texture    = glGetUniformLocation(prog, "u_texture");
     return shader;
 }
 
@@ -395,13 +467,11 @@ void zen_draw_buffer(int topology,
         cur_w = vp->base_w;
         cur_h = vp->base_h;
     }
-    GLint u_res = glGetUniformLocation(prog, "u_resolution");
-    if (u_res >= 0) {
-        glUniform2f(u_res, (float)cur_w, (float)cur_h);
+    if (shader->loc_resolution >= 0) {
+        glUniform2f(shader->loc_resolution, (float)cur_w, (float)cur_h);
     }
-    GLint u_flip = glGetUniformLocation(prog, "u_flip_y");
-    if (u_flip >= 0) {
-        glUniform1f(u_flip, s_current_render_target ? 1.0f : -1.0f);
+    if (shader->loc_flip_y >= 0) {
+        glUniform1f(shader->loc_flip_y, s_current_render_target ? 1.0f : -1.0f);
     }
 
     // 2. テクスチャの準備
@@ -409,9 +479,8 @@ void zen_draw_buffer(int topology,
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex_id);
     s_active_texture = tex_id;
-    GLint u_tex = glGetUniformLocation(prog, "u_texture");
-    if (u_tex >= 0) {
-        glUniform1i(u_tex, 0);
+    if (shader->loc_texture >= 0) {
+        glUniform1i(shader->loc_texture, 0);
     }
 
     // 3. stride の計算 (1バイト/属性の単純ループ)
@@ -427,8 +496,12 @@ void zen_draw_buffer(int topology,
     glBindVertexArray(s_dynamic_vao);
     glBindBuffer(GL_ARRAY_BUFFER, s_dynamic_vbo);
 
-    // Buffer Orphaning: 同期ストールを排除
-    glBufferData(GL_ARRAY_BUFFER, total_bytes, NULL, GL_STREAM_DRAW);
+    if (total_bytes > s_dynamic_vbo_capacity) {
+        size_t new_cap = (s_dynamic_vbo_capacity == 0) ? 65536 : s_dynamic_vbo_capacity * 2;
+        while (new_cap < total_bytes) new_cap *= 2;
+        glBufferData(GL_ARRAY_BUFFER, new_cap, NULL, GL_DYNAMIC_DRAW);
+        s_dynamic_vbo_capacity = new_cap;
+    }
     glBufferSubData(GL_ARRAY_BUFFER, 0, total_bytes, vertex_data);
 
     // 5. 頂点属性の設定 (常に location 0 から開始)

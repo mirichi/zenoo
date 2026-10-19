@@ -106,6 +106,14 @@ void zen_image_replace_texture(ZenImage* dst, ZenImage* src) {
         dst->fbo = 0;
         dst->has_fbo = 0;
     }
+    if (dst->msaa_fbo) {
+        glDeleteFramebuffers(1, &dst->msaa_fbo);
+        dst->msaa_fbo = 0;
+    }
+    if (dst->msaa_rbo) {
+        glDeleteRenderbuffers(1, &dst->msaa_rbo);
+        dst->msaa_rbo = 0;
+    }
 
     if (dst->texture) {
         zen_texture_release(dst->texture);
@@ -162,6 +170,28 @@ ZenImage* zen_image_create_format(int width, int height, int format) {
 
 ZenImage* zen_image_create(int width, int height) {
     return zen_image_create_format(width, height, ZEN_IMAGE_FORMAT_RGBA);
+}
+
+ZenImage* zen_image_create_msaa(int width, int height, int samples) {
+    if (width <= 0 || height <= 0) return NULL;
+    zen_ensure_context();
+
+    static GLint s_max_samples = 0;
+    if (s_max_samples <= 0) {
+        glGetIntegerv(GL_MAX_SAMPLES, &s_max_samples);
+        if (s_max_samples < 2) s_max_samples = 2;
+    }
+
+    if (samples > s_max_samples) {
+        samples = (int)s_max_samples;
+    } else if (samples < 2) {
+        samples = (samples > 0) ? 2 : 0;
+    }
+
+    ZenImage* img = zen_image_create_format(width, height, ZEN_IMAGE_FORMAT_RGBA);
+    if (!img) return NULL;
+    img->msaa_samples = samples;
+    return img;
 }
 
 ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pixels) {
@@ -235,6 +265,16 @@ void zen_image_destroy(ZenImage* image) {
 
     if (image->has_fbo) {
         glDeleteFramebuffers(1, &image->fbo);
+        image->fbo = 0;
+        image->has_fbo = 0;
+    }
+    if (image->msaa_fbo) {
+        glDeleteFramebuffers(1, &image->msaa_fbo);
+        image->msaa_fbo = 0;
+    }
+    if (image->msaa_rbo) {
+        glDeleteRenderbuffers(1, &image->msaa_rbo);
+        image->msaa_rbo = 0;
     }
     if (image->texture) {
         zen_texture_release(image->texture);
