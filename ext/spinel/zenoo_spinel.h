@@ -22,10 +22,13 @@ typedef struct sp_ZenShader_s {
 // Image メソッド
 void sp_ZenImage_free(void* p);
 sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h);
+sp_ZenImage* sp_ZenImage_new_msaa(sp_int cls_id, sp_int w, sp_int h, sp_int samples);
 sp_ZenImage* sp_ZenImage_new_format_internal(sp_int cls_id, sp_int w, sp_int h, sp_int marker, sp_int format);
 sp_ZenImage* sp_ZenImage_load(sp_int cls_id, const char* path);
 sp_int sp_ZenImage_width(sp_ZenImage* s);
 sp_int sp_ZenImage_height(sp_ZenImage* s);
+sp_bool sp_ZenImage_msaa(sp_ZenImage* s);
+sp_int sp_ZenImage_msaa_samples(sp_ZenImage* s);
 void sp_ZenImage_set_as_render_target(sp_ZenImage* s);
 void sp_ZenImage_reset_render_target(void);
 sp_ZenImage* sp_ZenImage_sub_image(sp_ZenImage* s, sp_int x, sp_int y, sp_int w, sp_int h);

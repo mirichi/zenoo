@@ -614,28 +614,35 @@ int zen_begin_frame(void) {
 
     // 1.5. 別モニターへの移動検知 (同DPIモニター間の移動やドラッグ完了時のサイズ・位置フィット補正)
     if (s_window_visible && !s_is_fullscreen && !s_in_auto_resize && !glfwGetWindowAttrib(s_window, GLFW_ICONIFIED)) {
-        int mouse_down = 0;
+        static int s_last_check_wx = -99999, s_last_check_wy = -99999;
+        int cur_wx = 0, cur_wy = 0;
+        glfwGetWindowPos(s_window, &cur_wx, &cur_wy);
+        if (cur_wx != s_last_check_wx || cur_wy != s_last_check_wy) {
+            int mouse_down = 0;
 #ifdef _WIN32
-        mouse_down = ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+            mouse_down = ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
 #endif
-        if (!mouse_down) {
-            GLFWmonitor* cur_mon = find_window_monitor(s_window, 0);
-            if (cur_mon && cur_mon != s_current_monitor) {
-                s_current_monitor = cur_mon;
-                s_in_auto_resize = 1;
-                int target_w = 0, target_h = 0;
-                compute_auto_window_size_for_monitor(cur_mon, 0.0f, s_viewport.base_w, s_viewport.base_h, &target_w, &target_h);
-                int cur_w = 0, cur_h = 0;
-                glfwGetWindowSize(s_window, &cur_w, &cur_h);
-                if (abs(cur_w - target_w) > 2 || abs(cur_h - target_h) > 2) {
-                    glfwSetWindowSize(s_window, target_w, target_h);
-                    cur_w = target_w;
-                    cur_h = target_h;
+            if (!mouse_down) {
+                s_last_check_wx = cur_wx;
+                s_last_check_wy = cur_wy;
+                GLFWmonitor* cur_mon = find_window_monitor(s_window, 0);
+                if (cur_mon && cur_mon != s_current_monitor) {
+                    s_current_monitor = cur_mon;
+                    s_in_auto_resize = 1;
+                    int target_w = 0, target_h = 0;
+                    compute_auto_window_size_for_monitor(cur_mon, 0.0f, s_viewport.base_w, s_viewport.base_h, &target_w, &target_h);
+                    int cur_w = 0, cur_h = 0;
+                    glfwGetWindowSize(s_window, &cur_w, &cur_h);
+                    if (abs(cur_w - target_w) > 2 || abs(cur_h - target_h) > 2) {
+                        glfwSetWindowSize(s_window, target_w, target_h);
+                        cur_w = target_w;
+                        cur_h = target_h;
+                    }
+                    clamp_window_to_monitor_workarea(s_window, cur_mon, cur_w, cur_h);
+                    s_saved_win_w = cur_w;
+                    s_saved_win_h = cur_h;
+                    s_in_auto_resize = 0;
                 }
-                clamp_window_to_monitor_workarea(s_window, cur_mon, cur_w, cur_h);
-                s_saved_win_w = cur_w;
-                s_saved_win_h = cur_h;
-                s_in_auto_resize = 0;
             }
         }
     }

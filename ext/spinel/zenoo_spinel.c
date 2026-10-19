@@ -34,6 +34,15 @@ sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h) {
     return s;
 }
 
+sp_ZenImage* sp_ZenImage_new_msaa(sp_int cls_id, sp_int w, sp_int h, sp_int samples) {
+    zen_set_gc_trigger_callback(spinel_gc_hook);
+    sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
+    memset(s, 0, sizeof(*s));
+    s->cls_id = cls_id;
+    s->image = zen_image_create_msaa((int)w, (int)h, (int)samples);
+    return s;
+}
+
 sp_ZenImage* sp_ZenImage_new_format_internal(sp_int cls_id, sp_int w, sp_int h, sp_int marker, sp_int format) {
     (void)marker;
     zen_set_gc_trigger_callback(spinel_gc_hook);
@@ -65,6 +74,16 @@ sp_int sp_ZenImage_height(sp_ZenImage* s) {
     int w = 0, h = 0;
     zen_image_get_size(s->image, &w, &h);
     return (sp_int)h;
+}
+
+sp_bool sp_ZenImage_msaa(sp_ZenImage* s) {
+    if (!s || !s->image) return false;
+    return s->image->msaa_samples > 0;
+}
+
+sp_int sp_ZenImage_msaa_samples(sp_ZenImage* s) {
+    if (!s || !s->image) return 0;
+    return (sp_int)s->image->msaa_samples;
 }
 
 void sp_ZenImage_set_as_render_target(sp_ZenImage* s) {

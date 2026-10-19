@@ -69,6 +69,7 @@ typedef ptrdiff_t GLintptr;
 #define GL_ONE                            1
 #define GL_ZERO                           0
 #define GL_SCISSOR_TEST                   0x0C11
+#define GL_MULTISAMPLE                    0x809D
 #define GL_TEXTURE_2D                     0x0DE1
 #define GL_TEXTURE_WRAP_S                 0x2802
 #define GL_TEXTURE_WRAP_T                 0x2803
@@ -100,6 +101,9 @@ typedef ptrdiff_t GLintptr;
 
 typedef const GLubyte * (APIENTRYP PFNGLGETSTRINGPROC)(GLenum name);
 GLAPI PFNGLGETSTRINGPROC glGetString;
+
+typedef void (APIENTRYP PFNGLGETINTEGERVPROC)(GLenum pname, GLint *data);
+GLAPI PFNGLGETINTEGERVPROC glGetIntegerv;
 
 typedef void (APIENTRYP PFNGLVIEWPORTPROC)(GLint x, GLint y, GLsizei width, GLsizei height);
 typedef void (APIENTRYP PFNGLCLEARCOLORPROC)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
@@ -234,6 +238,9 @@ GLAPI PFNGLDRAWELEMENTSINSTANCEDPROC glDrawElementsInstanced;
 #define GL_DRAW_FRAMEBUFFER               0x8CA9
 #define GL_COLOR_ATTACHMENT0              0x8CE0
 #define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#define GL_RENDERBUFFER                   0x8D41
+#define GL_RGBA8                          0x8058
+#define GL_MAX_SAMPLES                    0x8D57
 
 typedef void (APIENTRYP PFNGLGENFRAMEBUFFERSPROC)(GLsizei n, GLuint *framebuffers);
 typedef void (APIENTRYP PFNGLDELETEFRAMEBUFFERSPROC)(GLsizei n, const GLuint *framebuffers);
@@ -241,11 +248,25 @@ typedef void (APIENTRYP PFNGLBINDFRAMEBUFFERPROC)(GLenum target, GLuint framebuf
 typedef void (APIENTRYP PFNGLFRAMEBUFFERTEXTURE2DPROC)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
 typedef GLenum (APIENTRYP PFNGLCHECKFRAMEBUFFERSTATUSPROC)(GLenum target);
 
+typedef void (APIENTRYP PFNGLGENRENDERBUFFERSPROC)(GLsizei n, GLuint *renderbuffers);
+typedef void (APIENTRYP PFNGLDELETERENDERBUFFERSPROC)(GLsizei n, const GLuint *renderbuffers);
+typedef void (APIENTRYP PFNGLBINDRENDERBUFFERPROC)(GLenum target, GLuint renderbuffer);
+typedef void (APIENTRYP PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC)(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height);
+typedef void (APIENTRYP PFNGLFRAMEBUFFERRENDERBUFFERPROC)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
+typedef void (APIENTRYP PFNGLBLITFRAMEBUFFERPROC)(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
+
 GLAPI PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
 GLAPI PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffers;
 GLAPI PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
 GLAPI PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
 GLAPI PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
+
+GLAPI PFNGLGENRENDERBUFFERSPROC glGenRenderbuffers;
+GLAPI PFNGLDELETERENDERBUFFERSPROC glDeleteRenderbuffers;
+GLAPI PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer;
+GLAPI PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC glRenderbufferStorageMultisample;
+GLAPI PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
+GLAPI PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer;
 
 typedef void* (*GLADloadproc)(const char *name);
 GLAPI int gladLoadGLLoader(GLADloadproc load);

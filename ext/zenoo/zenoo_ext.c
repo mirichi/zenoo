@@ -60,12 +60,38 @@ static VALUE filter_to_sym(int filter) {
 }
 
 static VALUE image_init(int argc, VALUE* argv, VALUE self) {
-    VALUE rb_w, rb_h, rb_filter;
-    rb_scan_args(argc, argv, "21", &rb_w, &rb_h, &rb_filter);
+    VALUE rb_w, rb_h, rb_opt1, rb_opt2;
+    int count = rb_scan_args(argc, argv, "22", &rb_w, &rb_h, &rb_opt1, &rb_opt2);
 
     int w = NUM2INT(rb_w);
     int h = NUM2INT(rb_h);
-    ZenImage* img = zen_image_create(w, h);
+    VALUE rb_filter = Qnil;
+    int msaa_samples = 0;
+
+    if (count >= 3 && RB_TYPE_P(rb_opt1, T_HASH)) {
+        VALUE v_filter = rb_hash_aref(rb_opt1, ID2SYM(rb_intern("filter")));
+        if (!NIL_P(v_filter)) rb_filter = v_filter;
+        VALUE v_msaa = rb_hash_aref(rb_opt1, ID2SYM(rb_intern("msaa")));
+        if (RTEST(v_msaa)) {
+            msaa_samples = (FIXNUM_P(v_msaa)) ? FIX2INT(v_msaa) : 4;
+        }
+    } else {
+        if (count >= 3 && !NIL_P(rb_opt1)) {
+            rb_filter = rb_opt1;
+        }
+        if (count >= 4 && !NIL_P(rb_opt2)) {
+            if (RB_TYPE_P(rb_opt2, T_HASH)) {
+                VALUE v_msaa = rb_hash_aref(rb_opt2, ID2SYM(rb_intern("msaa")));
+                if (RTEST(v_msaa)) {
+                    msaa_samples = (FIXNUM_P(v_msaa)) ? FIX2INT(v_msaa) : 4;
+                }
+            } else if (RTEST(rb_opt2)) {
+                msaa_samples = (FIXNUM_P(rb_opt2)) ? FIX2INT(rb_opt2) : 4;
+            }
+        }
+    }
+
+    ZenImage* img = (msaa_samples > 0) ? zen_image_create_msaa(w, h, msaa_samples) : zen_image_create(w, h);
     if (!img) {
         rb_raise(rb_eRuntimeError, "Failed to create Image (%dx%d)", w, h);
     }
@@ -74,6 +100,18 @@ static VALUE image_init(int argc, VALUE* argv, VALUE self) {
     }
     DATA_PTR(self) = img;
     return self;
+}
+
+static VALUE image_get_msaa(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    return (img && img->msaa_samples > 0) ? Qtrue : Qfalse;
+}
+
+static VALUE image_get_msaa_samples(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    return img ? INT2NUM(img->msaa_samples) : INT2NUM(0);
 }
 
 static VALUE image_s_load(int argc, VALUE* argv, VALUE klass) {
@@ -108,6 +146,19 @@ static VALUE image_s_create_r8(VALUE klass, VALUE rb_w, VALUE rb_h) {
     ZenImage* img = zen_image_create_format(w, h, ZEN_IMAGE_FORMAT_R8);
     if (!img) {
         rb_raise(rb_eRuntimeError, "Failed to create R8 Image (%dx%d)", w, h);
+    }
+    return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
+}
+
+static VALUE image_s_create_msaa(int argc, VALUE* argv, VALUE klass) {
+    VALUE rb_w, rb_h, rb_samples;
+    int count = rb_scan_args(argc, argv, "21", &rb_w, &rb_h, &rb_samples);
+    int w = NUM2INT(rb_w);
+    int h = NUM2INT(rb_h);
+    int samples = (count >= 3 && !NIL_P(rb_samples)) ? NUM2INT(rb_samples) : 4;
+    ZenImage* img = zen_image_create_msaa(w, h, samples);
+    if (!img) {
+        rb_raise(rb_eRuntimeError, "Failed to create MSAA Image (%dx%d, samples=%d)", w, h, samples);
     }
     return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
 }
@@ -1070,8 +1121,11 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "replace_texture!", image_replace_texture, 1);
     rb_define_singleton_method(rb_cNativeImage, "create_format", image_s_create_format, 3);
     rb_define_singleton_method(rb_cNativeImage, "create_r8", image_s_create_r8, 2);
+    rb_define_singleton_method(rb_cNativeImage, "create_msaa", image_s_create_msaa, -1);
     rb_define_singleton_method(rb_cNativeImage, "default_texture_filter=", image_s_set_default_filter, 1);
     rb_define_singleton_method(rb_cNativeImage, "default_texture_filter", image_s_get_default_filter, 0);
+    rb_define_method(rb_cNativeImage, "msaa?", image_get_msaa, 0);
+    rb_define_method(rb_cNativeImage, "msaa_samples", image_get_msaa_samples, 0);
 
     // 4. NativeShader (Zenoo::Native::NativeShader)
     rb_cNativeShader = rb_define_class_under(rb_mNative, "NativeShader", rb_cObject);

@@ -80,7 +80,7 @@ module Zenoo
       in vec2 v_uv;
       uniform sampler2D u_texture;
 
-      // ★Ruby側で定義された SDF 角丸ボックス距離関数！★
+      // SDF 角丸ボックス距離関数
       float sd_rounded_box(vec2 p, vec2 b, float r) {
           vec2 q = abs(p) - b + r;
           return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;

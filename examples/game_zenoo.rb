@@ -1704,7 +1704,7 @@ class Game
     # ポストエフェクト (衝撃波 / CRT) を適用するため、まずはゲーム画面を
     # 自前のオフスクリーンバッファ (@game_screen) にレンダリング
     if @crt_enabled || @shockwave_timer > 0
-      @game_screen ||= Image.new(1280, 720)
+      @game_screen ||= Image.create_msaa(1280, 720)
       Image.render_to(@game_screen) do
         Window.clear(Color::BLACK)
         render_game_scene
