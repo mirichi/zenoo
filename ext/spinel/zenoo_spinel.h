@@ -78,6 +78,8 @@ sp_int sp_zen_win_get_scale_mode(void);
 void sp_zen_win_set_scale(double scale);
 double sp_zen_win_get_scale(void);
 void sp_zen_win_set_window_size(sp_int w, sp_int h);
+void sp_zen_win_set_msaa_samples(sp_int samples);
+sp_int sp_zen_win_get_msaa_samples(void);
 
 sp_bool sp_zen_input_key_pressed(sp_int key);
 sp_bool sp_zen_input_key_push(sp_int key);

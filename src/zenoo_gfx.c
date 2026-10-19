@@ -83,6 +83,9 @@ void zen__gfx_init(void) {
 
     s_current_render_target = NULL;
     s_current_blend_mode = -1;
+#if !defined(__EMSCRIPTEN__) && defined(GL_MULTISAMPLE)
+    glEnable(GL_MULTISAMPLE);
+#endif
 }
 
 void zen__gfx_shutdown(void) {

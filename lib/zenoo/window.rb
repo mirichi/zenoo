@@ -25,7 +25,8 @@ module Zenoo
     @fps_accum = 0.0
 
     # DXRuby風メインループ (scale: nil の場合はモニターのDPIスケールを自動検出)
-    def self.loop(width = 1280, height = 720, title = "Zenoo", scale: nil, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, &block)
+    def self.loop(width = 1280, height = 720, title = "Zenoo", scale: nil, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, msaa: nil, &block)
+      self.msaa = msaa unless msaa.nil?
       win_w = window_width ? window_width.to_i : (scale ? (width * scale).to_i : 0)
       win_h = window_height ? window_height.to_i : (scale ? (height * scale).to_i : 0)
       Native::Window.init(width, height, title, fullscreen, win_w, win_h, scale_mode)
@@ -172,6 +173,23 @@ module Zenoo
 
     def self.vsync=(val)
       Native::Window.vsync = (val ? 1 : 0)
+    end
+
+    def self.msaa_samples=(val)
+      Native::Window.msaa_samples = val.to_i if Native::Window.respond_to?(:msaa_samples=)
+    end
+
+    def self.msaa_samples
+      Native::Window.respond_to?(:msaa_samples) ? Native::Window.msaa_samples : 0
+    end
+
+    def self.msaa=(val)
+      samples = val ? (val.is_a?(Integer) ? val : 4) : 0
+      self.msaa_samples = samples
+    end
+
+    def self.msaa?
+      msaa_samples > 0
     end
 
     @current_shader = nil

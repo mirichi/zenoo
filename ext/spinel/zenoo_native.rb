@@ -62,6 +62,8 @@ module Zenoo
       native_func :raw_set_scale, [:float], :nil, "sp_zen_win_set_scale"
       native_func :scale, [], :float, "sp_zen_win_get_scale"
       native_func :set_window_size, [:int, :int], :nil, "sp_zen_win_set_window_size"
+      native_func :raw_set_msaa_samples, [:int], :nil, "sp_zen_win_set_msaa_samples"
+      native_func :raw_get_msaa_samples, [], :int, "sp_zen_win_get_msaa_samples"
       native_func :vsync=, [:int], :nil, "sp_zen_win_vsync_set"
       native_func :target_fps=, [:int], :nil, "sp_zen_win_target_fps_set"
       native_func :delta_time, [], :float, "sp_zen_win_delta_time"
@@ -70,6 +72,14 @@ module Zenoo
       native_func :ensure_context, [], :bool, "sp_zen_win_ensure_context"
       native_func :wasm?, [], :bool, "sp_zen_win_is_wasm"
       native_func :start_wasm_loop, [:any], :nil, "sp_zen_win_start_wasm_loop"
+
+      def self.msaa_samples=(val)
+        Zenoo::Native::Window.raw_set_msaa_samples(val.to_i)
+      end
+
+      def self.msaa_samples
+        Zenoo::Native::Window.raw_get_msaa_samples
+      end
 
       def self.scale_mode=(val)
         mode = (val == :integer || val == 1) ? 1 : 0
