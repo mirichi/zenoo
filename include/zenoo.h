@@ -126,6 +126,8 @@ float  zen_get_scale(void);
 void   zen_set_target_fps(int fps); // 目標FPS設定 (デフォルト60fps固定。0で無制限)
 int    zen_get_target_fps(void);
 void   zen_set_vsync(int vsync);    // 1: VSync有効, 0: VSync無効
+void   zen_window_set_msaa_samples(int samples); // ウィンドウ直接描画のMSAAサンプル数 (デフォルト4, 0で無効)
+int    zen_window_get_msaa_samples(void);
 
 // 入力 API
 void   zen_get_mouse_pos(float* x, float* y);

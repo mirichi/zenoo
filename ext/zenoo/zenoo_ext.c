@@ -551,6 +551,18 @@ static VALUE win_set_window_size(VALUE self, VALUE rb_w, VALUE rb_h) {
     return Qnil;
 }
 
+static VALUE win_set_msaa_samples(VALUE self, VALUE rb_samples) {
+    (void)self;
+    int samples = NUM2INT(rb_samples);
+    zen_window_set_msaa_samples(samples);
+    return rb_samples;
+}
+
+static VALUE win_get_msaa_samples(VALUE self) {
+    (void)self;
+    return INT2NUM(zen_window_get_msaa_samples());
+}
+
 static VALUE win_get_os_window_size(VALUE self) {
     (void)self;
     int w = 0, h = 0;
@@ -1068,6 +1080,8 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "scale", win_get_scale, 0);
     rb_define_singleton_method(mWindow, "set_window_size", win_set_window_size, 2);
     rb_define_singleton_method(mWindow, "window_size", win_get_os_window_size, 0);
+    rb_define_singleton_method(mWindow, "msaa_samples=", win_set_msaa_samples, 1);
+    rb_define_singleton_method(mWindow, "msaa_samples", win_get_msaa_samples, 0);
     rb_define_singleton_method(mWindow, "vsync=", win_set_vsync, 1);
     rb_define_singleton_method(mWindow, "target_fps=", win_set_target_fps, 1);
     rb_define_singleton_method(mWindow, "delta_time", win_get_delta_time, 0);

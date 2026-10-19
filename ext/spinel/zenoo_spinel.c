@@ -338,6 +338,14 @@ void sp_zen_win_set_window_size(sp_int w, sp_int h) {
     zen_set_window_size((int)w, (int)h);
 }
 
+void sp_zen_win_set_msaa_samples(sp_int samples) {
+    zen_window_set_msaa_samples((int)samples);
+}
+
+sp_int sp_zen_win_get_msaa_samples(void) {
+    return (sp_int)zen_window_get_msaa_samples();
+}
+
 sp_bool sp_zen_input_key_pressed(sp_int key) {
     return zen_is_key_pressed((int)key) ? true : false;
 }

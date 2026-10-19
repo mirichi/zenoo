@@ -53,6 +53,7 @@ static double s_frame_start_time = 0.0;  // 現フレームの begin_frame 時�
 static float  s_delta_time = (float)ZEN_DEFAULT_DT;
 static int    s_target_fps = 60;         // デフォルト60fpsに固定
 static int    s_vsync = 0;               // デフォルト 0 (ソフトウェア精密制御)
+static int    s_window_msaa_samples = 4; // ウィンドウ直接描画のMSAA (デフォルト 4x)
 
 // ------------------------------------------
 // 内部: ビューポート計算
@@ -221,9 +222,11 @@ static void compute_auto_window_size_for_monitor(GLFWmonitor* monitor, float ove
         int wx = 0, wy = 0, ww = 0, wh = 0;
         glfwGetMonitorWorkarea(monitor, &wx, &wy, &ww, &wh);
         int left = 0, top = 0, right = 0, bottom = 0;
+#ifndef __EMSCRIPTEN__
         if (s_window) {
             glfwGetWindowFrameSize(s_window, &left, &top, &right, &bottom);
         }
+#endif
         int pad_w = (left + right > 0) ? (left + right + 12) : 16;
         int pad_h = (top + bottom > 0) ? (top + bottom + 12) : 44;
         int max_w = ww - pad_w;
@@ -255,7 +258,9 @@ static void clamp_window_to_monitor_workarea(GLFWwindow* window, GLFWmonitor* mo
     if (mw <= 0 || mh <= 0) return;
 
     int left = 0, top = 0, right = 0, bottom = 0;
+#ifndef __EMSCRIPTEN__
     glfwGetWindowFrameSize(window, &left, &top, &right, &bottom);
+#endif
     if (top <= 0) top = 32;
     if (left <= 0) left = 8;
     if (right <= 0) right = 8;
@@ -304,7 +309,12 @@ static void center_window_on_monitor(GLFWwindow* window, int win_w, int win_h) {
 
 // 別ディスプレイへの移動等でDPIスケールが変化した際にウィンドウサイズを自動調整
 static void window_content_scale_callback(GLFWwindow* window, float xscale, float yscale) {
+    (void)window;
+    (void)xscale;
     (void)yscale;
+#ifdef __EMSCRIPTEN__
+    return;
+#else
     if (!window || s_is_fullscreen || !s_window_visible || s_in_auto_resize) return;
     if (s_viewport.base_w <= 0 || s_viewport.base_h <= 0) return;
 
@@ -348,6 +358,7 @@ static void window_content_scale_callback(GLFWwindow* window, float xscale, floa
     glfwGetFramebufferSize(window, &fb_w, &fb_h);
     update_viewport(fb_w, fb_h);
     s_in_auto_resize = 0;
+#endif
 }
 
 // ------------------------------------------
@@ -439,6 +450,11 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     glfwWindowHint(GLFW_VISIBLE, visible ? GLFW_TRUE : GLFW_FALSE);
     glfwWindowHint(GLFW_FOCUSED, visible ? GLFW_TRUE : GLFW_FALSE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
+    if (s_window_msaa_samples > 0) {
+        glfwWindowHint(GLFW_SAMPLES, s_window_msaa_samples);
+    } else {
+        glfwWindowHint(GLFW_SAMPLES, 0);
+    }
 
     s_viewport.base_w = width;
     s_viewport.base_h = height;
@@ -461,6 +477,7 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     if (!s_window) {
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_VISIBLE, visible ? GLFW_TRUE : GLFW_FALSE);
+        glfwWindowHint(GLFW_SAMPLES, 0);
         s_window = glfwCreateWindow(create_w, create_h, title, monitor, NULL);
         if (!s_window) {
             fprintf(stderr, "[Zenoo] Failed to create GLFW window\n");
@@ -494,7 +511,9 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     glfwSwapInterval(s_vsync ? 1 : 0);
 
     glfwSetFramebufferSizeCallback(s_window, framebuffer_size_callback);
+#ifndef __EMSCRIPTEN__
     glfwSetWindowContentScaleCallback(s_window, window_content_scale_callback);
+#endif
     zen__input_install(s_window);
 
 #ifndef __EMSCRIPTEN__
@@ -781,6 +800,14 @@ void zen_set_vsync(int vsync) {
     if (s_window) {
         glfwSwapInterval(vsync ? 1 : 0);
     }
+}
+
+void zen_window_set_msaa_samples(int samples) {
+    s_window_msaa_samples = (samples < 0) ? 0 : samples;
+}
+
+int zen_window_get_msaa_samples(void) {
+    return s_window_msaa_samples;
 }
 
 // ------------------------------------------
