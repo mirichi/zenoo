@@ -112,6 +112,19 @@ module Zenoo
       Native::Input.mouse_release?(resolve_mouse(button))
     end
 
+    # マウスホイール (スクロール量)
+    def self.mouse_wheel_x
+      Native::Input.mouse_wheel_x
+    end
+
+    def self.mouse_wheel_y
+      Native::Input.mouse_wheel_y
+    end
+
+    def self.mouse_wheel
+      Native::Input.mouse_wheel
+    end
+
     # ==========================================
     # ゲームパッド API
     # ==========================================

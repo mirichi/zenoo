@@ -134,6 +134,8 @@ void   zen_get_mouse_pos(float* x, float* y);
 int    zen_is_mouse_pressed(int button); // 押されている状態 (持続)
 int    zen_is_mouse_push(int button);    // 押した瞬間 (トリガー)
 int    zen_is_mouse_release(int button); // 離した瞬間 (リリース)
+float  zen_get_mouse_wheel_x(void);
+float  zen_get_mouse_wheel_y(void);
 
 int    zen_is_key_pressed(int key);      // 押されている状態 (持続)
 int    zen_is_key_push(int key);         // 押した瞬間 (トリガー)

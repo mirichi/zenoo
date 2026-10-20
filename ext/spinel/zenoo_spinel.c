@@ -386,6 +386,14 @@ sp_bool sp_zen_input_mouse_release(sp_int btn) {
     return zen_is_mouse_release((int)btn) ? true : false;
 }
 
+double sp_zen_input_mouse_wheel_x(void) {
+    return (double)zen_get_mouse_wheel_x();
+}
+
+double sp_zen_input_mouse_wheel_y(void) {
+    return (double)zen_get_mouse_wheel_y();
+}
+
 sp_bool sp_zen_input_gamepad_connected(sp_int id) {
     return zen_is_gamepad_connected((int)id) ? true : false;
 }
