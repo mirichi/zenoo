@@ -4,9 +4,11 @@ module Zenoo
     def self.with_target(target, &block)
       old_cam = @camera
       @camera = nil
+      __sync_active_camera
       Backend.with_target(target, &block)
     ensure
       @camera = old_cam
+      __sync_active_camera
     end
 
     def self.current_target
@@ -34,7 +36,6 @@ module Zenoo
       Native::Window.vsync = (vsync ? 1 : 0)
       Native::Window.target_fps = 60
       Font.atlas_image if defined?(Font) && Font.respond_to?(:atlas_image)
-      __recalculate_camera_cache
 
       @main_loop_block = block
 
@@ -51,7 +52,6 @@ module Zenoo
     end
 
     def self.__update_step
-      __recalculate_camera_cache
       Zenoo::Tween.__update_step(delta_time) if defined?(Zenoo::Tween)
       Zenoo::GUI.begin_frame if defined?(Zenoo::GUI)
       @main_loop_block.call if @main_loop_block
@@ -60,7 +60,6 @@ module Zenoo
     end
 
     def self.__draw_step
-      __recalculate_camera_cache
       if defined?(Zenoo::Profiler) && Zenoo::Profiler.enabled
         Zenoo::Profiler.measure(:draw) do
           Backend.flush_screen
@@ -254,25 +253,15 @@ module Zenoo
 
     @offset_x = 0.0
     @offset_y = 0.0
+    # @camera        : 設定中のカメラ (Window.camera が返すもの)
+    # @active_camera : 描画に実際に適用するカメラ (without_camera 中などは nil)
+    # 描画時は @active_camera.view ([zoom, ox, oy]) を都度参照する
     @camera = nil
-    @camera_disabled_stack = []
-    @cam_ox = 0.0
-    @cam_oy = 0.0
-    @cam_zoom = 1.0
-    @has_camera = false
+    @active_camera = nil
+    @camera_disabled_depth = 0
 
-    def self.__recalculate_camera_cache
-      if @camera && @camera_disabled_stack.empty?
-        @has_camera = true
-        @cam_zoom = @camera.zoom.to_f
-        @cam_ox   = @camera.calc_offset_x.to_f
-        @cam_oy   = @camera.calc_offset_y.to_f
-      else
-        @has_camera = false
-        @cam_zoom = 1.0
-        @cam_ox   = 0.0
-        @cam_oy   = 0.0
-      end
+    def self.__sync_active_camera
+      @active_camera = @camera_disabled_depth.zero? ? @camera : nil
     end
 
     # 2D カメラ設定 (Zenoo::Camera2D)
@@ -281,27 +270,17 @@ module Zenoo
     # - ブロックあり: ブロック内のみカメラを適用
     def self.camera(cam = nil, &block)
       if block
-        old_cam  = @camera
-        old_has  = @has_camera
-        old_ox   = @cam_ox
-        old_oy   = @cam_oy
-        old_zoom = @cam_zoom
-
+        old_cam = @camera
         @camera = cam
-        __recalculate_camera_cache
-
+        __sync_active_camera
         begin
           yield
         ensure
-          @camera     = old_cam
-          @has_camera = old_has
-          @cam_ox     = old_ox
-          @cam_oy     = old_oy
-          @cam_zoom   = old_zoom
+          @camera = old_cam
+          __sync_active_camera
         end
       elsif cam
-        @camera = cam
-        __recalculate_camera_cache
+        self.camera = cam
       else
         @camera
       end
@@ -309,30 +288,29 @@ module Zenoo
 
     def self.camera=(cam)
       @camera = cam
-      __recalculate_camera_cache
+      __sync_active_camera
     end
 
     # カメラを一時的に無効化して UI などを画面ピクセル座標で描画
     def self.without_camera
-      @camera_disabled_stack.push(true)
-      old_has = @has_camera
-      @has_camera = false
+      @camera_disabled_depth += 1
+      __sync_active_camera
       begin
         yield
       ensure
-        @camera_disabled_stack.pop
-        @has_camera = old_has
+        @camera_disabled_depth -= 1
+        __sync_active_camera
       end
     end
 
     def self.camera_enabled?
-      !@camera.nil? && @camera_disabled_stack.empty?
+      !@active_camera.nil?
     end
 
     # 画面座標 -> ワールド座標変換 (マウス位置など)
     def self.to_world(sx, sy)
-      if camera_enabled?
-        @camera.screen_to_world(sx, sy)
+      if @active_camera
+        @active_camera.screen_to_world(sx, sy)
       else
         [sx.to_f, sy.to_f]
       end
@@ -340,8 +318,8 @@ module Zenoo
 
     # ワールド座標 -> 画面座標変換
     def self.to_screen(wx, wy)
-      if camera_enabled?
-        @camera.world_to_screen(wx, wy)
+      if @active_camera
+        @active_camera.world_to_screen(wx, wy)
       else
         [wx.to_f, wy.to_f]
       end
@@ -435,10 +413,11 @@ module Zenoo
       actual_color = color || (border_color ? nil : :white)
       c_color = Backend.normalize_color(actual_color)
 
-      if @has_camera && camera
-        cur_zoom = @cam_zoom
-        ax = (x.to_f * cur_zoom) + @cam_ox + @offset_x
-        ay = (y.to_f * cur_zoom) + @cam_oy + @offset_y
+      cam = @active_camera
+      if cam && camera
+        cur_zoom, cam_ox, cam_oy = cam.view
+        ax = (x.to_f * cur_zoom) + cam_ox + @offset_x
+        ay = (y.to_f * cur_zoom) + cam_oy + @offset_y
         wf = w.to_f * cur_zoom
         hf = h.to_f * cur_zoom
         rad = radius.to_f * cur_zoom
@@ -592,11 +571,13 @@ module Zenoo
       sx = scale ? scale.to_f : scale_x.to_f
       sy = scale ? scale.to_f : scale_y.to_f
 
-      if @has_camera && camera
-        ax = (tl_x * @cam_zoom) + @cam_ox + @offset_x
-        ay = (tl_y * @cam_zoom) + @cam_oy + @offset_y
-        zw = draw_w * @cam_zoom
-        zh = draw_h * @cam_zoom
+      cam = @active_camera
+      if cam && camera
+        cz, cam_ox, cam_oy = cam.view
+        ax = (tl_x * cz) + cam_ox + @offset_x
+        ay = (tl_y * cz) + cam_oy + @offset_y
+        zw = draw_w * cz
+        zh = draw_h * cz
       else
         ax = tl_x + @offset_x
         ay = tl_y + @offset_y
@@ -687,12 +668,14 @@ module Zenoo
 
 
     def self.draw_triangle(x1, y1, x2, y2, x3, y3, color: :white, camera: true, z: 0.0)
-      if @has_camera && camera
-        cam_ox = @cam_ox + @offset_x
-        cam_oy = @cam_oy + @offset_y
-        ax1 = (x1.to_f * @cam_zoom) + cam_ox; ay1 = (y1.to_f * @cam_zoom) + cam_oy
-        ax2 = (x2.to_f * @cam_zoom) + cam_ox; ay2 = (y2.to_f * @cam_zoom) + cam_oy
-        ax3 = (x3.to_f * @cam_zoom) + cam_ox; ay3 = (y3.to_f * @cam_zoom) + cam_oy
+      cam = @active_camera
+      if cam && camera
+        cz, cam_ox, cam_oy = cam.view
+        cam_ox += @offset_x
+        cam_oy += @offset_y
+        ax1 = (x1.to_f * cz) + cam_ox; ay1 = (y1.to_f * cz) + cam_oy
+        ax2 = (x2.to_f * cz) + cam_ox; ay2 = (y2.to_f * cz) + cam_oy
+        ax3 = (x3.to_f * cz) + cam_ox; ay3 = (y3.to_f * cz) + cam_oy
       else
         ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
         ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
@@ -730,12 +713,14 @@ module Zenoo
 
     def self.draw_line(x1, y1, x2, y2, color: :white, width: 1.0, camera: true, z: 0.0)
       actual_color = color || :white
-      if @has_camera && camera
-        cam_ox = @cam_ox + @offset_x
-        cam_oy = @cam_oy + @offset_y
-        ax1 = (x1.to_f * @cam_zoom) + cam_ox; ay1 = (y1.to_f * @cam_zoom) + cam_oy
-        ax2 = (x2.to_f * @cam_zoom) + cam_ox; ay2 = (y2.to_f * @cam_zoom) + cam_oy
-        w = width.to_f * @cam_zoom
+      cam = @active_camera
+      if cam && camera
+        cz, cam_ox, cam_oy = cam.view
+        cam_ox += @offset_x
+        cam_oy += @offset_y
+        ax1 = (x1.to_f * cz) + cam_ox; ay1 = (y1.to_f * cz) + cam_oy
+        ax2 = (x2.to_f * cz) + cam_ox; ay2 = (y2.to_f * cz) + cam_oy
+        w = width.to_f * cz
       else
         ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
         ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
@@ -816,21 +801,10 @@ module Zenoo
       sx = scale_x.to_f
       sy = scale_y.to_f
 
-      if @has_camera && camera
-        cz = @cam_zoom
-        px = parallax_x.to_f
-        py = parallax_y.to_f
-        if (px - 1.0).abs < 0.0001 && (py - 1.0).abs < 0.0001
-          tx = (mx * cz) + @cam_ox + @offset_x
-          ty = (my * cz) + @cam_oy + @offset_y
-        else
-          cam = @camera
-          cx = cam.screen_center_x - (cam.x + cam.shake_x) * px * cz
-          cy = cam.screen_center_y - (cam.y + cam.shake_y) * py * cz
-          tx = (mx * cz) + cx + @offset_x
-          ty = (my * cz) + cy + @offset_y
-        end
-        [tx, ty, sx * cz, sy * cz]
+      cam = @active_camera
+      if cam && camera
+        cz, cox, coy = cam.parallax_view(parallax_x.to_f, parallax_y.to_f)
+        [(mx * cz) + cox + @offset_x, (my * cz) + coy + @offset_y, sx * cz, sy * cz]
       else
         [mx + @offset_x, my + @offset_y, sx, sy]
       end
@@ -1005,10 +979,12 @@ module Zenoo
       target_font = font || Font.default
       return unless target_font
 
-      if @has_camera && camera
-        base_x = (x.to_f * @cam_zoom) + @cam_ox
-        base_y = (y.to_f * @cam_zoom) + @cam_oy
-        f_size = size.to_f * @cam_zoom
+      cam = @active_camera
+      if cam && camera
+        cz, cam_ox, cam_oy = cam.view
+        base_x = (x.to_f * cz) + cam_ox
+        base_y = (y.to_f * cz) + cam_oy
+        f_size = size.to_f * cz
       else
         base_x = x.to_f
         base_y = y.to_f
@@ -1352,10 +1328,10 @@ module Zenoo
 
     def self.draw_path(camera: true)
       c = canvas
-      cam = (@camera && @camera_disabled_stack.empty? && camera) ? @camera : nil
-      zoom = cam ? cam.zoom : 1.0
-      cam_ox = (cam ? cam.calc_offset_x : 0.0) + @offset_x
-      cam_oy = (cam ? cam.calc_offset_y : 0.0) + @offset_y
+      cam = camera ? @active_camera : nil
+      zoom, cam_ox, cam_oy = cam ? cam.view : [1.0, 0.0, 0.0]
+      cam_ox += @offset_x
+      cam_oy += @offset_y
 
       has_transform = (cam_ox != 0.0 || cam_oy != 0.0 || zoom != 1.0)
       if has_transform
