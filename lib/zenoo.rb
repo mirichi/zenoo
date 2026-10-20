@@ -32,6 +32,7 @@ require_relative 'zenoo/sound'
 require_relative 'zenoo/sound_effect'
 require_relative 'zenoo/collision'
 require_relative 'zenoo/sprite'
+require_relative 'zenoo/tilemap'
 require_relative 'zenoo/physics'
 require_relative 'zenoo/camera'
 require_relative 'zenoo/easing'
@@ -58,6 +59,7 @@ Camera2D      = Zenoo::Camera2D      unless defined?(Camera2D)
 Easing        = Zenoo::Easing        unless defined?(Easing)
 Tween         = Zenoo::Tween         unless defined?(Tween)
 Sprite        = Zenoo::Sprite        unless defined?(Sprite)
+Tilemap       = Zenoo::Tilemap       unless defined?(Tilemap)
 PhysicsSprite = Zenoo::PhysicsSprite unless defined?(PhysicsSprite)
 Profiler      = Zenoo::Profiler      unless defined?(Profiler)
 

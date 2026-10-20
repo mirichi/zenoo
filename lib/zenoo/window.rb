@@ -680,6 +680,11 @@ module Zenoo
       )
     end
 
+    def self.draw_tilemap(tilemap, x: nil, y: nil, z: nil, camera: nil)
+      return unless tilemap
+      tilemap.draw(x: x, y: y, z: z, camera: camera)
+    end
+
 
     def self.draw_triangle(x1, y1, x2, y2, x3, y3, color: :white, camera: true, z: 0.0)
       if @has_camera && camera
