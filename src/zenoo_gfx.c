@@ -499,12 +499,8 @@ void zen_draw_buffer(int topology,
     glBindVertexArray(s_dynamic_vao);
     glBindBuffer(GL_ARRAY_BUFFER, s_dynamic_vbo);
 
-    if (total_bytes > s_dynamic_vbo_capacity) {
-        size_t new_cap = (s_dynamic_vbo_capacity == 0) ? 65536 : s_dynamic_vbo_capacity * 2;
-        while (new_cap < total_bytes) new_cap *= 2;
-        glBufferData(GL_ARRAY_BUFFER, new_cap, NULL, GL_DYNAMIC_DRAW);
-        s_dynamic_vbo_capacity = new_cap;
-    }
+    // Buffer Orphaning: 同期ストールを排除
+    glBufferData(GL_ARRAY_BUFFER, total_bytes, NULL, GL_STREAM_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0, total_bytes, vertex_data);
 
     // 5. 頂点属性の設定 (常に location 0 から開始)

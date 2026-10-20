@@ -200,7 +200,7 @@ input_message = "Rubyで2Dゲーム開発！"
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
 
-Window.loop(1280, 720, "Zenoo Immediate Mode GUI Demo") do
+Window.loop(1280, 720, "Zenoo Immediate Mode GUI Demo", msaa: 4) do
   # 毎フレームの背景クリア (スライダーで調整した背景色)
   bg_color = Color.new(r_val.to_i, g_val.to_i, b_val.to_i)
   Window.clear(bg_color)
