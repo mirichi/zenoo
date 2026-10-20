@@ -34,6 +34,7 @@ echo  Run demos:
 echo    ruby -Ilib examples\game_zenoo.rb
 echo    ruby -Ilib examples\demo_vector_graphics.rb
 echo    ruby -Ilib examples\demo_input.rb
+echo    ruby -Ilib examples\demo_tilemap.rb
 echo    ruby -Ilib examples\demo_gui.rb
 echo    ruby -Ilib examples\demo_window_clip.rb
 echo    ruby -Ilib examples\demo_texture_atlas.rb
