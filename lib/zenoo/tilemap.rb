@@ -110,15 +110,8 @@ module Zenoo
       win_w = Window.width.to_f
       win_h = Window.height.to_f
 
-      if draw_camera && Window.camera
-        cam = Window.camera
-        w_left, w_top = cam.screen_to_world(0.0, 0.0)
-        w_right, w_bottom = cam.screen_to_world(win_w, win_h)
-        # 上下左右が反転する場合を考慮して正規化
-        left = [w_left, w_right].min
-        right = [w_left, w_right].max
-        top = [w_top, w_bottom].min
-        bottom = [w_top, w_bottom].max
+      if draw_camera && Window.camera_enabled?
+        left, top, right, bottom = Window.camera.visible_rect(win_w, win_h)
       else
         left = 0.0
         right = win_w
