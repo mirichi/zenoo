@@ -705,6 +705,16 @@ static VALUE input_mouse_release(VALUE self, VALUE rb_btn) {
     return zen_is_mouse_release(NUM2INT(rb_btn)) ? Qtrue : Qfalse;
 }
 
+static VALUE input_mouse_wheel_x(VALUE self) {
+    (void)self;
+    return DBL2NUM(zen_get_mouse_wheel_x());
+}
+
+static VALUE input_mouse_wheel_y(VALUE self) {
+    (void)self;
+    return DBL2NUM(zen_get_mouse_wheel_y());
+}
+
 static VALUE input_gamepad_connected(VALUE self, VALUE rb_id) {
     (void)self;
     return zen_is_gamepad_connected(NUM2INT(rb_id)) ? Qtrue : Qfalse;
@@ -1102,6 +1112,9 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mInput, "mouse_pressed?", input_mouse_pressed, 1);
     rb_define_singleton_method(mInput, "mouse_push?", input_mouse_push, 1);
     rb_define_singleton_method(mInput, "mouse_release?", input_mouse_release, 1);
+    rb_define_singleton_method(mInput, "mouse_wheel_x", input_mouse_wheel_x, 0);
+    rb_define_singleton_method(mInput, "mouse_wheel_y", input_mouse_wheel_y, 0);
+    rb_define_singleton_method(mInput, "mouse_wheel", input_mouse_wheel_y, 0);
     rb_define_singleton_method(mInput, "gamepad_connected?", input_gamepad_connected, 1);
     rb_define_singleton_method(mInput, "gamepad_axis", input_gamepad_axis, 2);
     rb_define_singleton_method(mInput, "gamepad_button_pressed?", input_gamepad_button_pressed, 2);

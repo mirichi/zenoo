@@ -18,6 +18,8 @@
 // 入力状態
 static double s_mouse_x = 0.0;
 static double s_mouse_y = 0.0;
+static double s_mouse_wheel_x = 0.0;
+static double s_mouse_wheel_y = 0.0;
 static char s_keys_pressed[512] = {0}; // 押されている状態 (持続)
 static char s_keys_push[512] = {0};    // 押した瞬間 (トリガー)
 static char s_keys_release[512] = {0}; // 離した瞬間 (リリース)
@@ -92,6 +94,12 @@ static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
     s_mouse_y = ypos;
 }
 
+static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+    (void)window;
+    s_mouse_wheel_x += xoffset;
+    s_mouse_wheel_y += yoffset;
+}
+
 static void char_callback(GLFWwindow* window, unsigned int codepoint) {
     (void)window;
 #ifndef __EMSCRIPTEN__
@@ -123,6 +131,8 @@ static void window_focus_callback(GLFWwindow* window, int focused) {
                 s_keys_release[i] = 1;
             }
         }
+        s_mouse_wheel_x = 0.0;
+        s_mouse_wheel_y = 0.0;
         zen__vibration_stop_all();
     }
 }
@@ -132,6 +142,7 @@ void zen__input_install(GLFWwindow* window) {
     glfwSetCharCallback(window, char_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, cursor_pos_callback);
+    glfwSetScrollCallback(window, scroll_callback);
     glfwSetWindowFocusCallback(window, window_focus_callback);
 }
 
@@ -245,6 +256,8 @@ void zen__input_end_frame(void) {
     memset(s_mouse_release, 0, sizeof(s_mouse_release));
     memset(s_gamepad_buttons_push, 0, sizeof(s_gamepad_buttons_push));
     memset(s_gamepad_buttons_release, 0, sizeof(s_gamepad_buttons_release));
+    s_mouse_wheel_x = 0.0;
+    s_mouse_wheel_y = 0.0;
     s_char_queue_count = 0;
     s_char_queue_read_idx = 0;
 }
@@ -286,6 +299,14 @@ int zen_is_mouse_push(int button) {
 int zen_is_mouse_release(int button) {
     if (button >= 0 && button < 8) return s_mouse_release[button];
     return 0;
+}
+
+float zen_get_mouse_wheel_x(void) {
+    return (float)s_mouse_wheel_x;
+}
+
+float zen_get_mouse_wheel_y(void) {
+    return (float)s_mouse_wheel_y;
 }
 
 int zen_is_key_pressed(int key) {

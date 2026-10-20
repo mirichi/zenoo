@@ -90,6 +90,8 @@ double sp_zen_input_mouse_y(void);
 sp_bool sp_zen_input_mouse_pressed(sp_int btn);
 sp_bool sp_zen_input_mouse_push(sp_int btn);
 sp_bool sp_zen_input_mouse_release(sp_int btn);
+double  sp_zen_input_mouse_wheel_x(void);
+double  sp_zen_input_mouse_wheel_y(void);
 sp_bool sp_zen_input_gamepad_connected(sp_int id);
 double  sp_zen_input_gamepad_axis(sp_int id, sp_int axis);
 sp_bool sp_zen_input_gamepad_button_pressed(sp_int id, sp_int button);
