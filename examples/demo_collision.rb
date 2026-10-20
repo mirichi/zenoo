@@ -363,7 +363,7 @@ playground = CollisionPlayground.new
 test_frames = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_counter = 0
 
-Window.loop(1280, 720, "Zenoo GJK Collision Playground") do
+Window.loop(1280, 720, "Zenoo GJK Collision Playground", msaa: 4) do
   playground.step_frame
   if test_frames > 0
     frame_counter += 1

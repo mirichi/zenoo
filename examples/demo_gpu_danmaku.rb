@@ -56,9 +56,9 @@ DANMAKU_VERT = <<~'GLSL'
           age = mod(age, loop_period);
       }
 
-      // 寿命外または発射前ならクリッピング (画面外へ)
+      // 寿命外または発射前ならクリッピング (ニアプレーン外へ飛ばしてラスタライザをバイパス)
       if (age < 0.0 || age > life) {
-          gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+          gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
           return;
       }
 
@@ -80,14 +80,14 @@ DANMAKU_VERT = <<~'GLSL'
       // 発射直後のフェードイン (ボスの中心での密集・白飛びを防止)
       float spawn_fade = clamp((dist - 15.0) / 25.0, 0.0, 1.0);
       if (spawn_fade <= 0.0) {
-          gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+          gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
           return;
       }
 
       // ボムによる消滅判定
       if (u_bomb_radius > 0.0) {
           if (distance(cur_pos, u_bomb_pos) < u_bomb_radius) {
-              gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+              gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
               return;
           }
       }
@@ -133,22 +133,19 @@ DANMAKU_FRAG = <<~'GLSL'
 
   void main() {
       vec2 p = (v_uv - vec2(0.5)) * 2.0;
-      float d;
+      vec2 q = (v_type < 0.5) ? vec2(p.x * 0.48, p.y * 1.25) : p;
+      float d_sq = dot(q, q);
 
-      if (v_type < 0.5) {
-          // 米粒弾: 進行方向 (x) に長い楕円
-          d = length(vec2(p.x * 0.48, p.y * 1.25));
-      } else {
-          // 丸弾
-          d = length(p);
+      // モバイルTBDR最適化: 外側は即座にリターン (不要なsqrtや色計算・メモリ書き込みを根絶)
+      if (d_sq >= 1.0) {
+          fragColor = vec4(0.0);
+          return;
       }
 
-      if (d > 1.0) {
-          discard;
-      }
+      float d = sqrt(d_sq);
 
       // STG 3層レイヤードレンダリング:
-      // 1. 外周 (d > 0.72): 暗色のアウトライン (何重に重なっても輪郭を保ち白飛びしない)
+      // 1. 外周 (d > 0.72): 暗色のアウトライン
       // 2. 中間 (0.3 < d <= 0.72): ネオンカラー
       // 3. 中心 (d <= 0.3): 白い芯 (コア)
       vec3 col;
@@ -281,7 +278,7 @@ class DanmakuGroup
     @in_distance_range = false
     @in_sector_range   = false
     @hit_detected      = false
-    @tested_bullet_positions = []
+    @tested_bullet_positions.clear
 
     geom = current_geometry(cur_time)
     return false unless geom
@@ -524,8 +521,11 @@ danmaku_pipeline = Zenoo::Backend::Pipeline.new(
 )
 
 target_count = 60_000
-groups, total_count = build_danmaku_system(target_count)
-active_mesh = create_danmaku_mesh(groups, danmaku_shader, danmaku_pipeline)
+danmaku_systems = {}
+groups_75k, count_75k = build_danmaku_system(60_000)
+mesh_75k = create_danmaku_mesh(groups_75k, danmaku_shader, danmaku_pipeline)
+danmaku_systems[75_000] = [groups_75k, count_75k, mesh_75k]
+groups, total_count, active_mesh = danmaku_systems[75_000]
 
 # 自機ステータス
 player_x = WIDTH * 0.5
@@ -539,7 +539,7 @@ hit_flash = 0.0
 bomb_radius = 0.0
 bomb_pos = [0.0, 0.0]
 
-show_sectors = true # デバッグ: 円環セクター可視化
+show_sectors = true # デバッグ: 円環セクター可視化 ([C]キーでトグル)
 time = 0.0
 collision_time_us = 0.0
 
@@ -552,9 +552,21 @@ puts "Starting Zenoo Danmaku Demo..."
 # ------------------------------------------------------------------------------
 # メインループ
 # ------------------------------------------------------------------------------
-Window.loop(WIDTH, HEIGHT, "Zenoo - 60,000 GPU Danmaku & Annular Sector Collision", vsync: false) do
+Window.loop(WIDTH, HEIGHT, "Zenoo GPU Danmaku Storm", vsync: false) do
   dt = Window.delta_time
   time += dt
+
+  # キー [1] / [2] で弾数切り替え
+  if Input.key_push?(:"1")
+    danmaku_systems[37_500] ||= begin
+      g, c = build_danmaku_system(30_000)
+      m = create_danmaku_mesh(g, danmaku_shader, danmaku_pipeline)
+      [g, c, m]
+    end
+    groups, total_count, active_mesh = danmaku_systems[37_500]
+  elsif Input.key_push?(:"2")
+    groups, total_count, active_mesh = danmaku_systems[75_000]
+  end
 
   # --- 入力と自機移動 ---
   speed = Input.key_pressed?(:left_shift) || Input.key_pressed?(:right_shift) ? 180.0 : 380.0
@@ -756,5 +768,5 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 60,000 GPU Danmaku & Annular Sector Collisio
   Window.draw_text(24, 48, "FPS: #{last_fps}  |  DrawCall: 1  |  Ruby pack: 0/frame", size: 16, color: [0.4, 1.0, 0.6, 1.0], z: 101.0)
   Window.draw_text(24, 72, "Collision Time (CPU): #{collision_time_us.round(1)} us (#{tested_groups} groups)", size: 15, color: [1.0, 0.85, 0.3, 1.0], z: 101.0)
   Window.draw_text(24, 96, "In-Sector: #{sector_hits} grp | Evaluated Bullets: #{total_tested_bullets} / #{total_count}", size: 14, color: sector_hits > 0 ? [1.0, 0.9, 0.2, 1.0] : [0.6, 0.8, 1.0, 1.0], z: 101.0)
-  Window.draw_text(24, 120, "[WASD/Mouse] Move  [Shift] Slow  [C] Sectors (#{show_sectors ? 'ON' : 'OFF'})  [Space] Bomb", size: 13, color: [0.7, 0.8, 0.9, 0.8], z: 101.0)
+  Window.draw_text(24, 120, "[WASD/Mouse] Move  [Shift] Slow  [C] Sectors (#{show_sectors ? 'ON' : 'OFF'})  [1/2] Bullets", size: 13, color: [0.7, 0.8, 0.9, 0.8], z: 101.0)
 end

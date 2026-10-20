@@ -233,16 +233,16 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # 1. :alpha (標準アルファブレンド)
   b1_x, b1_y = p5_x + 25, p5_y + 65
   Window.draw_rect(b1_x, b1_y, 210, 175, radius: 8, color: [16, 22, 34, 255], border_width: 1, border_color: [45, 55, 75, 255])
-  Window.draw_image(b1_x + 25 - osc * 0.5, b1_y + 20, @disc_img, color: [0, 200, 255, 200], blend: :alpha, scale: 0.9)
-  Window.draw_image(b1_x + 65 + osc * 0.5, b1_y + 20, @disc_img, color: [255, 60, 140, 200], blend: :alpha, scale: 0.9)
+  Window.draw_image(b1_x + 25 - osc * 0.5, b1_y + 20, @disc_img, color: [0, 200, 255, 200], blend: :alpha)
+  Window.draw_image(b1_x + 65 + osc * 0.5, b1_y + 20, @disc_img, color: [255, 60, 140, 200], blend: :alpha)
   Window.draw_text(b1_x + 16, b1_y + 125, "1. :alpha (標準透過)", size: 14, color: :white)
   Window.draw_text(b1_x + 16, b1_y + 148, "手前が奥を透過上書き", size: 12, color: [160, 175, 195, 255])
 
   # 2. :add (加算合成: 暗い背景で光輝く)
   b2_x, b2_y = p5_x + 255, p5_y + 65
   Window.draw_rect(b2_x, b2_y, 210, 175, radius: 8, color: [10, 12, 18, 255], border_width: 1, border_color: [45, 55, 75, 255])
-  Window.draw_image(b2_x + 25 - osc * 0.5, b2_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :add, scale: 0.9)
-  Window.draw_image(b2_x + 65 + osc * 0.5, b2_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :add, scale: 0.9)
+  Window.draw_image(b2_x + 25 - osc * 0.5, b2_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :add)
+  Window.draw_image(b2_x + 65 + osc * 0.5, b2_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :add)
   Window.draw_text(b2_x + 16, b2_y + 125, "2. :add (加算合成)", size: 14, color: :yellow)
   Window.draw_text(b2_x + 16, b2_y + 148, "重なりが激しく発光！(光/炎)", size: 12, color: [255, 230, 160, 255])
 
@@ -253,8 +253,8 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # 市松模様のガイド線
   Window.draw_rect(b3_x + 10, b3_y + 10, 190, 100, color: [215, 222, 235, 255])
   # 2つのカラーフィルターを乗算合成 (シアン x マゼンタ -> 重なりが濃い青紫に！)
-  Window.draw_image(b3_x + 25 - osc * 0.5, b3_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :multiply, scale: 0.9)
-  Window.draw_image(b3_x + 65 + osc * 0.5, b3_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :multiply, scale: 0.9)
+  Window.draw_image(b3_x + 25 - osc * 0.5, b3_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :multiply)
+  Window.draw_image(b3_x + 65 + osc * 0.5, b3_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :multiply)
   Window.draw_text(b3_x + 16, b3_y + 125, "3. :multiply (乗算)", size: 14, color: [30, 40, 70, 255])
   Window.draw_text(b3_x + 16, b3_y + 148, "重なりが濃く混色 (影/セロハン)", size: 12, color: [70, 90, 120, 255])
 

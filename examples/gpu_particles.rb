@@ -116,8 +116,10 @@ PARTICLE_FRAG = <<~'GLSL'
       // 中心 (0.5, 0.5) からの距離でソフトな円形光球を表現
       vec2 d = v_uv - vec2(0.5);
       float dist_sq = dot(d, d);
-      if (dist_sq > 0.25) {
-          discard;
+      // モバイルTBDR最適化: discard を排除し、dist_sq >= 0.25 の外側は完全透明で加算なし
+      if (dist_sq >= 0.25) {
+          fragColor = vec4(0.0);
+          return;
       }
       // 中心ほど強く光り、外側に向かってなだらかに減衰
       float alpha = clamp((0.25 - dist_sq) * 4.0, 0.0, 1.0);
@@ -275,6 +277,9 @@ Window.loop(WIDTH, HEIGHT, "Zenoo GPU Particle Storm", vsync: false) do
 
   # UI表示
   frame_counter += 1
+  @total_frames ||= 0
+  @total_frames += 1
+
   fps_timer += dt
   if fps_timer >= 0.5
     last_fps = (frame_counter / fps_timer).round(1)
@@ -282,7 +287,7 @@ Window.loop(WIDTH, HEIGHT, "Zenoo GPU Particle Storm", vsync: false) do
     fps_timer = 0.0
   end
 
-  if ENV["TEST_FRAMES"] && frame_counter >= ENV["TEST_FRAMES"].to_i
+  if ENV["TEST_FRAMES"] && @total_frames >= ENV["TEST_FRAMES"].to_i
     puts "TEST_FRAMES reached (#{ENV['TEST_FRAMES']} frames). Exiting cleanly."
     break
   end

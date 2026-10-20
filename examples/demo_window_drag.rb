@@ -137,7 +137,7 @@ app = WindowDemoApp.new
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
 
-Window.loop(1280, 720, "Zenoo GUI.window - Multi-Window Drag & Occlusion Demo") do
+Window.loop(1280, 720, "Zenoo GUI.window - Multi-Window Drag & Occlusion Demo", msaa: 4) do
   app.step_frame
 
   # 自動テスト終了判定

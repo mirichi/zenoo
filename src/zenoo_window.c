@@ -53,7 +53,7 @@ static double s_frame_start_time = 0.0;  // 現フレームの begin_frame 時�
 static float  s_delta_time = (float)ZEN_DEFAULT_DT;
 static int    s_target_fps = 60;         // デフォルト60fpsに固定
 static int    s_vsync = 0;               // デフォルト 0 (ソフトウェア精密制御)
-static int    s_window_msaa_samples = 4; // ウィンドウ直接描画のMSAA (デフォルト 4x)
+static int    s_window_msaa_samples = 0; // ウィンドウ直接描画のMSAA (デフォルト 0: 無効, msaa: 4等で有効化)
 
 // ------------------------------------------
 // 内部: ビューポート計算
@@ -631,6 +631,7 @@ int zen_begin_frame(void) {
     // 1. OSイベント取得 (キー/マウスのコールバックはここで発火する)
     glfwPollEvents();
 
+#ifndef __EMSCRIPTEN__
     // 1.5. 別モニターへの移動検知 (同DPIモニター間の移動やドラッグ完了時のサイズ・位置フィット補正)
     if (s_window_visible && !s_is_fullscreen && !s_in_auto_resize && !glfwGetWindowAttrib(s_window, GLFW_ICONIFIED)) {
         static int s_last_check_wx = -99999, s_last_check_wy = -99999;
@@ -665,6 +666,7 @@ int zen_begin_frame(void) {
             }
         }
     }
+#endif
 
     // 2. 時間更新 (dt を計算するのはここだけ)
     double now = glfwGetTime();
