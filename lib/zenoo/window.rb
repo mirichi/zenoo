@@ -229,18 +229,6 @@ module Zenoo
       @tilemap_shader ||= Shader.new(Shaders::TILEMAP_VERTEX, Shaders::TILEMAP_FRAGMENT)
     end
 
-    def self.mesh_flat_shader
-      @mesh_flat_shader ||= Shader.new(Shaders::MESH_FLAT_VERTEX, Shaders::FLAT_PRIMITIVE_FRAGMENT)
-    end
-
-    def self.mesh_textured_shader
-      @mesh_textured_shader ||= Shader.new(Shaders::MESH_TEXTURED_VERTEX, Shaders::TEXTURED_PRIMITIVE_FRAGMENT)
-    end
-
-    def self.mesh_sprite_shader
-      @mesh_sprite_shader ||= Shader.new(Shaders::MESH_SPRITE_VERTEX, Shaders::DEFAULT_SPRITE_FRAGMENT)
-    end
-
     # ブロック内でのシェーダー適用スコープ (RAII / ensure で確実に元の状態に戻る)
     # ※ カスタムシェーダーは Image 描画 (draw_image) にのみ適用されます。
     def self.with_shader(shader)
@@ -535,7 +523,6 @@ module Zenoo
                         blend: :alpha,
                         shader: nil,
                         uniforms: nil,
-                        src_rect: nil,
                         camera: true,
                         z: 0.0)
       return unless image
@@ -552,13 +539,8 @@ module Zenoo
       end
 
       # 画像サイズ
-      if src_rect
-        draw_w = src_rect[2].to_f
-        draw_h = src_rect[3].to_f
-      else
-        draw_w = image.width.to_f
-        draw_h = image.height.to_f
-      end
+      draw_w = image.width.to_f
+      draw_h = image.height.to_f
 
       # アンカー (anchor: 配置基準点) から画像の左上原点 (tl_x, tl_y) を算出
       anc_x, anc_y = Collision.parse_anchor(anchor)
@@ -591,23 +573,12 @@ module Zenoo
       # blend mode
       b_mode = Backend.normalize_blend_mode(blend)
 
-      if src_rect
-        tw = image.texture_width.to_f
-        th = image.texture_height.to_f
-        s_rx = image.x + src_rect[0].to_f
-        s_ry = image.y + src_rect[1].to_f
-        uv0 = tw > 0.0 ? s_rx / tw : 0.0
-        uv1 = th > 0.0 ? s_ry / th : 0.0
-        uv2 = tw > 0.0 ? draw_w / tw : 1.0
-        uv3 = th > 0.0 ? draw_h / th : 1.0
-      else
-        tw = image.texture_width.to_f
-        th = image.texture_height.to_f
-        uv0 = tw > 0.0 ? image.x.to_f / tw : 0.0
-        uv1 = th > 0.0 ? image.y.to_f / th : 0.0
-        uv2 = tw > 0.0 ? draw_w / tw : 1.0
-        uv3 = th > 0.0 ? draw_h / th : 1.0
-      end
+      tw = image.texture_width.to_f
+      th = image.texture_height.to_f
+      uv0 = tw > 0.0 ? image.x.to_f / tw : 0.0
+      uv1 = th > 0.0 ? image.y.to_f / th : 0.0
+      uv2 = tw > 0.0 ? draw_w / tw : 1.0
+      uv3 = th > 0.0 ? draw_h / th : 1.0
 
       # シェーダーへは常に左上座標 (top_left) を渡し、off_mode = 0.0 とする
       data = [
@@ -793,51 +764,9 @@ module Zenoo
     end
 
     # ----------------------------------------------------
-    # キャッシュ済み頂点バッファ (Mesh) 描画 API
+    # 頂点バッファ (Mesh) 描画 API
     # ----------------------------------------------------
-    def self.compute_view_transform(x = 0.0, y = 0.0, scale_x = 1.0, scale_y = 1.0, camera: true, parallax_x: 1.0, parallax_y: 1.0)
-      mx = x.to_f
-      my = y.to_f
-      sx = scale_x.to_f
-      sy = scale_y.to_f
-
-      cam = @active_camera
-      if cam && camera
-        cz, cox, coy = cam.parallax_view(parallax_x.to_f, parallax_y.to_f)
-        [(mx * cz) + cox + @offset_x, (my * cz) + coy + @offset_y, sx * cz, sy * cz]
-      else
-        [mx + @offset_x, my + @offset_y, sx, sy]
-      end
-    end
-
-    def self.default_mesh_shader_for(pipeline, image)
-      if pipeline == Backend::Pipelines::TILEMAP
-        tilemap_shader
-      elsif pipeline == Backend::Pipelines::SPRITE
-        mesh_sprite_shader
-      elsif pipeline == Backend::Pipelines::TEXTURED_TRIANGLES || pipeline == Backend::Pipelines::TEXTURED_TRIANGLE_STRIP
-        mesh_textured_shader
-      elsif pipeline == Backend::Pipelines::CARD
-        card_shader
-      elsif image
-        mesh_textured_shader
-      else
-        mesh_flat_shader
-      end
-    end
-
-    DEFAULT_WHITE_F4 = [1.0, 1.0, 1.0, 1.0].freeze
-
     def self.draw_mesh(mesh,
-                       x: nil,
-                       y: nil,
-                       scale_x: nil,
-                       scale_y: nil,
-                       color: nil,
-                       alpha: nil,
-                       camera: nil,
-                       parallax_x: nil,
-                       parallax_y: nil,
                        z: 0.0,
                        uniforms: nil,
                        shader: nil,
@@ -847,49 +776,13 @@ module Zenoo
 
       eff_pipeline = mesh.pipeline
       eff_image = image || mesh.image
-      eff_shader = shader || mesh.shader || eff_pipeline.default_shader || default_mesh_shader_for(eff_pipeline, eff_image)
+      eff_shader = shader || mesh.shader || eff_pipeline.default_shader
       eff_blend = Backend.normalize_blend_mode(blend || mesh.blend)
-
-      base_uniforms = if mesh.uniforms && uniforms
-                        mesh.uniforms.merge(uniforms)
-                      else
-                        uniforms || mesh.uniforms
-                      end
-
-      if base_uniforms && base_uniforms.key?(:u_view) && base_uniforms.key?(:u_color)
-        eff_uniforms = base_uniforms
-      else
-        mx  = x.nil? ? (mesh.respond_to?(:x) ? mesh.x : 0.0) : x.to_f
-        my  = y.nil? ? (mesh.respond_to?(:y) ? mesh.y : 0.0) : y.to_f
-        msx = scale_x.nil? ? (mesh.respond_to?(:scale_x) ? mesh.scale_x : 1.0) : scale_x.to_f
-        msy = scale_y.nil? ? (mesh.respond_to?(:scale_y) ? mesh.scale_y : 1.0) : scale_y.to_f
-        mcam = camera.nil? ? (mesh.respond_to?(:camera) ? mesh.camera : true) : camera
-        mpx = parallax_x.nil? ? (mesh.respond_to?(:parallax_x) ? mesh.parallax_x : 1.0) : parallax_x.to_f
-        mpy = parallax_y.nil? ? (mesh.respond_to?(:parallax_y) ? mesh.parallax_y : 1.0) : parallax_y.to_f
-
-        u_view = compute_view_transform(mx, my, msx, msy, camera: mcam, parallax_x: mpx, parallax_y: mpy)
-
-        mcol = color.nil? ? (mesh.respond_to?(:color) ? mesh.color : nil) : color
-        malp = alpha.nil? ? (mesh.respond_to?(:alpha) ? mesh.alpha : 255) : alpha
-        af = malp.is_a?(Float) && malp <= 1.0 ? malp : (malp.to_f / 255.0).clamp(0.0, 1.0)
-
-        u_color = if mcol.nil? && (af - 1.0).abs < 0.0001
-                    DEFAULT_WHITE_F4
-                  elsif mcol.nil?
-                    [1.0, 1.0, 1.0, af]
-                  else
-                    c = Backend.normalize_color(mcol)
-                    [c[0].to_f, c[1].to_f, c[2].to_f, c[3].to_f * af]
-                  end
-
-        if base_uniforms
-          eff_uniforms = base_uniforms.dup
-          eff_uniforms[:u_view] ||= u_view
-          eff_uniforms[:u_color] ||= u_color
-        else
-          eff_uniforms = { u_view: u_view, u_color: u_color }
-        end
-      end
+      eff_uniforms = if mesh.uniforms && uniforms
+                       mesh.uniforms.merge(uniforms)
+                     else
+                       uniforms || mesh.uniforms
+                     end
 
       Backend.enqueue_draw(
         eff_pipeline,
