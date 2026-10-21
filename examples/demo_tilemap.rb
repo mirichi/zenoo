@@ -47,9 +47,9 @@ def create_tileset_image
 end
 
 # 32x32 ピクセル単位で Image 配列に分割
-# (外部ファイルから読み込む場合は Image.load_tiles("tileset.png", 32, 32) も可能)
+# (外部ファイルから読み込む場合は Image.load_tiles("tileset.png", 2, 2) または tile_width: 32, tile_height: 32 も可能)
 tileset_img = create_tileset_image
-tiles = tileset_img.slice_tiles(32, 32)
+tiles = tileset_img.slice_tiles(tile_width: 32, tile_height: 32)
 
 # ----------------------------------------------------
 # 2. マップ配列の定義 (20 列 x 14 行)
