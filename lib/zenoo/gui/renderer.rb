@@ -7,28 +7,28 @@ module Zenoo
     class Renderer
       # ボタン描画
       # state: :normal, :hover, :active
-      def draw_button(x, y, w, h, label, state, theme)
+      def draw_button(x, y, w, h, label, state, theme, **opts)
         raise NotImplementedError, "#{self.class}#draw_button must be implemented"
       end
 
       # スライダー描画
       # state: :normal, :hover, :active
-      def draw_slider(x, y, w, h, label, value, min, max, state, theme)
+      def draw_slider(x, y, w, h, label, value, min, max, state, theme, unit: "", format: nil, **opts)
         raise NotImplementedError, "#{self.class}#draw_slider must be implemented"
       end
 
       # ラベル描画
-      def draw_label(x, y, text, size, color, theme)
+      def draw_label(x, y, text, size, color, theme, **opts)
         raise NotImplementedError, "#{self.class}#draw_label must be implemented"
       end
 
       # テキストボックス描画
-      def draw_text_box(x, y, w, h, text, focused, cursor_pos, blink_on, theme)
+      def draw_text_box(x, y, w, h, text, focused, cursor_pos, blink_on, theme, **opts)
         raise NotImplementedError, "#{self.class}#draw_text_box must be implemented"
       end
 
       # パネル (コンテナ枠) 描画
-      def draw_panel(x, y, w, h, title, theme, opts = {})
+      def draw_panel(x, y, w, h, title, theme, **opts)
         # デフォルトはシンプルな矩形描画
         bg_col = opts[:color] || Color.new(24, 28, 38, 240)
         border_col = opts[:border_color] || Color.new(60, 70, 90, 200)
@@ -46,7 +46,7 @@ module Zenoo
       end
 
       # フローティングウィンドウ装飾 (外枠・タイトルバー) 描画
-      def draw_window(x, y, w, h, title, active, theme, opts = {})
+      def draw_window(x, y, w, h, title, active, theme, **opts)
         win_z       = (opts[:z] || 0.0).to_f
         title_bar_h = (opts[:title_bar_h] || 36.0).to_f
         bg_col      = theme.win_bg || Color.new(30, 30, 32, 245)
@@ -71,15 +71,15 @@ module Zenoo
       # 当たり判定 (Hit-Test)
       # レンダラーの描画形状に合わせてオーバーライド可能
       # ----------------------------------------------------
-      def hit_test_button(x, y, w, h, px, py, theme)
+      def hit_test_button(x, y, w, h, px, py, theme, **opts)
         px >= x && px <= (x + w) && py >= y && py <= (y + h)
       end
 
-      def hit_test_slider(x, y, w, h, px, py, theme)
+      def hit_test_slider(x, y, w, h, px, py, theme, **opts)
         px >= x && px <= (x + w) && py >= y && py <= (y + h)
       end
 
-      def hit_test_text_box(x, y, w, h, px, py, theme)
+      def hit_test_text_box(x, y, w, h, px, py, theme, **opts)
         px >= x && px <= (x + w) && py >= y && py <= (y + h)
       end
     end

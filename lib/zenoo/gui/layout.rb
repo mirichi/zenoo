@@ -209,13 +209,13 @@ module Zenoo
       # コンテナスコープ (panel / window 共通のローカル座標系 & スコープ退避)
       # - clip: true  => Window.clip(..., local: true, z: z) でハードウェアシザー + ローカル座標化
       # - clip: false => Window.offset_x / offset_y のみシフトしてローカル座標化
-      def container(x, y, w, h, clip: false, z: 0.0)
+      def container(x, y, w, h, clip: false, z: 0.0, spacing_x: nil, spacing_y: nil)
         @scope_stack.push(@current)
         @current = LayoutScope.new(
           cursor_x: 0.0,
           cursor_y: 0.0,
-          spacing_x: @current.spacing_x,
-          spacing_y: @current.spacing_y,
+          spacing_x: spacing_x ? spacing_x.to_f : @current.spacing_x,
+          spacing_y: spacing_y ? spacing_y.to_f : @current.spacing_y,
           content_w: w.to_f,
           content_h: h.to_f
         )
