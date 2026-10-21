@@ -2,29 +2,42 @@ class Zenoo::Image
   # 内部描画キュー（Backend が使用）
   attr_accessor :__draw_queue
 
-  # 指定したピクセルサイズ (tile_width, tile_height) で画像を格子状に分割した Image の配列を返す
-  def slice_tiles(tile_width, tile_height)
-    tw = tile_width.to_i
-    th = tile_height.to_i
-    return [] if tw <= 0 || th <= 0
+  # 指定したピクセルサイズまたは分割数で画像を格子状に分割した Image の配列を返す
+  # - 分割数指定 (DXRuby互換): slice_tiles(xcount = 1, ycount = 1)
+  # - ピクセル指定:           slice_tiles(tile_width: 32, tile_height: 32)
+  # ※ 引数未指定時は 1x1 (画像全体) として処理します。
+  def slice_tiles(xcount = 1, ycount = 1, tile_width: nil, tile_height: nil)
+    if tile_width && tile_height
+      tw = tile_width.to_i
+      th = tile_height.to_i
+      return [] if tw <= 0 || th <= 0
+      xc = width / tw
+      yc = height / th
+    else
+      xc = (xcount || 1).to_i
+      yc = (ycount || 1).to_i
+      return [] if xc <= 0 || yc <= 0
+      tw = width / xc
+      th = height / yc
+    end
 
-    xcount = width / tw
-    ycount = height / th
-    return [] if xcount <= 0 || ycount <= 0
+    return [] if xc <= 0 || yc <= 0 || tw <= 0 || th <= 0
 
     tiles = []
-    ycount.times do |cy|
-      xcount.times do |cx|
+    yc.times do |cy|
+      xc.times do |cx|
         tiles << sub_image(cx * tw, cy * th, tw, th)
       end
     end
     tiles
   end
 
-  # ファイルから画像をロードし、指定ピクセルサイズで格子状に分割した配列を生成
-  def self.load_tiles(filename, tile_width, tile_height)
+  # ファイルから画像をロードし、格子状に分割した配列を生成
+  # - 分割数指定 (DXRuby互換): load_tiles(filename, xcount = 1, ycount = 1)
+  # - ピクセル指定:           load_tiles(filename, tile_width: 32, tile_height: 32)
+  def self.load_tiles(filename, xcount = 1, ycount = 1, tile_width: nil, tile_height: nil)
     img = Zenoo::Image.load(filename.to_s)
-    img.slice_tiles(tile_width, tile_height)
+    img.slice_tiles(xcount, ycount, tile_width: tile_width, tile_height: tile_height)
   end
 
   # サブ画像かどうか判定
