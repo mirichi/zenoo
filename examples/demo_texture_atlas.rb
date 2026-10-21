@@ -289,16 +289,16 @@ def draw_atlas_grid(atlas_draw_x, atlas_draw_y)
   end
 end
 
-# D-2. src_rect による直接切り出しプレビュー
+# D-2. sub_image による切り出しプレビュー
 def draw_atlas_preview(prev_x, prev_y, atlas, gallery_frame)
-  draw_panel_text(prev_x, prev_y, "src_rect Direct:", 13, Color.new(255, 215, 0))
+  draw_panel_text(prev_x, prev_y, "sub_image Preview:", 13, Color.new(255, 215, 0))
   Window.draw_rect(prev_x, prev_y + 22.0, 140.0, 140.0,
                    radius: 6.0, color: Color.new(14, 17, 24),
                    border_width: 1.0, border_color: Color.new(70, 90, 125), z: 51.0)
 
+  sub = atlas.sub_image(gallery_frame * SLOT_SIZE, 3 * SLOT_SIZE, SLOT_SIZE, SLOT_SIZE)
   Window.draw_image(
-    prev_x + 38.0, prev_y + 50.0, atlas,
-    src_rect: [gallery_frame * SLOT_SIZE, 3 * SLOT_SIZE, SLOT_SIZE, SLOT_SIZE],
+    prev_x + 38.0, prev_y + 50.0, sub,
     scale: 1.0,
     z: 52.0
   )
@@ -319,7 +319,7 @@ def draw_batch_stats(panel_x, stats_y, panel_w, sprite_count)
   draw_panel_text(panel_x + 45.0, stats_y + 140.0, "- Image#sub_image (Zero Allocation View)", 13, Color.new(170, 190, 220))
   draw_panel_text(panel_x + 45.0, stats_y + 165.0, "- Image.render_to (Slot Local Clipping)", 13, Color.new(170, 190, 220))
   draw_panel_text(panel_x + 45.0, stats_y + 190.0, "- DrawQueue Auto-Batching (1 Draw Call)", 13, Color.new(170, 190, 220))
-  draw_panel_text(panel_x + 45.0, stats_y + 215.0, "- Window.draw_image(..., src_rect: [...])", 13, Color.new(170, 190, 220))
+  draw_panel_text(panel_x + 45.0, stats_y + 215.0, "- DrawQueue Fast Sorting (Z-Buffered)", 13, Color.new(170, 190, 220))
 end
 
 # D. 右側サイドパネル: テクスチャアトラスインスペクター
