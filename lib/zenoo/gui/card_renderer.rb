@@ -9,7 +9,7 @@ module Zenoo
       # ----------------------------------------------------
       # ボタン描画
       # ----------------------------------------------------
-      def draw_button(x, y, w, h, label, state, theme)
+      def draw_button(x, y, w, h, label, state, theme, **_opts)
         rx = x.to_f
         ry = y.to_f
         rw = w.to_f
@@ -82,7 +82,7 @@ module Zenoo
       # ----------------------------------------------------
       # スライダー描画
       # ----------------------------------------------------
-      def draw_slider(x, y, w, h, label, value, min, max, state, theme)
+      def draw_slider(x, y, w, h, label, value, min, max, state, theme, unit: "", format: nil, **_opts)
         rx = x.to_f
         ry = y.to_f
         rw = w.to_f
@@ -108,10 +108,22 @@ module Zenoo
           label_str = label.to_s
           Window.draw_text(rx, ry, label_str, font: f_font, size: f_size, color: theme.text_color)
 
-          # 数値テキスト (小数点以下1桁)
-          v_int = v_val.to_i
-          v_dec = ((v_val - v_int.to_f).abs * 10.0).to_i
-          val_str = "#{v_int}.#{v_dec}"
+          # 数値テキスト
+          val_str = if format
+                      sprintf(format, v_val)
+                    elsif (v_val % 1.0).abs < 0.0001 && (v_min % 1.0).abs < 0.0001 && (v_max % 1.0).abs < 0.0001
+                      v_val.round.to_s
+                    else
+                      v_int = v_val.to_i
+                      v_dec = ((v_val - v_int.to_f).abs * 100.0).round
+                      if v_dec == 0
+                        v_int.to_s
+                      else
+                        v_dec_str = sprintf("%02d", v_dec).sub(/0$/, '')
+                        "#{v_int}.#{v_dec_str}"
+                      end
+                    end
+          val_str = "#{val_str}#{unit}" unless unit.to_s.empty?
           val_w = f_font.text_width(val_str, f_size)
           Window.draw_text(rx + rw - val_w, ry, val_str, font: f_font, size: f_size, color: theme.accent_color)
 
@@ -122,32 +134,38 @@ module Zenoo
           track_h = 8.0
         end
 
-        # トラック溝 (背景)
+        # ノブ (つまみ) 寸法
+        knob_size = 18.0
+        knob_radius = knob_size / 2.0
+        usable_w = [rw - knob_size, 0.0].max
+
+        # トラック溝 (背景): ノブが左右境界からはみ出さないよう可動域に合わせる
+        track_x = rx + knob_radius
+        track_w = usable_w
+
         tb_w = theme.track_border ? theme.track_border[0].to_f : 0.0
         tb_c = theme.track_border ? theme.track_border[1] : :cyan
         Window.draw_rect(
-          rx, track_y, rw, track_h,
+          track_x, track_y, track_w, track_h,
           radius: 4.0,
           color: theme.track_bg,
           border_width: tb_w,
           border_color: tb_c
         )
 
-        # 進行度フィル (左端からノブ位置まで)
-        fill_w = rw * ratio
-        if fill_w > 4.0
+        # 進行度フィル (左端からノブ中心まで)
+        fill_w = track_w * ratio
+        if fill_w > 0.0
           fill_color = (state == :hover || state == :active) ? theme.accent_hover : theme.accent_color
           Window.draw_rect(
-            rx, track_y, fill_w, track_h,
+            track_x, track_y, fill_w, track_h,
             radius: 4.0,
             color: fill_color
           )
         end
 
         # ノブ (つまみ)
-        knob_size = 18.0
-        knob_radius = knob_size / 2.0
-        knob_x = rx + rw * ratio - knob_radius
+        knob_x = rx + usable_w * ratio
         knob_y = track_y + (track_h - knob_size) / 2.0
 
         knob_color = Color::WHITE
@@ -168,7 +186,7 @@ module Zenoo
       # ----------------------------------------------------
       # ラベル描画
       # ----------------------------------------------------
-      def draw_label(x, y, text, size, color, theme)
+      def draw_label(x, y, text, size, color, theme, **_opts)
         return unless text
         f_size = size ? size.to_i : theme.font_size.to_i
         f_size = 16 if f_size <= 0
@@ -180,7 +198,7 @@ module Zenoo
       # ----------------------------------------------------
       # ボタン当たり判定 (SDF Rounded Box 距離関数による厳密判定)
       # ----------------------------------------------------
-      def hit_test_button(x, y, w, h, px, py, theme)
+      def hit_test_button(x, y, w, h, px, py, theme, **_opts)
         rx = x.to_f
         ry = y.to_f
         rw = w.to_f
@@ -228,7 +246,7 @@ module Zenoo
       # ----------------------------------------------------
       # テキストボックス描画
       # ----------------------------------------------------
-      def draw_text_box(x, y, w, h, text, focused, cursor_pos, blink_on, theme)
+      def draw_text_box(x, y, w, h, text, focused, cursor_pos, blink_on, theme, **_opts)
         rx = x.to_f
         ry = y.to_f
         rw = w.to_f
@@ -286,12 +304,12 @@ module Zenoo
         end
       end
 
-      def hit_test_text_box(x, y, w, h, px, py, theme)
-        hit_test_button(x, y, w, h, px, py, theme)
+      def hit_test_text_box(x, y, w, h, px, py, theme, **opts)
+        hit_test_button(x, y, w, h, px, py, theme, **opts)
       end
 
       # パネル (カード枠) 描画
-      def draw_panel(x, y, w, h, title, theme, opts = {})
+      def draw_panel(x, y, w, h, title, theme, **opts)
         rx = x.to_f
         ry = y.to_f
         rw = w.to_f
@@ -328,7 +346,7 @@ module Zenoo
       end
 
       # フローティングウィンドウ (外枠・タイトルバー) 描画
-      def draw_window(x, y, w, h, title, active, theme, opts = {})
+      def draw_window(x, y, w, h, title, active, theme, **opts)
         wx          = x.to_f
         wy          = y.to_f
         ww          = w.to_f

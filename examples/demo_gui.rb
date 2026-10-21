@@ -16,7 +16,7 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     @col_dark    = Color.new(20, 20, 25)
   end
 
-  def draw_button(x, y, w, h, label, state, theme)
+  def draw_button(x, y, w, h, label, state, theme, **_opts)
     bg = @col_normal
     bg = @col_hover if state == :hover
     bg = @col_active if state == :active
@@ -48,7 +48,7 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     end
   end
 
-  def draw_slider(x, y, w, h, label, value, min, max, state, theme)
+  def draw_slider(x, y, w, h, label, value, min, max, state, theme, **_opts)
     range = (max.to_f - min.to_f)
     range = 1.0 if range <= 0.0001
     ratio = (value.to_f - min.to_f) / range
@@ -69,12 +69,12 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     Window.draw_rect(knob_x, track_y - 3.0, 10.0, track_h + 6.0, color: @col_white)
   end
 
-  def draw_label(x, y, text, size, color, theme)
+  def draw_label(x, y, text, size, color, theme, **_opts)
     f_font = theme.font || Font::MPLUS
     Window.draw_text(x, y, text.to_s, font: f_font, size: (size || 16), color: (color || @col_white))
   end
 
-  def draw_text_box(x, y, w, h, text, focused, cursor_pos, blink_on, theme)
+  def draw_text_box(x, y, w, h, text, focused, cursor_pos, blink_on, theme, **_opts)
     bg = focused ? @col_active : @col_normal
     border = focused ? @col_accent : @col_border
 
@@ -94,22 +94,22 @@ class RetroFlatRenderer < Zenoo::GUI::Renderer
     end
   end
 
-  def hit_test_button(x, y, w, h, px, py, theme)
+  def hit_test_button(x, y, w, h, px, py, theme, **_opts)
     px >= x && px <= (x + w) && py >= y && py <= (y + h)
   end
 
-  def hit_test_slider(x, y, w, h, px, py, theme)
+  def hit_test_slider(x, y, w, h, px, py, theme, **_opts)
     px >= x && px <= (x + w) && py >= y && py <= (y + h)
   end
 
-  def hit_test_text_box(x, y, w, h, px, py, theme)
+  def hit_test_text_box(x, y, w, h, px, py, theme, **_opts)
     px >= x && px <= (x + w) && py >= y && py <= (y + h)
   end
 
   # ----------------------------------------------------
   # 対角2隅カット (左上 & 右下 45度面取り) のクラシック・サイバーパネル描画
   # ----------------------------------------------------
-  def draw_panel(x, y, w, h, title, theme, opts = {})
+  def draw_panel(x, y, w, h, title, theme, **opts)
     rx = x.to_f
     ry = y.to_f
     rw = w.to_f
