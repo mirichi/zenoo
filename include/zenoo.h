@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define ZENOO_VERSION "0.1.0"
+#define ZENOO_VERSION "0.2.0"
 
 // カラーヘルパーマクロ (0xRRGGBBAA)
 #define ZEN_RGBA(r, g, b, a) (((uint32_t)(r) << 24) | ((uint32_t)(g) << 16) | ((uint32_t)(b) << 8) | (uint32_t)(a))
