@@ -5,16 +5,32 @@ module Zenoo
     # コンテナ・行ごとのレイアウトスコープ状態
     class LayoutScope
       attr_accessor :cursor_x, :cursor_y, :line_start_x, :line_max_h,
-                    :spacing_x, :spacing_y, :in_row, :content_w, :content_h,
+                    :in_row, :content_w, :content_h,
                     :cols, :col_width
 
+      def spacing_x
+        @spacing_x
+      end
+
+      def spacing_x=(v)
+        @spacing_x = v.to_f
+      end
+
+      def spacing_y
+        @spacing_y
+      end
+
+      def spacing_y=(v)
+        @spacing_y = v.to_f
+      end
+
       def initialize(cursor_x: 0.0, cursor_y: 0.0, spacing_x: 8.0, spacing_y: 8.0, content_w: nil, content_h: nil)
-        @cursor_x     = cursor_x
-        @cursor_y     = cursor_y
-        @line_start_x = cursor_x
+        @cursor_x     = cursor_x.to_f
+        @cursor_y     = cursor_y.to_f
+        @line_start_x = cursor_x.to_f
         @line_max_h   = 0.0
-        @spacing_x    = spacing_x
-        @spacing_y    = spacing_y
+        @spacing_x    = spacing_x.to_f
+        @spacing_y    = spacing_y.to_f
         @in_row       = false
         @content_w    = content_w
         @content_h    = content_h
@@ -157,8 +173,8 @@ module Zenoo
         end
       end
 
-      # 横並びブロック (cols: N を指定するとコンテナ幅を N 等分した幅を自動割り当て)
-      def row(spacing: -1.0, cols: nil)
+      # 横並びブロックの開始
+      def begin_row(spacing: -1.0, cols: nil)
         prev_in_row       = @current.in_row
         prev_line_start_x = @current.line_start_x
         prev_line_max_h   = @current.line_max_h
@@ -186,30 +202,36 @@ module Zenoo
           @current.col_width = nil
         end
 
-        begin
-          yield
-        ensure
-          row_h = @current.line_max_h
-          @current.in_row       = prev_in_row
-          @current.line_start_x = prev_line_start_x
-          @current.cursor_x     = prev_line_start_x
-          @current.spacing_x    = prev_spacing_x
-          @current.cols         = prev_cols
-          @current.col_width    = prev_col_width
+        [prev_in_row, prev_line_start_x, prev_line_max_h, prev_spacing_x, prev_cols, prev_col_width]
+      end
 
-          if @current.in_row
-            @current.line_max_h = [prev_line_max_h, row_h].max
-          else
-            @current.cursor_y += row_h + @current.spacing_y
-            @current.line_max_h = 0.0
-          end
+      # 横並びブロックの終了
+      def end_row(prev)
+        row_h = @current.line_max_h
+        @current.in_row       = prev[0]
+        @current.line_start_x = prev[1]
+        @current.cursor_x     = prev[1]
+        @current.spacing_x    = prev[3]
+        @current.cols         = prev[4]
+        @current.col_width    = prev[5]
+
+        if @current.in_row
+          @current.line_max_h = [prev[2], row_h].max
+        else
+          @current.cursor_y += row_h + @current.spacing_y
+          @current.line_max_h = 0.0
         end
       end
 
-      # コンテナスコープ (panel / window 共通のローカル座標系 & スコープ退避)
-      # - clip: true  => Window.clip(..., local: true, z: z) でハードウェアシザー + ローカル座標化
-      # - clip: false => Window.offset_x / offset_y のみシフトしてローカル座標化
-      def container(x, y, w, h, clip: false, z: 0.0, spacing_x: nil, spacing_y: nil)
+      # 横並びブロック (cols: N を指定するとコンテナ幅を N 等分した幅を自動割り当て)
+      def row(spacing: -1.0, cols: nil)
+        prev = begin_row(spacing: spacing, cols: cols)
+        yield
+        end_row(prev)
+      end
+
+      # コンテナスコープの開始
+      def begin_container(x, y, w, h, clip: false, z: 0.0, spacing_x: nil, spacing_y: nil)
         @scope_stack.push(@current)
         @current = LayoutScope.new(
           cursor_x: 0.0,
@@ -221,23 +243,36 @@ module Zenoo
         )
 
         if clip
-          Window.clip(x, y, w, h, local: true, z: z) do
-            yield
-          end
+          clip_offsets = Window.push_clip_scope(x, y, w, h, local: true, z: z)
+          [true, clip_offsets]
         else
           prev_ox = Window.offset_x
           prev_oy = Window.offset_y
           Window.offset_x = prev_ox + x.to_f
           Window.offset_y = prev_oy + y.to_f
-          begin
-            yield
-          ensure
-            Window.offset_x = prev_ox
-            Window.offset_y = prev_oy
-          end
+          [false, [prev_ox, prev_oy]]
         end
-      ensure
+      end
+
+      # コンテナスコープの終了
+      def end_container(state)
+        is_clip, offsets = state
+        if is_clip
+          Window.pop_clip_scope(offsets[0], offsets[1])
+        else
+          Window.offset_x = offsets[0]
+          Window.offset_y = offsets[1]
+        end
         @current = @scope_stack.pop if @scope_stack.any?
+      end
+
+      # コンテナスコープ (panel / window 共通のローカル座標系 & スコープ退避)
+      # - clip: true  => Window.clip(..., local: true, z: z) でハードウェアシザー + ローカル座標化
+      # - clip: false => Window.offset_x / offset_y のみシフトしてローカル座標化
+      def container(x, y, w, h, clip: false, z: 0.0, spacing_x: nil, spacing_y: nil)
+        state = begin_container(x, y, w, h, clip: clip, z: z, spacing_x: spacing_x, spacing_y: spacing_y)
+        yield
+        end_container(state)
       end
     end
   end

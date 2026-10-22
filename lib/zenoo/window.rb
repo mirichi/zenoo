@@ -6,7 +6,6 @@ module Zenoo
       @camera = nil
       __sync_active_camera
       Backend.with_target(target, &block)
-    ensure
       @camera = old_cam
       __sync_active_camera
     end
@@ -46,9 +45,8 @@ module Zenoo
         while Native::Window.update
           __step_frame
         end
+        Native::Window.shutdown
       end
-    ensure
-      Native::Window.shutdown unless Native::Window.wasm?
     end
 
     def self.__update_step
@@ -88,7 +86,6 @@ module Zenoo
       end
       __update_step
       __draw_step
-    ensure
       Zenoo::Profiler.end_frame if defined?(Zenoo::Profiler)
       Backend.current_target = nil
       Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
@@ -229,13 +226,12 @@ module Zenoo
       @tilemap_shader ||= Shader.new(Shaders::TILEMAP_VERTEX, Shaders::TILEMAP_FRAGMENT)
     end
 
-    # ブロック内でのシェーダー適用スコープ (RAII / ensure で確実に元の状態に戻る)
+    # ブロック内でのシェーダー適用スコープ
     # ※ カスタムシェーダーは Image 描画 (draw_image) にのみ適用されます。
     def self.with_shader(shader)
       old_shader = @current_shader
       @current_shader = shader
       yield
-    ensure
       @current_shader = old_shader
     end
 
@@ -261,12 +257,9 @@ module Zenoo
         old_cam = @camera
         @camera = cam
         __sync_active_camera
-        begin
-          yield
-        ensure
-          @camera = old_cam
-          __sync_active_camera
-        end
+        yield
+        @camera = old_cam
+        __sync_active_camera
       elsif cam
         self.camera = cam
       else
@@ -283,12 +276,9 @@ module Zenoo
     def self.without_camera
       @camera_disabled_depth += 1
       __sync_active_camera
-      begin
-        yield
-      ensure
-        @camera_disabled_depth -= 1
-        __sync_active_camera
-      end
+      yield
+      @camera_disabled_depth -= 1
+      __sync_active_camera
     end
 
     def self.camera_enabled?
@@ -337,7 +327,7 @@ module Zenoo
     # - local: false => 元の画面座標系のまま指定矩形外をクリップ (Ebitengine SubImage 風)
     # - local: true  => クリップ矩形の左上を (0, 0) とするローカル相対座標系 (UI ウィンドウ用)
     # - z: Float     => クリップ全体の親キューにおける Z レベル。クリップ内部は独立して Z ソートされます。
-    def self.clip(x, y, w, h, local: false, z: 0.0)
+    def self.push_clip_scope(x, y, w, h, local: false, z: 0.0)
       prev_ox = @offset_x
       prev_oy = @offset_y
 
@@ -350,7 +340,10 @@ module Zenoo
       # 親クリップ矩形との交差判定 (AABB Intersection)
       parent_clip = Backend.current_clip
       if parent_clip
-        px, py, pw, ph = parent_clip[0], parent_clip[1], parent_clip[2], parent_clip[3]
+        px = parent_clip[0]
+        py = parent_clip[1]
+        pw = parent_clip[2]
+        ph = parent_clip[3]
         x1 = [abs_x, px].max
         y1 = [abs_y, py].max
         x2 = [abs_x + req_w, px + pw].min
@@ -373,12 +366,19 @@ module Zenoo
       end
 
       Backend.push_clip([clip_x, clip_y, clip_w, clip_h], z)
+      [prev_ox, prev_oy]
+    end
 
-      yield
-    ensure
+    def self.pop_clip_scope(prev_ox, prev_oy)
       Backend.pop_clip
       @offset_x = prev_ox
       @offset_y = prev_oy
+    end
+
+    def self.clip(x, y, w, h, local: false, z: 0.0)
+      prev_ox, prev_oy = push_clip_scope(x, y, w, h, local: local, z: z)
+      yield
+      pop_clip_scope(prev_ox, prev_oy)
     end
 
     DEFAULT_SHADOW_COLOR = [0, 0, 0, 180].freeze
@@ -1234,7 +1234,6 @@ module Zenoo
       end
       c.begin_path
       yield c
-    ensure
       c.restore if has_transform
     end
   end

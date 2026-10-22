@@ -109,11 +109,8 @@ module Zenoo
       def with_window_context(win_id)
         prev_win_id = @current_window_id
         @current_window_id = win_id
-        begin
-          yield
-        ensure
-          @current_window_id = prev_win_id
-        end
+        yield
+        @current_window_id = prev_win_id
       end
 
       private
