@@ -67,7 +67,6 @@ module Zenoo
                    @theme.dup.update(**overrides)
                  end
         yield
-      ensure
         @theme = old_theme
       end
 
@@ -231,13 +230,13 @@ module Zenoo
       # --------------------------------------------------
       # コンテナ (Panel / Window)
       # --------------------------------------------------
-      # パネル (コンテナ枠)
-      def panel(title = "", x: nil, y: nil, w: nil, h: 400.0, padding: 16.0,
-                radius: -1.0, color: nil,
-                border_width: nil, border_color: nil,
-                shadow_blur: 8.0, shadow_color: Color.new(0, 0, 0, 120),
-                z: 0.0, title_size: 18, title_color: nil, clip: false,
-                spacing_x: nil, spacing_y: nil)
+      # パネルの開始 (描画とコンテナ設定を別関数に切り出し、yieldのインライン展開肥大化を防止)
+      def begin_panel(title = "", x: nil, y: nil, w: nil, h: 400.0, padding: 16.0,
+                      radius: -1.0, color: nil,
+                      border_width: nil, border_color: nil,
+                      shadow_blur: 8.0, shadow_color: Color.new(0, 0, 0, 120),
+                      z: 0.0, title_size: 18, title_color: nil, clip: false,
+                      spacing_x: nil, spacing_y: nil)
         px  = x ? x.to_f : @layout.cursor_x
         py  = y ? y.to_f : @layout.cursor_y
         pw  = @layout.resolve_width(w, 360.0)
@@ -266,28 +265,51 @@ module Zenoo
 
         @renderer.draw_panel(px, py, pw, ph, title, @theme, **opts)
 
-        if block_given?
-          header_h  = title.to_s.empty? ? 0.0 : (title_size.to_i + (spacing_y || @layout.spacing_y) + 4.0)
-          content_x = px + pad
-          content_y = py + pad + header_h
-          content_w = [pw - pad * 2.0, 0.0].max
-          content_h = [ph - pad * 2.0 - header_h, 0.0].max
+        header_h  = title.to_s.empty? ? 0.0 : (title_size.to_i + (spacing_y || @layout.spacing_y) + 4.0)
+        content_x = px + pad
+        content_y = py + pad + header_h
+        content_w = [pw - pad * 2.0, 0.0].max
+        content_h = [ph - pad * 2.0 - header_h, 0.0].max
 
-          @layout.container(content_x, content_y, content_w, content_h, clip: clip, z: z.to_f, spacing_x: spacing_x, spacing_y: spacing_y) do
-            yield
-          end
-        end
-
-        @layout.advance(pw, ph) if x.nil? && y.nil?
+        container_state = @layout.begin_container(content_x, content_y, content_w, content_h, clip: clip, z: z.to_f, spacing_x: spacing_x, spacing_y: spacing_y)
+        [pw, ph, !x.nil? || !y.nil?, container_state]
       end
 
-      # フローティングウィンドウ (Window)
-      # - ドラッグ移動、タイトルバー、最前面フォーカス切り替え
-      # - Window.clip(local: true) によるコンテンツのビューポートクリッピング
-      def window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0)
+      # パネルの終了
+      def end_panel(state)
+        pw, ph, is_manual_pos, container_state = state
+        @layout.end_container(container_state)
+        @layout.advance(pw, ph) unless is_manual_pos
+      end
+
+      # パネル (コンテナ枠)
+      def panel(title = "", x: nil, y: nil, w: nil, h: 400.0, padding: 16.0,
+                radius: -1.0, color: nil,
+                border_width: nil, border_color: nil,
+                shadow_blur: 8.0, shadow_color: Color.new(0, 0, 0, 120),
+                z: 0.0, title_size: 18, title_color: nil, clip: false,
+                spacing_x: nil, spacing_y: nil)
+        state = begin_panel(
+          title, x: x, y: y, w: w, h: h, padding: padding,
+          radius: radius, color: color,
+          border_width: border_width, border_color: border_color,
+          shadow_blur: shadow_blur, shadow_color: shadow_color,
+          z: z, title_size: title_size, title_color: title_color, clip: clip,
+          spacing_x: spacing_x, spacing_y: spacing_y
+        )
+        if block_given?
+          yield
+          end_panel(state)
+        else
+          end_panel(state)
+        end
+      end
+
+      # ウィンドウの開始
+      def begin_window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0)
         win_id = id.to_s.empty? ? title.to_s : id.to_s
         win = @win_mgr.find_or_create(win_id, title, x, y, w, h)
-        return unless win.open
+        return nil unless win.open
 
         wx = win.x
         wy = win.y
@@ -298,24 +320,37 @@ module Zenoo
         is_active = @win_mgr.active?(win_id)
         win_z = win.z
 
-        # タイトルバーのドラッグ開始判定
         @win_mgr.check_drag_start(win, title_bar_h, @mouse_x, @mouse_y, @mouse_push)
-
-        # 1. ウィンドウ全体の装飾描画 (Renderer へ委譲)
         @renderer.draw_window(wx, wy, ww, wh, win.title, is_active, @theme, z: win_z, title_bar_h: title_bar_h)
-
-        # 2. コンテンツ領域のクリッピング & レイアウトスコープ
-        return unless block_given?
 
         content_x = wx + pad
         content_y = wy + title_bar_h + 8.0
         content_w = [ww - pad * 2.0, 0.0].max
         content_h = [wh - title_bar_h - pad - 8.0, 0.0].max
 
+        container_state = @layout.begin_container(content_x, content_y, content_w, content_h, clip: true, z: win_z + 10.0)
+        [win, win_id, container_state]
+      end
+
+      # ウィンドウの終了
+      def end_window(state)
+        return unless state
+        _win, _win_id, container_state = state
+        @layout.end_container(container_state)
+      end
+
+      # フローティングウィンドウ (Window)
+      # - ドラッグ移動、タイトルバー、最前面フォーカス切り替え
+      # - Window.clip(local: true) によるコンテンツのビューポートクリッピング
+      def window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0)
+        state = begin_window(title, x: x, y: y, w: w, h: h, id: id, padding: padding)
+        return unless state
+        return unless block_given?
+
+        win, win_id, _cs = state
         @win_mgr.with_window_context(win_id) do
-          @layout.container(content_x, content_y, content_w, content_h, clip: true, z: win_z + 10.0) do
-            yield win
-          end
+          yield win
+          end_window(state)
         end
       end
 

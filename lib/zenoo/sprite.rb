@@ -205,7 +205,9 @@ module Zenoo
     end
 
     def collider_offset_x=(v)
-      collider.offset_x = v.to_f
+      col = collider
+      col.offset_x = v.to_f if col
+      nil
     end
 
     def collider_offset_y
@@ -213,7 +215,9 @@ module Zenoo
     end
 
     def collider_offset_y=(v)
-      collider.offset_y = v.to_f
+      col = collider
+      col.offset_y = v.to_f if col
+      nil
     end
 
     def collider_offset

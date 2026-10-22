@@ -78,7 +78,7 @@ class Zenoo::Image
     end
 
     yield
-  ensure
+
     if is_sub
       Zenoo::Backend.pop_clip
       Zenoo::Window.offset_x = prev_ox

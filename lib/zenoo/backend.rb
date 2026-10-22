@@ -421,7 +421,6 @@ module Zenoo
       old_target = @current_target
       @current_target = target
       yield
-    ensure
       @current_target = old_target
     end
 

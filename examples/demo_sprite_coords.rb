@@ -592,7 +592,7 @@ simulator = CoordsSimulator.new
 test_frames = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
 
-Window.loop(1280, 720, "Zenoo - Sprite & Collision Coords Visualizer") do
+Window.loop(1280, 720, "Zenoo - Sprite & Collision Coords Visualizer", msaa: 4) do
   simulator.step_frame
   if test_frames > 0
     frame_count += 1
