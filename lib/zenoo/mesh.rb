@@ -11,7 +11,7 @@ module Zenoo
     # - data: pack("f*") された頂点バイナリ文字列 (String)
     # - count: 描画する頂点数 (またはインスタンス数)
     # - pipeline: 描画パイプライン (:triangles, :lines, :points, :triangle_strip,
-    #             :textured_triangles, :textured_triangle_strip, :sprite, :card, :tilemap, または Backend::Pipeline)
+    #             :textured_triangles, :textured_triangle_strip, :sprite, :card, または Backend::Pipeline)
     # - image: 描画に使用するテクスチャ (Zenoo::Image, 省略時は nil)
     # - shader: 描画に使用するシェーダー (Zenoo::Shader, 省略時はパイプライン既定)
     # - uniforms: シェーダーに渡す Uniform ハッシュ (例: { u_time: 1.0, ... })
@@ -76,8 +76,6 @@ module Zenoo
         Backend::Pipelines::SPRITE
       when :card
         Backend::Pipelines::CARD
-      when :tilemap
-        Backend::Pipelines::TILEMAP
       else
         Backend::Pipelines::TRIANGLES
       end

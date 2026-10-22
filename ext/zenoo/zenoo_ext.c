@@ -616,8 +616,18 @@ static VALUE win_set_vsync(VALUE self, VALUE rb_vsync) {
 
 static VALUE win_set_target_fps(VALUE self, VALUE rb_fps) {
     (void)self;
-    zen_set_target_fps(NUM2INT(rb_fps));
+    int fps = 0;
+    if (RTEST(rb_fps)) {
+        fps = NUM2INT(rb_fps);
+        if (fps < 0) fps = 0;
+    }
+    zen_set_target_fps(fps);
     return rb_fps;
+}
+
+static VALUE win_get_target_fps(VALUE self) {
+    (void)self;
+    return INT2NUM(zen_get_target_fps());
 }
 
 static VALUE win_get_delta_time(VALUE self) {
@@ -1094,6 +1104,7 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "msaa_samples", win_get_msaa_samples, 0);
     rb_define_singleton_method(mWindow, "vsync=", win_set_vsync, 1);
     rb_define_singleton_method(mWindow, "target_fps=", win_set_target_fps, 1);
+    rb_define_singleton_method(mWindow, "target_fps", win_get_target_fps, 0);
     rb_define_singleton_method(mWindow, "delta_time", win_get_delta_time, 0);
     rb_define_singleton_method(mWindow, "time", win_get_time, 0);
     rb_define_singleton_method(mWindow, "shutdown", win_shutdown, 0);

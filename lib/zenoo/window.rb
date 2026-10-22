@@ -16,14 +16,14 @@ module Zenoo
     @fps_accum = 0.0
 
     # DXRuby風メインループ (scale: nil の場合はモニターのDPIスケールを自動検出)
-    def self.loop(width = 1280, height = 720, title = "Zenoo", scale: nil, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, msaa: nil, &block)
+    def self.loop(width = 1280, height = 720, title = "Zenoo", scale: nil, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, msaa: nil, fps: 60, &block)
       self.msaa = msaa unless msaa.nil?
       win_w = window_width ? window_width.to_i : (scale ? (width * scale).to_i : 0)
       win_h = window_height ? window_height.to_i : (scale ? (height * scale).to_i : 0)
       Native::Window.init(width, height, title, fullscreen, win_w, win_h, scale_mode)
       Native::Window.scale_mode = scale_mode if Native::Window.respond_to?(:scale_mode=)
       Native::Window.vsync = (vsync ? 1 : 0)
-      Native::Window.target_fps = 60
+      self.target_fps = fps
       Font.atlas_image if defined?(Font) && Font.respond_to?(:atlas_image)
 
       @main_loop_block = block
@@ -143,9 +143,22 @@ module Zenoo
       @fps || 60.0
     end
 
+    def self.fps=(val)
+      self.target_fps = val
+    end
+
+    def self.target_fps=(val)
+      t = (val.nil? || val.to_i <= 0) ? 0 : val.to_i
+      Native::Window.target_fps = t if defined?(Native::Window) && Native::Window.respond_to?(:target_fps=)
+    end
+
+    def self.target_fps
+      defined?(Native::Window) && Native::Window.respond_to?(:target_fps) ? Native::Window.target_fps : 60
+    end
+
     def self.__update_fps
       dt = delta_time
-      return if dt <= 0.0001 || dt > 1.0
+      return if dt <= 0.0 || dt > 1.0
       @fps_frames = (@fps_frames || 0) + 1
       @fps_accum = (@fps_accum || 0.0) + dt
       if @fps_accum >= 0.25
@@ -210,10 +223,6 @@ module Zenoo
 
     def self.card_shader
       @card_shader ||= Shader.new(Shaders::CARD_VERTEX, Shaders::CARD_FRAGMENT)
-    end
-
-    def self.tilemap_shader
-      @tilemap_shader ||= Shader.new(Shaders::TILEMAP_VERTEX, Shaders::TILEMAP_FRAGMENT)
     end
 
     # ブロック内でのシェーダー適用スコープ
