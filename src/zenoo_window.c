@@ -671,7 +671,7 @@ int zen_begin_frame(void) {
     // 2. 時間更新 (dt を計算するのはここだけ)
     double now = glfwGetTime();
     double dt = s_first_frame ? ZEN_DEFAULT_DT : (now - s_frame_start_time);
-    if (dt <= 0.0001) dt = ZEN_DEFAULT_DT;
+    if (dt <= 0.0) dt = 0.000001;
 #ifdef __EMSCRIPTEN__
     // 極端なラグ時（タブバックグラウンド移行等）のスパイラル防止
     if (dt > 0.2) dt = 0.2;

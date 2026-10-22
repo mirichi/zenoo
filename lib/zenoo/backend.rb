@@ -36,7 +36,6 @@ module Zenoo
       QUAD_INSTANCED      = CARD_INSTANCED
       SPRITE_INSTANCED    = "\x04\x04\x04\x04\x04"
       FONT_INSTANCED      = "\x04\x04\x04\x04\x04\x04\x04"
-      TILE_INSTANCED      = "\x04\x04"
     end
 
     # ----------------------------------------------------
@@ -51,7 +50,6 @@ module Zenoo
       QUAD_INSTANCED      = CARD_INSTANCED
       SPRITE_INSTANCED    = "\x01\x01\x01\x01\x01"
       FONT_INSTANCED      = "\x01\x01\x01\x01\x01\x01\x01"
-      TILE_INSTANCED      = "\x01\x01"
     end
 
     # ----------------------------------------------------
@@ -73,7 +71,6 @@ module Zenoo
       CARD                    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::CARD_INSTANCED, Divisor::CARD_INSTANCED, 4)
       SPRITE                  = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::SPRITE_INSTANCED, Divisor::SPRITE_INSTANCED, 4)
       FONT                    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::FONT_INSTANCED, Divisor::FONT_INSTANCED, 4)
-      TILEMAP                 = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::TILE_INSTANCED, Divisor::TILE_INSTANCED, 4)
       TRIANGLES               = Pipeline.new(Topology::TRIANGLES, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)
       TRIANGLE_STRIP          = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)
       LINES                   = Pipeline.new(Topology::LINES, Layout::LINE, Divisor::LINE, 0)
