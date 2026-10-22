@@ -149,7 +149,6 @@ module Zenoo
       r_part = @r >= 128 ? ((@r - 256) * 16777216) : (@r << 24)
       r_part | (@g << 16) | (@b << 8) | @a
     end
-    alias to_uint32 to_i
 
     def ==(other)
       other.is_a?(Color) && @r == other.r && @g == other.g && @b == other.b && @a == other.a

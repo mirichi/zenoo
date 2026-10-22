@@ -102,8 +102,8 @@ module Zenoo
         @pivot_x = 0.5
         @pivot_y = 0.5
 
-        set_anchor(anchor)
-        set_pivot(pivot)
+        self.anchor = anchor
+        self.pivot = pivot
         dirty_pos!
         dirty_geom!
       end
@@ -311,10 +311,6 @@ module Zenoo
         self.center_x = cx
         self.center_y = cy
       end
-
-      # 内部初期化用エイリアス
-      alias set_anchor anchor=
-      alias set_pivot pivot=
     end
 
     # 円 / 楕円 (楕円は不等半径・不等スケールの Circle として包含)
@@ -1612,13 +1608,6 @@ module Zenoo
         end
       end
       hits
-    end
-
-    class << self
-      alias overlap penetration
-      alias intersect penetration
-      alias overlap_all penetration_all
-      alias intersect_all penetration_all
     end
 
     # 真円 vs 真円の押し出し

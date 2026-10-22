@@ -251,7 +251,6 @@ module Zenoo
       return false unless col_b
       Collision.check(col_a, col_b)
     end
-    alias collides_with? collide?
 
     def ===(other)
       collide?(other)
@@ -265,7 +264,6 @@ module Zenoo
       return nil unless col_b
       Collision.penetration(col_a, col_b)
     end
-    alias overlap_with penetration
 
     # other から自動的にめり込み解消 (位置を直接更新)
     # other が配列の場合は各オブジェクトに対して順次押し出しを行う
