@@ -259,18 +259,17 @@ module Zenoo
       self
     end
 
-    # ループ回数を指定 (count = true または :infinite で無限ループ)
-    def loop(count = true)
+    # 繰り返し回数を指定 (count = true または :infinite で無限ループ)
+    def repeat(count = true)
       @loop_mode = (count == true || count == :infinite) ? :infinite : count.to_i
       @initial_loop = @loop_mode
       self
     end
-    alias repeat loop
 
     # 順再生と逆再生を交互に行う
     def yoyo(count = true)
       @yoyo = true
-      loop(count)
+      repeat(count)
       self
     end
 

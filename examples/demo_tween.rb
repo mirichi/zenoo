@@ -6,7 +6,7 @@ require_relative '../lib/zenoo'
 # Zenoo Tween & Easing Animation デモ
 # ==============================================================================
 # 1. 豊富なイージング関数 (Bounce, Elastic, Back, Quad, Linear 等)
-# 2. メソッドチェーン (.to, .delay, .call, .loop, .yoyo)
+# 2. メソッドチェーン (.to, .delay, .call, .repeat, .yoyo)
 # 3. .call { ... } による時間軸イベント発火 (画像切替・SE・ステータス更新)
 # 4. インタラクティブなクリック追従 Tween & 一括制御 (stop/finish)
 # ==============================================================================

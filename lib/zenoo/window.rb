@@ -1,15 +1,5 @@
 module Zenoo
   module Window
-    # オフスクリーンFBO描画ターゲットスコープ
-    def self.with_target(target, &block)
-      old_cam = @camera
-      @camera = nil
-      __sync_active_camera
-      Backend.with_target(target, &block)
-      @camera = old_cam
-      __sync_active_camera
-    end
-
     def self.current_target
       Backend.current_target
     end
@@ -396,10 +386,12 @@ module Zenoo
                        angle: 0.0,
                        pivot: nil,
                        image: nil,
+                       blend: :alpha,
                        camera: true,
                        z: 0.0)
       actual_color = color || (border_color ? nil : :white)
       c_color = Backend.normalize_color(actual_color)
+      b_mode = Backend.normalize_blend_mode(blend)
 
       cam = @active_camera
       if cam && camera
@@ -441,6 +433,7 @@ module Zenoo
           data,
           6,
           shader: flat_primitive_shader,
+          blend: b_mode,
           z: z
         )
         return
@@ -484,6 +477,7 @@ module Zenoo
         1,
         image: image,
         shader: card_shader,
+        blend: b_mode,
         z: z
       )
     end
@@ -494,7 +488,7 @@ module Zenoo
                         border_width: nil,
                         shadow_blur: 0.0,
                         shadow_color: nil,
-                        image: nil,
+                        blend: :alpha,
                         camera: true,
                         z: 0.0)
       rf = r.to_f
@@ -506,7 +500,7 @@ module Zenoo
                 border_width: border_width,
                 shadow_blur: shadow_blur,
                 shadow_color: shadow_color,
-                image: image,
+                blend: blend,
                 camera: camera,
                 z: z)
     end
@@ -638,7 +632,8 @@ module Zenoo
     end
 
 
-    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color: :white, camera: true, z: 0.0)
+    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color: :white, blend: :alpha, camera: true, z: 0.0)
+      b_mode = Backend.normalize_blend_mode(blend)
       cam = @active_camera
       if cam && camera
         cz, cam_ox, cam_oy = cam.view
@@ -678,12 +673,14 @@ module Zenoo
         data,
         3,
         shader: flat_primitive_shader,
+        blend: b_mode,
         z: z
       )
     end
 
-    def self.draw_line(x1, y1, x2, y2, color: :white, width: 1.0, camera: true, z: 0.0)
+    def self.draw_line(x1, y1, x2, y2, color: :white, width: 1.0, blend: :alpha, camera: true, z: 0.0)
       actual_color = color || :white
+      b_mode = Backend.normalize_blend_mode(blend)
       cam = @active_camera
       if cam && camera
         cz, cam_ox, cam_oy = cam.view
@@ -745,6 +742,7 @@ module Zenoo
           data,
           6,
           shader: flat_primitive_shader,
+          blend: b_mode,
           z: z
         )
       else
@@ -758,6 +756,7 @@ module Zenoo
           data,
           2,
           shader: flat_primitive_shader,
+          blend: b_mode,
           z: z
         )
       end
