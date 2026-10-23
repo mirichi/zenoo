@@ -172,7 +172,7 @@ build_game() {
 build_gui() {
     echo "=== Building Immediate Mode GUI Demo (${DOCS_DIR}/gui) ==="
     mkdir -p "${DOCS_DIR}/gui"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_gui.rb -c -o "${DOCS_DIR}/gui/app.c"
+    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_gui_widgets.rb -c -o "${DOCS_DIR}/gui/app.c"
     strip_always_inline "${DOCS_DIR}/gui/app.c"
 
     emcc "${COMMON_EMCC_FLAGS[@]}" \

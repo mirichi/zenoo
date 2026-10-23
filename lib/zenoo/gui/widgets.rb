@@ -750,10 +750,10 @@ module Zenoo
         prev_ox, prev_oy = Window.push_clip_scope(rx + 2.0, ry + 2.0, view_w, clip_h, local: true)
 
         # レイアウトコンテナ開始 (スクロールオフセット分だけカーソルを上にオフセット)
-        prev_cx = @layout.cursor_x
-        prev_cy = @layout.cursor_y
+        # content_w を view_w - 4.0 に設定することで、左右4pxパディングを保ちつつ
+        # 自動幅ウィジェットがスクロールバーと重ならず綺麗に領域内に収まる
         start_y = pad_y - scroll_y
-        @layout.cursor(4.0, start_y)
+        @layout.push_scope(content_w: view_w - 4.0, cursor_x: 4.0, cursor_y: start_y)
 
         yield
 
@@ -763,7 +763,7 @@ module Zenoo
         content_bottom = (end_y > start_y) ? (end_y - sp_y - start_y) : 0.0
         Widgets.scroll_states["#{widget_id}_content_h"] = content_bottom
 
-        @layout.cursor(prev_cx, prev_cy)
+        @layout.pop_scope
         Window.pop_clip_scope(prev_ox, prev_oy)
 
         # スクロールバー描画
