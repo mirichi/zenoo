@@ -254,23 +254,6 @@ build_atlas() {
     echo "-> Atlas build done!"
 }
 
-build_window() {
-    echo "=== Building Multi-Window & Occlusion Demo (${DOCS_DIR}/window) ==="
-    mkdir -p "${DOCS_DIR}/window"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_window_drag.rb -c -o "${DOCS_DIR}/window/app.c"
-    strip_always_inline "${DOCS_DIR}/window/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/window/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/window/index.html" \
-        --shell-file examples/web/shell_window.html
-
-    patch_emscripten_js "${DOCS_DIR}/window/index.js"
-    rm -f "${DOCS_DIR}/window/app.c"
-    echo "-> Window build done!"
-}
-
 build_clip() {
     echo "=== Building Hardware Clipping Demo (${DOCS_DIR}/clip) ==="
     mkdir -p "${DOCS_DIR}/clip"
@@ -431,7 +414,6 @@ case "$TARGET" in
     vector)       build_vector ;;
     image)        build_image ;;
     atlas)        build_atlas ;;
-    window)       build_window ;;
     clip)         build_clip ;;
     sound)        build_sound ;;
     collision)    build_collision ;;
@@ -454,8 +436,6 @@ case "$TARGET" in
         sleep 0.5
         build_atlas
         sleep 0.5
-        build_window
-        sleep 0.5
         build_clip
         sleep 0.5
         build_sound
@@ -476,7 +456,7 @@ case "$TARGET" in
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|window|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|all]"
         exit 1
         ;;
 esac
@@ -491,7 +471,6 @@ echo " Font     : ${DOCS_DIR}/font/index.html"
 echo " Vector   : ${DOCS_DIR}/vector/index.html"
 echo " Image    : ${DOCS_DIR}/image/index.html"
 echo " Atlas    : ${DOCS_DIR}/atlas/index.html"
-echo " Window   : ${DOCS_DIR}/window/index.html"
 echo " Clip     : ${DOCS_DIR}/clip/index.html"
 echo " Sound    : ${DOCS_DIR}/sound/index.html"
 echo " Collision: ${DOCS_DIR}/collision/index.html"
