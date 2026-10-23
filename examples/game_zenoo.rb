@@ -920,7 +920,7 @@ class Game
   # ワールド全体を初期状態に戻す (リトライ時にも使用)
   def reset_world
     @player = Player.new(1280.0 / 2.0, 720.0 / 2.0)
-    @camera = Camera2D.new(target: @player, smooth_speed: 0.8)
+    @camera = Camera.new(target: @player, smooth_speed: 0.8)
     @bullets = []
     @missiles = []
     @enemies = []

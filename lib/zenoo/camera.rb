@@ -8,7 +8,7 @@ module Zenoo
   # #view が [zoom, ox, oy] を返します。値はパラメータ変更時 (dirty) または
   # 画面サイズ変化時のみ再計算され、それ以外はキャッシュを返します。
   # Window 側はこの #view を描画時に参照するだけで、Camera から Window への依存はありません。
-  class Camera2D
+  class Camera
     attr_reader :x, :y, :zoom
     attr_reader :offset_x, :offset_y
     attr_accessor :smooth_speed
