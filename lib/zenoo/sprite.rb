@@ -15,6 +15,8 @@ module Zenoo
       @scale_y = 1.0
       @anchor_x = 0.0
       @anchor_y = 0.0
+      @pivot_x = 0.5
+      @pivot_y = 0.5
       self.anchor = anchor
       self.pivot = pivot
       @alpha = 255
@@ -23,9 +25,23 @@ module Zenoo
       @shader = shader
       @uniforms = uniforms
       @visible = true
+      @vanished = false
 
       # コライダー管理
       @collider_shape = nil
+    end
+
+    # ライフサイクル管理 (消滅)
+    def vanish
+      @vanished = true
+    end
+
+    def vanished?
+      @vanished
+    end
+
+    # フレーム更新 (継承先でオーバーライド)
+    def update
     end
 
     def x=(v)
@@ -78,25 +94,30 @@ module Zenoo
     def pivot=(v)
       return if @pivot == v
       @pivot = v
+      pv = Collision.parse_pivot(v)
+      @pivot_x = pv[0]
+      @pivot_y = pv[1]
       @collider_shape&.dirty_geom!
     end
 
     def pivot_x
-      Collision.parse_pivot(@pivot)[0]
+      @pivot_x || 0.5
     end
 
     def pivot_y
-      Collision.parse_pivot(@pivot)[1]
+      @pivot_y || 0.5
     end
 
     def pivot_x=(v)
-      py = pivot_y
-      self.pivot = [v.to_f, py]
+      @pivot_x = v.to_f
+      @pivot = [@pivot_x, pivot_y]
+      @collider_shape&.dirty_geom!
     end
 
     def pivot_y=(v)
-      px = pivot_x
-      self.pivot = [px, v.to_f]
+      @pivot_y = v.to_f
+      @pivot = [pivot_x, @pivot_y]
+      @collider_shape&.dirty_geom!
     end
 
     def anchor
@@ -249,9 +270,10 @@ module Zenoo
 
     # 衝突判定
     def collide?(other)
+      return false if @vanished || other.vanished?
       col_a = self.collider
       return false unless col_a
-      col_b = other.respond_to?(:collider) ? other.collider : other
+      col_b = other.is_a?(Collision::Shape) ? other : (other.respond_to?(:collider) ? other.collider : nil)
       return false unless col_b
       Collision.check(col_a, col_b)
     end
@@ -262,9 +284,10 @@ module Zenoo
 
     # 衝突めり込み量・押し出しベクトルを取得 (MTV: 衝突していない場合は nil)
     def penetration(other)
+      return nil if @vanished || other.vanished?
       col_a = self.collider
       return nil unless col_a
-      col_b = other.respond_to?(:collider) ? other.collider : other
+      col_b = other.is_a?(Collision::Shape) ? other : (other.respond_to?(:collider) ? other.collider : nil)
       return nil unless col_b
       Collision.penetration(col_a, col_b)
     end
@@ -272,6 +295,7 @@ module Zenoo
     # other から自動的にめり込み解消 (位置を直接更新)
     # other が配列の場合は各オブジェクトに対して順次押し出しを行う
     def push_out_of(other)
+      return nil if @vanished
       if other.is_a?(Array)
         resolved_hits = []
         other.each do |item|
@@ -293,12 +317,53 @@ module Zenoo
 
     # 描画
     def draw(camera: true, z: nil, blend: nil, shader: nil, uniforms: nil)
+      return if @vanished
       Window.draw_sprite(self, camera: camera, z: z, blend: blend, shader: shader, uniforms: uniforms)
     end
 
     # 単一または配列スプライトの一括描画 (DXRuby互換)
     def self.draw(sprites, camera: true, z: nil, blend: nil, shader: nil, uniforms: nil)
       Window.draw_sprite(sprites, camera: camera, z: z, blend: blend, shader: shader, uniforms: uniforms)
+    end
+
+    # 単一または配列スプライトの一括フレーム更新 (DXRuby互換)
+    def self.update(sprites)
+      return unless sprites
+      if sprites.is_a?(Array)
+        i = 0
+        len = sprites.length
+        while i < len
+          sp = sprites[i]
+          sp.update if sp && !sp.vanished?
+          i += 1
+        end
+      else
+        sprites.update unless sprites.vanished?
+      end
+    end
+
+    # 配列から消滅済み (vanished?) スプライトを一括除去 (インプレース・ゼロアロケーション)
+    def self.clean(sprites)
+      return sprites unless sprites.is_a?(Array)
+
+      write_idx = 0
+      i = 0
+      len = sprites.length
+      while i < len
+        sp = sprites[i]
+        if sp && !sp.vanished?
+          sprites[write_idx] = sp if write_idx != i
+          write_idx += 1
+        end
+        i += 1
+      end
+
+      # 末尾を切り詰める
+      while sprites.length > write_idx
+        sprites.pop
+      end
+
+      sprites
     end
 
     # スプライト同士・配列同士の一括衝突判定 (DXRuby互換)

@@ -7,6 +7,7 @@ module Zenoo
       @g = clamp(g, 0, 255)
       @b = clamp(b, 0, 255)
       @a = clamp(a, 0, 255)
+      @f4 = [@r / 255.0, @g / 255.0, @b / 255.0, @a / 255.0].freeze
     end
 
     # 浮動小数点 (0.0..1.0) ゲッター (シェーダー連携用)
@@ -141,7 +142,7 @@ module Zenoo
 
     # 0.0〜1.0 の浮動小数点配列 [r, g, b, a] (シェーダー直接送出用)
     def to_f4
-      [rf, gf, bf, af]
+      @f4
     end
 
     # 0xRRGGBBAA 形式の uint32 (32bit signed環境で r >= 128 のオーバーフローを防止)

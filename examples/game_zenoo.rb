@@ -231,7 +231,7 @@ end
 # 1. パーティクル & エフェクト (短命GCオブジェクト)
 # ==========================================
 class Particle
-  attr_reader :dead, :x, :y
+  attr_reader :x, :y
 
   def initialize(x, y, vx, vy, life, color, size = 6.0)
     @x = x.to_f
@@ -242,7 +242,15 @@ class Particle
     @max_life = life
     @color = color
     @size = size.to_f
-    @dead = false
+    @vanished = false
+  end
+
+  def vanish
+    @vanished = true
+  end
+
+  def vanished?
+    @vanished
   end
 
   def update
@@ -251,7 +259,7 @@ class Particle
     @vx *= 0.94
     @vy *= 0.94
     @life -= 1
-    @dead = true if @life <= 0
+    vanish if @life <= 0
   end
 
   def draw
@@ -262,7 +270,7 @@ end
 
 # 敵頭上に飛び出すダメージ数値ポップアップ
 class DamageText
-  attr_reader :dead, :x, :y
+  attr_reader :x, :y
 
   def initialize(x, y, text, color = Color::WHITE, size = 18)
     @x = x.to_f + (rand(16) - 8).to_f
@@ -271,13 +279,21 @@ class DamageText
     @color = color
     @size = size
     @life = 25
-    @dead = false
+    @vanished = false
+  end
+
+  def vanish
+    @vanished = true
+  end
+
+  def vanished?
+    @vanished
   end
 
   def update
     @y -= 1.2
     @life -= 1
-    @dead = true if @life <= 0
+    vanish if @life <= 0
   end
 
   def draw
@@ -289,7 +305,7 @@ end
 # 2. 弾 & 近接武器 (Bullet, Missile, Orbiter)
 # ==========================================
 class Bullet < Sprite
-  attr_accessor :vx, :vy, :dead, :damage
+  attr_accessor :vx, :vy, :damage
 
   def initialize(x, y, angle, speed = 16.0, damage = 1)
     super(x, y, anchor: :center, pivot: :center)
@@ -297,7 +313,6 @@ class Bullet < Sprite
     @vy = speed * Math.sin(angle)
     @damage = damage
     @traveled = 0.0
-    @dead = false
     set_collider(:circle, radius: 2.5)
   end
 
@@ -305,7 +320,7 @@ class Bullet < Sprite
     self.x += @vx
     self.y += @vy
     @traveled += 16.0
-    @dead = true if @traveled > 1400.0
+    vanish if @traveled > 1400.0
   end
 
   def draw
@@ -315,7 +330,7 @@ end
 
 # 追尾＆着弾範囲爆発ミサイル
 class Missile < Sprite
-  attr_accessor :vx, :vy, :dead, :damage, :exploded
+  attr_accessor :vx, :vy, :damage, :exploded
 
   def initialize(x, y, target_x, target_y)
     super(x, y, anchor: :center, pivot: :center)
@@ -327,7 +342,6 @@ class Missile < Sprite
     @vy = @speed * Math.sin(angle)
     @damage = 12
     @life = 90
-    @dead = false
     @exploded = false
     set_collider(:circle, radius: 4.0)
   end
@@ -335,7 +349,7 @@ class Missile < Sprite
   def update(enemies)
     @life -= 1
     if @life <= 0
-      @dead = true
+      vanish
       @exploded = true
       return
     end
@@ -343,7 +357,7 @@ class Missile < Sprite
     nearest = nil
     min_d2 = 600.0 * 600.0
     enemies.each do |e|
-      next if e.dead
+      next if e.vanished?
       dx = e.x - self.x
       dy = e.y - self.y
       d2 = dx * dx + dy * dy
@@ -369,7 +383,7 @@ class Missile < Sprite
   end
 
   def explode
-    @dead = true
+    vanish
     @exploded = true
   end
 
@@ -409,7 +423,7 @@ end
 # 3. ドロップアイテム (EXPジェム / 回復ハート)
 # ==========================================
 class Item < Sprite
-  attr_accessor :dead, :value, :kind
+  attr_accessor :value, :kind
 
   # kind: 0 = EXPジェム, 1 = 回復ハート
   def initialize(x, y, value = 10, kind = 0)
@@ -417,14 +431,13 @@ class Item < Sprite
     @value = value
     @kind = kind
     @life = kind == 1 ? 900 : 600
-    @dead = false
     set_collider(:circle, radius: 28.0) # 自機(12.0) + アイテム(28.0) = 40.0 で取得
   end
 
   def update(px, py, magnet_radius)
     @life -= 1
     if @life <= 0
-      @dead = true
+      vanish
       return
     end
 
@@ -459,7 +472,7 @@ end
 # 4. 敵キャラクター (Enemy)
 # ==========================================
 class Enemy < Sprite
-  attr_accessor :radius, :hp, :max_hp, :speed, :sides, :color, :score_value, :dead, :is_boss, :flash, :type, :hit_radius
+  attr_accessor :radius, :hp, :max_hp, :speed, :sides, :color, :score_value, :is_boss, :flash, :type, :hit_radius
 
   @atlas = nil
   @sprites = nil
@@ -540,7 +553,6 @@ class Enemy < Sprite
 
     super(ix, iy, Enemy.sprites[type][false], anchor: :center, pivot: :center)
 
-    @dead = false
     @rotation = 0.0
     @is_boss = false
     @flash = 0 # 被弾時の白フラッシュ残りフレーム
@@ -781,7 +793,7 @@ class Player < Sprite
         nearest_enemy = nil
         min_dist_sq = 1_000_000_000.0
         enemies.each do |e|
-          next if e.dead
+          next if e.vanished?
           dx = e.x - self.x
           dy = e.y - self.y
           d2 = dx * dx + dy * dy
@@ -1113,27 +1125,23 @@ class Game
 
     # 1. 通常弾 vs 敵 (Sprite.check: Sweep and Prune による一括高速判定)
     Sprite.check(@bullets, @enemies) do |b, e|
-      next if b.dead || e.dead
-      b.dead = true
+      b.vanish
       damage_enemy(e, b.damage, Color::YELLOW)
     end
 
     # 2. ミサイル直撃 vs 敵 (Sprite.check)
     Sprite.check(@missiles, @enemies) do |m, e|
-      next if m.dead || e.dead
       m.explode
     end
 
     # 3. オービター刃 vs 敵 (Sprite.check)
     Sprite.check(@player.orbiters, @enemies) do |orb, e|
-      next if e.dead
       damage_enemy(e, orb.damage, Color::CYAN)
     end
 
     # 4. 自機 vs 敵 (Sprite.check)
     unless @player_dead
       Sprite.check(@player, @enemies) do |p, e|
-        next if e.dead
         if e.is_boss
           boss_hit = true
           contact_damage = 2
@@ -1159,8 +1167,7 @@ class Game
     # 7. アイテム取得判定 (自機 vs アイテム: Sprite.check)
     unless @player_dead
       Sprite.check(@player, @items) do |p, item|
-        next if item.dead
-        item.dead = true
+        item.vanish
         if item.kind == 1
           pick_heart(item)
         else
@@ -1208,7 +1215,7 @@ class Game
 
     # 周囲の雑魚を押し返して立て直す余地を作る
     @enemies.each do |e|
-      next if e.dead || e.is_boss
+      next if e.vanished? || e.is_boss
       dx = e.x - @player.x
       dy = e.y - @player.y
       dist = Math.sqrt(dx * dx + dy * dy)
@@ -1253,7 +1260,7 @@ class Game
     end
 
     if e.hp <= 0
-      e.dead = true
+      e.vanish
       kill_enemy(e)
     end
   end
@@ -1341,7 +1348,7 @@ class Game
     end
     # 範囲内の敵全員にダメージ
     @enemies.each do |e|
-      next if e.dead
+      next if e.vanished?
       dx = e.x - x
       dy = e.y - y
       if dx * dx + dy * dy < radius * radius
@@ -1484,14 +1491,14 @@ class Game
       check_collisions
     end
 
-    # 4. オブジェクトの自然な回収 (delete_if)
+    # 4. オブジェクトの自然な回収 (Sprite.clean)
     Profiler.measure(:gc) do
-      @bullets.delete_if { |b| b.dead }
-      @missiles.delete_if { |m| m.dead }
-      @enemies.delete_if { |e| e.dead }
-      @items.delete_if { |i| i.dead }
-      @particles.delete_if { |p| p.dead }
-      @damage_texts.delete_if { |t| t.dead }
+      Sprite.clean(@bullets)
+      Sprite.clean(@missiles)
+      Sprite.clean(@enemies)
+      Sprite.clean(@items)
+      Sprite.clean(@particles)
+      Sprite.clean(@damage_texts)
 
       # 敵を倒して空いた枠へ、ストックから即座にスポーン補充
       limit = max_enemies
