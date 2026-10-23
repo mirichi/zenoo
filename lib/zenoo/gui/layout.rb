@@ -237,6 +237,23 @@ module Zenoo
       end
 
       # コンテナスコープの開始
+      def push_scope(content_w: nil, content_h: nil, cursor_x: 0.0, cursor_y: 0.0, spacing_x: nil, spacing_y: nil)
+        @scope_stack.push(@current)
+        @current = LayoutScope.new(
+          cursor_x: cursor_x.to_f,
+          cursor_y: cursor_y.to_f,
+          spacing_x: spacing_x ? spacing_x.to_f : @current.spacing_x,
+          spacing_y: spacing_y ? spacing_y.to_f : @current.spacing_y,
+          content_w: content_w ? content_w.to_f : nil,
+          content_h: content_h ? content_h.to_f : nil
+        )
+      end
+
+      # スコープの復帰
+      def pop_scope
+        @current = @scope_stack.pop if @scope_stack.any?
+      end
+
       def begin_container(x, y, w, h, clip: false, z: 0.0, spacing_x: nil, spacing_y: nil)
         @scope_stack.push(@current)
         @current = LayoutScope.new(

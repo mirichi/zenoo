@@ -29,6 +29,14 @@ selected_hero = 0
 
 scrollbar_val = 0.0
 
+# スライダー・テキストボックス用状態変数
+slider_bgm   = 75.0
+slider_sfx   = 90.0
+slider_fov   = 90.0
+slider_speed = 1.0
+user_name    = "Player1"
+user_status  = "Ready to play!"
+
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame = 0
 
@@ -86,6 +94,13 @@ Window.loop(1280, 720, "Zenoo - Extended GUI Widgets & Resizable Windows", msaa:
       spin_scale  = GUI.spinner("UI Scale", spin_scale, min: 0.5, max: 3.0, step: 0.25, format: "%.2fx")
 
     when 1
+      GUI.label("=== Sliders (Audio Volumes) ===", size: 15, color: Color.new(255, 200, 80))
+      slider_bgm = GUI.slider("BGM Vol", slider_bgm, 0.0, 100.0)
+      slider_sfx = GUI.slider("SFX Vol", slider_sfx, 0.0, 100.0)
+
+      GUI.spacer(10)
+      GUI.divider
+
       GUI.label("=== Dropdown / ComboBox ===", size: 15, color: Color.new(255, 200, 80))
       GUI.label("Texture Filter Mode:", size: 13, color: Color.new(180, 180, 190))
       selected_dropdown = GUI.dropdown("filter_dropdown", selected_dropdown, dropdown_items)
@@ -129,17 +144,41 @@ Window.loop(1280, 720, "Zenoo - Extended GUI Widgets & Resizable Windows", msaa:
   end
 
   # -------------------------------------------------------------------
-  # ウィンドウ 3: 固定サイズ ウィンドウ (Resizable: false, 比較用)
+  # ウィンドウ 3: テキストボックス & スライダー (Non-Resizable)
   # -------------------------------------------------------------------
-  GUI.window("Fixed Size Window [Non-Resizable]", x: 900, y: 90, w: 330, h: 280, resizable: false) do
-    GUI.label("This window cannot be resized.", size: 14, color: Color.new(255, 120, 120))
+  GUI.window("Profile & Inputs [Fixed]", x: 900, y: 90, w: 340, h: 580, resizable: false) do
+    GUI.label("=== Text Box Input ===", size: 15, color: Color.new(255, 200, 80))
+    GUI.label("Player Name:", size: 13, color: Color.new(180, 180, 190))
+    user_name = GUI.text_box("Name", user_name)
+
     GUI.spacer(6)
-    GUI.label("Option: resizable: false (default)", size: 12, color: Color.new(160, 160, 165))
+    GUI.label("Status Message:", size: 13, color: Color.new(180, 180, 190))
+    user_status = GUI.text_box("Status", user_status)
+
+    GUI.spacer(10)
     GUI.divider
-    GUI.spacer(6)
-    GUI.button("Confirm Settings")
-    GUI.button("Reset Defaults")
-    GUI.button("Cancel")
+
+    GUI.label("=== Gameplay Sliders ===", size: 15, color: Color.new(255, 200, 80))
+    slider_fov   = GUI.slider("Camera FOV", slider_fov, 60.0, 120.0)
+    slider_speed = GUI.slider("Game Speed", slider_speed, 0.25, 3.0)
+
+    GUI.spacer(10)
+    GUI.divider
+
+    GUI.label("Input Status:", size: 14, color: Color.new(130, 220, 180))
+    GUI.label("Name: #{user_name}", size: 13, color: Color::WHITE)
+    GUI.label("FOV: #{slider_fov.to_i} deg / Speed: #{slider_speed.round(2)}x", size: 13, color: Color::WHITE)
+
+    GUI.spacer(12)
+    GUI.row(cols: 2, spacing: 8) do
+      GUI.button("Save Profile")
+      if GUI.button("Reset Defaults")
+        user_name    = "Player1"
+        user_status  = "Ready to play!"
+        slider_fov   = 90.0
+        slider_speed = 1.0
+      end
+    end
   end
 
   frame += 1

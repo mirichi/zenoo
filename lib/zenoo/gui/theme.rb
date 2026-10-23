@@ -101,10 +101,10 @@ module Zenoo
         @border_hover   = [1.0, Color.new(120, 120, 130, 220)]
         @border_active  = [1.5, Color.new(180, 180, 190, 255)]
 
-        # シャドウ設定 (フラット)
-        @shadow_normal  = nil
-        @shadow_hover   = nil
-        @shadow_active  = nil
+        # シャドウ設定 (控えめなドロップシャドウ)
+        @shadow_normal  = [4.0, Color.new(0, 0, 0, 100)]
+        @shadow_hover   = [6.0, Color.new(0, 0, 0, 140)]
+        @shadow_active  = [2.0, Color.new(0, 0, 0, 160)]
 
         # テキストカラー
         @text_color     = Color.new(235, 235, 235)
