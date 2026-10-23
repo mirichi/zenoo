@@ -7,10 +7,13 @@ require_relative 'gui/layout'
 require_relative 'gui/window_manager'
 require_relative 'gui/text_edit'
 require_relative 'gui/profile_graph'
+require_relative 'gui/widgets'
 
 module Zenoo
   # 即時モード (Immediate Mode) GUI システム
   module GUI
+    extend Widgets
+
     @theme      = Theme.new
     @renderer   = CardRenderer.new
     @layout     = Layout.new
@@ -306,9 +309,9 @@ module Zenoo
       end
 
       # ウィンドウの開始
-      def begin_window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0)
+      def begin_window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, resizable: false, min_w: 120.0, min_h: 80.0)
         win_id = id.to_s.empty? ? title.to_s : id.to_s
-        win = @win_mgr.find_or_create(win_id, title, x, y, w, h)
+        win = @win_mgr.find_or_create(win_id, title, x, y, w, h, resizable: resizable, min_w: min_w, min_h: min_h)
         return nil unless win.open
 
         wx = win.x
@@ -320,8 +323,10 @@ module Zenoo
         is_active = @win_mgr.active?(win_id)
         win_z = win.z
 
-        @win_mgr.check_drag_start(win, title_bar_h, @mouse_x, @mouse_y, @mouse_push)
-        @renderer.draw_window(wx, wy, ww, wh, win.title, is_active, @theme, z: win_z, title_bar_h: title_bar_h)
+        unless @win_mgr.check_resize_start(win, @mouse_x, @mouse_y, @mouse_push)
+          @win_mgr.check_drag_start(win, title_bar_h, @mouse_x, @mouse_y, @mouse_push)
+        end
+        @renderer.draw_window(wx, wy, ww, wh, win.title, is_active, @theme, z: win_z, title_bar_h: title_bar_h, resizable: win.resizable)
 
         content_x = wx + pad
         content_y = wy + title_bar_h + 8.0
@@ -342,8 +347,9 @@ module Zenoo
       # フローティングウィンドウ (Window)
       # - ドラッグ移動、タイトルバー、最前面フォーカス切り替え
       # - Window.clip(local: true) によるコンテンツのビューポートクリッピング
-      def window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0)
-        state = begin_window(title, x: x, y: y, w: w, h: h, id: id, padding: padding)
+      # - resizable: true で右下ドラッグによるサイズ変更を許可 (オプション)
+      def window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, resizable: false, min_w: 120.0, min_h: 80.0)
+        state = begin_window(title, x: x, y: y, w: w, h: h, id: id, padding: padding, resizable: resizable, min_w: min_w, min_h: min_h)
         return unless state
         return unless block_given?
 
