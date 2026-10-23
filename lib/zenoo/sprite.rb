@@ -3,8 +3,9 @@
 module Zenoo
   class Sprite
     attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image
+    attr_accessor :blend, :shader, :uniforms
 
-    def initialize(x = 0.0, y = 0.0, image = nil, anchor: :top_left, pivot: :center)
+    def initialize(x = 0.0, y = 0.0, image = nil, anchor: :top_left, pivot: :center, blend: :alpha, shader: nil, uniforms: nil)
       @x = x.to_f
       @y = y.to_f
       @z = 0.0
@@ -18,6 +19,9 @@ module Zenoo
       self.pivot = pivot
       @alpha = 255
       @color = nil
+      @blend = blend || :alpha
+      @shader = shader
+      @uniforms = uniforms
       @visible = true
 
       # コライダー管理
@@ -288,13 +292,13 @@ module Zenoo
     end
 
     # 描画
-    def draw(camera: true, z: nil)
-      Window.draw_sprite(self, camera: camera, z: z)
+    def draw(camera: true, z: nil, blend: nil, shader: nil, uniforms: nil)
+      Window.draw_sprite(self, camera: camera, z: z, blend: blend, shader: shader, uniforms: uniforms)
     end
 
     # 単一または配列スプライトの一括描画 (DXRuby互換)
-    def self.draw(sprites, camera: true, z: nil)
-      Window.draw_sprite(sprites, camera: camera, z: z)
+    def self.draw(sprites, camera: true, z: nil, blend: nil, shader: nil, uniforms: nil)
+      Window.draw_sprite(sprites, camera: camera, z: z, blend: blend, shader: shader, uniforms: uniforms)
     end
 
     # スプライト同士・配列同士の一括衝突判定 (DXRuby互換)

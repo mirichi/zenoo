@@ -64,6 +64,15 @@ module Zenoo
       native_func :set_window_size, [:int, :int], :nil, "sp_zen_win_set_window_size"
       native_func :raw_set_msaa_samples, [:int], :nil, "sp_zen_win_set_msaa_samples"
       native_func :raw_get_msaa_samples, [], :int, "sp_zen_win_get_msaa_samples"
+      native_func :title=, [:string], :nil, "sp_zen_win_set_title"
+      native_func :title, [], :string, "sp_zen_win_get_title"
+      native_func :pos_x, [], :int, "sp_zen_win_get_pos_x"
+      native_func :pos_y, [], :int, "sp_zen_win_get_pos_y"
+      native_func :set_window_pos_raw, [:int, :int], :nil, "sp_zen_win_set_window_pos"
+      native_func :focused?, [], :bool, "sp_zen_win_is_focused"
+      native_func :minimized?, [], :bool, "sp_zen_win_is_minimized"
+      native_func :maximized?, [], :bool, "sp_zen_win_is_maximized"
+      native_func :hovered?, [], :bool, "sp_zen_win_is_hovered"
       native_func :vsync=, [:int], :nil, "sp_zen_win_vsync_set"
       native_func :target_fps=, [:int], :nil, "sp_zen_win_target_fps_set"
       native_func :delta_time, [], :float, "sp_zen_win_delta_time"
@@ -96,6 +105,14 @@ module Zenoo
 
       def self.window_size
         [Zenoo::Native::Window.os_size_w, Zenoo::Native::Window.os_size_h]
+      end
+
+      def self.window_position
+        [Zenoo::Native::Window.pos_x, Zenoo::Native::Window.pos_y]
+      end
+
+      def self.set_window_position(x, y)
+        Zenoo::Native::Window.set_window_pos_raw(x.to_i, y.to_i)
       end
 
       def self.init(w, h, title, fullscreen = false, win_w = 0, win_h = 0, scale_mode = 0)

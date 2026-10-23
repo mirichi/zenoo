@@ -40,6 +40,7 @@ __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 
 // ウィンドウ状態
 static GLFWwindow* s_window = NULL;
+static char s_window_title[256] = "Zenoo";
 static ZenViewport s_viewport = { 1280, 720, 1280, 720, 0, 0, 1280, 720, 1.0f };
 static int s_scale_mode = ZEN_SCALE_FIT;
 static int s_is_fullscreen = 0;
@@ -382,7 +383,9 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
         }
 
         if (title && strlen(title) > 0) {
-            glfwSetWindowTitle(s_window, title);
+            strncpy(s_window_title, title, sizeof(s_window_title) - 1);
+            s_window_title[sizeof(s_window_title) - 1] = '\0';
+            glfwSetWindowTitle(s_window, s_window_title);
         }
 
         if (monitor) {
@@ -484,6 +487,11 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
             glfwTerminate();
             return 0;
         }
+    }
+
+    if (title && strlen(title) > 0) {
+        strncpy(s_window_title, title, sizeof(s_window_title) - 1);
+        s_window_title[sizeof(s_window_title) - 1] = '\0';
     }
 
     if (!monitor) {
@@ -863,4 +871,52 @@ void zen_toggle_fullscreen(void) {
         glfwSetWindowMonitor(s_window, NULL, s_saved_win_x, s_saved_win_y, s_saved_win_w, s_saved_win_h, 0);
         s_is_fullscreen = 0;
     }
+}
+
+void zen_set_window_title(const char* title) {
+    if (!title) return;
+    strncpy(s_window_title, title, sizeof(s_window_title) - 1);
+    s_window_title[sizeof(s_window_title) - 1] = '\0';
+    if (s_window) {
+        glfwSetWindowTitle(s_window, s_window_title);
+    }
+}
+
+const char* zen_get_window_title(void) {
+    return s_window_title;
+}
+
+void zen_get_window_pos(int* x, int* y) {
+    if (s_window) {
+        glfwGetWindowPos(s_window, x, y);
+    } else {
+        if (x) *x = 0;
+        if (y) *y = 0;
+    }
+}
+
+void zen_set_window_pos(int x, int y) {
+    if (s_window) {
+        glfwSetWindowPos(s_window, x, y);
+    }
+}
+
+int zen_is_window_focused(void) {
+    if (!s_window) return 0;
+    return glfwGetWindowAttrib(s_window, GLFW_FOCUSED) ? 1 : 0;
+}
+
+int zen_is_window_minimized(void) {
+    if (!s_window) return 0;
+    return glfwGetWindowAttrib(s_window, GLFW_ICONIFIED) ? 1 : 0;
+}
+
+int zen_is_window_maximized(void) {
+    if (!s_window) return 0;
+    return glfwGetWindowAttrib(s_window, GLFW_MAXIMIZED) ? 1 : 0;
+}
+
+int zen_is_window_hovered(void) {
+    if (!s_window) return 0;
+    return glfwGetWindowAttrib(s_window, GLFW_HOVERED) ? 1 : 0;
 }

@@ -131,6 +131,66 @@ module Zenoo
       Native::Window.set_window_size(size[0].to_i, size[1].to_i)
     end
 
+    def self.title
+      Native::Window.respond_to?(:title) ? Native::Window.title : "Zenoo"
+    end
+
+    def self.title=(val)
+      Native::Window.title = val.to_s if Native::Window.respond_to?(:title=)
+    end
+
+    def self.window_position
+      if Native::Window.respond_to?(:window_position)
+        Native::Window.window_position
+      else
+        [0, 0]
+      end
+    end
+
+    def self.window_position=(pos)
+      if pos.is_a?(Array) && pos.length >= 2
+        if Native::Window.respond_to?(:set_window_position)
+          Native::Window.set_window_position(pos[0].to_i, pos[1].to_i)
+        end
+      end
+    end
+
+    def self.position
+      window_position
+    end
+
+    def self.position=(pos)
+      self.window_position = pos
+    end
+
+    def self.focused?
+      Native::Window.respond_to?(:focused?) ? Native::Window.focused? : true
+    end
+
+    def self.active?
+      focused?
+    end
+
+    def self.minimized?
+      Native::Window.respond_to?(:minimized?) ? Native::Window.minimized? : false
+    end
+
+    def self.iconified?
+      minimized?
+    end
+
+    def self.maximized?
+      Native::Window.respond_to?(:maximized?) ? Native::Window.maximized? : false
+    end
+
+    def self.hovered?
+      Native::Window.respond_to?(:hovered?) ? Native::Window.hovered? : false
+    end
+
+    def self.mouse_in_window?
+      hovered?
+    end
+
     def self.resize(w, h)
       Native::Window.set_window_size(w.to_i, h.to_i)
     end
@@ -606,14 +666,17 @@ module Zenoo
 
     def self.draw_sprite(sprite,
                          camera: true,
-                         z: nil)
+                         z: nil,
+                         blend: nil,
+                         shader: nil,
+                         uniforms: nil)
       return unless sprite
 
       if sprite.is_a?(Array)
         i = 0
         len = sprite.length
         while i < len
-          draw_sprite(sprite[i], camera: camera, z: z)
+          draw_sprite(sprite[i], camera: camera, z: z, blend: blend, shader: shader, uniforms: uniforms)
           i += 1
         end
         return
@@ -630,6 +693,9 @@ module Zenoo
         scale_y: sprite.scale_y,
         alpha: sprite.alpha,
         color: sprite.color || :white,
+        blend: blend || (sprite.respond_to?(:blend) ? sprite.blend : :alpha) || :alpha,
+        shader: shader || (sprite.respond_to?(:shader) ? sprite.shader : nil),
+        uniforms: uniforms || (sprite.respond_to?(:uniforms) ? sprite.uniforms : nil),
         camera: camera,
         z: z || sprite.z
       )
@@ -846,6 +912,20 @@ module Zenoo
       target_font = font || Font.default
       return 0.0 unless target_font
       target_font.text_width(text, size)
+    end
+
+    # テキスト描画サイズの計算 [width, height] (複数行対応)
+    def self.text_size(text, font: nil, size: 24, line_spacing: nil)
+      target_font = font || Font.default
+      return [0.0, 0.0] unless target_font
+      target_font.text_size(text, size, line_spacing: line_spacing)
+    end
+
+    # テキスト描画高さの計算 (複数行対応)
+    def self.text_height(text, font: nil, size: 24, line_spacing: nil)
+      target_font = font || Font.default
+      return 0.0 unless target_font
+      target_font.text_height(text, size, line_spacing: line_spacing)
     end
 
     # ----------------------------------------------------

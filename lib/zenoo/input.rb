@@ -2,6 +2,20 @@ module Zenoo
   module Input
     # キーシンボルからGLFWキーコードへのマッピング
     KEY_MAP = {
+      # 記号キー
+      apostrophe: 39,
+      comma: 44,
+      minus: 45,
+      period: 46,
+      slash: 47,
+      semicolon: 59,
+      equal: 61,
+      left_bracket: 91,
+      backslash: 92,
+      right_bracket: 93,
+      grave_accent: 96,
+
+      # 制御・移動キー
       space: 32,
       escape: 256,
       enter: 257,
@@ -16,7 +30,59 @@ module Zenoo
       page_up: 266,
       page_down: 267,
       home: 268,
-      end: 269
+      end: 269,
+
+      # 特殊・ロック
+      caps_lock: 280,
+      scroll_lock: 281,
+      num_lock: 282,
+      print_screen: 283,
+      pause: 284,
+
+      # テンキー
+      kp_0: 320,
+      kp_1: 321,
+      kp_2: 322,
+      kp_3: 323,
+      kp_4: 324,
+      kp_5: 325,
+      kp_6: 326,
+      kp_7: 327,
+      kp_8: 328,
+      kp_9: 329,
+      kp_decimal: 330,
+      kp_divide: 331,
+      kp_multiply: 332,
+      kp_subtract: 333,
+      kp_add: 334,
+      kp_enter: 335,
+      kp_equal: 336,
+
+      # 修飾キー (左右別)
+      left_shift: 340,
+      left_control: 341,
+      left_ctrl: 341,
+      left_alt: 342,
+      left_super: 343,
+      left_win: 343,
+      left_command: 343,
+      right_shift: 344,
+      right_control: 345,
+      right_ctrl: 345,
+      right_alt: 346,
+      right_super: 347,
+      right_win: 347,
+      right_command: 347,
+      menu: 348,
+
+      # 修飾キー (左右統合エイリアス)
+      shift: 340,
+      control: 341,
+      ctrl: 341,
+      alt: 342,
+      super: 343,
+      win: 343,
+      command: 343
     }
 
     # ファンクションキー (f1..f12)
@@ -51,7 +117,17 @@ module Zenoo
 
     # 押されている状態 (持続)
     def self.key_pressed?(key)
-      Native::Input.key_pressed?(resolve_key(key))
+      if key == :shift
+        Native::Input.key_pressed?(340) || Native::Input.key_pressed?(344)
+      elsif key == :ctrl || key == :control
+        Native::Input.key_pressed?(341) || Native::Input.key_pressed?(345)
+      elsif key == :alt
+        Native::Input.key_pressed?(342) || Native::Input.key_pressed?(346)
+      elsif key == :super || key == :win || key == :command
+        Native::Input.key_pressed?(343) || Native::Input.key_pressed?(347)
+      else
+        Native::Input.key_pressed?(resolve_key(key))
+      end
     end
 
     def self.key_down?(key)
@@ -60,17 +136,47 @@ module Zenoo
 
     # 押した瞬間 (トリガー)
     def self.key_push?(key)
-      Native::Input.key_push?(resolve_key(key))
+      if key == :shift
+        Native::Input.key_push?(340) || Native::Input.key_push?(344)
+      elsif key == :ctrl || key == :control
+        Native::Input.key_push?(341) || Native::Input.key_push?(345)
+      elsif key == :alt
+        Native::Input.key_push?(342) || Native::Input.key_push?(346)
+      elsif key == :super || key == :win || key == :command
+        Native::Input.key_push?(343) || Native::Input.key_push?(347)
+      else
+        Native::Input.key_push?(resolve_key(key))
+      end
     end
 
     # 離した瞬間 (リリース)
     def self.key_release?(key)
-      Native::Input.key_release?(resolve_key(key))
+      if key == :shift
+        Native::Input.key_release?(340) || Native::Input.key_release?(344)
+      elsif key == :ctrl || key == :control
+        Native::Input.key_release?(341) || Native::Input.key_release?(345)
+      elsif key == :alt
+        Native::Input.key_release?(342) || Native::Input.key_release?(346)
+      elsif key == :super || key == :win || key == :command
+        Native::Input.key_release?(343) || Native::Input.key_release?(347)
+      else
+        Native::Input.key_release?(resolve_key(key))
+      end
     end
 
     # 押した瞬間、または長押しによるキーリピート
     def self.key_repeat?(key)
-      Native::Input.key_repeat?(resolve_key(key))
+      if key == :shift
+        Native::Input.key_repeat?(340) || Native::Input.key_repeat?(344)
+      elsif key == :ctrl || key == :control
+        Native::Input.key_repeat?(341) || Native::Input.key_repeat?(345)
+      elsif key == :alt
+        Native::Input.key_repeat?(342) || Native::Input.key_repeat?(346)
+      elsif key == :super || key == :win || key == :command
+        Native::Input.key_repeat?(343) || Native::Input.key_repeat?(347)
+      else
+        Native::Input.key_repeat?(resolve_key(key))
+      end
     end
 
     # フレーム内で入力された文字（UTF-8文字列）の配列
