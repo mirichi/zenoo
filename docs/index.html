@@ -378,14 +378,15 @@
     <div class="card gui">
       <div>
         <div class="card-tag">UI System</div>
-        <h2>Immediate Mode GUI</h2>
+        <h2>Extended GUI &amp; Resizable Window</h2>
         <p class="desc">
-          Pure Ruby で実装された即時モード (Immediate Mode) GUI システム。ボタン、スライダー、ラベル、GPU SDF 角丸カードを体験できます。
+          Pure Ruby 実装の即時モード (Immediate Mode) GUI システム。チェックボックス、ラジオボタン、タブ、スピンボタン、ドロップダウン、リストボックス、スクロールビュー、および右下ドラッグによるサイズ変更ウィンドウを体験できます。
         </p>
         <ul class="features">
-          <li>SDF (符号付き距離関数) による角丸・枠線・影描画</li>
-          <li>マウスキャプチャ &amp; 排他制御付きボタン／スライダー</li>
-          <li>Style ボタンでモダンカード ↔ レトロフラットの即時切り替え</li>
+          <li>チェックボックス・ラジオボタン・タブバー・スピンボタン</li>
+          <li>ドロップダウンリスト (前面ポップアップ) &amp; スクロール対応リストボックス</li>
+          <li>ScrollView (要素の自動高さ計測・ホイールスクロールコンテナ)</li>
+          <li>マルチウィンドウのドラッグ移動・前面化 &amp; 右下ドラッグによるサイズ変更 (resizable)</li>
         </ul>
       </div>
       <a href="gui/" class="btn-launch">GUI デモを起動 (Launch Demo) →</a>
@@ -458,24 +459,6 @@
         </ul>
       </div>
       <a href="atlas/" class="btn-launch">アトラスデモを起動 (Launch Demo) →</a>
-    </div>
-
-    <!-- Multi-Window & Occlusion Demo Card -->
-    <div class="card window">
-      <div>
-        <div class="card-tag">Window System</div>
-        <h2>Multi-Window &amp; Occlusion</h2>
-        <p class="desc">
-          ドラッグ移動可能なフローティングウィンドウと前面化 (Bring to Front)。ウィンドウ背面へのクリック貫通防止や、内部コンテンツのハードウェアクリッピングを体験できます。
-        </p>
-        <ul class="features">
-          <li>GUI.window (タイトルカードラッグ移動・前面化)</li>
-          <li>クリック遮断 &amp; イベント透過防止 (Occlusion)</li>
-          <li>Window.clip によるウィンドウ内部コンテンツの保護</li>
-          <li>独立したローカル Z ソート階層管理</li>
-        </ul>
-      </div>
-      <a href="window/" class="btn-launch">ウィンドウデモを起動 (Launch Demo) →</a>
     </div>
 
     <!-- Hardware Clipping Demo Card -->
