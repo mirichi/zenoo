@@ -33,10 +33,15 @@ class Spark
     @vx *= 0.92
     @vy *= 0.92
     @life -= 1
+    vanish if @life <= 0
   end
 
-  def dead?
-    @life <= 0
+  def vanish
+    @vanished = true
+  end
+
+  def vanished?
+    @vanished
   end
 
   def draw
@@ -712,9 +717,9 @@ class BilliardsPlayground
       end
     end
 
-    # パーティクル更新
-    @sparks.each(&:update)
-    @sparks.reject!(&:dead?)
+    # パーティクル更新 (Sprite.update / Sprite.clean)
+    Sprite.update(@sparks)
+    Sprite.clean(@sparks)
   end
 
   # エイムガイドライン・パワーインジケータ描画

@@ -278,7 +278,10 @@ module Zenoo
         return if @queue_count <= 1
 
         valid_cmds = @command_pool[0...@queue_count]
-        valid_cmds.sort_by! { |cmd| [cmd.z, cmd.order] }
+        valid_cmds.sort! do |a, b|
+          comp = a.z <=> b.z
+          comp == 0 ? (a.order <=> b.order) : comp
+        end
         @command_pool[0...@queue_count] = valid_cmds
       end
 

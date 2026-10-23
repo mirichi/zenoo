@@ -682,22 +682,81 @@ module Zenoo
         return
       end
 
-      return unless sprite.visible && sprite.image
+      return if sprite.vanished?
+      return unless sprite.visible && (img = sprite.image)
 
-      draw_image(
-        sprite.x, sprite.y, sprite.image,
-        anchor: [sprite.anchor_x, sprite.anchor_y],
-        pivot: sprite.pivot,
-        angle: sprite.angle,
-        scale_x: sprite.scale_x,
-        scale_y: sprite.scale_y,
-        alpha: sprite.alpha,
-        color: sprite.color || :white,
-        blend: blend || (sprite.respond_to?(:blend) ? sprite.blend : :alpha) || :alpha,
-        shader: shader || (sprite.respond_to?(:shader) ? sprite.shader : nil),
-        uniforms: uniforms || (sprite.respond_to?(:uniforms) ? sprite.uniforms : nil),
-        camera: camera,
-        z: z || sprite.z
+      eff_blend = blend || sprite.blend || :alpha
+      b_mode = Backend.normalize_blend_mode(eff_blend)
+      eff_shader = shader || sprite.shader || @current_shader || default_sprite_shader
+      eff_uniforms = uniforms || sprite.uniforms
+
+      alpha = sprite.alpha
+      col = sprite.color
+      if col.nil? && (alpha.nil? || alpha == 255)
+        c0 = 1.0; c1 = 1.0; c2 = 1.0; c3 = 1.0
+      else
+        c_color = Backend.normalize_color(col || :white)
+        c0 = c_color[0].to_f; c1 = c_color[1].to_f; c2 = c_color[2].to_f; c3 = c_color[3].to_f
+        if alpha && alpha != 255
+          af = alpha.to_f / 255.0
+          af = 0.0 if af < 0.0
+          af = 1.0 if af > 1.0
+          c3 *= af
+        end
+      end
+
+      draw_w = img.width.to_f
+      draw_h = img.height.to_f
+      tl_x = sprite.x.to_f - sprite.anchor_x * draw_w
+      tl_y = sprite.y.to_f - sprite.anchor_y * draw_h
+
+      pv_x = sprite.pivot_x
+      pv_y = sprite.pivot_y
+
+      sx = sprite.scale_x.to_f
+      sy = sprite.scale_y.to_f
+
+      cam = @active_camera
+      if cam && camera
+        cz, cam_ox, cam_oy = cam.view
+        ax = (tl_x * cz) + cam_ox + @offset_x
+        ay = (tl_y * cz) + cam_oy + @offset_y
+        zw = draw_w * cz
+        zh = draw_h * cz
+      else
+        ax = tl_x + @offset_x
+        ay = tl_y + @offset_y
+        zw = draw_w
+        zh = draw_h
+      end
+
+      rad = sprite.angle != 0.0 ? sprite.angle.to_f * (Math::PI / 180.0) : 0.0
+
+      tw = img.texture_width.to_f
+      th = img.texture_height.to_f
+      uv0 = tw > 0.0 ? img.x.to_f / tw : 0.0
+      uv1 = th > 0.0 ? img.y.to_f / th : 0.0
+      uv2 = tw > 0.0 ? draw_w / tw : 1.0
+      uv3 = th > 0.0 ? draw_h / th : 1.0
+
+      data = [
+        ax, ay, zw, zh,
+        c0, c1, c2, c3,
+        uv0, uv1, uv2, uv3,
+        rad, sx, sy, 0.0,
+        pv_x, pv_y, 0.0, 0.0
+      ].pack("f*")
+
+      eff_z = (z || sprite.z).to_f
+      Backend.enqueue_draw(
+        Backend::Pipelines::SPRITE,
+        data,
+        1,
+        image: img,
+        shader: eff_shader,
+        uniforms: eff_uniforms,
+        blend: b_mode,
+        z: eff_z
       )
     end
 

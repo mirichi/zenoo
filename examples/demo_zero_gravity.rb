@@ -37,10 +37,15 @@ class Spark
     @vx *= 0.94
     @vy *= 0.94
     @life -= 1
+    vanish if @life <= 0
   end
 
-  def dead?
-    @life <= 0
+  def vanish
+    @vanished = true
+  end
+
+  def vanished?
+    @vanished
   end
 
   def draw
@@ -516,9 +521,9 @@ class ZeroGravityDemo
     # 物理シミュレーション (拘束解決 ＆ 衝突解決)
     update_physics(mx, my)
 
-    # パーティクル更新
-    @sparks.each(&:update)
-    @sparks.reject!(&:dead?)
+    # パーティクル更新 (Sprite.update / Sprite.clean)
+    Sprite.update(@sparks)
+    Sprite.clean(@sparks)
   end
 
   # 即時モード 拘束の適用

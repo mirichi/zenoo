@@ -111,6 +111,7 @@ module Zenoo
       def is_rounded; false; end
       def is_aabb; false; end
       def is_uniform; false; end
+      def vanished?; false; end
       def half_w; 0.0; end
       def half_h; 0.0; end
       def core_half_w; 0.0; end
@@ -1224,6 +1225,7 @@ module Zenoo
 
     # Sweep and Prune 用ヘルパー: アイテムから Shape と AABB (min_x, max_x) を抽出
     def self.__extract_sap_entry(item, group_id = nil)
+      return nil if item.vanished?
       shape = item.is_a?(Shape) ? item : (item.respond_to?(:collider) ? item.collider : nil)
       return nil unless shape
 
@@ -1248,20 +1250,25 @@ module Zenoo
       i = 0
       while i < len_a
         item_a = arr_a[i]
-        shape_a = item_a.is_a?(Shape) ? item_a : (item_a.respond_to?(:collider) ? item_a.collider : nil)
-        if shape_a
-          j = same_group ? (i + 1) : 0
-          while j < len_b
-            item_b = arr_b[j]
-            shape_b = item_b.is_a?(Shape) ? item_b : (item_b.respond_to?(:collider) ? item_b.collider : nil)
-            if shape_b && check(shape_a, shape_b)
-              if block_given?
-                yield(item_a, item_b)
-              else
-                hits << [item_a, item_b]
+        if item_a && !item_a.vanished?
+          shape_a = item_a.is_a?(Shape) ? item_a : (item_a.respond_to?(:collider) ? item_a.collider : nil)
+          if shape_a
+            j = same_group ? (i + 1) : 0
+            while j < len_b
+              item_b = arr_b[j]
+              if item_b && !item_b.vanished?
+                shape_b = item_b.is_a?(Shape) ? item_b : (item_b.respond_to?(:collider) ? item_b.collider : nil)
+                if shape_b && check(shape_a, shape_b)
+                  if block_given?
+                    yield(item_a, item_b)
+                    break if item_a.vanished?
+                  else
+                    hits << [item_a, item_b]
+                  end
+                end
               end
+              j += 1
             end
-            j += 1
           end
         end
         i += 1
@@ -1300,25 +1307,30 @@ module Zenoo
         i = 0
         while i < total
           e_a = entries[i]
-          max_a = e_a[1]
           item_a = e_a[2]
-          shape_a = e_a[3]
+          if !item_a.vanished?
+            max_a = e_a[1]
+            shape_a = e_a[3]
 
-          j = i + 1
-          while j < total
-            e_b = entries[j]
-            break if e_b[0] > max_a
+            j = i + 1
+            while j < total
+              e_b = entries[j]
+              break if e_b[0] > max_a
 
-            item_b = e_b[2]
-            shape_b = e_b[3]
-            if check(shape_a, shape_b)
-              if block_given?
-                yield(item_a, item_b)
-              else
-                hits << [item_a, item_b]
+              item_b = e_b[2]
+              if !item_b.vanished?
+                shape_b = e_b[3]
+                if check(shape_a, shape_b)
+                  if block_given?
+                    yield(item_a, item_b)
+                    break if item_a.vanished?
+                  else
+                    hits << [item_a, item_b]
+                  end
+                end
               end
+              j += 1
             end
-            j += 1
           end
           i += 1
         end
@@ -1353,41 +1365,46 @@ module Zenoo
         i = 0
         while i < total_a
           e_a = entries_a[i]
-          min_a = e_a[0]
-          max_a = e_a[1]
           item_a = e_a[2]
-          shape_a = e_a[3]
+          if !item_a.vanished?
+            min_a = e_a[0]
+            max_a = e_a[1]
+            shape_a = e_a[3]
 
-          # 左側の切り捨て (Two Pointers): B の先頭要素が完全に A より左側にある間 start_j を進める
-          safe_cutoff = min_a - max_w_b
-          while start_j < total_b
-            e_b_start = entries_b[start_j]
-            if e_b_start[1] < min_a || e_b_start[0] < safe_cutoff
-              start_j += 1
-            else
-              break
-            end
-          end
-
-          j = start_j
-          while j < total_b
-            e_b = entries_b[j]
-            # 右側の打ち切り (Early Out)
-            break if e_b[0] > max_a
-
-            # X軸の重なり確認 (先頭に巨大キャラがいて start_j が進んでいなくても、左に外れたキャラはここで即スキップ)
-            if e_b[1] >= min_a
-              item_b = e_b[2]
-              shape_b = e_b[3]
-              if check(shape_a, shape_b)
-                if block_given?
-                  yield(item_a, item_b)
-                else
-                  hits << [item_a, item_b]
-                end
+            # 左側の切り捨て (Two Pointers): B の先頭要素が完全に A より左側にある間 start_j を進める
+            safe_cutoff = min_a - max_w_b
+            while start_j < total_b
+              e_b_start = entries_b[start_j]
+              if e_b_start[1] < min_a || e_b_start[0] < safe_cutoff
+                start_j += 1
+              else
+                break
               end
             end
-            j += 1
+
+            j = start_j
+            while j < total_b
+              e_b = entries_b[j]
+              # 右側の打ち切り (Early Out)
+              break if e_b[0] > max_a
+
+              # X軸の重なり確認 (先頭に巨大キャラがいて start_j が進んでいなくても、左に外れたキャラはここで即スキップ)
+              if e_b[1] >= min_a
+                item_b = e_b[2]
+                if !item_b.vanished?
+                  shape_b = e_b[3]
+                  if check(shape_a, shape_b)
+                    if block_given?
+                      yield(item_a, item_b)
+                      break if item_a.vanished?
+                    else
+                      hits << [item_a, item_b]
+                    end
+                  end
+                end
+              end
+              j += 1
+            end
           end
           i += 1
         end
@@ -2079,7 +2096,7 @@ module Zenoo
           item = items[i]
           i += 1
           next unless item
-          next if item.respond_to?(:dead) && item.dead
+          next if item.vanished?
 
           # 高速座標・半径取得 (動的メソッド呼び出しとキャッシュ同期のオーバーヘッドをバイパス)
           x = item.x.to_f
@@ -2158,12 +2175,17 @@ module Zenoo
           while i < c_len
             e1 = cell_enemies[i]
             i += 1
-            j = i
-            while j < c_len
-              e2 = cell_enemies[j]
-              j += 1
-              next if e1.equal?(e2)
-              yield(e1, e2)
+            if !e1.vanished?
+              j = i
+              while j < c_len
+                e2 = cell_enemies[j]
+                j += 1
+                next if e1.equal?(e2)
+                if !e2.vanished?
+                  yield(e1, e2)
+                  break if e1.vanished?
+                end
+              end
             end
           end
 
@@ -2180,12 +2202,17 @@ module Zenoo
             while i < c_len
               e1 = cell_enemies[i]
               i += 1
-              j = 0
-              while j < n_len
-                e2 = neighbor[j]
-                j += 1
-                next if e1.equal?(e2)
-                yield(e1, e2)
+              if !e1.vanished?
+                j = 0
+                while j < n_len
+                  e2 = neighbor[j]
+                  j += 1
+                  next if e1.equal?(e2)
+                  if !e2.vanished?
+                    yield(e1, e2)
+                    break if e1.vanished?
+                  end
+                end
               end
             end
           end
