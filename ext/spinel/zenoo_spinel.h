@@ -80,6 +80,15 @@ double sp_zen_win_get_scale(void);
 void sp_zen_win_set_window_size(sp_int w, sp_int h);
 void sp_zen_win_set_msaa_samples(sp_int samples);
 sp_int sp_zen_win_get_msaa_samples(void);
+void sp_zen_win_set_title(const char* title);
+const char* sp_zen_win_get_title(void);
+sp_int sp_zen_win_get_pos_x(void);
+sp_int sp_zen_win_get_pos_y(void);
+void sp_zen_win_set_window_pos(sp_int x, sp_int y);
+sp_bool sp_zen_win_is_focused(void);
+sp_bool sp_zen_win_is_minimized(void);
+sp_bool sp_zen_win_is_maximized(void);
+sp_bool sp_zen_win_is_hovered(void);
 
 sp_bool sp_zen_input_key_pressed(sp_int key);
 sp_bool sp_zen_input_key_push(sp_int key);

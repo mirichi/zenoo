@@ -346,6 +346,46 @@ sp_int sp_zen_win_get_msaa_samples(void) {
     return (sp_int)zen_window_get_msaa_samples();
 }
 
+void sp_zen_win_set_title(const char* title) {
+    zen_set_window_title(title);
+}
+
+const char* sp_zen_win_get_title(void) {
+    return zen_get_window_title();
+}
+
+sp_int sp_zen_win_get_pos_x(void) {
+    int x = 0, y = 0;
+    zen_get_window_pos(&x, &y);
+    return (sp_int)x;
+}
+
+sp_int sp_zen_win_get_pos_y(void) {
+    int x = 0, y = 0;
+    zen_get_window_pos(&x, &y);
+    return (sp_int)y;
+}
+
+void sp_zen_win_set_window_pos(sp_int x, sp_int y) {
+    zen_set_window_pos((int)x, (int)y);
+}
+
+sp_bool sp_zen_win_is_focused(void) {
+    return zen_is_window_focused() ? true : false;
+}
+
+sp_bool sp_zen_win_is_minimized(void) {
+    return zen_is_window_minimized() ? true : false;
+}
+
+sp_bool sp_zen_win_is_maximized(void) {
+    return zen_is_window_maximized() ? true : false;
+}
+
+sp_bool sp_zen_win_is_hovered(void) {
+    return zen_is_window_hovered() ? true : false;
+}
+
 sp_bool sp_zen_input_key_pressed(sp_int key) {
     return zen_is_key_pressed((int)key) ? true : false;
 }

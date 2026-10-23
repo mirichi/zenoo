@@ -82,6 +82,44 @@ module Zenoo
       default.text_width(text, size)
     end
 
+    # 文字列の描画サイズ [width, height] を計算 (複数行対応)
+    def text_size(text, size = 24.0, line_spacing: nil)
+      return [0.0, 0.0] unless text
+      str = text.to_s
+      return [0.0, 0.0] if str.empty?
+
+      s = size.to_f
+      s = 24.0 if s <= 0.0
+
+      if str.include?("\n")
+        lines = str.split("\n", -1)
+        max_w = 0.0
+        lines.each do |line|
+          w = text_width(line, s)
+          max_w = w if w > max_w
+        end
+        m = metrics(s)
+        line_h = line_spacing ? (s * line_spacing.to_f) : (m[:line_height] || (s * 1.2))
+        total_h = s + (lines.length - 1) * line_h
+        [max_w, total_h]
+      else
+        [text_width(str, s), s]
+      end
+    end
+
+    def self.text_size(text, size = 24.0, line_spacing: nil)
+      default.text_size(text, size, line_spacing: line_spacing)
+    end
+
+    # 文字列の描画高さを計算 (複数行対応)
+    def text_height(text, size = 24.0, line_spacing: nil)
+      text_size(text, size, line_spacing: line_spacing)[1]
+    end
+
+    def self.text_height(text, size = 24.0, line_spacing: nil)
+      default.text_height(text, size, line_spacing: line_spacing)
+    end
+
 
     # ----------------------------------------------------
     # SDF / TTF ベクターフォント基盤 (定数・デフォルトフォント)

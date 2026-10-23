@@ -17,6 +17,11 @@ extern "C" {
 // キーコード定数 (GLFW準拠)
 enum ZenKey {
     ZEN_KEY_SPACE         = 32,
+    ZEN_KEY_APOSTROPHE    = 39,
+    ZEN_KEY_COMMA         = 44,
+    ZEN_KEY_MINUS         = 45,
+    ZEN_KEY_PERIOD        = 46,
+    ZEN_KEY_SLASH         = 47,
     ZEN_KEY_0             = 48,
     ZEN_KEY_1             = 49,
     ZEN_KEY_2             = 50,
@@ -27,6 +32,8 @@ enum ZenKey {
     ZEN_KEY_7             = 55,
     ZEN_KEY_8             = 56,
     ZEN_KEY_9             = 57,
+    ZEN_KEY_SEMICOLON     = 59,
+    ZEN_KEY_EQUAL         = 61,
     ZEN_KEY_A             = 65,
     ZEN_KEY_B             = 66,
     ZEN_KEY_C             = 67,
@@ -53,14 +60,67 @@ enum ZenKey {
     ZEN_KEY_X             = 88,
     ZEN_KEY_Y             = 89,
     ZEN_KEY_Z             = 90,
+    ZEN_KEY_LEFT_BRACKET  = 91,
+    ZEN_KEY_BACKSLASH     = 92,
+    ZEN_KEY_RIGHT_BRACKET = 93,
+    ZEN_KEY_GRAVE_ACCENT  = 96,
     ZEN_KEY_ESCAPE        = 256,
     ZEN_KEY_ENTER         = 257,
     ZEN_KEY_TAB           = 258,
     ZEN_KEY_BACKSPACE     = 259,
+    ZEN_KEY_INSERT        = 260,
+    ZEN_KEY_DELETE        = 261,
     ZEN_KEY_RIGHT         = 262,
     ZEN_KEY_LEFT          = 263,
     ZEN_KEY_DOWN          = 264,
     ZEN_KEY_UP            = 265,
+    ZEN_KEY_PAGE_UP       = 266,
+    ZEN_KEY_PAGE_DOWN     = 267,
+    ZEN_KEY_HOME          = 268,
+    ZEN_KEY_END           = 269,
+    ZEN_KEY_CAPS_LOCK     = 280,
+    ZEN_KEY_SCROLL_LOCK   = 281,
+    ZEN_KEY_NUM_LOCK      = 282,
+    ZEN_KEY_PRINT_SCREEN  = 283,
+    ZEN_KEY_PAUSE         = 284,
+    ZEN_KEY_F1            = 290,
+    ZEN_KEY_F2            = 291,
+    ZEN_KEY_F3            = 292,
+    ZEN_KEY_F4            = 293,
+    ZEN_KEY_F5            = 294,
+    ZEN_KEY_F6            = 295,
+    ZEN_KEY_F7            = 296,
+    ZEN_KEY_F8            = 297,
+    ZEN_KEY_F9            = 298,
+    ZEN_KEY_F10           = 299,
+    ZEN_KEY_F11           = 300,
+    ZEN_KEY_F12           = 301,
+    ZEN_KEY_KP_0          = 320,
+    ZEN_KEY_KP_1          = 321,
+    ZEN_KEY_KP_2          = 322,
+    ZEN_KEY_KP_3          = 323,
+    ZEN_KEY_KP_4          = 324,
+    ZEN_KEY_KP_5          = 325,
+    ZEN_KEY_KP_6          = 326,
+    ZEN_KEY_KP_7          = 327,
+    ZEN_KEY_KP_8          = 328,
+    ZEN_KEY_KP_9          = 329,
+    ZEN_KEY_KP_DECIMAL    = 330,
+    ZEN_KEY_KP_DIVIDE     = 331,
+    ZEN_KEY_KP_MULTIPLY   = 332,
+    ZEN_KEY_KP_SUBTRACT   = 333,
+    ZEN_KEY_KP_ADD        = 334,
+    ZEN_KEY_KP_ENTER      = 335,
+    ZEN_KEY_KP_EQUAL      = 336,
+    ZEN_KEY_LEFT_SHIFT    = 340,
+    ZEN_KEY_LEFT_CONTROL  = 341,
+    ZEN_KEY_LEFT_ALT      = 342,
+    ZEN_KEY_LEFT_SUPER    = 343,
+    ZEN_KEY_RIGHT_SHIFT   = 344,
+    ZEN_KEY_RIGHT_CONTROL = 345,
+    ZEN_KEY_RIGHT_ALT     = 346,
+    ZEN_KEY_RIGHT_SUPER   = 347,
+    ZEN_KEY_MENU          = 348,
 };
 
 enum ZenMouseButton {
@@ -120,6 +180,14 @@ float  zen_get_delta_time(void);
 void   zen_get_screen_size(int* width, int* height);  // 仮想解像度 (ゲーム内の論理座標系)
 void   zen_get_window_size(int* width, int* height);  // OS ウィンドウのサイズ
 void   zen_set_window_size(int width, int height);    // OS ウィンドウのサイズ変更
+void   zen_set_window_title(const char* title);       // ウィンドウタイトルの動的変更
+const char* zen_get_window_title(void);              // ウィンドウタイトルの取得
+void   zen_get_window_pos(int* x, int* y);            // OS ウィンドウの位置取得
+void   zen_set_window_pos(int x, int y);              // OS ウィンドウの位置変更
+int    zen_is_window_focused(void);                  // フォーカス状態
+int    zen_is_window_minimized(void);                // 最小化 (アイコン化) 状態
+int    zen_is_window_maximized(void);                // 最大化状態
+int    zen_is_window_hovered(void);                  // マウスカーソルがウィンドウ内にあるか
 void   zen_set_scale_mode(int mode);
 int    zen_get_scale_mode(void);
 float  zen_get_scale(void);

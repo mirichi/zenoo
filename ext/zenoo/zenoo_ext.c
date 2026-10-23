@@ -570,6 +570,51 @@ static VALUE win_get_os_window_size(VALUE self) {
     return rb_ary_new_from_args(2, INT2NUM(w), INT2NUM(h));
 }
 
+static VALUE win_set_title(VALUE self, VALUE rb_title) {
+    (void)self;
+    Check_Type(rb_title, T_STRING);
+    zen_set_window_title(StringValueCStr(rb_title));
+    return rb_title;
+}
+
+static VALUE win_get_title(VALUE self) {
+    (void)self;
+    return rb_str_new_cstr(zen_get_window_title());
+}
+
+static VALUE win_get_window_pos(VALUE self) {
+    (void)self;
+    int x = 0, y = 0;
+    zen_get_window_pos(&x, &y);
+    return rb_ary_new_from_args(2, INT2NUM(x), INT2NUM(y));
+}
+
+static VALUE win_set_window_pos(VALUE self, VALUE rb_x, VALUE rb_y) {
+    (void)self;
+    zen_set_window_pos(NUM2INT(rb_x), NUM2INT(rb_y));
+    return Qnil;
+}
+
+static VALUE win_is_focused(VALUE self) {
+    (void)self;
+    return zen_is_window_focused() ? Qtrue : Qfalse;
+}
+
+static VALUE win_is_minimized(VALUE self) {
+    (void)self;
+    return zen_is_window_minimized() ? Qtrue : Qfalse;
+}
+
+static VALUE win_is_maximized(VALUE self) {
+    (void)self;
+    return zen_is_window_maximized() ? Qtrue : Qfalse;
+}
+
+static VALUE win_is_hovered(VALUE self) {
+    (void)self;
+    return zen_is_window_hovered() ? Qtrue : Qfalse;
+}
+
 static VALUE win_update(VALUE self) {
     (void)self;
     return zen_update() ? Qtrue : Qfalse;
@@ -1100,6 +1145,14 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "scale", win_get_scale, 0);
     rb_define_singleton_method(mWindow, "set_window_size", win_set_window_size, 2);
     rb_define_singleton_method(mWindow, "window_size", win_get_os_window_size, 0);
+    rb_define_singleton_method(mWindow, "title=", win_set_title, 1);
+    rb_define_singleton_method(mWindow, "title", win_get_title, 0);
+    rb_define_singleton_method(mWindow, "window_position", win_get_window_pos, 0);
+    rb_define_singleton_method(mWindow, "set_window_position", win_set_window_pos, 2);
+    rb_define_singleton_method(mWindow, "focused?", win_is_focused, 0);
+    rb_define_singleton_method(mWindow, "minimized?", win_is_minimized, 0);
+    rb_define_singleton_method(mWindow, "maximized?", win_is_maximized, 0);
+    rb_define_singleton_method(mWindow, "hovered?", win_is_hovered, 0);
     rb_define_singleton_method(mWindow, "msaa_samples=", win_set_msaa_samples, 1);
     rb_define_singleton_method(mWindow, "msaa_samples", win_get_msaa_samples, 0);
     rb_define_singleton_method(mWindow, "vsync=", win_set_vsync, 1);
