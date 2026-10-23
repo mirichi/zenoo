@@ -27,6 +27,61 @@ module Zenoo
         raise NotImplementedError, "#{self.class}#draw_text_box must be implemented"
       end
 
+      # チェックボックス描画
+      def draw_checkbox(x, y, w, h, label, checked, hover, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_checkbox must be implemented"
+      end
+
+      # ラジオボタン描画
+      def draw_radio(x, y, w, h, label, active, hover, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_radio must be implemented"
+      end
+
+      # タブバー描画
+      def draw_tabs(x, y, w, h, labels, selected_index, hover_index, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_tabs must be implemented"
+      end
+
+      # スピンボタン描画
+      def draw_spinner(x, y, w, h, label, value_str, minus_hover, plus_hover, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_spinner must be implemented"
+      end
+
+      # スクロールバー描画
+      def draw_scrollbar(x, y, w, h, thumb_y, thumb_h, state, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_scrollbar must be implemented"
+      end
+
+      # リストボックス枠描画
+      def draw_listbox_frame(x, y, w, h, label, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_listbox_frame must be implemented"
+      end
+
+      # リストボックスアイテム描画
+      def draw_listbox_item(x, y, w, h, text, selected, hover, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_listbox_item must be implemented"
+      end
+
+      # ドロップダウン本体描画
+      def draw_dropdown(x, y, w, h, label, selected_text, is_open, hover, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_dropdown must be implemented"
+      end
+
+      # ドロップダウンポップアップ枠描画
+      def draw_dropdown_popup_frame(x, y, w, h, z, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_dropdown_popup_frame must be implemented"
+      end
+
+      # ドロップダウンポップアップアイテム描画
+      def draw_dropdown_popup_item(x, y, w, h, text, selected, hover, z, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_dropdown_popup_item must be implemented"
+      end
+
+      # スクロールビュー外枠描画
+      def draw_scroll_view_frame(x, y, w, h, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_scroll_view_frame must be implemented"
+      end
+
       # パネル (コンテナ枠) 描画
       def draw_panel(x, y, w, h, title, theme, **opts)
         # デフォルトはシンプルな矩形描画

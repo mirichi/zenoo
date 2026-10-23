@@ -49,38 +49,7 @@ module Zenoo
         end
 
         # 描画
-        border_cfg = hover ? (@theme.border_hover || @theme.border_normal) : @theme.border_normal
-        b_width = border_cfg ? border_cfg[0].to_f : 1.0
-        b_color = border_cfg ? border_cfg[1] : Color.new(80, 80, 85)
-        bg_col = hover ? (@theme.bg_hover || Color.new(50, 50, 55)) : (@theme.bg_normal || Color.new(35, 35, 38))
-
-        # 外枠
-        Window.draw_rect(
-          rx, box_y, box_size, box_size,
-          radius: 4.0,
-          color: bg_col,
-          border_width: b_width,
-          border_color: b_color
-        )
-
-        # チェック状態の描画 (アクセントカラーの内側角丸四角形 + 白チェック)
-        if new_checked
-          accent = @theme.accent_color || Color.new(80, 140, 240)
-          inner_pad = 4.0
-          Window.draw_rect(
-            rx + inner_pad, box_y + inner_pad,
-            box_size - inner_pad * 2.0, box_size - inner_pad * 2.0,
-            radius: 2.0,
-            color: accent
-          )
-        end
-
-        # ラベルテキスト
-        text_col = hover ? (@theme.text_color || Color::WHITE) : (@theme.text_color || Color.new(220, 220, 225))
-        ty = ry + (rh - f_size.to_f) * 0.5
-        Profiler.measure(:gui_text) do
-          Window.draw_text(rx + box_size + 10.0, ty, label.to_s, font: f_font, size: f_size, color: text_col)
-        end
+        @renderer.draw_checkbox(rx, ry, rw, rh, label, new_checked, hover, @theme)
 
         @layout.advance(rw, rh) if x.nil? && y.nil?
         new_checked
@@ -122,31 +91,7 @@ module Zenoo
         end
 
         # 描画
-        border_cfg = hover ? (@theme.border_hover || @theme.border_normal) : @theme.border_normal
-        b_width = border_cfg ? border_cfg[0].to_f : 1.0
-        b_color = border_cfg ? border_cfg[1] : Color.new(80, 80, 85)
-        bg_col = hover ? (@theme.bg_hover || Color.new(50, 50, 55)) : (@theme.bg_normal || Color.new(35, 35, 38))
-
-        # 外円
-        Window.draw_circle(
-          cx, cy, circle_r,
-          color: bg_col,
-          border_width: b_width,
-          border_color: b_color
-        )
-
-        # 選択時の内丸
-        if new_active
-          accent = @theme.accent_color || Color.new(80, 140, 240)
-          Window.draw_circle(cx, cy, 4.5, color: accent)
-        end
-
-        # ラベルテキスト
-        text_col = hover ? (@theme.text_color || Color::WHITE) : (@theme.text_color || Color.new(220, 220, 225))
-        ty = ry + (rh - f_size.to_f) * 0.5
-        Profiler.measure(:gui_text) do
-          Window.draw_text(rx + circle_d + 10.0, ty, label.to_s, font: f_font, size: f_size, color: text_col)
-        end
+        @renderer.draw_radio(rx, ry, rw, rh, label, new_active, hover, @theme)
 
         @layout.advance(rw, rh) if x.nil? && y.nil?
         new_active
@@ -173,63 +118,26 @@ module Zenoo
         f_size = 14
         accent = @theme.accent_color || Color.new(80, 140, 240)
 
-        # 背景トラック
-        Window.draw_rect(
-          rx, ry, rw, rh,
-          radius: 4.0,
-          color: Color.new(26, 26, 29, 230),
-          border_width: 1.0,
-          border_color: Color.new(55, 55, 60, 180)
-        )
-
         new_selected = selected_index.to_i
+        hover_idx = nil
 
         i = 0
         while i < count
-          lbl = labels[i].to_s
           tx = rx + i.to_f * tab_w
-          is_cur = (i == new_selected)
           hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, tx, ry, tab_w, rh)
 
           if hover
+            hover_idx = i
             @hot_id = "#{widget_id}_#{i}"
             if @mouse_push
               new_selected = i
             end
           end
-
-          # タブ背景 (選択中 / ホバー中)
-          if is_cur
-            Window.draw_rect(
-              tx + 2.0, ry + 2.0, tab_w - 4.0, rh - 4.0,
-              radius: 3.0,
-              color: Color.new(48, 48, 54, 255)
-            )
-            # アクティブインジケータ (下線アクセントバー)
-            Window.draw_rect(
-              tx + 6.0, ry + rh - 3.5, tab_w - 12.0, 2.5,
-              radius: 1.0,
-              color: accent
-            )
-          elsif hover
-            Window.draw_rect(
-              tx + 2.0, ry + 2.0, tab_w - 4.0, rh - 4.0,
-              radius: 3.0,
-              color: Color.new(38, 38, 42, 180)
-            )
-          end
-
-          # ラベル (中央揃え)
-          tw = f_font.text_width(lbl, f_size)
-          text_x = tx + (tab_w - tw) * 0.5
-          text_y = ry + (rh - f_size.to_f) * 0.5 - 1.0
-          tcol = is_cur ? (@theme.text_color || Color::WHITE) : (hover ? Color::WHITE : Color.new(160, 160, 165))
-          Profiler.measure(:gui_text) do
-            Window.draw_text(text_x, text_y, lbl, font: f_font, size: f_size, color: tcol)
-          end
-
           i += 1
         end
+
+        # 描画
+        @renderer.draw_tabs(rx, ry, rw, rh, labels, new_selected, hover_idx, @theme)
 
         @layout.advance(rw, rh) if x.nil? && y.nil?
         new_selected
@@ -291,53 +199,11 @@ module Zenoo
         cur_val = [cur_val, min].max if min
         cur_val = [cur_val, max].min if max
 
-        # ラベル描画
-        if has_label
-          ly = ry + (rh - f_size.to_f) * 0.5
-          Profiler.measure(:gui_text) do
-            Window.draw_text(rx, ly, label.to_s, font: f_font, size: f_size, color: @theme.text_color || Color::WHITE)
-          end
-        end
-
-        # 中央の値表示ボックス
-        Window.draw_rect(
-          val_x, ry, val_w, rh,
-          radius: 3.0,
-          color: Color.new(28, 28, 32, 230),
-          border_width: 1.0,
-          border_color: Color.new(55, 55, 60, 200)
-        )
-
         fmt_str = format || (cur_val.is_a?(Float) ? "%.2f" : "%d")
         val_str = sprintf(fmt_str, cur_val)
-        tw = f_font.text_width(val_str, f_size)
-        Profiler.measure(:gui_text) do
-          Window.draw_text(val_x + (val_w - tw) * 0.5, ry + (rh - f_size.to_f) * 0.5, val_str, font: f_font, size: f_size, color: Color::WHITE)
-        end
 
-        # [-] ボタン描画
-        m_bg = minus_hover ? (@theme.bg_hover || Color.new(55, 55, 60)) : (@theme.bg_normal || Color.new(40, 40, 44))
-        Window.draw_rect(
-          minus_x, ry, btn_w, rh,
-          radius: 3.0,
-          color: m_bg,
-          border_width: 1.0,
-          border_color: Color.new(65, 65, 70, 200)
-        )
-        Window.draw_rect(minus_x + 10.0, ry + rh * 0.5 - 1.0, btn_w - 20.0, 2.0, color: Color::WHITE)
-
-        # [+] ボタン描画
-        p_bg = plus_hover ? (@theme.bg_hover || Color.new(55, 55, 60)) : (@theme.bg_normal || Color.new(40, 40, 44))
-        Window.draw_rect(
-          plus_x, ry, btn_w, rh,
-          radius: 3.0,
-          color: p_bg,
-          border_width: 1.0,
-          border_color: Color.new(65, 65, 70, 200)
-        )
-        # 十字マーク
-        Window.draw_rect(plus_x + 10.0, ry + rh * 0.5 - 1.0, btn_w - 20.0, 2.0, color: Color::WHITE)
-        Window.draw_rect(plus_x + btn_w * 0.5 - 1.0, ry + 10.0, 2.0, rh - 20.0, color: Color::WHITE)
+        # 描画
+        @renderer.draw_spinner(rx, ry, rw, rh, label, val_str, minus_hover, plus_hover, @theme)
 
         @layout.advance(rw, rh) if x.nil? && y.nil?
         cur_val
@@ -364,7 +230,7 @@ module Zenoo
         max_scroll = [tot - vw, 0.0].max
         if max_scroll <= 0.0
           # スクロール不要時は無効バーを描画
-          Window.draw_rect(rx, ry, rw, rh, radius: rw * 0.5, color: Color.new(22, 22, 25, 120))
+          @renderer.draw_scrollbar(rx, ry, rw, rh, 0.0, 0.0, :disabled, @theme)
           @layout.advance(rw, rh) if x.nil? && y.nil?
           return 0.0
         end
@@ -407,20 +273,10 @@ module Zenoo
         cur_val = [[cur_val, 0.0].max, max_scroll].min
 
         # 描画
-        # トラック
-        Window.draw_rect(rx, ry, rw, rh, radius: rw * 0.5, color: Color.new(20, 20, 22, 160))
-
-        # サム (つまみ)
         thumb_ratio = max_scroll > 0 ? (cur_val / max_scroll) : 0.0
         actual_thumb_y = ry + thumb_ratio * (rh - thumb_h)
-        thumb_col = (@active_id == widget_id) ? (@theme.accent_color || Color.new(100, 160, 255)) :
-                    (hover_thumb ? Color.new(110, 110, 120, 240) : Color.new(75, 75, 82, 200))
-
-        Window.draw_rect(
-          rx + 2.0, actual_thumb_y, rw - 4.0, thumb_h,
-          radius: (rw - 4.0) * 0.5,
-          color: thumb_col
-        )
+        state = (@active_id == widget_id) ? :active : (hover_thumb ? :hover : :normal)
+        @renderer.draw_scrollbar(rx, ry, rw, rh, actual_thumb_y, thumb_h, state, @theme)
 
         @layout.advance(rw, rh) if x.nil? && y.nil?
         cur_val
@@ -447,12 +303,8 @@ module Zenoo
         list_h = h ? h.to_f : [items.length * item_h + 8.0, 140.0].min
         list_y = ry + label_h
 
-        # ラベル描画
-        if has_label
-          Profiler.measure(:gui_text) do
-            Window.draw_text(rx, ry + 2.0, label.to_s, font: f_font, size: f_size, color: @theme.text_color || Color::WHITE)
-          end
-        end
+        # 外枠描画 (ラベル＋背景ボックス)
+        @renderer.draw_listbox_frame(rx, ry, rw, list_h, label, @theme)
 
         pad_y = 4.0
         total_content_h = items.length.to_f * item_h + pad_y * 2.0
@@ -472,15 +324,6 @@ module Zenoo
         max_s = [total_content_h - inner_h, 0.0].max
         scroll_y = [[scroll_y, 0.0].max, max_s].min
         Widgets.scroll_states[widget_id] = scroll_y
-
-        # 背景ボックス
-        Window.draw_rect(
-          rx, list_y, rw, list_h,
-          radius: 4.0,
-          color: Color.new(24, 24, 27, 240),
-          border_width: 1.0,
-          border_color: Color.new(55, 55, 60, 200)
-        )
 
         new_selected = selected_index.to_i
         accent = @theme.accent_color || Color.new(80, 140, 240)
@@ -505,26 +348,8 @@ module Zenoo
                 end
               end
 
-              # 行背景 (選択 / ホバー)
-              if is_sel
-                Window.draw_rect(
-                  rx + 4.0, iy + 1.0, content_w - 4.0, item_h - 2.0,
-                  radius: 3.0,
-                  color: Color.new(accent.r, accent.g, accent.b, 200)
-                )
-              elsif it_hover
-                Window.draw_rect(
-                  rx + 4.0, iy + 1.0, content_w - 4.0, item_h - 2.0,
-                  radius: 3.0,
-                  color: Color.new(45, 45, 50, 180)
-                )
-              end
-
-              # アイテム名
-              tcol = is_sel ? Color::WHITE : (it_hover ? Color::WHITE : Color.new(200, 200, 205))
-              Profiler.measure(:gui_text) do
-                Window.draw_text(rx + 10.0, iy + (item_h - f_size.to_f) * 0.5, it_text, font: f_font, size: f_size, color: tcol)
-              end
+              # アイテム描画
+              @renderer.draw_listbox_item(rx, iy, content_w, item_h, it_text, is_sel, it_hover, @theme)
             end
             i += 1
           end
@@ -566,13 +391,6 @@ module Zenoo
         label_h = has_label ? 20.0 : 0.0
         ctrl_y = ry + label_h
 
-        # ラベル描画
-        if has_label
-          Profiler.measure(:gui_text) do
-            Window.draw_text(rx, ry + 1.0, label.to_s, font: f_font, size: f_size, color: @theme.text_color || Color::WHITE)
-          end
-        end
-
         is_open = (Widgets.dropdown_open == widget_id)
         hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ctrl_y, rw, rh)
         new_selected = selected_index.to_i
@@ -591,40 +409,11 @@ module Zenoo
           # ポップアップ領域外クリック判定は下部で行う
         end
 
-        # コントロール本体の描画
-        border_cfg = (hover || is_open) ? (@theme.border_hover || @theme.border_normal) : @theme.border_normal
-        b_width = border_cfg ? border_cfg[0].to_f : 1.0
-        b_color = border_cfg ? border_cfg[1] : Color.new(80, 80, 85)
-        bg_col = (hover || is_open) ? (@theme.bg_hover || Color.new(50, 50, 55)) : (@theme.bg_normal || Color.new(35, 35, 38))
-
-        Window.draw_rect(
-          rx, ctrl_y, rw, rh,
-          radius: 4.0,
-          color: bg_col,
-          border_width: b_width,
-          border_color: b_color
-        )
-
         # 現在選択中のテキスト
         sel_text = (items[new_selected] || "").to_s
-        Profiler.measure(:gui_text) do
-          Window.draw_text(
-            rx + 10.0, ctrl_y + (rh - f_size.to_f) * 0.5,
-            sel_text,
-            font: f_font, size: f_size,
-            color: Color::WHITE
-          )
-        end
 
-        # 下向き三角矢印 (▼)
-        arrow_x = rx + rw - 18.0
-        arrow_y = ctrl_y + rh * 0.5 - 2.0
-        Window.draw_triangle(
-          arrow_x, arrow_y,
-          arrow_x + 8.0, arrow_y,
-          arrow_x + 4.0, arrow_y + 5.0,
-          color: Color.new(180, 180, 185)
-        )
+        # コントロール本体の描画
+        @renderer.draw_dropdown(rx, ry, rw, rh, label, sel_text, is_open, hover, @theme)
 
         # 開いている場合のポップアップリスト描画
         if is_open
@@ -635,21 +424,11 @@ module Zenoo
 
           # ポップアップ背景 (最前面 Z + 200.0)
           pop_z = 500.0
-          Window.draw_rect(
-            rx, pop_y, rw, pop_h,
-            radius: 4.0,
-            color: Color.new(28, 28, 32, 250),
-            border_width: 1.0,
-            border_color: @theme.accent_color || Color.new(80, 140, 240),
-            shadow_blur: 8.0,
-            shadow_color: Color.new(0, 0, 0, 160),
-            z: pop_z
-          )
+          @renderer.draw_dropdown_popup_frame(rx, pop_y, rw, pop_h, pop_z, @theme)
 
           # アイテム描画
           i = 0
           len = items.length
-          accent = @theme.accent_color || Color.new(80, 140, 240)
           while i < len
             iy = pop_y + 3.0 + i.to_f * item_h
             if iy + item_h <= pop_y + pop_h + 4.0
@@ -664,16 +443,7 @@ module Zenoo
                 end
               end
 
-              if is_sel
-                Window.draw_rect(rx + 3.0, iy, rw - 6.0, item_h, radius: 2.0, color: Color.new(accent.r, accent.g, accent.b, 200), z: pop_z + 1.0)
-              elsif it_hover
-                Window.draw_rect(rx + 3.0, iy, rw - 6.0, item_h, radius: 2.0, color: Color.new(48, 48, 54, 220), z: pop_z + 1.0)
-              end
-
-              it_col = is_sel ? Color::WHITE : (it_hover ? Color::WHITE : Color.new(200, 200, 205))
-              Profiler.measure(:gui_text) do
-                Window.draw_text(rx + 10.0, iy + (item_h - f_size.to_f) * 0.5, items[i].to_s, font: f_font, size: f_size, color: it_col, z: pop_z + 2.0)
-              end
+              @renderer.draw_dropdown_popup_item(rx, iy, rw, item_h, items[i], is_sel, it_hover, pop_z, @theme)
             end
             i += 1
           end
@@ -738,13 +508,7 @@ module Zenoo
         Widgets.scroll_states[widget_id] = scroll_y
 
         # 背景パネル
-        Window.draw_rect(
-          rx, ry, rw, rh,
-          radius: 4.0,
-          color: Color.new(22, 22, 25, 230),
-          border_width: 1.0,
-          border_color: Color.new(50, 50, 55, 200)
-        )
+        @renderer.draw_scroll_view_frame(rx, ry, rw, rh, @theme)
 
         # クリップスコープ開始
         prev_ox, prev_oy = Window.push_clip_scope(rx + 2.0, ry + 2.0, view_w, clip_h, local: true)
