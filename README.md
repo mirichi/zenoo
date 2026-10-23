@@ -28,10 +28,11 @@ DXRuby に着想を得た直感的な API を備え、デスクトップ（CRuby
    - **耳刈り取り法 (Ear Clipping)** による凹凸多角形のリアルタイム GPU メッシュ化。
    - モバイル GPU に最適化された 32bit 高精度（`highp`）シェーダーによる線形 (Linear) / 放射 (Radial) グラデーション。
 
-5. **Pure Ruby 即時モード (Immediate Mode) GUI**
-   - ステートレスに毎フレーム構築可能な UI システム。
-   - GPU SDF シェーダーによるモダン角丸カード、ドロップシャドウ、押し込みアニメーション、スライダー、ラベルを標準装備。
-   - モダンテーマとレトロフラットテーマのリアルタイム切り替えに対応。
+5. **Pure Ruby 即時モード (Immediate Mode) GUI (`Zenoo::GUI`)**
+   - ステートレスに毎フレーム構築可能な本格 UI システム。
+   - ボタン、スライダー、テキストボックス、チェックボックス、ラジオボタン、タブバー、スピンボタン、ドロップダウンリスト、リストボックス、スクロールビュー（自動高さ計測・ホイール対応）を標準装備。
+   - マルチウィンドウのドラッグ移動・前面化（Bring to Front）および右下ドラッグによるインタラクティブなサイズ変更（`resizable: true`）に対応。
+   - GPU SDF シェーダーによるモダン角丸カードと、テーマ・スタイルのリアルタイム切り替え。
 
 6. **スマートフォン・マルチプラットフォーム完全最適化**
    - 16:9 仮想解像度のアスペクト比自動維持。
@@ -70,12 +71,11 @@ Web ブラウザ上で動作するインタラクティブデモは、GitHub Pag
 |---|---|---|
 | **Zenoo Portal** | `docs/index.html` | 全デモを一覧・起動できるポータルハブ |
 | **Survival Shooting** | `docs/game/` | 群がる敵を倒しオーブで強化する 2D サバイバルアクション |
-| **Immediate Mode GUI** | `docs/gui/` | Pure Ruby 即時モード GUI（ボタン・スライダー・SDF カード） |
+| **Extended GUI & Windows**| `docs/gui/` | チェックボックス・ラジオ・タブ・スピン・ドロップダウン・リスト・スクロールビュー・サイズ変更ウィンドウ |
 | **SDF Font & Sinclair** | `docs/font/` | ハイブリッドSDF/ビットマップ動的アトラス、高品質日本語・袋文字・8x8 レトロ文字 |
 | **Vector Graphics** | `docs/vector/` | Canvas 2D 互換 API、ベジエ曲線、多角形分割、グラデーション |
 | **Sprite & Blend Modes** | `docs/image/` | GPU Instanced な回転・拡縮・反転・ピボット・加算/乗算ブレンド合成 |
 | **Texture Atlas & sub_image** | `docs/atlas/` | FBO への動的ベイク、sub_image ゼロアロケーション切り出し、1ドローコール描画 |
-| **Multi-Window & Occlusion** | `docs/window/` | ドラッグ移動・Zオーダー制御・背面クリック遮断・内部クリッピング |
 | **Hardware Clipping** | `docs/clip/` | glScissor ハードウェアクリッピング、画面全体マスクとローカルビューポート |
 | **Audio & Sound Synthesis** | `docs/sound/` | miniaudio & Ogg Vorbis、DXRuby風動的波形合成 (SoundEffect) |
 | **2D Collision Playground** | `docs/collision/` | GJK 2D 凸図形衝突判定、円・カプセル・OBB・凸多角形リアルタイム交差 |
@@ -283,23 +283,21 @@ zenoo/
 │   ├── index.html             # ショーケースポータル
 │   ├── favicon.ico            # ファビコン
 │   ├── game/                  # Survival Shooting デモ
-│   ├── gui/                   # Immediate Mode GUI デモ
+│   ├── gui/                   # Extended GUI & Resizable Windows デモ
 │   ├── font/                  # SDF Font & Sinclair デモ
 │   ├── vector/                # Vector Graphics デモ
 │   ├── image/                 # Sprite & Blend Modes デモ
 │   ├── atlas/                 # Texture Atlas & sub_image デモ
-│   ├── window/                # Multi-Window & Occlusion デモ
 │   ├── clip/                  # Hardware Clipping デモ
 │   ├── sound/                 # Audio & Sound Synthesis デモ
 │   └── collision/             # 2D Collision Playground デモ
 ├── examples/                  # サンプルコード集
 │   ├── game_zenoo.rb          # サバイバルシューティング
-│   ├── demo_gui.rb            # 即時モード GUI
+│   ├── demo_gui_widgets.rb    # 拡張 GUI ウィジェット & サイズ変更ウィンドウ
 │   ├── demo_ttf_sdf_font.rb   # SDF フォント描画
 │   ├── demo_vector_graphics.rb# ベクターグラフィックス
 │   ├── demo_draw_image.rb     # スプライト描画 & ブレンド合成
 │   ├── demo_texture_atlas.rb  # テクスチャアトラス & sub_image
-│   ├── demo_window_drag.rb    # マルチウィンドウ & ドラッグ移動
 │   ├── demo_window_clip.rb    # ハードウェアクリッピング
 │   ├── demo_sound.rb          # オーディオ & 動的波形合成
 │   ├── demo_collision.rb      # 2D GJK 衝突判定プレイグラウンド

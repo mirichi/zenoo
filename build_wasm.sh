@@ -20,7 +20,7 @@ SPINEL_DIR="${HOME}/spinel"
 SPINEL_BIN="${SPINEL_DIR}/bin/spinel"
 
 TARGET_RB="${1:-examples/game_zenoo.rb}"
-OUTPUT_DIR="build/wasm"
+OUTPUT_DIR="${2:-build/wasm}"
 CACHE_DIR="build/wasm_cache"
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${CACHE_DIR}/rt"
