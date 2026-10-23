@@ -132,6 +132,12 @@ module Zenoo
         [@current.content_w - @current.cursor_x, 10.0].max
       end
 
+      # 現在のカーソル位置から利用可能な残り縦幅
+      def available_height
+        return nil unless @current.content_h
+        [@current.content_h - @current.cursor_y, 10.0].max
+      end
+
       # ウィジェット横幅の解決:
       # 1. 明示指定 (w) があればその値を使用
       # 2. row(cols: N) のブロック内であれば均等分割された col_width を使用

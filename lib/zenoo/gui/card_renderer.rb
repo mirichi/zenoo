@@ -18,32 +18,25 @@ module Zenoo
         # 状態別のスタイル選択
         bg_col     = theme.bg_normal
         border_cfg = theme.border_normal
-        shadow_cfg = theme.shadow_normal
 
         if state == :active
           bg_col     = theme.bg_active
           border_cfg = theme.border_active
-          shadow_cfg = theme.shadow_active
         elsif state == :hover
           bg_col     = theme.bg_hover
           border_cfg = theme.border_hover
-          shadow_cfg = theme.shadow_hover
         end
 
         b_w = border_cfg ? border_cfg[0] : 0.0
         b_c = border_cfg ? border_cfg[1] : :cyan
-        s_b = shadow_cfg ? shadow_cfg[0] : 0.0
-        s_c = shadow_cfg ? shadow_cfg[1] : [0, 0, 0, 180]
 
-        # 背景カード描画 (SDF角丸 + ボーダー + シャドウ)
+        # 背景カード描画 (SDF角丸 + ボーダー、影なし)
         Window.draw_rect(
           rx, ry, rw, rh,
           radius: theme.corner_radius,
           color: bg_col,
           border_width: b_w,
-          border_color: b_c,
-          shadow_blur: s_b,
-          shadow_color: s_c
+          border_color: b_c
         )
 
         # テキストの描画 (ボタン幅に収まるよう厳密に計算 & センタリング)
@@ -252,29 +245,23 @@ module Zenoo
         rw = w.to_f
         rh = h.to_f
 
-        # 背景色・枠線・影
+        # 背景色・枠線 (影なし)
         bg_col = theme.bg_normal
         if focused
           border_cfg = [2.0, theme.accent_color]
-          shadow_cfg = theme.shadow_active
         else
           border_cfg = theme.border_normal
-          shadow_cfg = theme.shadow_normal
         end
 
         b_w = border_cfg ? border_cfg[0] : 1.0
         b_c = border_cfg ? border_cfg[1] : [60, 70, 90, 255]
-        s_b = shadow_cfg ? shadow_cfg[0] : 0.0
-        s_c = shadow_cfg ? shadow_cfg[1] : [0, 0, 0, 180]
 
         Window.draw_rect(
           rx, ry, rw, rh,
           radius: theme.corner_radius,
           color: bg_col,
           border_width: b_w,
-          border_color: b_c,
-          shadow_blur: s_b,
-          shadow_color: s_c
+          border_color: b_c
         )
 
         f_size = theme.font_size.to_i
@@ -408,6 +395,16 @@ module Zenoo
               z: win_z + 2.0
             )
           end
+        end
+
+        # リサイズグリップ (右下隅)
+        if opts[:resizable]
+          grip_color = active ? (theme.win_border_active ? theme.win_border_active[1] : Color.new(140, 140, 150)) : Color.new(80, 80, 85)
+          rx = wx + ww - 15.0
+          ry = wy + wh - 15.0
+          Window.draw_line(rx + 8.0, ry + 12.0, rx + 12.0, ry + 8.0, color: grip_color, width: 1.5, z: win_z + 2.0)
+          Window.draw_line(rx + 4.0, ry + 12.0, rx + 12.0, ry + 4.0, color: grip_color, width: 1.5, z: win_z + 2.0)
+          Window.draw_line(rx + 0.0, ry + 12.0, rx + 12.0, ry + 0.0, color: grip_color, width: 1.5, z: win_z + 2.0)
         end
       end
     end
