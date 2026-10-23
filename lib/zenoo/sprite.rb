@@ -3,9 +3,9 @@
 module Zenoo
   class Sprite
     attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image
-    attr_accessor :blend, :shader, :uniforms
+    attr_accessor :blend, :shader, :uniforms, :camera
 
-    def initialize(x = 0.0, y = 0.0, image = nil, anchor: :top_left, pivot: :center, blend: :alpha, shader: nil, uniforms: nil)
+    def initialize(x = 0.0, y = 0.0, image = nil, anchor: :top_left, pivot: :center, blend: :alpha, shader: nil, uniforms: nil, camera: true)
       @x = x.to_f
       @y = y.to_f
       @z = 0.0
@@ -24,6 +24,7 @@ module Zenoo
       @blend = blend || :alpha
       @shader = shader
       @uniforms = uniforms
+      @camera = camera.nil? ? true : camera
       @visible = true
       @vanished = false
 
@@ -316,14 +317,29 @@ module Zenoo
     end
 
     # 描画
-    def draw(camera: true, z: nil, blend: nil, shader: nil, uniforms: nil)
+    def draw
       return if @vanished
-      Window.draw_sprite(self, camera: camera, z: z, blend: blend, shader: shader, uniforms: uniforms)
+      Window.draw_sprite(self)
     end
 
     # 単一または配列スプライトの一括描画 (DXRuby互換)
-    def self.draw(sprites, camera: true, z: nil, blend: nil, shader: nil, uniforms: nil)
-      Window.draw_sprite(sprites, camera: camera, z: z, blend: blend, shader: shader, uniforms: uniforms)
+    def self.draw(sprites)
+      return unless sprites
+      if sprites.is_a?(Array)
+        i = 0
+        len = sprites.length
+        while i < len
+          sp = sprites[i]
+          if sp
+            is_vanished = sp.respond_to?(:vanished?) && sp.vanished?
+            sp.draw unless is_vanished
+          end
+          i += 1
+        end
+      else
+        is_vanished = sprites.respond_to?(:vanished?) && sprites.vanished?
+        sprites.draw unless is_vanished
+      end
     end
 
     # 単一または配列スプライトの一括フレーム更新 (DXRuby互換)
@@ -334,11 +350,15 @@ module Zenoo
         len = sprites.length
         while i < len
           sp = sprites[i]
-          sp.update if sp && !sp.vanished?
+          if sp
+            is_vanished = sp.respond_to?(:vanished?) && sp.vanished?
+            sp.update unless is_vanished
+          end
           i += 1
         end
       else
-        sprites.update unless sprites.vanished?
+        is_vanished = sprites.respond_to?(:vanished?) && sprites.vanished?
+        sprites.update unless is_vanished
       end
     end
 
@@ -351,9 +371,12 @@ module Zenoo
       len = sprites.length
       while i < len
         sp = sprites[i]
-        if sp && !sp.vanished?
-          sprites[write_idx] = sp if write_idx != i
-          write_idx += 1
+        if sp
+          is_vanished = sp.respond_to?(:vanished?) && sp.vanished?
+          unless is_vanished
+            sprites[write_idx] = sp if write_idx != i
+            write_idx += 1
+          end
         end
         i += 1
       end

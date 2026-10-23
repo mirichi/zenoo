@@ -251,7 +251,6 @@ module Zenoo
       msaa_samples > 0
     end
 
-    @current_shader = nil
     @card_shader = nil
     @default_sprite_shader = nil
     @flat_primitive_shader = nil
@@ -285,15 +284,6 @@ module Zenoo
       @card_shader ||= Shader.new(Shaders::CARD_VERTEX, Shaders::CARD_FRAGMENT)
     end
 
-    # ブロック内でのシェーダー適用スコープ
-    # ※ カスタムシェーダーは Image 描画 (draw_image) にのみ適用されます。
-    def self.with_shader(shader)
-      old_shader = @current_shader
-      @current_shader = shader
-      yield
-      @current_shader = old_shader
-    end
-
     @offset_x = 0.0
     @offset_y = 0.0
     # @camera        : 設定中のカメラ (Window.camera が返すもの)
@@ -307,7 +297,7 @@ module Zenoo
       @active_camera = @camera_disabled_depth.zero? ? @camera : nil
     end
 
-    # 2D カメラ設定 (Zenoo::Camera2D)
+    # カメラ設定 (Zenoo::Camera)
     # - 引数なし: 現在のカメラを取得
     # - 引数あり (ブロックなし): カメラを設定
     # - ブロックあり: ブロック内のみカメラを適用
@@ -589,7 +579,7 @@ module Zenoo
                         camera: true,
                         z: 0.0)
       return unless image
-      effective_shader = shader || @current_shader || default_sprite_shader
+      effective_shader = shader || default_sprite_shader
 
       c_color = Backend.normalize_color(color || :white)
 
@@ -664,31 +654,15 @@ module Zenoo
       )
     end
 
-    def self.draw_sprite(sprite,
-                         camera: true,
-                         z: nil,
-                         blend: nil,
-                         shader: nil,
-                         uniforms: nil)
+    def self.draw_sprite(sprite)
       return unless sprite
-
-      if sprite.is_a?(Array)
-        i = 0
-        len = sprite.length
-        while i < len
-          draw_sprite(sprite[i], camera: camera, z: z, blend: blend, shader: shader, uniforms: uniforms)
-          i += 1
-        end
-        return
-      end
-
       return if sprite.vanished?
       return unless sprite.visible && (img = sprite.image)
 
-      eff_blend = blend || sprite.blend || :alpha
+      eff_blend = sprite.blend || :alpha
       b_mode = Backend.normalize_blend_mode(eff_blend)
-      eff_shader = shader || sprite.shader || @current_shader || default_sprite_shader
-      eff_uniforms = uniforms || sprite.uniforms
+      eff_shader = sprite.shader || default_sprite_shader
+      eff_uniforms = sprite.uniforms
 
       alpha = sprite.alpha
       col = sprite.color
@@ -716,8 +690,15 @@ module Zenoo
       sx = sprite.scale_x.to_f
       sy = sprite.scale_y.to_f
 
-      cam = @active_camera
-      if cam && camera
+      sp_cam = sprite.camera
+      cam = if sp_cam.is_a?(Camera)
+              sp_cam
+            elsif sp_cam
+              @active_camera
+            else
+              nil
+            end
+      if cam
         cz, cam_ox, cam_oy = cam.view
         ax = (tl_x * cz) + cam_ox + @offset_x
         ay = (tl_y * cz) + cam_oy + @offset_y
@@ -747,7 +728,7 @@ module Zenoo
         pv_x, pv_y, 0.0, 0.0
       ].pack("f*")
 
-      eff_z = (z || sprite.z).to_f
+      eff_z = sprite.z.to_f
       Backend.enqueue_draw(
         Backend::Pipelines::SPRITE,
         data,

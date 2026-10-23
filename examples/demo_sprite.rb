@@ -147,8 +147,8 @@ Window.loop(1280, 720, "Zenoo - Sprite & Collision Synchronization Demo") do
     end
   end
 
-  # スプライトの一括描画 (Window.draw_sprite)
-  Window.draw_sprite(@targets)
+  # スプライトの一括描画 (Sprite.draw)
+  Sprite.draw(@targets)
   Window.draw_sprite(@player)
 
   # コライダー幾何形状の可視化デバッグ描画 (トグル表示)
