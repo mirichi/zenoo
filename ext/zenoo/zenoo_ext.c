@@ -1027,9 +1027,12 @@ static VALUE sound_allocate(VALUE klass) {
     return TypedData_Wrap_Struct(klass, &zenoo_sound_data_type, NULL);
 }
 
-static VALUE sound_s_load(VALUE klass, VALUE rb_path) {
+static VALUE sound_s_load(int argc, VALUE* argv, VALUE klass) {
+    VALUE rb_path, rb_stream;
+    rb_scan_args(argc, argv, "11", &rb_path, &rb_stream);
     const char* path = StringValueCStr(rb_path);
-    ZenSound* sound = zen_sound_load_file(path);
+    int stream = RTEST(rb_stream) ? 1 : 0;
+    ZenSound* sound = zen_sound_load_file(path, stream);
     if (!sound) {
         rb_raise(rb_eRuntimeError, "Failed to load sound from file: %s", path);
     }
@@ -1352,7 +1355,7 @@ void Init_zenoo(void) {
     // 7. Sound (Zenoo::Native::Sound)
     rb_cNativeSound = rb_define_class_under(rb_mNative, "Sound", rb_cObject);
     rb_define_alloc_func(rb_cNativeSound, sound_allocate);
-    rb_define_singleton_method(rb_cNativeSound, "load", sound_s_load, 1);
+    rb_define_singleton_method(rb_cNativeSound, "load", sound_s_load, -1);
     rb_define_singleton_method(rb_cNativeSound, "load_pcm", sound_s_load_pcm, 3);
     rb_define_method(rb_cNativeSound, "play", sound_play, 0);
     rb_define_method(rb_cNativeSound, "stop", sound_stop, 0);

@@ -97,9 +97,13 @@ module Zenoo
 
         # 上部: ラベル & 数値
         has_label = label && label.to_s.length > 0
+        is_disabled = (state == :disabled)
+        lbl_col = is_disabled ? theme.text_disabled : theme.text_color
+        num_col = is_disabled ? theme.text_disabled : theme.accent_color
+
         if has_label
           label_str = label.to_s
-          Window.draw_text(rx, ry, label_str, font: f_font, size: f_size, color: theme.text_color)
+          Window.draw_text(rx, ry, label_str, font: f_font, size: f_size, color: lbl_col)
 
           # 数値テキスト
           val_str = if format
@@ -118,7 +122,7 @@ module Zenoo
                     end
           val_str = "#{val_str}#{unit}" unless unit.to_s.empty?
           val_w = f_font.text_width(val_str, f_size)
-          Window.draw_text(rx + rw - val_w, ry, val_str, font: f_font, size: f_size, color: theme.accent_color)
+          Window.draw_text(rx + rw - val_w, ry, val_str, font: f_font, size: f_size, color: num_col)
 
           track_y = ry + f_size.to_f + 8.0
           track_h = 8.0
@@ -149,7 +153,13 @@ module Zenoo
         # 進行度フィル (左端からノブ中心まで)
         fill_w = track_w * ratio
         if fill_w > 0.0
-          fill_color = (state == :hover || state == :active) ? theme.accent_hover : theme.accent_color
+          fill_color = if is_disabled
+                         Color.new(70, 75, 85, 140)
+                       elsif (state == :hover || state == :active)
+                         theme.accent_hover
+                       else
+                         theme.accent_color
+                       end
           Window.draw_rect(
             track_x, track_y, fill_w, track_h,
             radius: 4.0,
@@ -161,11 +171,18 @@ module Zenoo
         knob_x = rx + usable_w * ratio
         knob_y = track_y + (track_h - knob_size) / 2.0
 
-        knob_color = theme.text_color || Color::WHITE
-        kb_border = [2.0, (state == :active ? theme.accent_hover : theme.accent_color)]
-        kb_shadow = (state == :active ? theme.shadow_active : theme.shadow_normal)
-        kb_s_blur = kb_shadow ? kb_shadow[0].to_f : 0.0
-        kb_s_col  = kb_shadow ? kb_shadow[1] : nil
+        if is_disabled
+          knob_color = Color.new(80, 85, 95)
+          kb_border  = [1.0, Color.new(65, 70, 80)]
+          kb_s_blur  = 0.0
+          kb_s_col   = nil
+        else
+          knob_color = theme.text_color || Color::WHITE
+          kb_border  = [2.0, (state == :active ? theme.accent_hover : theme.accent_color)]
+          kb_shadow  = (state == :active ? theme.shadow_active : theme.shadow_normal)
+          kb_s_blur  = kb_shadow ? kb_shadow[0].to_f : 0.0
+          kb_s_col   = kb_shadow ? kb_shadow[1] : nil
+        end
 
         Window.draw_rect(
           knob_x, knob_y, knob_size, knob_size,
@@ -447,7 +464,7 @@ module Zenoo
         if label && !label.to_s.empty?
           f_font = theme.font || Font.default
           f_size = theme.font_size.to_i > 0 ? theme.font_size.to_i : 15
-          text_col = hover ? theme.text_color : (theme.text_disabled || theme.text_color)
+          text_col = hover ? Color::WHITE : theme.text_color
           ty = ry + (rh - f_size.to_f) * 0.5
           Profiler.measure(:gui_text) do
             Window.draw_text(rx + box_size + 10.0, ty, label.to_s, font: f_font, size: f_size, color: text_col)
@@ -485,7 +502,7 @@ module Zenoo
         if label && !label.to_s.empty?
           f_font = theme.font || Font.default
           f_size = theme.font_size.to_i > 0 ? theme.font_size.to_i : 15
-          text_col = hover ? theme.text_color : (theme.text_disabled || theme.text_color)
+          text_col = hover ? Color::WHITE : theme.text_color
           ty = ry + (rh - f_size.to_f) * 0.5
           Profiler.measure(:gui_text) do
             Window.draw_text(rx + circle_r * 2.0 + 10.0, ty, label.to_s, font: f_font, size: f_size, color: text_col)
@@ -542,12 +559,19 @@ module Zenoo
               radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
               color: theme.bg_hover
             )
+          else
+            # 非選択・非ホバーのタブも背景を描いてタブ項目としての存在感を確保
+            Window.draw_rect(
+              tx + 2.0, ry + 2.0, tab_w - 4.0, rh - 4.0,
+              radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
+              color: theme.bg_normal
+            )
           end
 
           tw = f_font.text_width(lbl, f_size)
           text_x = tx + (tab_w - tw) * 0.5
           text_y = ry + (rh - f_size.to_f) * 0.5 - 1.0
-          tcol = (is_cur || is_hov) ? theme.text_color : (theme.text_disabled || theme.text_color)
+          tcol = is_cur ? Color::WHITE : (is_hov ? theme.text_color : Color.new(200, 205, 215))
           Profiler.measure(:gui_text) do
             Window.draw_text(text_x, text_y, lbl, font: f_font, size: f_size, color: tcol)
           end
@@ -610,7 +634,7 @@ module Zenoo
           border_width: m_border ? m_border[0].to_f : 1.0,
           border_color: m_border ? m_border[1] : nil
         )
-        minus_col = minus_hover ? theme.text_color : (theme.text_disabled || theme.text_color)
+        minus_col = minus_hover ? Color::WHITE : theme.text_color
         Window.draw_rect(minus_x + 10.0, ry + rh * 0.5 - 1.0, btn_w - 20.0, 2.0, color: minus_col)
 
         # [+] ボタン
@@ -622,7 +646,7 @@ module Zenoo
           border_width: p_border ? p_border[0].to_f : 1.0,
           border_color: p_border ? p_border[1] : nil
         )
-        plus_col = plus_hover ? theme.text_color : (theme.text_disabled || theme.text_color)
+        plus_col = plus_hover ? Color::WHITE : theme.text_color
         Window.draw_rect(plus_x + 10.0, ry + rh * 0.5 - 1.0, btn_w - 20.0, 2.0, color: plus_col)
         Window.draw_rect(plus_x + btn_w * 0.5 - 1.0, ry + 10.0, 2.0, rh - 20.0, color: plus_col)
       end
@@ -714,7 +738,7 @@ module Zenoo
           )
         end
 
-        tcol = (selected || hover) ? theme.text_color : (theme.text_disabled || theme.text_color)
+        tcol = (selected || hover) ? Color::WHITE : theme.text_color
         Profiler.measure(:gui_text) do
           Window.draw_text(rx + 10.0, ry + (rh - f_size.to_f) * 0.5, text.to_s, font: f_font, size: f_size, color: tcol)
         end
@@ -767,7 +791,7 @@ module Zenoo
         # 下向き三角矢印 (▼)
         arrow_x = rx + rw - 18.0
         arrow_y = ctrl_y + rh * 0.5 - 2.0
-        arrow_col = (hover || is_open) ? theme.accent_color : (theme.text_disabled || theme.text_color)
+        arrow_col = (hover || is_open) ? theme.accent_color : Color.new(180, 185, 195)
         Window.draw_triangle(
           arrow_x, arrow_y,
           arrow_x + 8.0, arrow_y,
@@ -819,7 +843,7 @@ module Zenoo
           Window.draw_rect(rx + 3.0, ry, rw - 6.0, rh, radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max, color: theme.bg_hover, z: pop_z + 1.0)
         end
 
-        it_col = (selected || hover) ? theme.text_color : (theme.text_disabled || theme.text_color)
+        it_col = (selected || hover) ? Color::WHITE : theme.text_color
         Profiler.measure(:gui_text) do
           Window.draw_text(rx + 10.0, ry + (rh - f_size.to_f) * 0.5, text.to_s, font: f_font, size: f_size, color: it_col, z: pop_z + 2.0)
         end

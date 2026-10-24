@@ -432,7 +432,7 @@ void  zen_audio_set_master_volume(float volume);
 float zen_audio_get_master_volume(void);
 
 // サウンドの生成・破棄
-ZenSound* zen_sound_load_file(const char* filepath);
+ZenSound* zen_sound_load_file(const char* filepath, int stream);
 ZenSound* zen_sound_load_memory_pcm(const float* frames, int frame_count, int channels, int sample_rate);
 void      zen_sound_destroy(ZenSound* sound);
 

@@ -149,6 +149,173 @@ module Zenoo
         Sound.from_pcm(samples, channels: 1, sample_rate: sample_rate)
       end
 
+      # 統合シンセサイザー (PCM配列生成)
+      # エディタ (tools/sound_generator.rb) 互換のパラメータ群から [-1.0 .. 1.0] の Float サンプル配列を生成
+      def synthesize_pcm(
+        wave: :square,
+        freq: 440.0,
+        min_freq: 20.0,
+        slide: 0.0,
+        slide_accel: 0.0,
+        duty: 0.5,
+        duty_sweep: 0.0,
+        vib_depth: 0.0,
+        vib_speed: 10.0,
+        attack: 0.005,
+        sustain: 0.1,
+        punch: 0.0,
+        decay: 0.15,
+        arp_mod: 1.0,
+        arp_time: 0.0,
+        lpf_cutoff: 20000.0,
+        volume: 0.8,
+        sample_rate: 44100
+      )
+        total_time = attack.to_f + sustain.to_f + decay.to_f
+        total_time = 0.05 if total_time < 0.05
+        sr = sample_rate.to_i
+        total_frames = (total_time * sr).to_i
+        return [] if total_frames <= 0
+
+        attack_frames  = (attack.to_f * sr).to_i
+        sustain_frames = (sustain.to_f * sr).to_i
+        decay_frames   = (decay.to_f * sr).to_i
+        arp_frame      = (arp_time.to_f * sr).to_i
+
+        samples = Array.new(total_frames)
+
+        cur_freq  = freq.to_f
+        min_f     = min_freq.to_f
+        cur_slide = slide.to_f
+        s_accel   = slide_accel.to_f
+        cur_duty  = duty.to_f
+        d_sweep   = duty_sweep.to_f
+        v_depth   = vib_depth.to_f
+        v_speed   = vib_speed.to_f
+        p_punch   = punch.to_f
+        a_mod     = arp_mod.to_f
+        a_time    = arp_time.to_f
+        vol       = volume.to_f
+        lpf_cut   = lpf_cutoff.to_f
+
+        wave_type = case wave
+                    when :square, 0 then 0
+                    when :sawtooth, :saw, 1 then 1
+                    when :sine, 2 then 2
+                    when :triangle, :tri, 3 then 3
+                    when :noise, 4 then 4
+                    else 0
+                    end
+
+        phase   = 0.0
+        lpf_val = 0.0
+
+        lpf_cut = 100.0 if lpf_cut < 100.0
+        max_cut = sr * 0.45
+        lpf_cut = max_cut if lpf_cut > max_cut
+        lpf_alpha = 1.0 - Math.exp(-TWO_PI * lpf_cut / sr)
+
+        dt = 1.0 / sr
+        rng = Random.new
+
+        i = 0
+        while i < total_frames
+          t = i * dt
+
+          cur_slide += s_accel * dt
+          cur_freq  += cur_slide * dt
+          cur_freq   = min_f if cur_freq < min_f
+
+          eff_freq = cur_freq
+          if a_mod != 1.0 && a_time > 0.0 && i >= arp_frame
+            eff_freq *= a_mod
+          end
+
+          if v_depth > 0.0
+            eff_freq += Math.sin(t * v_speed * TWO_PI) * v_depth
+          end
+          eff_freq = 10.0 if eff_freq < 10.0
+
+          cur_duty += d_sweep * dt
+          cur_duty = 0.05 if cur_duty < 0.05
+          cur_duty = 0.95 if cur_duty > 0.95
+
+          phase = (phase + eff_freq * dt) % 1.0
+
+          raw_sample = case wave_type
+                       when 0
+                         phase < cur_duty ? 1.0 : -1.0
+                       when 1
+                         2.0 * phase - 1.0
+                       when 2
+                         Math.sin(phase * TWO_PI)
+                       when 3
+                         phase < 0.5 ? (4.0 * phase - 1.0) : (3.0 - 4.0 * phase)
+                       when 4
+                         rng.rand * 2.0 - 1.0
+                       else
+                         Math.sin(phase * TWO_PI)
+                       end
+
+          if lpf_cut < 19000.0
+            lpf_val += (raw_sample - lpf_val) * lpf_alpha
+            raw_sample = lpf_val
+          end
+
+          env = 0.0
+          if i < attack_frames && attack_frames > 0
+            env = i.to_f / attack_frames
+          elsif i < attack_frames + sustain_frames
+            sustain_progress = (i - attack_frames).to_f / [sustain_frames, 1].max
+            env = 1.0 + p_punch * (1.0 - sustain_progress)
+          else
+            decay_pos = i - (attack_frames + sustain_frames)
+            env = [1.0 - (decay_pos.to_f / [decay_frames, 1].max), 0.0].max
+          end
+
+          sample_out = raw_sample * env * vol
+          sample_out = -1.0 if sample_out < -1.0
+          sample_out = 1.0 if sample_out > 1.0
+          samples[i] = sample_out
+
+          i += 1
+        end
+
+        samples
+      end
+
+      # 統合シンセサイザー (Sound インスタンス生成)
+      # synthesize_pcm で生成された波形から直接 Sound インスタンスを生成
+      def synthesize(
+        wave: :square,
+        freq: 440.0,
+        min_freq: 20.0,
+        slide: 0.0,
+        slide_accel: 0.0,
+        duty: 0.5,
+        duty_sweep: 0.0,
+        vib_depth: 0.0,
+        vib_speed: 10.0,
+        attack: 0.005,
+        sustain: 0.1,
+        punch: 0.0,
+        decay: 0.15,
+        arp_mod: 1.0,
+        arp_time: 0.0,
+        lpf_cutoff: 20000.0,
+        volume: 0.8,
+        sample_rate: 44100
+      )
+        samples = synthesize_pcm(
+          wave: wave, freq: freq, min_freq: min_freq, slide: slide, slide_accel: slide_accel,
+          duty: duty, duty_sweep: duty_sweep, vib_depth: vib_depth, vib_speed: vib_speed,
+          attack: attack, sustain: sustain, punch: punch, decay: decay,
+          arp_mod: arp_mod, arp_time: arp_time, lpf_cutoff: lpf_cutoff, volume: volume,
+          sample_rate: sample_rate
+        )
+        Sound.from_pcm(samples, channels: 1, sample_rate: sample_rate)
+      end
+
       private
 
       # 位相 (0.0 .. 1.0) と波形種別からサンプル値 (-1.0 .. 1.0) を計算

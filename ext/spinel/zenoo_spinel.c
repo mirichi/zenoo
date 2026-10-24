@@ -646,7 +646,11 @@ void sp_ZenSound_free(void* p) {
 }
 
 sp_ZenSound* sp_ZenSound_load(sp_int cls_id, const char* path) {
-    ZenSound* snd = zen_sound_load_file(path);
+    return sp_ZenSound_load_stream(cls_id, path, false);
+}
+
+sp_ZenSound* sp_ZenSound_load_stream(sp_int cls_id, const char* path, sp_bool stream) {
+    ZenSound* snd = zen_sound_load_file(path, stream ? 1 : 0);
     if (!snd) return NULL;
 
     sp_ZenSound* s = (sp_ZenSound*)sp_gc_alloc(sizeof(sp_ZenSound), sp_ZenSound_free, NULL);
