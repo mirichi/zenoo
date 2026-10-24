@@ -86,7 +86,8 @@ module Zenoo
       Native::Window.time
     end
 
-    def self.clear(color)
+    # 画面またはレンダーターゲットのクリア (引数省略時は黒 [0, 0, 0, 255])
+    def self.clear(color = :black)
       target = Backend.current_target
       if target
         draw_rect(0.0, 0.0, target.width, target.height, color: color)
