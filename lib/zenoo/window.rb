@@ -600,6 +600,91 @@ module Zenoo
                 z: z)
     end
 
+    # SDF 楕円描画 (解析的アンチエイリアス・回転・枠線・影対応)
+    #
+    # cx, cy       : 楕円の中心座標
+    # rx, ry       : X軸・Y軸の半径
+    # color        : 塗りつぶし色 (シンボル、配列、Hex、Colorオブジェクト)
+    # border_color : 枠線の色
+    # border_width : 枠線の幅 (ピクセル単位)
+    # shadow_blur  : ドロップシャドウ・外光彩のぼかし幅
+    # shadow_color : 影の色
+    # angle        : 楕円の回転角度 (度数法)
+    # blend        : ブレンドモード (:alpha, :add 等)
+    # camera       : カメラ適用有無 (デフォルト: true)
+    # z            : Zオーダー (デフォルト: 0.0)
+    def self.draw_ellipse(cx, cy, rx, ry,
+                          color: nil,
+                          border_color: nil,
+                          border_width: nil,
+                          shadow_blur: 0.0,
+                          shadow_color: nil,
+                          angle: 0.0,
+                          blend: :alpha,
+                          camera: true,
+                          z: 0.0)
+      rxf = rx.to_f.abs
+      ryf = ry.to_f.abs
+      return if rxf <= 0.0 || ryf <= 0.0
+
+      actual_color = color || (border_color ? nil : :white)
+      c_color = Backend.normalize_color(actual_color)
+      b_mode = Backend.normalize_blend_mode(blend)
+
+      cam = @active_camera
+      if cam && camera
+        cur_zoom, cam_ox, cam_oy = cam.view
+        ax = ((cx.to_f - rxf) * cur_zoom) + cam_ox + @offset_x
+        ay = ((cy.to_f - ryf) * cur_zoom) + cam_oy + @offset_y
+        wf = (rxf * 2.0) * cur_zoom
+        hf = (ryf * 2.0) * cur_zoom
+      else
+        cur_zoom = 1.0
+        ax = (cx.to_f - rxf) + @offset_x
+        ay = (cy.to_f - ryf) + @offset_y
+        wf = rxf * 2.0
+        hf = ryf * 2.0
+      end
+
+      b_width = 0.0
+      b0 = 0.0; b1 = 0.0; b2 = 0.0; b3 = 0.0
+      if border_color
+        b_width = (border_width || 1.0).to_f * cur_zoom
+        bc = Backend.normalize_color(border_color)
+        b0 = bc[0].to_f; b1 = bc[1].to_f; b2 = bc[2].to_f; b3 = bc[3].to_f
+      end
+
+      s_blur = shadow_blur.to_f * cur_zoom
+      s0 = 0.0; s1 = 0.0; s2 = 0.0; s3 = 0.0
+      if s_blur > 0.0
+        sc = Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR)
+        s0 = sc[0].to_f; s1 = sc[1].to_f; s2 = sc[2].to_f; s3 = sc[3].to_f
+      end
+
+      rot_rad = (angle ? angle.to_f : 0.0) * (Math::PI / 180.0)
+      mode = 2.0 # 楕円モード (SDF)
+
+      data = [
+        ax, ay, wf, hf,
+        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
+        0.0, b_width, s_blur, mode,
+        b0, b1, b2, b3,
+        s0, s1, s2, s3,
+        0.0, 0.0, 1.0, 1.0,
+        rot_rad, 0.5, 0.5, 0.0
+      ].pack("f*")
+
+      Backend.enqueue_draw(
+        Backend::Pipelines::CARD,
+        data,
+        1,
+        image: nil,
+        shader: card_shader,
+        blend: b_mode,
+        z: z
+      )
+    end
+
     def self.draw_image(x, y, image,
                         anchor: :top_left,
                         pivot: :center,
@@ -783,7 +868,28 @@ module Zenoo
     end
 
 
-    def self.draw_triangle(x1, y1, x2, y2, x3, y3, color: :white, blend: :alpha, camera: true, z: 0.0)
+    # SDF 三角形描画 (解析的アンチエイリアス・角丸・枠線・影対応)
+    #
+    # x1, y1, x2, y2, x3, y3 : 三角形の3頂点
+    # color                  : 塗りつぶし色
+    # radius                 : 角丸半径 (デフォルト: 0.0)
+    # border_color           : 枠線の色
+    # border_width           : 枠線の幅
+    # shadow_blur            : 影・光彩のぼかし幅
+    # shadow_color           : 影の色
+    # blend                  : ブレンドモード (:alpha, :add 等)
+    # camera                 : カメラ適用有無 (デフォルト: true)
+    # z                      : Zオーダー (デフォルト: 0.0)
+    def self.draw_triangle(x1, y1, x2, y2, x3, y3,
+                          color: :white,
+                          radius: 0.0,
+                          border_color: nil,
+                          border_width: nil,
+                          shadow_blur: 0.0,
+                          shadow_color: nil,
+                          blend: :alpha,
+                          camera: true,
+                          z: 0.0)
       b_mode = Backend.normalize_blend_mode(blend)
       cam = @active_camera
       if cam && camera
@@ -793,43 +899,99 @@ module Zenoo
         ax1 = (x1.to_f * cz) + cam_ox; ay1 = (y1.to_f * cz) + cam_oy
         ax2 = (x2.to_f * cz) + cam_ox; ay2 = (y2.to_f * cz) + cam_oy
         ax3 = (x3.to_f * cz) + cam_ox; ay3 = (y3.to_f * cz) + cam_oy
+        cur_zoom = cz
       else
         ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
         ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
         ax3 = x3.to_f + @offset_x; ay3 = y3.to_f + @offset_y
+        cur_zoom = 1.0
       end
 
-      if color.is_a?(Array) && color.length == 3 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
-        # 頂点ごとの色指定 [c1, c2, c3]
-        c1 = Backend.normalize_color(color[0])
-        c2 = Backend.normalize_color(color[1])
-        c3 = Backend.normalize_color(color[2])
-        data = [
-          ax1, ay1, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
-          ax2, ay2, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f,
-          ax3, ay3, c3[0].to_f, c3[1].to_f, c3[2].to_f, c3[3].to_f
-        ].pack("f*")
-      else
-        c = Backend.normalize_color(color)
-        cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
-        data = [
-          ax1, ay1, cr, cg, cb, ca,
-          ax2, ay2, cr, cg, cb, ca,
-          ax3, ay3, cr, cg, cb, ca
-        ].pack("f*")
+      # バウンディングボックス計算
+      min_x = [ax1, ax2, ax3].min
+      max_x = [ax1, ax2, ax3].max
+      min_y = [ay1, ay2, ay3].min
+      max_y = [ay1, ay2, ay3].max
+
+      wf = max_x - min_x
+      hf = max_y - min_y
+      return if wf <= 0.0 && hf <= 0.0
+
+      # 中心
+      cx = (min_x + max_x) * 0.5
+      cy = (min_y + max_y) * 0.5
+
+      # 中心からの相対座標 (ローカル座標)
+      p1x = ax1 - cx; p1y = ay1 - cy
+      p2x = ax2 - cx; p2y = ay2 - cy
+      p3x = ax3 - cx; p3y = ay3 - cy
+
+      actual_color = color || (border_color ? nil : :white)
+      c_color = Backend.normalize_color(actual_color)
+
+      b_width = 0.0
+      b0 = 0.0; b1 = 0.0; b2 = 0.0; b3 = 0.0
+      if border_color
+        b_width = (border_width || 1.0).to_f * cur_zoom
+        bc = Backend.normalize_color(border_color)
+        b0 = bc[0].to_f; b1 = bc[1].to_f; b2 = bc[2].to_f; b3 = bc[3].to_f
       end
+
+      s_blur = shadow_blur.to_f * cur_zoom
+      s0 = 0.0; s1 = 0.0; s2 = 0.0; s3 = 0.0
+      if s_blur > 0.0
+        sc = Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR)
+        s0 = sc[0].to_f; s1 = sc[1].to_f; s2 = sc[2].to_f; s3 = sc[3].to_f
+      end
+
+      rad = radius.to_f * cur_zoom
+      mode = 4.0 # 三角形モード (SDF)
+
+      data = [
+        min_x, min_y, wf, hf,
+        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
+        rad, b_width, s_blur, mode,
+        b0, b1, b2, b3,
+        s0, s1, s2, s3,
+        p1x, p1y, p2x, p2y,
+        p3x, p3y, 0.0, 0.0
+      ].pack("f*")
 
       Backend.enqueue_draw(
-        Backend::Pipelines::TRIANGLES,
+        Backend::Pipelines::CARD,
         data,
-        3,
-        shader: flat_primitive_shader,
+        1,
+        image: nil,
+        shader: card_shader,
         blend: b_mode,
         z: z
       )
     end
 
-    def self.draw_line(x1, y1, x2, y2, color: :white, width: 1.0, blend: :alpha, camera: true, z: 0.0)
+    # SDF 線分描画 (解析的アンチエイリアス・端点形状・枠線・影対応)
+    #
+    # x1, y1, x2, y2 : 始点・終点
+    # color          : 線の色
+    # width          : 線の太さ (ピクセル単位、デフォルト: 1.0)
+    # cap            : 端点形状 (:butt [平ら], :round [丸端], :square [正方形])
+    # border_color   : 枠線の色
+    # border_width   : 枠線の幅
+    # shadow_blur    : 影・光彩のぼかし幅
+    # shadow_color   : 影の色
+    # blend          : ブレンドモード (:alpha, :add 等)
+    # camera         : カメラ適用有無 (デフォルト: true)
+    # z              : Zオーダー (デフォルト: 0.0)
+    def self.draw_line(x1, y1, x2, y2,
+                      color: :white,
+                      width: 1.0,
+                      cap: :butt,
+                      border_color: nil,
+                      border_width: nil,
+                      shadow_blur: 0.0,
+                      shadow_color: nil,
+                      blend: :alpha,
+                      camera: true,
+                      z: 0.0)
       actual_color = color || :white
       b_mode = Backend.normalize_blend_mode(blend)
       cam = @active_camera
@@ -840,77 +1002,74 @@ module Zenoo
         ax1 = (x1.to_f * cz) + cam_ox; ay1 = (y1.to_f * cz) + cam_oy
         ax2 = (x2.to_f * cz) + cam_ox; ay2 = (y2.to_f * cz) + cam_oy
         w = width.to_f * cz
+        cur_zoom = cz
       else
         ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
         ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
         w = width.to_f
+        cur_zoom = 1.0
       end
 
       dx = ax2 - ax1
       dy = ay2 - ay1
       len = Math.sqrt(dx * dx + dy * dy)
+      return if len <= 0.0001 && w <= 0.0
 
-      is_grad = actual_color.is_a?(Array) && actual_color.length == 2 && (actual_color[0].is_a?(Color) || actual_color[0].is_a?(Symbol) || actual_color[0].is_a?(Array))
-      if is_grad
-        c1 = Backend.normalize_color(actual_color[0])
-        c2 = Backend.normalize_color(actual_color[1])
-        c1_r = c1[0].to_f; c1_g = c1[1].to_f; c1_b = c1[2].to_f; c1_a = c1[3].to_f
-        c2_r = c2[0].to_f; c2_g = c2[1].to_f; c2_b = c2[2].to_f; c2_a = c2[3].to_f
-      else
-        c = Backend.normalize_color(actual_color)
-        cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
-        c1_r = c2_r = cr
-        c1_g = c2_g = cg
-        c1_b = c2_b = cb
-        c1_a = c2_a = ca
+      cx = (ax1 + ax2) * 0.5
+      cy = (ay1 + ay2) * 0.5
+      rot_rad = Math.atan2(dy, dx)
+
+      rad = 0.0
+      total_len = len
+      case cap
+      when :round
+        rad = w * 0.5
+        total_len = len + w
+      when :square
+        total_len = len + w
       end
 
-      if w > 1.0 && len > 0.0001
-        inv_len = 1.0 / len
-        nx = -dy * inv_len
-        ny = dx * inv_len
-        hw = w * 0.5
-        ox = nx * hw
-        oy = ny * hw
+      bx = cx - (total_len * 0.5)
+      by = cy - (w * 0.5)
 
-        px1 = ax1 + ox; py1 = ay1 + oy
-        px2 = ax1 - ox; py2 = ay1 - oy
-        px3 = ax2 - ox; py3 = ay2 - oy
-        px4 = ax2 + ox; py4 = ay2 + oy
+      c_color = Backend.normalize_color(actual_color)
 
-        data = [
-          px1, py1, c1_r, c1_g, c1_b, c1_a,
-          px2, py2, c1_r, c1_g, c1_b, c1_a,
-          px3, py3, c2_r, c2_g, c2_b, c2_a,
-
-          px1, py1, c1_r, c1_g, c1_b, c1_a,
-          px3, py3, c2_r, c2_g, c2_b, c2_a,
-          px4, py4, c2_r, c2_g, c2_b, c2_a
-        ].pack("f*")
-
-        Backend.enqueue_draw(
-          Backend::Pipelines::TRIANGLES,
-          data,
-          6,
-          shader: flat_primitive_shader,
-          blend: b_mode,
-          z: z
-        )
-      else
-        data = [
-          ax1, ay1, c1_r, c1_g, c1_b, c1_a,
-          ax2, ay2, c2_r, c2_g, c2_b, c2_a
-        ].pack("f*")
-
-        Backend.enqueue_draw(
-          Backend::Pipelines::LINES,
-          data,
-          2,
-          shader: flat_primitive_shader,
-          blend: b_mode,
-          z: z
-        )
+      b_width = 0.0
+      b0 = 0.0; b1 = 0.0; b2 = 0.0; b3 = 0.0
+      if border_color
+        b_width = (border_width || 1.0).to_f * cur_zoom
+        bc = Backend.normalize_color(border_color)
+        b0 = bc[0].to_f; b1 = bc[1].to_f; b2 = bc[2].to_f; b3 = bc[3].to_f
       end
+
+      s_blur = shadow_blur.to_f * cur_zoom
+      s0 = 0.0; s1 = 0.0; s2 = 0.0; s3 = 0.0
+      if s_blur > 0.0
+        sc = Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR)
+        s0 = sc[0].to_f; s1 = sc[1].to_f; s2 = sc[2].to_f; s3 = sc[3].to_f
+      end
+
+      mode = 0.0 # 角丸矩形モード (SDF)
+
+      data = [
+        bx, by, total_len, w,
+        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
+        rad, b_width, s_blur, mode,
+        b0, b1, b2, b3,
+        s0, s1, s2, s3,
+        0.0, 0.0, 1.0, 1.0,
+        rot_rad, 0.5, 0.5, 0.0
+      ].pack("f*")
+
+      Backend.enqueue_draw(
+        Backend::Pipelines::CARD,
+        data,
+        1,
+        image: nil,
+        shader: card_shader,
+        blend: b_mode,
+        z: z
+      )
     end
 
     # ----------------------------------------------------
