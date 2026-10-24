@@ -20,8 +20,8 @@ end
 ogg_path = find_asset_file("assets/sounds/sample.ogg")
 wav_path = find_asset_file("assets/sounds/sample.wav")
 
-bgm_ogg = File.exist?(ogg_path) ? Sound.load(ogg_path) : nil
-bgm_wav = File.exist?(wav_path) ? Sound.load(wav_path) : nil
+bgm_ogg = File.exist?(ogg_path) ? Sound.load(ogg_path, bus: :bgm) : nil
+bgm_wav = File.exist?(wav_path) ? Sound.load(wav_path, bus: :se) : nil
 
 
 # 動的波形効果音 (SoundEffect) のプリセット
@@ -119,28 +119,40 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
     GUI.label("Decoded via stb_vorbis & miniaudio engine", size: 13, color: Color.new(150, 160, 180))
 
     if bgm_ogg
-      ogg_state = bgm_ogg.playing? ? "Playing" : "Stopped"
-      GUI.label("Sample OGG: #{ogg_state} (#{bgm_ogg.time.to_f.round(1)}s / #{bgm_ogg.length.to_f.round(1)}s)", size: 14, color: Color.new(240, 180, 100))
+      ogg_state = bgm_ogg.fading? ? "Fading..." : (bgm_ogg.playing? ? "Playing" : "Stopped")
+      GUI.label("Sample OGG [Bus: :bgm]: #{ogg_state} (#{bgm_ogg.time.to_f.round(1)}s / #{bgm_ogg.length.to_f.round(1)}s)", size: 14, color: Color.new(240, 180, 100))
 
       GUI.row(cols: 3, spacing: 10) do
-        if GUI.button("Play OGG", h: 40.0)
+        if GUI.button("Play OGG", h: 36.0)
           bgm_ogg.play
           current_status = "Playing sample.ogg"
         end
-        if GUI.button("Pause", h: 40.0)
+        if GUI.button("Pause", h: 36.0)
           bgm_ogg.pause
           current_status = "Paused sample.ogg"
         end
-        if GUI.button("Stop", h: 40.0)
+        if GUI.button("Stop", h: 36.0)
           bgm_ogg.stop
           current_status = "Stopped sample.ogg"
+        end
+      end
+
+      # フェード制御ボタン
+      GUI.row(cols: 2, spacing: 10) do
+        if GUI.button("Fade In (2.0s)", h: 36.0)
+          bgm_ogg.fade_in(2.0)
+          current_status = "Fade In sample.ogg (2.0s)"
+        end
+        if GUI.button("Fade Out (2.0s)", h: 36.0)
+          bgm_ogg.fade_out(2.0)
+          current_status = "Fade Out sample.ogg (2.0s)"
         end
       end
     end
 
     if bgm_wav
       GUI.row(cols: 3, spacing: 10) do
-        if GUI.button("Play WAV (SFX)", h: 36.0)
+        if GUI.button("Play WAV [Bus: :se]", h: 36.0)
           bgm_wav.play
           current_status = "Playing sample.wav"
         end
@@ -148,9 +160,18 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
     end
 
     GUI.divider
-    GUI.label("Sound & Engine Parameters", size: 14, color: Color.new(180, 180, 200))
+    GUI.label("Buses & Engine Parameters", size: 14, color: Color.new(180, 180, 200))
 
-    GUI.label("Master Volume: #{(master_vol * 100).to_i}%", size: 13, color: Color.new(200, 210, 225))
+    # カテゴリ / バス管理スライダー
+    bgm_bus_vol = Audio.bus_volume(:bgm)
+    new_bgm_bus = GUI.slider("BGM Bus Vol", bgm_bus_vol, 0.0, 1.5)
+    Audio.bus_volume = :bgm, new_bgm_bus if (new_bgm_bus - bgm_bus_vol).abs > 0.01
+
+    se_bus_vol = Audio.bus_volume(:se)
+    new_se_bus = GUI.slider("SE Bus Vol", se_bus_vol, 0.0, 1.5)
+    Audio.bus_volume = :se, new_se_bus if (new_se_bus - se_bus_vol).abs > 0.01
+
+    # マスター音量
     new_vol = GUI.slider("Master Vol", master_vol, 0.0, 1.0)
     if (new_vol.to_f - master_vol).abs > 0.01
       master_vol = new_vol.to_f
@@ -158,21 +179,15 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
     end
 
     if bgm_ogg
-      GUI.label("BGM Volume: #{(bgm_vol * 100).to_i}%", size: 13, color: Color.new(200, 210, 225))
-      new_bvol = GUI.slider("BGM Vol", bgm_vol, 0.0, 2.0)
-      if (new_bvol.to_f - bgm_vol).abs > 0.01
-        bgm_vol = new_bvol.to_f
-        bgm_ogg.volume = bgm_vol
-      end
+      GUI.divider
+      GUI.label("BGM Sound Properties", size: 14, color: Color.new(180, 180, 200))
 
-      GUI.label("BGM Pitch: #{bgm_pitch.round(2)}x", size: 13, color: Color.new(200, 210, 225))
       new_pitch = GUI.slider("Pitch", bgm_pitch, 0.5, 2.0)
       if (new_pitch.to_f - bgm_pitch).abs > 0.01
         bgm_pitch = new_pitch.to_f
         bgm_ogg.pitch = bgm_pitch
       end
 
-      GUI.label("BGM Pan: #{bgm_pan.round(2)} (Left: -1.0, Right: +1.0)", size: 13, color: Color.new(200, 210, 225))
       new_pan = GUI.slider("Pan", bgm_pan, -1.0, 1.0)
       if (new_pan.to_f - bgm_pan).abs > 0.01
         bgm_pan = new_pan.to_f

@@ -8,6 +8,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #include "zenoo_internal.h"
 
 static void (*s_gc_callback)(void) = NULL;
@@ -165,6 +168,10 @@ ZenImage* zen_image_create_format(int width, int height, int format) {
     img->width = width;
     img->height = height;
 
+    img->pixels = NULL;
+    img->cpu_dirty = 1;
+    img->gpu_dirty = 0;
+
     return img;
 }
 
@@ -220,6 +227,13 @@ ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pi
     img->y = 0;
     img->width = width;
     img->height = height;
+
+    img->pixels = (uint32_t*)malloc((size_t)width * (size_t)height * sizeof(uint32_t));
+    if (img->pixels) {
+        memcpy(img->pixels, pixels, (size_t)width * (size_t)height * sizeof(uint32_t));
+    }
+    img->cpu_dirty = 0;
+    img->gpu_dirty = 0;
 
     return img;
 }
@@ -280,6 +294,10 @@ void zen_image_destroy(ZenImage* image) {
         zen_texture_release(image->texture);
         image->texture = NULL;
     }
+    if (image->pixels) {
+        free(image->pixels);
+        image->pixels = NULL;
+    }
     free(image);
 }
 
@@ -331,4 +349,133 @@ void zen_image_get_uv(const ZenImage* image, float* u, float* v, float* uw, floa
 
 uint32_t zen_image_get_texture_id(const ZenImage* image) {
     return (image && image->texture) ? (uint32_t)image->texture->id : 0;
+}
+
+// ------------------------------------------
+// ピクセル直接アクセス & 保存 & 複製
+// ------------------------------------------
+#ifdef _WIN32
+#define zen_strcasecmp _stricmp
+#else
+#include <strings.h>
+#define zen_strcasecmp strcasecmp
+#endif
+
+static void zen__ensure_cpu_pixels(ZenImage* img) {
+    if (!img || !img->texture || img->width <= 0 || img->height <= 0) return;
+    if (!img->pixels) {
+        img->pixels = (uint32_t*)calloc((size_t)img->width * (size_t)img->height, sizeof(uint32_t));
+        img->cpu_dirty = 1;
+    }
+    if (img->cpu_dirty) {
+        zen_ensure_context();
+        GLint prev_fbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
+
+        if (img->msaa_samples > 0 && img->msaa_fbo != 0) {
+            zen_image_resolve_msaa(img);
+        }
+
+        if (!img->has_fbo) {
+            glGenFramebuffers(1, &img->fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, img->fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, img->texture->id, 0);
+            img->has_fbo = 1;
+        } else {
+            glBindFramebuffer(GL_FRAMEBUFFER, img->fbo);
+        }
+
+        int th = img->texture->height;
+        int gl_y = th - (img->y + img->height);
+        if (gl_y < 0) gl_y = 0;
+
+        uint32_t* temp = (uint32_t*)malloc((size_t)img->width * (size_t)img->height * sizeof(uint32_t));
+        if (temp) {
+            glReadPixels(img->x, gl_y, img->width, img->height, GL_RGBA, GL_UNSIGNED_BYTE, temp);
+            for (int r = 0; r < img->height; r++) {
+                int src_r = img->height - 1 - r;
+                memcpy(&img->pixels[r * img->width], &temp[src_r * img->width], (size_t)img->width * sizeof(uint32_t));
+            }
+            free(temp);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, prev_fbo);
+        img->cpu_dirty = 0;
+    }
+}
+
+void zen_image_sync_to_gpu(ZenImage* img) {
+    if (!img || !img->texture || !img->gpu_dirty || !img->pixels) return;
+    zen_ensure_context();
+    glBindTexture(GL_TEXTURE_2D, img->texture->id);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, img->x, img->y, img->width, img->height, GL_RGBA, GL_UNSIGNED_BYTE, img->pixels);
+    img->gpu_dirty = 0;
+}
+
+uint32_t zen_image_get_pixel(ZenImage* img, int x, int y) {
+    if (!img || x < 0 || y < 0 || x >= img->width || y >= img->height) return 0;
+    zen__ensure_cpu_pixels(img);
+    if (!img->pixels) return 0;
+    return img->pixels[y * img->width + x];
+}
+
+void zen_image_set_pixel(ZenImage* img, int x, int y, uint32_t color) {
+    if (!img || x < 0 || y < 0 || x >= img->width || y >= img->height) return;
+    zen__ensure_cpu_pixels(img);
+    if (!img->pixels) return;
+    img->pixels[y * img->width + x] = color;
+    img->gpu_dirty = 1;
+}
+
+void zen_image_get_pixels(ZenImage* img, uint32_t* out_pixels) {
+    if (!img || !out_pixels) return;
+    zen__ensure_cpu_pixels(img);
+    if (!img->pixels) return;
+    memcpy(out_pixels, img->pixels, (size_t)img->width * (size_t)img->height * sizeof(uint32_t));
+}
+
+void zen_image_set_pixels(ZenImage* img, const uint32_t* in_pixels) {
+    if (!img || !in_pixels) return;
+    if (!img->pixels) {
+        img->pixels = (uint32_t*)calloc((size_t)img->width * (size_t)img->height, sizeof(uint32_t));
+    }
+    if (img->pixels) {
+        memcpy(img->pixels, in_pixels, (size_t)img->width * (size_t)img->height * sizeof(uint32_t));
+    }
+    img->cpu_dirty = 0;
+    img->gpu_dirty = 1;
+    zen_image_sync_to_gpu(img);
+}
+
+ZenImage* zen_image_clone(const ZenImage* src) {
+    if (!src || !src->texture || src->width <= 0 || src->height <= 0) return NULL;
+    zen_ensure_context();
+
+    zen__ensure_cpu_pixels((ZenImage*)src);
+    if (!src->pixels) return NULL;
+
+    ZenImage* clone = zen_image_create_from_pixels(src->width, src->height, src->pixels);
+    if (!clone) return NULL;
+
+    if (src->texture) {
+        zen_image_set_filter(clone, src->texture->filter);
+    }
+    return clone;
+}
+
+int zen_image_save(ZenImage* img, const char* filepath) {
+    if (!img || !filepath) return 0;
+    zen__ensure_cpu_pixels(img);
+    if (!img->pixels) return 0;
+
+    const char* ext = strrchr(filepath, '.');
+    if (ext && (zen_strcasecmp(ext, ".bmp") == 0)) {
+        return stbi_write_bmp(filepath, img->width, img->height, 4, img->pixels) ? 1 : 0;
+    } else if (ext && (zen_strcasecmp(ext, ".tga") == 0)) {
+        return stbi_write_tga(filepath, img->width, img->height, 4, img->pixels) ? 1 : 0;
+    } else if (ext && (zen_strcasecmp(ext, ".jpg") == 0 || zen_strcasecmp(ext, ".jpeg") == 0)) {
+        return stbi_write_jpg(filepath, img->width, img->height, 4, img->pixels, 90) ? 1 : 0;
+    } else {
+        return stbi_write_png(filepath, img->width, img->height, 4, img->pixels, img->width * 4) ? 1 : 0;
+    }
 }

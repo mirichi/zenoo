@@ -30,6 +30,7 @@ module Zenoo
         box_y = ry + (rh - box_size) * 0.5
 
         hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ry, rw, rh)
+        set_mouse_cursor(:hand) if hover || @active_id == widget_id
         new_checked = !!checked
 
         if @active_id == widget_id
@@ -75,6 +76,7 @@ module Zenoo
         cy = ry + rh * 0.5
 
         hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ry, rw, rh)
+        set_mouse_cursor(:hand) if hover || @active_id == widget_id
         new_active = !!active
 
         if @active_id == widget_id
@@ -127,6 +129,7 @@ module Zenoo
           hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, tx, ry, tab_w, rh)
 
           if hover
+            set_mouse_cursor(:hand)
             hover_idx = i
             @hot_id = "#{widget_id}_#{i}"
             if @mouse_push
@@ -182,6 +185,7 @@ module Zenoo
         val_w = ctrl_w - btn_w * 2.0 - 4.0
 
         # 入力処理
+        set_mouse_cursor(:hand) if minus_hover || plus_hover
         if minus_hover
           @hot_id = "#{widget_id}_minus"
           if @mouse_push
@@ -241,6 +245,7 @@ module Zenoo
 
         hover_track = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ry, rw, rh)
         hover_thumb = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, thumb_y, rw, thumb_h)
+        set_mouse_cursor(:hand) if hover_thumb || @active_id == widget_id
 
         if @active_id == widget_id
           if @mouse_rel || !@mouse_down
@@ -342,6 +347,7 @@ module Zenoo
               is_sel = (i == new_selected)
 
               if it_hover
+                set_mouse_cursor(:hand)
                 @hot_id = "#{widget_id}_item_#{i}"
                 if @mouse_push
                   new_selected = i
@@ -397,6 +403,7 @@ module Zenoo
 
         # 開閉トグル処理
         if hover
+          set_mouse_cursor(:hand)
           @hot_id = widget_id
           if @mouse_push
             if is_open
@@ -436,6 +443,7 @@ module Zenoo
               is_sel = (i == new_selected)
 
               if it_hover
+                set_mouse_cursor(:hand)
                 @hot_id = "#{widget_id}_pop_#{i}"
                 if @mouse_push
                   new_selected = i

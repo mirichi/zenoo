@@ -203,6 +203,9 @@ void zen_set_render_target(ZenImage* target) {
     }
 
     s_current_render_target = target;
+    if (target) {
+        target->cpu_dirty = 1;
+    }
 
     if (target != NULL && target->texture != NULL) {
         // 1. 通常 FBO の確保 (テクスチャのアタッチ)

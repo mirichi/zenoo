@@ -197,6 +197,25 @@ void   zen_set_vsync(int vsync);    // 1: VSync有効, 0: VSync無効
 void   zen_window_set_msaa_samples(int samples); // ウィンドウ直接描画のMSAAサンプル数 (デフォルト0: 無効, 4等で有効化)
 int    zen_window_get_msaa_samples(void);
 
+// マウスカーソル & クリップボード
+enum ZenCursorShape {
+    ZEN_CURSOR_ARROW       = 0,
+    ZEN_CURSOR_IBEAM       = 1,
+    ZEN_CURSOR_CROSSHAIR   = 2,
+    ZEN_CURSOR_HAND        = 3,
+    ZEN_CURSOR_HRESIZE     = 4,
+    ZEN_CURSOR_VRESIZE     = 5,
+    ZEN_CURSOR_RESIZE_NWSE = 6,
+    ZEN_CURSOR_RESIZE_NESW = 7,
+    ZEN_CURSOR_RESIZE_ALL  = 8,
+    ZEN_CURSOR_NOT_ALLOWED = 9
+};
+
+void        zen_window_show_cursor(int show);
+void        zen_window_set_cursor(int shape);
+const char* zen_window_get_clipboard_string(void);
+void        zen_window_set_clipboard_string(const char* text);
+
 // 入力 API
 void   zen_get_mouse_pos(float* x, float* y);
 int    zen_is_mouse_pressed(int button); // 押されている状態 (持続)
@@ -275,6 +294,9 @@ struct ZenImage {
     uint32_t msaa_fbo;   // MSAA用 FBO (0なら未生成)
     uint32_t msaa_rbo;   // MSAA用 レンダーバッファ (0なら未生成)
     int msaa_samples;   // MSAAサンプル数 (0なら無効、通常4)
+    uint32_t* pixels;   // CPU側ピクセルバッファ (RGBA)
+    int cpu_dirty;      // CPU側がGPUより古い場合 1
+    int gpu_dirty;      // GPU側がCPUより古い場合 1
 };
 typedef struct ZenImage ZenImage;
 
@@ -299,6 +321,7 @@ ZenImage* zen_image_create_msaa(int width, int height, int samples);
 ZenImage* zen_image_load(const char* filepath);
 ZenImage* zen_image_create_from_pixels(int width, int height, const uint32_t* pixels);
 ZenImage* zen_image_sub_image(ZenImage* parent, int x, int y, int width, int height);
+ZenImage* zen_image_clone(const ZenImage* image);
 void      zen_image_destroy(ZenImage* image);
 void      zen_image_resolve_msaa(ZenImage* image);
 void      zen_image_get_size(const ZenImage* image, int* width, int* height);
@@ -306,6 +329,14 @@ void      zen_image_get_bounds(const ZenImage* image, int* x, int* y, int* w, in
 void      zen_image_get_texture_size(const ZenImage* image, int* tex_w, int* tex_h);
 void      zen_image_get_uv(const ZenImage* image, float* u, float* v, float* uw, float* vh);
 uint32_t  zen_image_get_texture_id(const ZenImage* image);
+
+// ピクセル直接アクセス & 保存
+uint32_t  zen_image_get_pixel(ZenImage* image, int x, int y);
+void      zen_image_set_pixel(ZenImage* image, int x, int y, uint32_t color);
+void      zen_image_get_pixels(ZenImage* image, uint32_t* out_pixels);
+void      zen_image_set_pixels(ZenImage* image, const uint32_t* in_pixels);
+void      zen_image_sync_to_gpu(ZenImage* image);
+int       zen_image_save(ZenImage* image, const char* filepath);
 
 // 描画先ターゲットの切り替え (NULL でメイン画面に戻る)
 void      zen_set_render_target(ZenImage* target);

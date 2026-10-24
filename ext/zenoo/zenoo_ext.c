@@ -294,6 +294,69 @@ static VALUE image_is_sub_image(VALUE self) {
     return Qfalse;
 }
 
+static VALUE image_get_pixel(VALUE self, VALUE rb_x, VALUE rb_y) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    int x = NUM2INT(rb_x);
+    int y = NUM2INT(rb_y);
+    uint32_t col = zen_image_get_pixel(img, x, y);
+    return UINT2NUM(col);
+}
+
+static VALUE image_set_pixel(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_color) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    int x = NUM2INT(rb_x);
+    int y = NUM2INT(rb_y);
+    uint32_t col = (uint32_t)NUM2ULONG(rb_color);
+    zen_image_set_pixel(img, x, y, col);
+    return self;
+}
+
+static VALUE image_get_pixels(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    if (!img || img->width <= 0 || img->height <= 0) return rb_str_new("", 0);
+    size_t size = (size_t)img->width * (size_t)img->height * sizeof(uint32_t);
+    VALUE str = rb_str_new(NULL, size);
+    zen_image_get_pixels(img, (uint32_t*)RSTRING_PTR(str));
+    return str;
+}
+
+static VALUE image_set_pixels(VALUE self, VALUE rb_buf) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    if (!img) return self;
+    StringValue(rb_buf);
+    zen_image_set_pixels(img, (const uint32_t*)RSTRING_PTR(rb_buf));
+    return self;
+}
+
+static VALUE image_sync(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    zen_image_sync_to_gpu(img);
+    return self;
+}
+
+static VALUE image_clone(VALUE self) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    ZenImage* clone = zen_image_clone(img);
+    if (!clone) {
+        rb_raise(rb_eRuntimeError, "Failed to clone Image");
+    }
+    return TypedData_Wrap_Struct(rb_obj_class(self), &zenoo_image_data_type, clone);
+}
+
+static VALUE image_save(VALUE self, VALUE rb_path) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    const char* path = StringValueCStr(rb_path);
+    int ok = zen_image_save(img, path);
+    return ok ? Qtrue : Qfalse;
+}
+
 // ==========================================
 // Zenoo::Native::Shader (TypedData)
 // ==========================================
@@ -613,6 +676,31 @@ static VALUE win_is_maximized(VALUE self) {
 static VALUE win_is_hovered(VALUE self) {
     (void)self;
     return zen_is_window_hovered() ? Qtrue : Qfalse;
+}
+
+static VALUE win_show_cursor(VALUE self, VALUE rb_show) {
+    (void)self;
+    zen_window_show_cursor(RTEST(rb_show) ? 1 : 0);
+    return Qnil;
+}
+
+static VALUE win_set_cursor(VALUE self, VALUE rb_shape) {
+    (void)self;
+    zen_window_set_cursor(NUM2INT(rb_shape));
+    return Qnil;
+}
+
+static VALUE input_get_clipboard(VALUE self) {
+    (void)self;
+    const char* s = zen_window_get_clipboard_string();
+    return rb_utf8_str_new_cstr(s ? s : "");
+}
+
+static VALUE input_set_clipboard(VALUE self, VALUE rb_text) {
+    (void)self;
+    const char* s = StringValueCStr(rb_text);
+    zen_window_set_clipboard_string(s);
+    return Qnil;
 }
 
 static VALUE win_update(VALUE self) {
@@ -1163,9 +1251,13 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "shutdown", win_shutdown, 0);
     rb_define_singleton_method(mWindow, "ensure_context", win_ensure_context, 0);
     rb_define_singleton_method(mWindow, "wasm?", win_wasm_p, 0);
+    rb_define_singleton_method(mWindow, "show_cursor", win_show_cursor, 1);
+    rb_define_singleton_method(mWindow, "set_cursor", win_set_cursor, 1);
 
     // 2. Input
     VALUE mInput = rb_define_module_under(rb_mNative, "Input");
+    rb_define_singleton_method(mInput, "clipboard", input_get_clipboard, 0);
+    rb_define_singleton_method(mInput, "clipboard=", input_set_clipboard, 1);
     rb_define_singleton_method(mInput, "key_pressed?", input_key_pressed, 1);
     rb_define_singleton_method(mInput, "key_push?", input_key_push, 1);
     rb_define_singleton_method(mInput, "key_release?", input_key_release, 1);
@@ -1217,6 +1309,14 @@ void Init_zenoo(void) {
     rb_define_singleton_method(rb_cNativeImage, "default_texture_filter", image_s_get_default_filter, 0);
     rb_define_method(rb_cNativeImage, "msaa?", image_get_msaa, 0);
     rb_define_method(rb_cNativeImage, "msaa_samples", image_get_msaa_samples, 0);
+    rb_define_method(rb_cNativeImage, "raw_get_pixel", image_get_pixel, 2);
+    rb_define_method(rb_cNativeImage, "raw_set_pixel", image_set_pixel, 3);
+    rb_define_method(rb_cNativeImage, "raw_get_pixels", image_get_pixels, 0);
+    rb_define_method(rb_cNativeImage, "raw_set_pixels", image_set_pixels, 1);
+    rb_define_method(rb_cNativeImage, "sync", image_sync, 0);
+    rb_define_method(rb_cNativeImage, "clone", image_clone, 0);
+    rb_define_method(rb_cNativeImage, "dup", image_clone, 0);
+    rb_define_method(rb_cNativeImage, "save", image_save, 1);
 
     // 4. NativeShader (Zenoo::Native::NativeShader)
     rb_cNativeShader = rb_define_class_under(rb_mNative, "NativeShader", rb_cObject);

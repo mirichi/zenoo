@@ -123,6 +123,7 @@ typedef void (APIENTRYP PFNGLBINDTEXTUREPROC)(GLenum target, GLuint texture);
 typedef void (APIENTRYP PFNGLTEXIMAGE2DPROC)(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void *pixels);
 typedef void (APIENTRYP PFNGLTEXPARAMETERIPROC)(GLenum target, GLenum pname, GLint param);
 typedef void (APIENTRYP PFNGLACTIVETEXTUREPROC)(GLenum texture);
+typedef void (APIENTRYP PFNGLREADPIXELSPROC)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *pixels);
 
 typedef GLuint (APIENTRYP PFNGLCREATESHADERPROC)(GLenum type);
 typedef void (APIENTRYP PFNGLSHADERSOURCEPROC)(GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length);
@@ -189,6 +190,7 @@ typedef void (APIENTRYP PFNGLTEXSUBIMAGE2DPROC)(GLenum target, GLint level, GLin
 typedef void (APIENTRYP PFNGLPIXELSTOREIPROC)(GLenum pname, GLint param);
 GLAPI PFNGLTEXSUBIMAGE2DPROC glTexSubImage2D;
 GLAPI PFNGLPIXELSTOREIPROC glPixelStorei;
+GLAPI PFNGLREADPIXELSPROC glReadPixels;
 
 GLAPI PFNGLCREATESHADERPROC glCreateShader;
 GLAPI PFNGLSHADERSOURCEPROC glShaderSource;
@@ -238,6 +240,7 @@ GLAPI PFNGLDRAWELEMENTSINSTANCEDPROC glDrawElementsInstanced;
 #define GL_DRAW_FRAMEBUFFER               0x8CA9
 #define GL_COLOR_ATTACHMENT0              0x8CE0
 #define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#define GL_FRAMEBUFFER_BINDING            0x8CA6
 #define GL_RENDERBUFFER                   0x8D41
 #define GL_RGBA8                          0x8058
 #define GL_MAX_SAMPLES                    0x8D57

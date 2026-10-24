@@ -46,6 +46,20 @@ static int s_scale_mode = ZEN_SCALE_FIT;
 static int s_is_fullscreen = 0;
 static int s_saved_win_x = 100, s_saved_win_y = 100;
 static int s_saved_win_w = 960, s_saved_win_h = 540;
+static GLFWcursor* s_cursors[10] = { NULL };
+
+#ifndef GLFW_RESIZE_NWSE_CURSOR
+#define GLFW_RESIZE_NWSE_CURSOR 0x00036007
+#endif
+#ifndef GLFW_RESIZE_NESW_CURSOR
+#define GLFW_RESIZE_NESW_CURSOR 0x00036008
+#endif
+#ifndef GLFW_RESIZE_ALL_CURSOR
+#define GLFW_RESIZE_ALL_CURSOR 0x00036009
+#endif
+#ifndef GLFW_NOT_ALLOWED_CURSOR
+#define GLFW_NOT_ALLOWED_CURSOR 0x0003600A
+#endif
 
 // フレーム & 時間状態
 static int    s_frame_open = 0;          // begin_frame 済みで end_frame 前なら 1
@@ -578,6 +592,12 @@ int zen_init_fullscreen(const char* title) {
 void zen_shutdown(void) {
     zen__vibration_shutdown();
     zen__gfx_shutdown();
+    for (int i = 0; i < 10; i++) {
+        if (s_cursors[i]) {
+            glfwDestroyCursor(s_cursors[i]);
+            s_cursors[i] = NULL;
+        }
+    }
     if (s_window) {
         glfwDestroyWindow(s_window);
         s_window = NULL;
@@ -919,4 +939,46 @@ int zen_is_window_maximized(void) {
 int zen_is_window_hovered(void) {
     if (!s_window) return 0;
     return glfwGetWindowAttrib(s_window, GLFW_HOVERED) ? 1 : 0;
+}
+
+// ------------------------------------------
+// マウスカーソル & クリップボード
+// ------------------------------------------
+void zen_window_show_cursor(int show) {
+    if (!s_window) return;
+    glfwSetInputMode(s_window, GLFW_CURSOR, show ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
+}
+
+void zen_window_set_cursor(int shape) {
+    if (!s_window) return;
+    if (shape < 0 || shape >= 10) shape = 0;
+    if (!s_cursors[shape]) {
+        int glfw_shapes[10] = {
+            GLFW_ARROW_CURSOR,
+            GLFW_IBEAM_CURSOR,
+            GLFW_CROSSHAIR_CURSOR,
+            GLFW_HAND_CURSOR,
+            GLFW_HRESIZE_CURSOR,
+            GLFW_VRESIZE_CURSOR,
+            GLFW_RESIZE_NWSE_CURSOR,
+            GLFW_RESIZE_NESW_CURSOR,
+            GLFW_RESIZE_ALL_CURSOR,
+            GLFW_NOT_ALLOWED_CURSOR
+        };
+        s_cursors[shape] = glfwCreateStandardCursor(glfw_shapes[shape]);
+    }
+    if (s_cursors[shape]) {
+        glfwSetCursor(s_window, s_cursors[shape]);
+    }
+}
+
+const char* zen_window_get_clipboard_string(void) {
+    if (!s_window) return "";
+    const char* str = glfwGetClipboardString(s_window);
+    return str ? str : "";
+}
+
+void zen_window_set_clipboard_string(const char* text) {
+    if (!s_window || !text) return;
+    glfwSetClipboardString(s_window, text);
 }

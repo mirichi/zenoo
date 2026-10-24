@@ -185,9 +185,10 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   Window.draw_text(c2_x - 45, p3_y + 175, "anchor: :center", size: 13, color: :white)
 
   # ピボット変更デモ (先端回転 vs 根元回転)
+  tip_pivot = [0.85, 0.5]
   tip_x, tip_y = p3_x + 90, p3_y + 225
   Window.draw_circle(tip_x, tip_y, 4, color: :yellow) # ピボット位置
-  Window.draw_image(tip_x, tip_y, @ship_img, angle: rot_angle * 1.5, scale: 0.6, pivot: [0.85, 0.5], anchor: :center)
+  Window.draw_image(tip_x, tip_y, @ship_img, angle: rot_angle * 1.5, scale: 0.6, pivot: tip_pivot, anchor: tip_pivot)
   Window.draw_text(p3_x + 150, p3_y + 220, "先端ピボット [0.85, 0.5]", size: 13, color: :yellow)
   Window.draw_text(p3_x + 150, p3_y + 238, "剣先を振るような動き", size: 11, color: [140, 160, 190, 255])
 

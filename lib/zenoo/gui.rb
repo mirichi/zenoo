@@ -129,12 +129,18 @@ module Zenoo
         @hot_id     = nil
         @evaluated  = false
         @blink_time = (@blink_time || 0.0) + Window.delta_time
+        @requested_cursor = :arrow
 
         @win_mgr.begin_frame(@mouse_x, @mouse_y, @mouse_down, @mouse_push)
         @layout.reset
       end
 
+      def set_mouse_cursor(shape)
+        @requested_cursor = shape
+      end
+
       def end_frame
+        Window.cursor = @requested_cursor
       end
 
       # --------------------------------------------------
@@ -396,6 +402,7 @@ module Zenoo
         # 1フレームだけホバー色に戻ってチラつくのを防止する
         is_active_visual = active || clicked
         state = is_active_visual ? :active : widget_visual_state(widget_id, hover, active_requires_hover: true)
+        set_mouse_cursor(:hand) if hover || @active_id == widget_id
         @renderer.draw_button(rx, ry, rw, rh, label, state, @theme)
         @layout.advance(rw, rh) if x.nil? && y.nil?
         clicked
@@ -433,6 +440,7 @@ module Zenoo
         end
 
         state = widget_visual_state(widget_id, hover, active_requires_hover: false)
+        set_mouse_cursor(:hand) if hover || @active_id == widget_id
         @renderer.draw_slider(rx, ry, rw, rh, label, v_val, v_min, v_max, state, @theme, unit: unit, format: format)
         @layout.advance(rw, rh) if x.nil? && y.nil?
         v_val
@@ -502,6 +510,7 @@ module Zenoo
 
         bt = @blink_time || 0.0
         blink_on = (bt % 1.0) < 0.5
+        set_mouse_cursor(:ibeam) if hover || is_focused
         @renderer.draw_text_box(rx, ry, rw, rh, cur_text, is_focused, @cursor_pos || 0, blink_on, @theme)
         @layout.advance(rw, rh) if x.nil? && y.nil?
         cur_text

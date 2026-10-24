@@ -54,6 +54,30 @@ class Zenoo::Image
     [x.to_f / tw, y.to_f / th, width.to_f / tw, height.to_f / th]
   end
 
+  # ピクセル色取得: image[x, y] -> Color
+  def [](x, y)
+    col = raw_get_pixel(x.to_i, y.to_i)
+    r = (col >> 24) & 0xFF
+    g = (col >> 16) & 0xFF
+    b = (col >> 8) & 0xFF
+    a = col & 0xFF
+    Zenoo::Color.new(r, g, b, a)
+  end
+
+  # ピクセル色設定: image[x, y] = color
+  def []=(x, y, color)
+    c = Zenoo::Backend.normalize_color(color)
+    r = (c[0] * 255.0).round.clamp(0, 255)
+    g = (c[1] * 255.0).round.clamp(0, 255)
+    b = (c[2] * 255.0).round.clamp(0, 255)
+    a = (c[3] * 255.0).round.clamp(0, 255)
+    u32 = (r << 24) | (g << 16) | (b << 8) | a
+    raw_set_pixel(x.to_i, y.to_i, u32)
+  end
+
+  alias get_pixel []
+  alias set_pixel []=
+
 
   # オフスクリーンFBO描画ブロック
   # Image.render_to(canvas) do
@@ -61,13 +85,13 @@ class Zenoo::Image
   # end
   # ※ sub_image に対して呼び出された場合は、自動的に該当領域へクリッピングされます。
   def self.render_to(target)
-    is_sub = target.respond_to?(:sub_image?) && target.sub_image?
+    is_sub = target.sub_image?
     old_target = Zenoo::Backend.current_target
     Zenoo::Backend.current_target = target
 
     # オフスクリーン描画中はワールドカメラの影響を遮断 (ローカル座標系にリセット)
-    old_camera = Zenoo::Window.respond_to?(:camera) ? Zenoo::Window.camera : nil
-    Zenoo::Window.camera = nil if Zenoo::Window.respond_to?(:camera=)
+    old_camera = Zenoo::Window.camera
+    Zenoo::Window.camera = nil
 
     if is_sub
       prev_ox = Zenoo::Window.offset_x
@@ -84,7 +108,7 @@ class Zenoo::Image
       Zenoo::Window.offset_x = prev_ox
       Zenoo::Window.offset_y = prev_oy
     end
-    Zenoo::Window.camera = old_camera if Zenoo::Window.respond_to?(:camera=)
+    Zenoo::Window.camera = old_camera
     Zenoo::Backend.current_target = old_target
   end
 
@@ -103,15 +127,7 @@ class Zenoo::Image
   # 破壊版: 自身のテクスチャをシェーダー処理で上書き加工します
   def apply_filter!(shader, uniforms: nil)
     filtered = apply_filter(shader, uniforms: uniforms)
-    if respond_to?(:replace_texture!)
-      replace_texture!(filtered)
-    else
-      Zenoo::Image.render_to(self) do
-        Zenoo::Window.clear([0, 0, 0, 0])
-        Zenoo::Window.draw_image(0, 0, filtered)
-      end
-      Zenoo::Backend.flush_image(self)
-    end
+    replace_texture!(filtered)
     self
   end
 
