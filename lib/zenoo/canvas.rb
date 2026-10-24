@@ -666,14 +666,17 @@ module Zenoo
         end
       end
 
-      if closed && pts_work.size > 2 && Math.hypot(pts_work.first[0] - pts_work.last[0], pts_work.first[1] - pts_work.last[1]) < 0.0001
+      # 始点と終点が一致している場合（明示的 closed、または 360 度円弧など幾何学的に同一座標で循環する場合）
+      is_loop = closed || (pts_work.size > 2 && Math.hypot(pts_work.first[0] - pts_work.last[0], pts_work.first[1] - pts_work.last[1]) < 0.0001)
+
+      if is_loop && pts_work.size > 2 && Math.hypot(pts_work.first[0] - pts_work.last[0], pts_work.first[1] - pts_work.last[1]) < 0.0001
         pts_work.pop
       end
       n = pts_work.size
       return [] if n < 2
 
       half_w = width.to_f * 0.5
-      num_segments = closed ? n : (n - 1)
+      num_segments = is_loop ? n : (n - 1)
 
       # 各セグメントの方向ベクトルと法線オフセット
       seg_dirs_x = []
@@ -726,8 +729,8 @@ module Zenoo
       # 2. 中間頂点のジョイント (Join)
       miter_limit = (@miter_limit && @miter_limit > 0) ? @miter_limit.to_f : 10.0
       limit_sq = miter_limit * miter_limit
-      joint_count = closed ? n : (n - 2)
-      start_idx = closed ? 0 : 1
+      joint_count = is_loop ? n : (n - 2)
+      start_idx = is_loop ? 0 : 1
 
       start_idx.upto(start_idx + joint_count - 1) do |idx|
         curr_i = idx % n
@@ -796,7 +799,7 @@ module Zenoo
       end
 
       # 3. 端点キャップ (Cap) - 開いたパスのみ
-      if !closed && n >= 2
+      if !is_loop && n >= 2
         if @line_cap == :square
           d0x = seg_dirs_x[0]; d0y = seg_dirs_y[0]
           n0x = seg_normals_x[0]; n0y = seg_normals_y[0]

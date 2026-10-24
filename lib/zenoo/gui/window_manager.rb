@@ -48,6 +48,7 @@ module Zenoo
       def begin_frame(mouse_x, mouse_y, mouse_down, mouse_push)
         # 1. ウィンドウのドラッグ / リサイズ継続処理
         if @resizing_window_id
+          GUI.set_mouse_cursor(:resize_nwse)
           if mouse_down && (win = @windows[@resizing_window_id])
             dw = mouse_x - @resize_start_mouse_x
             dh = mouse_y - @resize_start_mouse_y
@@ -59,6 +60,7 @@ module Zenoo
             @resizing_window_id = nil
           end
         elsif @dragging_window_id
+          GUI.set_mouse_cursor(:hand)
           if mouse_down && (win = @windows[@dragging_window_id])
             win.x = mouse_x - @drag_offset_x
             win.y = mouse_y - @drag_offset_y
@@ -129,17 +131,20 @@ module Zenoo
       # リサイズハンドルの操作判定 (右下 16x16 領域)
       def check_resize_start(win, mouse_x, mouse_y, mouse_push)
         return false unless win.resizable
-        return false unless mouse_push && @hovered_window_id == win.id
+        return false unless @hovered_window_id == win.id
         handle_size = 18.0
         hx = win.x + win.w - handle_size
         hy = win.y + win.h - handle_size
         if in_rect?(mouse_x, mouse_y, hx, hy, handle_size, handle_size)
-          @resizing_window_id = win.id
-          @resize_start_w = win.w
-          @resize_start_h = win.h
-          @resize_start_mouse_x = mouse_x
-          @resize_start_mouse_y = mouse_y
-          return true
+          GUI.set_mouse_cursor(:resize_nwse)
+          if mouse_push
+            @resizing_window_id = win.id
+            @resize_start_w = win.w
+            @resize_start_h = win.h
+            @resize_start_mouse_x = mouse_x
+            @resize_start_mouse_y = mouse_y
+            return true
+          end
         end
         false
       end

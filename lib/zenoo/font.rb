@@ -39,7 +39,7 @@ module Zenoo
              char_or_cp.to_i
            end
       s = size.to_f
-      r_scale = (defined?(Backend) && Backend.current_target) ? 1.0 : (defined?(Native::Window) ? Native::Window.scale.round(2) : 1.0)
+      r_scale = Backend.current_target ? 1.0 : Native::Window.scale.round(2)
       r_scale = 1.0 if r_scale < 1.0
       key = [cp, s, sdf, r_scale]
       @glyph_cache[key] ||= begin

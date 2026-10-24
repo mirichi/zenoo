@@ -166,6 +166,36 @@ void sp_ZenImage_replace_texture(sp_ZenImage* dst, sp_ZenImage* src) {
     }
 }
 
+sp_int sp_ZenImage_get_pixel(sp_ZenImage* s, sp_int x, sp_int y) {
+    if (!s || !s->image) return 0;
+    return (sp_int)zen_image_get_pixel(s->image, (int)x, (int)y);
+}
+
+void sp_ZenImage_set_pixel(sp_ZenImage* s, sp_int x, sp_int y, sp_int color) {
+    if (!s || !s->image) return;
+    zen_image_set_pixel(s->image, (int)x, (int)y, (uint32_t)color);
+}
+
+void sp_ZenImage_sync(sp_ZenImage* s) {
+    if (!s || !s->image) return;
+    zen_image_sync_to_gpu(s->image);
+}
+
+sp_ZenImage* sp_ZenImage_clone(sp_ZenImage* s) {
+    if (!s || !s->image) return NULL;
+    zen_set_gc_trigger_callback(spinel_gc_hook);
+    sp_ZenImage* clone_obj = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
+    memset(clone_obj, 0, sizeof(*clone_obj));
+    clone_obj->cls_id = s->cls_id;
+    clone_obj->image = zen_image_clone(s->image);
+    return clone_obj;
+}
+
+sp_bool sp_ZenImage_save(sp_ZenImage* s, const char* path) {
+    if (!s || !s->image || !path) return false;
+    return zen_image_save(s->image, path) ? true : false;
+}
+
 // ==========================================
 // Shader (sp_ZenShader)
 // ==========================================
@@ -384,6 +414,22 @@ sp_bool sp_zen_win_is_maximized(void) {
 
 sp_bool sp_zen_win_is_hovered(void) {
     return zen_is_window_hovered() ? true : false;
+}
+
+void sp_zen_win_show_cursor(sp_int show) {
+    zen_window_show_cursor((int)show);
+}
+
+void sp_zen_win_set_cursor(sp_int shape) {
+    zen_window_set_cursor((int)shape);
+}
+
+const char* sp_zen_input_get_clipboard(void) {
+    return zen_window_get_clipboard_string();
+}
+
+void sp_zen_input_set_clipboard(const char* text) {
+    zen_window_set_clipboard_string(text);
 }
 
 sp_bool sp_zen_input_key_pressed(sp_int key) {

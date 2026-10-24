@@ -31,6 +31,12 @@ module Zenoo
   native_class_method :raw_default_texture_filter=, [:int], :nil, "sp_zen_image_set_default_filter"
   native_class_method :raw_default_texture_filter, [], :int, "sp_zen_image_get_default_filter"
   native_method :replace_texture!, [:self], :nil, "sp_ZenImage_replace_texture"
+  native_method :raw_get_pixel, [:int, :int], :int, "sp_ZenImage_get_pixel"
+  native_method :raw_set_pixel, [:int, :int, :int], :nil, "sp_ZenImage_set_pixel"
+  native_method :sync, [], :nil, "sp_ZenImage_sync"
+  native_method :clone, [], :self, "sp_ZenImage_clone"
+  native_method :dup, [], :self, "sp_ZenImage_clone"
+  native_method :save, [:string], :bool, "sp_ZenImage_save"
 
   # ==========================================
   # 2. Native::NativeShader (Spinel native_struct)
@@ -81,6 +87,16 @@ module Zenoo
       native_func :ensure_context, [], :bool, "sp_zen_win_ensure_context"
       native_func :wasm?, [], :bool, "sp_zen_win_is_wasm"
       native_func :start_wasm_loop, [:any], :nil, "sp_zen_win_start_wasm_loop"
+      native_func :raw_show_cursor, [:int], :nil, "sp_zen_win_show_cursor"
+      native_func :raw_set_cursor, [:int], :nil, "sp_zen_win_set_cursor"
+
+      def self.show_cursor(show)
+        raw_show_cursor(show ? 1 : 0)
+      end
+
+      def self.set_cursor(shape)
+        raw_set_cursor(shape.to_i)
+      end
 
       def self.msaa_samples=(val)
         Zenoo::Native::Window.raw_set_msaa_samples(val.to_i)
@@ -159,6 +175,9 @@ module Zenoo
         end
         chars
       end
+
+      native_func :clipboard, [], :string, "sp_zen_input_get_clipboard"
+      native_func :clipboard=, [:string], :nil, "sp_zen_input_set_clipboard"
     end
 
     # ==========================================

@@ -514,7 +514,7 @@ module Zenoo
     def self.execute_commands(pool, count)
       return if count == 0
 
-      if defined?(Zenoo::Profiler) && Zenoo::Profiler.enabled
+      if Zenoo::Profiler.enabled
         Zenoo::Profiler.measure(:draw) do
           __execute_commands_internal(pool, count)
         end

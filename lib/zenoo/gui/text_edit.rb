@@ -43,8 +43,28 @@ module Zenoo
           abs_ime_y = ry + rh + 2.0 + Window.offset_y
           Input.set_ime_position(abs_ime_x, abs_ime_y)
 
-          # 2. 特殊キー処理 (キーリピート対応)
-          if Input.key_repeat?(:backspace)
+          # 2. クリップボード & 特殊キー処理 (Ctrl/Command ショートカット対応)
+          ctrl_down = Input.key_pressed?(:left_control) || Input.key_pressed?(:right_control) ||
+                      Input.key_pressed?(:left_super) || Input.key_pressed?(:right_super)
+
+          if ctrl_down && Input.key_push?(:v)
+            clip = Input.clipboard
+            if clip && !clip.empty?
+              cur_text.insert(cursor_pos, clip)
+              cursor_pos += clip.length
+              reset_blink = true
+            end
+          elsif ctrl_down && Input.key_push?(:c)
+            Input.clipboard = cur_text
+          elsif ctrl_down && Input.key_push?(:x)
+            Input.clipboard = cur_text
+            cur_text = ""
+            cursor_pos = 0
+            reset_blink = true
+          elsif ctrl_down && Input.key_push?(:a)
+            cursor_pos = cur_text.length
+            reset_blink = true
+          elsif Input.key_repeat?(:backspace)
             if cursor_pos > 0
               cur_text.slice!(cursor_pos - 1)
               cursor_pos -= 1
@@ -75,12 +95,14 @@ module Zenoo
             unfocus = true
           end
 
-          # 3. 通常文字・日本語確定文字の入力
-          Input.input_chars.each do |ch|
-            next if ch == "\r" || ch == "\n"
-            cur_text.insert(cursor_pos, ch)
-            cursor_pos += ch.length
-            reset_blink = true
+          # 3. 通常文字・日本語確定文字の入力 (Ctrl押下時のショートカット文字混入を防止)
+          unless ctrl_down
+            Input.input_chars.each do |ch|
+              next if ch.ord < 32 && ch != "\t"
+              cur_text.insert(cursor_pos, ch)
+              cursor_pos += ch.length
+              reset_blink = true
+            end
           end
 
           [cur_text, cursor_pos, reset_blink, unfocus]

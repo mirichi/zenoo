@@ -43,6 +43,11 @@ sp_int sp_ZenImage_get_filter(sp_ZenImage* s);
 void sp_zen_image_set_default_filter(sp_int filter);
 sp_int sp_zen_image_get_default_filter(void);
 void sp_ZenImage_replace_texture(sp_ZenImage* dst, sp_ZenImage* src);
+sp_int sp_ZenImage_get_pixel(sp_ZenImage* s, sp_int x, sp_int y);
+void sp_ZenImage_set_pixel(sp_ZenImage* s, sp_int x, sp_int y, sp_int color);
+void sp_ZenImage_sync(sp_ZenImage* s);
+sp_ZenImage* sp_ZenImage_clone(sp_ZenImage* s);
+sp_bool sp_ZenImage_save(sp_ZenImage* s, const char* path);
 sp_int sp_zen_get_image_free_count(void);
 
 // Shader メソッド
@@ -89,6 +94,8 @@ sp_bool sp_zen_win_is_focused(void);
 sp_bool sp_zen_win_is_minimized(void);
 sp_bool sp_zen_win_is_maximized(void);
 sp_bool sp_zen_win_is_hovered(void);
+void sp_zen_win_show_cursor(sp_int show);
+void sp_zen_win_set_cursor(sp_int shape);
 
 sp_bool sp_zen_input_key_pressed(sp_int key);
 sp_bool sp_zen_input_key_push(sp_int key);
@@ -101,6 +108,8 @@ sp_bool sp_zen_input_mouse_push(sp_int btn);
 sp_bool sp_zen_input_mouse_release(sp_int btn);
 double  sp_zen_input_mouse_wheel_x(void);
 double  sp_zen_input_mouse_wheel_y(void);
+const char* sp_zen_input_get_clipboard(void);
+void sp_zen_input_set_clipboard(const char* text);
 sp_bool sp_zen_input_gamepad_connected(sp_int id);
 double  sp_zen_input_gamepad_axis(sp_int id, sp_int axis);
 sp_bool sp_zen_input_gamepad_button_pressed(sp_int id, sp_int button);

@@ -21,16 +21,16 @@ module Zenoo
       win_w = window_width ? window_width.to_i : (scale ? (width * scale).to_i : 0)
       win_h = window_height ? window_height.to_i : (scale ? (height * scale).to_i : 0)
       Native::Window.init(width, height, title, fullscreen, win_w, win_h, scale_mode)
-      Native::Window.scale_mode = scale_mode if Native::Window.respond_to?(:scale_mode=)
+      Native::Window.scale_mode = scale_mode
       Native::Window.vsync = (vsync ? 1 : 0)
       self.target_fps = fps
-      Font.atlas_image if defined?(Font) && Font.respond_to?(:atlas_image)
+      Font.atlas_image
 
       @main_loop_block = block
 
       if Native::Window.wasm?
         @step_proc = proc { __step_frame }
-        Zenoo::Native::Window.start_wasm_loop(@step_proc)
+        Native::Window.start_wasm_loop(@step_proc)
       else
         while Native::Window.update
           __step_frame
@@ -40,16 +40,17 @@ module Zenoo
     end
 
     def self.__update_step
-      Zenoo::Tween.__update_step(delta_time) if defined?(Zenoo::Tween)
-      Zenoo::GUI.begin_frame if defined?(Zenoo::GUI)
+      Audio.update(delta_time)
+      Tween.__update_step(delta_time)
+      GUI.begin_frame
       @main_loop_block.call if @main_loop_block
-      Zenoo::GUI.end_frame if defined?(Zenoo::GUI)
-      Zenoo::Input.__update_step if defined?(Zenoo::Input)
+      GUI.end_frame
+      Input.__update_step
     end
 
     def self.__draw_step
-      if defined?(Zenoo::Profiler) && Zenoo::Profiler.enabled
-        Zenoo::Profiler.measure(:draw) do
+      if Profiler.enabled
+        Profiler.measure(:draw) do
           Backend.flush_screen
           Backend.clear_clips
           @offset_x = 0.0
@@ -68,17 +69,17 @@ module Zenoo
     def self.__step_frame
       __update_fps
       Backend.current_target = nil
-      Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
-      if defined?(Zenoo::Profiler) && Zenoo::Profiler.enabled
-        Zenoo::Profiler.measure(:draw) { Native::Window.clear(@bg_color) }
+      Native::Image.reset_render_target
+      if Profiler.enabled
+        Profiler.measure(:draw) { Native::Window.clear(@bg_color) }
       else
         Native::Window.clear(@bg_color)
       end
       __update_step
       __draw_step
-      Zenoo::Profiler.end_frame if defined?(Zenoo::Profiler)
+      Profiler.end_frame
       Backend.current_target = nil
-      Native::Image.reset_render_target if defined?(Native::Image) && Native::Image.respond_to?(:reset_render_target)
+      Native::Image.reset_render_target
     end
 
     def self.time
@@ -132,26 +133,20 @@ module Zenoo
     end
 
     def self.title
-      Native::Window.respond_to?(:title) ? Native::Window.title : "Zenoo"
+      Native::Window.title
     end
 
     def self.title=(val)
-      Native::Window.title = val.to_s if Native::Window.respond_to?(:title=)
+      Native::Window.title = val.to_s
     end
 
     def self.window_position
-      if Native::Window.respond_to?(:window_position)
-        Native::Window.window_position
-      else
-        [0, 0]
-      end
+      Native::Window.window_position
     end
 
     def self.window_position=(pos)
       if pos.is_a?(Array) && pos.length >= 2
-        if Native::Window.respond_to?(:set_window_position)
-          Native::Window.set_window_position(pos[0].to_i, pos[1].to_i)
-        end
+        Native::Window.set_window_position(pos[0].to_i, pos[1].to_i)
       end
     end
 
@@ -164,7 +159,7 @@ module Zenoo
     end
 
     def self.focused?
-      Native::Window.respond_to?(:focused?) ? Native::Window.focused? : true
+      Native::Window.focused?
     end
 
     def self.active?
@@ -172,7 +167,7 @@ module Zenoo
     end
 
     def self.minimized?
-      Native::Window.respond_to?(:minimized?) ? Native::Window.minimized? : false
+      Native::Window.minimized?
     end
 
     def self.iconified?
@@ -180,11 +175,11 @@ module Zenoo
     end
 
     def self.maximized?
-      Native::Window.respond_to?(:maximized?) ? Native::Window.maximized? : false
+      Native::Window.maximized?
     end
 
     def self.hovered?
-      Native::Window.respond_to?(:hovered?) ? Native::Window.hovered? : false
+      Native::Window.hovered?
     end
 
     def self.mouse_in_window?
@@ -209,11 +204,11 @@ module Zenoo
 
     def self.target_fps=(val)
       t = (val.nil? || val.to_i <= 0) ? 0 : val.to_i
-      Native::Window.target_fps = t if defined?(Native::Window) && Native::Window.respond_to?(:target_fps=)
+      Native::Window.target_fps = t
     end
 
     def self.target_fps
-      defined?(Native::Window) && Native::Window.respond_to?(:target_fps) ? Native::Window.target_fps : 60
+      Native::Window.target_fps
     end
 
     def self.__update_fps
@@ -235,11 +230,11 @@ module Zenoo
     end
 
     def self.msaa_samples=(val)
-      Native::Window.msaa_samples = val.to_i if Native::Window.respond_to?(:msaa_samples=)
+      Native::Window.msaa_samples = val.to_i
     end
 
     def self.msaa_samples
-      Native::Window.respond_to?(:msaa_samples) ? Native::Window.msaa_samples : 0
+      Native::Window.msaa_samples
     end
 
     def self.msaa=(val)
@@ -249,6 +244,47 @@ module Zenoo
 
     def self.msaa?
       msaa_samples > 0
+    end
+
+    CURSOR_SHAPES = {
+      arrow: 0,
+      ibeam: 1,
+      crosshair: 2,
+      hand: 3,
+      hresize: 4,
+      vresize: 5,
+      resize_nwse: 6,
+      resize_nesw: 7,
+      resize_all: 8,
+      not_allowed: 9,
+      resize: 6,
+      window_resize: 6
+    }.freeze
+
+    def self.show_cursor(show = true)
+      Native::Window.show_cursor(show)
+    end
+
+    def self.hide_cursor
+      Native::Window.show_cursor(false)
+    end
+
+    def self.mouse_cursor_visible=(val)
+      Native::Window.show_cursor(!!val)
+    end
+
+    def self.cursor
+      @current_cursor_shape || :arrow
+    end
+
+    def self.cursor=(shape)
+      @current_cursor_shape = shape
+      shape_id = CURSOR_SHAPES[shape] || (shape.is_a?(Integer) ? shape : 0)
+      Native::Window.set_cursor(shape_id)
+    end
+
+    def self.set_cursor(shape)
+      self.cursor = shape
     end
 
     @card_shader = nil

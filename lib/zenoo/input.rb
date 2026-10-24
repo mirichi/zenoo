@@ -186,7 +186,7 @@ module Zenoo
 
     # IME変換候補ウィンドウの位置設定
     def self.set_ime_position(x, y)
-      Native::Input.set_ime_position(x.to_i, y.to_i) if Native::Input.respond_to?(:set_ime_position)
+      Native::Input.set_ime_position(x.to_i, y.to_i)
     end
 
     # マウス座標
@@ -229,6 +229,15 @@ module Zenoo
 
     def self.mouse_wheel
       Native::Input.mouse_wheel
+    end
+
+    # クリップボード
+    def self.clipboard
+      Native::Input.clipboard
+    end
+
+    def self.clipboard=(str)
+      Native::Input.clipboard = str.to_s
     end
 
     # ==========================================
