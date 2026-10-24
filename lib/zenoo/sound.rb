@@ -94,17 +94,21 @@ module Zenoo
     attr_reader :path
     attr_accessor :bus
 
+    def stream?
+      @stream
+    end
+
     class << self
-      # ファイルからサウンドをロード
-      def load(path, bus: :se)
-        sound = new(path)
+      # ファイルからサウンドをロード (stream: true でストリーミング再生)
+      def load(path, bus: :se, stream: false)
+        sound = new(path, stream: stream)
         sound.bus = bus
         sound
       end
 
       # ワンショット再生用の簡易メソッド
-      def play(path, volume: 1.0, bus: :se)
-        sound = load(path, bus: bus)
+      def play(path, volume: 1.0, bus: :se, stream: false)
+        sound = load(path, bus: bus, stream: stream)
         sound.volume = volume if volume != 1.0
         sound.play
         sound
@@ -127,12 +131,14 @@ module Zenoo
       end
     end
 
-    def initialize(source)
+    def initialize(source, stream: false)
       if source.is_a?(String)
         @path = source.to_s
-        @native = Native::Sound.load(@path)
+        @stream = !!stream
+        @native = Native::Sound.load(@path, @stream)
       else
         @path = nil
+        @stream = false
         @native = source
       end
 

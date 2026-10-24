@@ -413,7 +413,8 @@ module Zenoo
       # - step: 刻み幅 (例: 0.1, 1.0)
       # - unit: 単位サフィックス (例: "px", "x", "%")
       # - format: 数値書式 (例: "%.2f", "%d")
-      def slider(label, value, min, max, x: nil, y: nil, w: nil, h: 44.0, step: nil, unit: "", format: nil, id: "")
+      # - enabled: 有効/非活性フラグ (false でグレーアウト・操作無効)
+      def slider(label, value, min, max, x: nil, y: nil, w: nil, h: 44.0, step: nil, unit: "", format: nil, id: "", enabled: true)
         widget_id = id.empty? ? label.to_s : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
@@ -422,6 +423,12 @@ module Zenoo
         v_val = value.to_f
         v_min = min.to_f
         v_max = max.to_f
+
+        unless enabled
+          @renderer.draw_slider(rx, ry, rw, rh, label, v_val, v_min, v_max, :disabled, @theme, unit: unit, format: format)
+          @layout.advance(rw, rh) if x.nil? && y.nil?
+          return v_val
+        end
 
         hover = can_interact? && @renderer.hit_test_slider(rx, ry, rw, rh, gui_mouse_x, gui_mouse_y, @theme)
 

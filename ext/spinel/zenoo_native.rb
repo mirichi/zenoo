@@ -274,6 +274,7 @@ module Zenoo
   # ==========================================
   native_struct "Zenoo::Native::Sound", "sp_ZenSound", "sp_ZenSound_free"
   native_new [:string], "sp_ZenSound_load"
+  native_new [:string, :bool], "sp_ZenSound_load_stream"
   native_new [:string, :int, :int, :int], "sp_ZenSound_load_pcm"
   native_method :play, [], :nil, "sp_ZenSound_play"
   native_method :stop, [], :nil, "sp_ZenSound_stop"

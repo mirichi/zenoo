@@ -85,9 +85,9 @@ module Zenoo
       def apply_tool_dark
         @font           = nil
         # 背景色 (ダークグレー)
-        @bg_normal      = Color.new(42, 42, 44, 235)
-        @bg_hover       = Color.new(58, 58, 62, 245)
-        @bg_active      = Color.new(75, 75, 80, 255)
+        @bg_normal      = Color.new(46, 46, 50, 240)
+        @bg_hover       = Color.new(62, 62, 68, 245)
+        @bg_active      = Color.new(78, 78, 86, 255)
 
         # ウィンドウ装飾 (フラットなモノトーン・ダークグレー)
         @win_bg              = Color.new(30, 30, 32, 245)
@@ -97,9 +97,9 @@ module Zenoo
         @win_border_active   = [1.0, Color.new(120, 120, 130, 240)]
 
         # ボーダー設定 [幅, Color] (端正な1pxグレー)
-        @border_normal  = [1.0, Color.new(70, 70, 75, 180)]
-        @border_hover   = [1.0, Color.new(120, 120, 130, 220)]
-        @border_active  = [1.5, Color.new(180, 180, 190, 255)]
+        @border_normal  = [1.0, Color.new(90, 95, 105, 220)]
+        @border_hover   = [1.0, Color.new(145, 150, 165, 240)]
+        @border_active  = [1.5, Color.new(190, 195, 210, 255)]
 
         # シャドウ設定 (控えめなドロップシャドウ)
         @shadow_normal  = [4.0, Color.new(0, 0, 0, 100)]
@@ -111,10 +111,10 @@ module Zenoo
         @text_disabled  = Color.new(110, 110, 115)
 
         # スライダー・アクセントカラー (落ち着いたライトグレー・シルバー)
-        @accent_color   = Color.new(160, 165, 175)
-        @accent_hover   = Color.new(200, 205, 215)
-        @track_bg       = Color.new(28, 28, 30, 220)
-        @track_border   = [1.0, Color.new(55, 55, 60, 160)]
+        @accent_color   = Color.new(175, 180, 195)
+        @accent_hover   = Color.new(215, 220, 235)
+        @track_bg       = Color.new(32, 32, 36, 230)
+        @track_border   = [1.0, Color.new(70, 75, 85, 180)]
 
         # スタイル設定 (ツール向けにコンパクト＆シャープ)
         @corner_radius  = 4.0

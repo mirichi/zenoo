@@ -177,6 +177,7 @@ typedef struct sp_ZenSound_s {
 
 void sp_ZenSound_free(void* p);
 sp_ZenSound* sp_ZenSound_load(sp_int cls_id, const char* path);
+sp_ZenSound* sp_ZenSound_load_stream(sp_int cls_id, const char* path, sp_bool stream);
 sp_ZenSound* sp_ZenSound_load_pcm(sp_int cls_id, const char* pcm_data, sp_int frame_count, sp_int channels, sp_int sample_rate);
 
 void sp_ZenSound_play(sp_ZenSound* s);

@@ -88,7 +88,7 @@ float zen_audio_get_master_volume(void) {
 // ==========================================
 // サウンドの生成・破棄
 // ==========================================
-ZenSound* zen_sound_load_file(const char* filepath) {
+ZenSound* zen_sound_load_file(const char* filepath, int stream) {
     if (!filepath) {
         return NULL;
     }
@@ -102,7 +102,8 @@ ZenSound* zen_sound_load_file(const char* filepath) {
     }
     s->is_data_source = 0;
 
-    ma_result res = ma_sound_init_from_file(&s_engine, filepath, 0, NULL, NULL, &s->sound);
+    ma_uint32 flags = stream ? MA_SOUND_FLAG_STREAM : 0;
+    ma_result res = ma_sound_init_from_file(&s_engine, filepath, flags, NULL, NULL, &s->sound);
     if (res != MA_SUCCESS) {
         fprintf(stderr, "[Zenoo Audio] Failed to load sound from file: %s (error %d)\n", filepath, res);
         free(s);
