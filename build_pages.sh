@@ -152,260 +152,52 @@ except Exception as e:
 " "$1"
 }
 
-build_game() {
-    echo "=== Building Survival Shooting Game (${DOCS_DIR}/game) ==="
-    mkdir -p "${DOCS_DIR}/game"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/game_zenoo.rb -c -o "${DOCS_DIR}/game/app.c"
-    strip_always_inline "${DOCS_DIR}/game/app.c"
+build_item() {
+    title="$1"
+    dir_name="$2"
+    src_rb="$3"
+    shell_file="$4"
+
+    echo "=== Building ${title} (${DOCS_DIR}/${dir_name}) ==="
+    out_dir="${DOCS_DIR}/${dir_name}"
+    tmp_out="/tmp/zenoo_wasm/${dir_name}"
+    mkdir -p "${out_dir}"
+    rm -rf "${tmp_out}"
+    mkdir -p "${tmp_out}"
+
+    "${SPINEL_BIN}" --no-inline-hot -Ilib "${src_rb}" -c -o "${tmp_out}/app.c"
+    strip_always_inline "${tmp_out}/app.c"
 
     emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/game/app.c" \
+        "${tmp_out}/app.c" \
         "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/game/index.html" \
-        --shell-file examples/web/shell_game.html
+        -o "${tmp_out}/index.html" \
+        --shell-file "${shell_file}"
 
-    patch_emscripten_js "${DOCS_DIR}/game/index.js"
-    rm -f "${DOCS_DIR}/game/app.c"
-    echo "-> Game build done!"
+    patch_emscripten_js "${tmp_out}/index.js"
+    rm -f "${tmp_out}/app.c"
+
+    # docs/ へ一括コピー (NTFSファイル共有違反を完全回避)
+    cp "${tmp_out}"/* "${out_dir}/"
+    rm -rf "${tmp_out}"
+    echo "-> ${title} build done!"
 }
 
-build_gui() {
-    echo "=== Building Immediate Mode GUI Demo (${DOCS_DIR}/gui) ==="
-    mkdir -p "${DOCS_DIR}/gui"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_gui_widgets.rb -c -o "${DOCS_DIR}/gui/app.c"
-    strip_always_inline "${DOCS_DIR}/gui/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/gui/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/gui/index.html" \
-        --shell-file examples/web/shell_gui.html
-
-    patch_emscripten_js "${DOCS_DIR}/gui/index.js"
-    rm -f "${DOCS_DIR}/gui/app.c"
-    echo "-> GUI build done!"
-}
-
-build_font() {
-    echo "=== Building SDF Text & Font Demo (${DOCS_DIR}/font) ==="
-    mkdir -p "${DOCS_DIR}/font"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_ttf_sdf_font.rb -c -o "${DOCS_DIR}/font/app.c"
-    strip_always_inline "${DOCS_DIR}/font/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/font/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/font/index.html" \
-        --shell-file examples/web/shell_font.html
-
-    patch_emscripten_js "${DOCS_DIR}/font/index.js"
-    rm -f "${DOCS_DIR}/font/app.c"
-    echo "-> Font build done!"
-}
-
-build_vector() {
-    echo "=== Building Vector Graphics Demo (${DOCS_DIR}/vector) ==="
-    mkdir -p "${DOCS_DIR}/vector"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_vector_graphics.rb -c -o "${DOCS_DIR}/vector/app.c"
-    strip_always_inline "${DOCS_DIR}/vector/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/vector/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/vector/index.html" \
-        --shell-file examples/web/shell.html
-
-    patch_emscripten_js "${DOCS_DIR}/vector/index.js"
-    rm -f "${DOCS_DIR}/vector/app.c"
-    echo "-> Vector build done!"
-}
-
-build_image() {
-    echo "=== Building Sprite & Blend Modes Demo (${DOCS_DIR}/image) ==="
-    mkdir -p "${DOCS_DIR}/image"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_draw_image.rb -c -o "${DOCS_DIR}/image/app.c"
-    strip_always_inline "${DOCS_DIR}/image/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/image/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/image/index.html" \
-        --shell-file examples/web/shell_image.html
-
-    patch_emscripten_js "${DOCS_DIR}/image/index.js"
-    rm -f "${DOCS_DIR}/image/app.c"
-    echo "-> Image build done!"
-}
-
-build_atlas() {
-    echo "=== Building Texture Atlas Demo (${DOCS_DIR}/atlas) ==="
-    mkdir -p "${DOCS_DIR}/atlas"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_texture_atlas.rb -c -o "${DOCS_DIR}/atlas/app.c"
-    strip_always_inline "${DOCS_DIR}/atlas/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/atlas/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/atlas/index.html" \
-        --shell-file examples/web/shell_atlas.html
-
-    patch_emscripten_js "${DOCS_DIR}/atlas/index.js"
-    rm -f "${DOCS_DIR}/atlas/app.c"
-    echo "-> Atlas build done!"
-}
-
-build_clip() {
-    echo "=== Building Hardware Clipping Demo (${DOCS_DIR}/clip) ==="
-    mkdir -p "${DOCS_DIR}/clip"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_window_clip.rb -c -o "${DOCS_DIR}/clip/app.c"
-    strip_always_inline "${DOCS_DIR}/clip/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/clip/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/clip/index.html" \
-        --shell-file examples/web/shell_clip.html
-
-    patch_emscripten_js "${DOCS_DIR}/clip/index.js"
-    rm -f "${DOCS_DIR}/clip/app.c"
-    echo "-> Clip build done!"
-}
-
-build_sound() {
-    echo "=== Building Audio & Sound Demo (${DOCS_DIR}/sound) ==="
-    mkdir -p "${DOCS_DIR}/sound"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_sound.rb -c -o "${DOCS_DIR}/sound/app.c"
-    strip_always_inline "${DOCS_DIR}/sound/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/sound/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/sound/index.html" \
-        --shell-file examples/web/shell_sound.html
-
-    patch_emscripten_js "${DOCS_DIR}/sound/index.js"
-    rm -f "${DOCS_DIR}/sound/app.c"
-    echo "-> Sound build done!"
-}
-
-build_collision() {
-    echo "=== Building GJK Collision Playground (${DOCS_DIR}/collision) ==="
-    mkdir -p "${DOCS_DIR}/collision"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_collision.rb -c -o "${DOCS_DIR}/collision/app.c"
-    strip_always_inline "${DOCS_DIR}/collision/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/collision/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/collision/index.html" \
-        --shell-file examples/web/shell_collision.html
-
-    patch_emscripten_js "${DOCS_DIR}/collision/index.js"
-    rm -f "${DOCS_DIR}/collision/app.c"
-    echo "-> Collision build done!"
-}
-
-build_tween() {
-    echo "=== Building Tween & Easing Animation (${DOCS_DIR}/tween) ==="
-    mkdir -p "${DOCS_DIR}/tween"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_tween.rb -c -o "${DOCS_DIR}/tween/app.c"
-    strip_always_inline "${DOCS_DIR}/tween/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/tween/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/tween/index.html" \
-        --shell-file examples/web/shell_tween.html
-
-    patch_emscripten_js "${DOCS_DIR}/tween/index.js"
-    rm -f "${DOCS_DIR}/tween/app.c"
-    echo "-> Tween build done!"
-}
-
-build_coords() {
-    echo "=== Building Sprite Coords & Collision Visualizer (${DOCS_DIR}/coords) ==="
-    mkdir -p "${DOCS_DIR}/coords"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_sprite_coords.rb -c -o "${DOCS_DIR}/coords/app.c"
-    strip_always_inline "${DOCS_DIR}/coords/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/coords/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/coords/index.html" \
-        --shell-file examples/web/shell_coords.html
-
-    patch_emscripten_js "${DOCS_DIR}/coords/index.js"
-    rm -f "${DOCS_DIR}/coords/app.c"
-    echo "-> Coords build done!"
-}
-
-build_billiards() {
-    echo "=== Building Billiards & 3D Rolling Shader Demo (${DOCS_DIR}/billiards) ==="
-    mkdir -p "${DOCS_DIR}/billiards"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_billiards.rb -c -o "${DOCS_DIR}/billiards/app.c"
-    strip_always_inline "${DOCS_DIR}/billiards/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/billiards/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/billiards/index.html" \
-        --shell-file examples/web/shell_billiards.html
-
-    patch_emscripten_js "${DOCS_DIR}/billiards/index.js"
-    rm -f "${DOCS_DIR}/billiards/app.c"
-    echo "-> Billiards build done!"
-}
-
-build_zero_gravity() {
-    echo "=== Building Zero-Gravity 2D Physics Demo (${DOCS_DIR}/zero_gravity) ==="
-    mkdir -p "${DOCS_DIR}/zero_gravity"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_zero_gravity.rb -c -o "${DOCS_DIR}/zero_gravity/app.c"
-    strip_always_inline "${DOCS_DIR}/zero_gravity/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/zero_gravity/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/zero_gravity/index.html" \
-        --shell-file examples/web/shell_zero_gravity.html
-
-    patch_emscripten_js "${DOCS_DIR}/zero_gravity/index.js"
-    rm -f "${DOCS_DIR}/zero_gravity/app.c"
-    echo "-> Zero-Gravity build done!"
-}
-
-build_particles() {
-    echo "=== Building GPU Particle Storm Demo (${DOCS_DIR}/particles) ==="
-    mkdir -p "${DOCS_DIR}/particles"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/gpu_particles.rb -c -o "${DOCS_DIR}/particles/app.c"
-    strip_always_inline "${DOCS_DIR}/particles/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/particles/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/particles/index.html" \
-        --shell-file examples/web/shell_particles.html
-
-    patch_emscripten_js "${DOCS_DIR}/particles/index.js"
-    rm -f "${DOCS_DIR}/particles/app.c"
-    echo "-> Particles build done!"
-}
-
-build_danmaku() {
-    echo "=== Building GPU Danmaku Storm Demo (${DOCS_DIR}/danmaku) ==="
-    mkdir -p "${DOCS_DIR}/danmaku"
-    "${SPINEL_BIN}" --no-inline-hot -Ilib examples/demo_gpu_danmaku.rb -c -o "${DOCS_DIR}/danmaku/app.c"
-    strip_always_inline "${DOCS_DIR}/danmaku/app.c"
-
-    emcc "${COMMON_EMCC_FLAGS[@]}" \
-        "${DOCS_DIR}/danmaku/app.c" \
-        "${COMMON_OBJS[@]}" \
-        -o "${DOCS_DIR}/danmaku/index.html" \
-        --shell-file examples/web/shell_danmaku.html
-
-    patch_emscripten_js "${DOCS_DIR}/danmaku/index.js"
-    rm -f "${DOCS_DIR}/danmaku/app.c"
-    echo "-> Danmaku build done!"
-}
+build_game()         { build_item "Survival Shooting Game" "game" "examples/game_zenoo.rb" "examples/web/shell_game.html"; }
+build_gui()          { build_item "Immediate Mode GUI Demo" "gui" "examples/demo_gui_widgets.rb" "examples/web/shell_gui.html"; }
+build_font()         { build_item "SDF Text & Font Demo" "font" "examples/demo_ttf_sdf_font.rb" "examples/web/shell_font.html"; }
+build_vector()       { build_item "Vector Graphics Demo" "vector" "examples/demo_vector_graphics.rb" "examples/web/shell.html"; }
+build_image()        { build_item "Sprite & Blend Modes Demo" "image" "examples/demo_draw_image.rb" "examples/web/shell_image.html"; }
+build_atlas()        { build_item "Texture Atlas Demo" "atlas" "examples/demo_texture_atlas.rb" "examples/web/shell_atlas.html"; }
+build_clip()         { build_item "Hardware Clipping Demo" "clip" "examples/demo_window_clip.rb" "examples/web/shell_clip.html"; }
+build_sound()        { build_item "Audio & Sound Demo" "sound" "examples/demo_sound.rb" "examples/web/shell_sound.html"; }
+build_collision()    { build_item "GJK Collision Playground" "collision" "examples/demo_collision.rb" "examples/web/shell_collision.html"; }
+build_tween()        { build_item "Tween & Easing Animation" "tween" "examples/demo_tween.rb" "examples/web/shell_tween.html"; }
+build_coords()       { build_item "Sprite Coords & Collision Visualizer" "coords" "examples/demo_sprite_coords.rb" "examples/web/shell_coords.html"; }
+build_billiards()    { build_item "Billiards & 3D Rolling Shader Demo" "billiards" "examples/demo_billiards.rb" "examples/web/shell_billiards.html"; }
+build_zero_gravity() { build_item "Zero-Gravity 2D Physics Demo" "zero_gravity" "examples/demo_zero_gravity.rb" "examples/web/shell_zero_gravity.html"; }
+build_particles()    { build_item "GPU Particle Storm Demo" "particles" "examples/gpu_particles.rb" "examples/web/shell_particles.html"; }
+build_danmaku()      { build_item "GPU Danmaku Storm Demo" "danmaku" "examples/demo_gpu_danmaku.rb" "examples/web/shell_danmaku.html"; }
 
 case "$TARGET" in
     game)         build_game ;;
