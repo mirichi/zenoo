@@ -261,7 +261,8 @@ module Zenoo
       when :dpad_right, :right then 12
       when :dpad_down, :down then 13
       when :dpad_left, :left then 14
-      else btn.to_i
+      else
+        btn.respond_to?(:to_i) ? btn.to_i : 0
       end
     end
 
@@ -274,7 +275,8 @@ module Zenoo
       when :ry, :right_y then 3
       when :lt, :left_trigger, :l2 then 4
       when :rt, :right_trigger, :r2 then 5
-      else axis.to_i
+      else
+        axis.respond_to?(:to_i) ? axis.to_i : 0
       end
     end
 

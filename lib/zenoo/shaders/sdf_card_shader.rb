@@ -27,11 +27,11 @@ module Zenoo
       void main() {
           vec2 in_unit_pos = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
           float x = in_bounds.x; float y = in_bounds.y; float w = in_bounds.z; float h = in_bounds.w;
-          float shadow_blur = in_param0.z;
-          // アンチエイリアス用に影がなくても最低2pxのマージンを確保
-          float pad = max(shadow_blur * 2.0, 2.0);
-
           int mode = int(in_param0.w);
+          float shadow_blur = in_param0.z;
+          // 三角形(mode == 4)の角丸膨らみ、および太いボーダーの描画領域をパディングに加算
+          float extra_pad = in_param0.y + ((mode == 4) ? in_param0.x : 0.0);
+          float pad = max(shadow_blur * 2.0, 2.0) + extra_pad;
 
           // パディング込みのローカル頂点
           vec2 local_corner = vec2(-pad, -pad) + in_unit_pos * vec2(w + pad * 2.0, h + pad * 2.0);
