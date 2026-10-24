@@ -869,25 +869,17 @@ module Zenoo
     end
 
 
-    # SDF 三角形描画 (解析的アンチエイリアス・角丸・枠線・影対応)
+    # 三角形描画 (GPUポリゴンラスタライズ描画)
+    # 複数三角形を組み合わせたメッシュでも継ぎ目(シーム)が出ないハードウェア描画です。
+    # 頂点グラデーション (color: [c1, c2, c3]) に対応しています。
     #
     # x1, y1, x2, y2, x3, y3 : 三角形の3頂点
-    # color                  : 塗りつぶし色
-    # radius                 : 角丸半径 (デフォルト: 0.0)
-    # border_color           : 枠線の色
-    # border_width           : 枠線の幅
-    # shadow_blur            : 影・光彩のぼかし幅
-    # shadow_color           : 影の色
+    # color                  : 塗りつぶし色 または 3頂点分の色の配列 [c1, c2, c3]
     # blend                  : ブレンドモード (:alpha, :add 等)
     # camera                 : カメラ適用有無 (デフォルト: true)
     # z                      : Zオーダー (デフォルト: 0.0)
     def self.draw_triangle(x1, y1, x2, y2, x3, y3,
                           color: :white,
-                          radius: 0.0,
-                          border_color: nil,
-                          border_width: nil,
-                          shadow_blur: 0.0,
-                          shadow_color: nil,
                           blend: :alpha,
                           camera: true,
                           z: 0.0)
@@ -900,70 +892,37 @@ module Zenoo
         ax1 = (x1.to_f * cz) + cam_ox; ay1 = (y1.to_f * cz) + cam_oy
         ax2 = (x2.to_f * cz) + cam_ox; ay2 = (y2.to_f * cz) + cam_oy
         ax3 = (x3.to_f * cz) + cam_ox; ay3 = (y3.to_f * cz) + cam_oy
-        cur_zoom = cz
       else
         ax1 = x1.to_f + @offset_x; ay1 = y1.to_f + @offset_y
         ax2 = x2.to_f + @offset_x; ay2 = y2.to_f + @offset_y
         ax3 = x3.to_f + @offset_x; ay3 = y3.to_f + @offset_y
-        cur_zoom = 1.0
       end
 
-      # バウンディングボックス計算
-      min_x = [ax1, ax2, ax3].min
-      max_x = [ax1, ax2, ax3].max
-      min_y = [ay1, ay2, ay3].min
-      max_y = [ay1, ay2, ay3].max
-
-      wf = max_x - min_x
-      hf = max_y - min_y
-      return if wf <= 0.0 && hf <= 0.0
-
-      # 中心
-      cx = (min_x + max_x) * 0.5
-      cy = (min_y + max_y) * 0.5
-
-      # 中心からの相対座標 (ローカル座標)
-      p1x = ax1 - cx; p1y = ay1 - cy
-      p2x = ax2 - cx; p2y = ay2 - cy
-      p3x = ax3 - cx; p3y = ay3 - cy
-
-      actual_color = color || (border_color ? nil : :white)
-      c_color = Backend.normalize_color(actual_color)
-
-      b_width = 0.0
-      b0 = 0.0; b1 = 0.0; b2 = 0.0; b3 = 0.0
-      if border_color
-        b_width = (border_width || 1.0).to_f * cur_zoom
-        bc = Backend.normalize_color(border_color)
-        b0 = bc[0].to_f; b1 = bc[1].to_f; b2 = bc[2].to_f; b3 = bc[3].to_f
+      if color.is_a?(Array) && color.length == 3 && (color[0].is_a?(Color) || color[0].is_a?(Symbol) || color[0].is_a?(Array))
+        # 頂点ごとの色指定 [c1, c2, c3]
+        c1 = Backend.normalize_color(color[0])
+        c2 = Backend.normalize_color(color[1])
+        c3 = Backend.normalize_color(color[2])
+        data = [
+          ax1, ay1, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
+          ax2, ay2, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f,
+          ax3, ay3, c3[0].to_f, c3[1].to_f, c3[2].to_f, c3[3].to_f
+        ].pack("f*")
+      else
+        c = Backend.normalize_color(color)
+        cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
+        data = [
+          ax1, ay1, cr, cg, cb, ca,
+          ax2, ay2, cr, cg, cb, ca,
+          ax3, ay3, cr, cg, cb, ca
+        ].pack("f*")
       end
-
-      s_blur = shadow_blur.to_f * cur_zoom
-      s0 = 0.0; s1 = 0.0; s2 = 0.0; s3 = 0.0
-      if s_blur > 0.0
-        sc = Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR)
-        s0 = sc[0].to_f; s1 = sc[1].to_f; s2 = sc[2].to_f; s3 = sc[3].to_f
-      end
-
-      rad = radius.to_f * cur_zoom
-      mode = 4.0 # 三角形モード (SDF)
-
-      data = [
-        min_x, min_y, wf, hf,
-        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        rad, b_width, s_blur, mode,
-        b0, b1, b2, b3,
-        s0, s1, s2, s3,
-        p1x, p1y, p2x, p2y,
-        p3x, p3y, 0.0, 0.0
-      ].pack("f*")
 
       Backend.enqueue_draw(
-        Backend::Pipelines::CARD,
+        Backend::Pipelines::TRIANGLES,
         data,
-        1,
-        image: nil,
-        shader: card_shader,
+        3,
+        shader: flat_primitive_shader,
         blend: b_mode,
         z: z
       )
