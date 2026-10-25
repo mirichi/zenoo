@@ -10,7 +10,7 @@ require_relative 'dev/inspector'
 module Zenoo
   module Dev
     class << self
-      attr_accessor :enabled, :watch_interval_frames, :current_error, :auto_reload, :test_frames, :watch_dirs
+      attr_accessor :enabled, :watch_interval_frames, :current_error, :auto_reload, :test_frames, :watch_dirs, :game_block_active
 
       def init
         @enabled = ENV["ZENOO_DEV"] != "0"
@@ -28,6 +28,7 @@ module Zenoo
         @snapshot_clear_color = nil
         @has_snapshot = false
         @single_step_requested = false
+        @game_block_active = false
 
         # 実行中スクリプトのディレクトリとカレントディレクトリを監視対象に追加
         add_watch_dir(Dir.pwd)
@@ -135,6 +136,22 @@ module Zenoo
 
       def has_snapshot?
         @has_snapshot
+      end
+
+      def game_block_active?
+        @game_block_active
+      end
+
+      # ユーザーのゲームブロック実行中かつインスペクタ等のGUIがマウスを捕捉している場合はマスク
+      def mask_mouse_input?
+        return false unless @enabled && @game_block_active
+        Zenoo::GUI.mouse_captured? || !Zenoo::GUI.hovered_window_id.nil?
+      end
+
+      # ユーザーのゲームブロック実行中かつインスペクタ等のGUI要素（テキスト入力等）にフォーカスがある場合はマスク
+      def mask_keyboard_input?
+        return false unless @enabled && @game_block_active
+        !Zenoo::GUI.focus_id.nil?
       end
 
       # 画面キューのコマンド群をスナップショットとして保持
@@ -363,13 +380,18 @@ module Zenoo
         GUI.begin_frame
         if @main_loop_block
           begin
-            @main_loop_block.call if @current_frame_ran_game
+            if @current_frame_ran_game
+              Zenoo::Dev.game_block_active = true
+              @main_loop_block.call
+            end
           rescue ScriptError, StandardError => e
             if Zenoo::Dev.enabled
               Zenoo::Dev.handle_exception(e)
             else
               raise e
             end
+          ensure
+            Zenoo::Dev.game_block_active = false
           end
         end
 
@@ -409,11 +431,259 @@ module Zenoo
         end
       end
     end
+
+    # Input モジュールへのパッチ (インスペクタ等のGUI操作時にゲーム側の入力を自動マスク)
+    module InputPatch
+      # マウスボタン
+      def mouse_pressed?(button = :left)
+        return false if Zenoo::Dev.mask_mouse_input?
+        super
+      end
+
+      def mouse_down?(button = :left)
+        return false if Zenoo::Dev.mask_mouse_input?
+        super
+      end
+
+      def mouse_push?(button = :left)
+        return false if Zenoo::Dev.mask_mouse_input?
+        super
+      end
+
+      def mouse_release?(button = :left)
+        return false if Zenoo::Dev.mask_mouse_input?
+        super
+      end
+
+      # マウスホイール
+      def mouse_wheel
+        return 0.0 if Zenoo::Dev.mask_mouse_input?
+        super
+      end
+
+      def mouse_wheel_x
+        return 0.0 if Zenoo::Dev.mask_mouse_input?
+        super
+      end
+
+      def mouse_wheel_y
+        return 0.0 if Zenoo::Dev.mask_mouse_input?
+        super
+      end
+
+      # キーボード
+      def key_pressed?(key)
+        return false if Zenoo::Dev.mask_keyboard_input?
+        super
+      end
+
+      def key_down?(key)
+        return false if Zenoo::Dev.mask_keyboard_input?
+        super
+      end
+
+      def key_push?(key)
+        return false if Zenoo::Dev.mask_keyboard_input?
+        super
+      end
+
+      def key_release?(key)
+        return false if Zenoo::Dev.mask_keyboard_input?
+        super
+      end
+
+      def key_repeat?(key)
+        return false if Zenoo::Dev.mask_keyboard_input?
+        super
+      end
+
+      def input_chars
+        return [] if Zenoo::Dev.mask_keyboard_input?
+        super
+      end
+
+      # アクションマップ
+      def action_pressed?(name, id = 0)
+        mask_m = Zenoo::Dev.mask_mouse_input?
+        mask_k = Zenoo::Dev.mask_keyboard_input?
+        return super unless mask_m || mask_k
+
+        act = @actions[name.to_sym]
+        return false unless act
+
+        unless mask_k
+          act[:keys].each do |k|
+            return true if Native::Input.key_pressed?(k)
+          end
+        end
+
+        act[:gamepad].each do |b|
+          return true if Native::Input.gamepad_button_pressed?(id.to_i, b)
+        end
+
+        unless mask_m
+          act[:mouse].each do |m|
+            return true if Native::Input.mouse_pressed?(m)
+          end
+        end
+
+        act[:axes].each do |ax_def|
+          axis_name, dir, thresh, _deadzone = ax_def
+          thresh ||= 0.5
+          val = gamepad_axis(axis_name, id)
+          case dir
+          when :positive
+            return true if val >= thresh
+          when :negative
+            return true if val <= -thresh
+          else
+            return true if val >= thresh
+          end
+        end
+
+        false
+      end
+
+      def action_down?(name, id = 0)
+        action_pressed?(name, id)
+      end
+
+      def action_push?(name, id = 0)
+        mask_m = Zenoo::Dev.mask_mouse_input?
+        mask_k = Zenoo::Dev.mask_keyboard_input?
+        return super unless mask_m || mask_k
+
+        act = @actions[name.to_sym]
+        return false unless act
+
+        unless mask_k
+          act[:keys].each do |k|
+            return true if Native::Input.key_push?(k)
+          end
+        end
+
+        act[:gamepad].each do |b|
+          return true if Native::Input.gamepad_button_push?(id.to_i, b)
+        end
+
+        unless mask_m
+          act[:mouse].each do |m|
+            return true if Native::Input.mouse_push?(m)
+          end
+        end
+
+        act[:axes].each do |ax_def|
+          axis_name, dir, thresh, _deadzone = ax_def
+          thresh ||= 0.5
+          val = gamepad_axis(axis_name, id)
+          cur_active = case dir
+                       when :positive then val >= thresh
+                       when :negative then val <= -thresh
+                       else val >= thresh
+                       end
+          key = [axis_name, id.to_i, dir]
+          prev_active = @axis_state_prev[key] || false
+          return true if cur_active && !prev_active
+        end
+
+        false
+      end
+
+      def action_release?(name, id = 0)
+        mask_m = Zenoo::Dev.mask_mouse_input?
+        mask_k = Zenoo::Dev.mask_keyboard_input?
+        return super unless mask_m || mask_k
+
+        act = @actions[name.to_sym]
+        return false unless act
+
+        unless mask_k
+          act[:keys].each do |k|
+            return true if Native::Input.key_release?(k)
+          end
+        end
+
+        act[:gamepad].each do |b|
+          return true if Native::Input.gamepad_button_release?(id.to_i, b)
+        end
+
+        unless mask_m
+          act[:mouse].each do |m|
+            return true if Native::Input.mouse_release?(m)
+          end
+        end
+
+        act[:axes].each do |ax_def|
+          axis_name, dir, thresh, _deadzone = ax_def
+          thresh ||= 0.5
+          val = gamepad_axis(axis_name, id)
+          cur_active = case dir
+                       when :positive then val >= thresh
+                       when :negative then val <= -thresh
+                       else val >= thresh
+                       end
+          key = [axis_name, id.to_i, dir]
+          prev_active = @axis_state_prev[key] || false
+          return true if !cur_active && prev_active
+        end
+
+        false
+      end
+
+      def action_strength(name, id = 0)
+        mask_m = Zenoo::Dev.mask_mouse_input?
+        mask_k = Zenoo::Dev.mask_keyboard_input?
+        return super unless mask_m || mask_k
+
+        act = @actions[name.to_sym]
+        return 0.0 unless act
+
+        max_val = 0.0
+
+        unless mask_k
+          act[:keys].each do |k|
+            return 1.0 if Native::Input.key_pressed?(k)
+          end
+        end
+
+        act[:gamepad].each do |b|
+          return 1.0 if Native::Input.gamepad_button_pressed?(id.to_i, b)
+        end
+
+        unless mask_m
+          act[:mouse].each do |m|
+            return 1.0 if Native::Input.mouse_pressed?(m)
+          end
+        end
+
+        act[:axes].each do |ax_def|
+          axis_name, dir, _thresh, deadzone = ax_def
+          deadzone ||= 0.2
+          val = gamepad_axis(axis_name, id)
+          raw = case dir
+                when :positive then val > 0.0 ? val : 0.0
+                when :negative then val < 0.0 ? -val : 0.0
+                else val > 0.0 ? val : 0.0
+                end
+
+          strength = if raw <= deadzone
+                       0.0
+                     else
+                       ((raw - deadzone) / (1.0 - deadzone)).clamp(0.0, 1.0)
+                     end
+
+          max_val = strength if strength > max_val
+        end
+
+        max_val
+      end
+    end
   end
 end
 
-# 初期化 & Windowモジュールへの prepend
+# 初期化 & Window / Input モジュールへの prepend
 Zenoo::Dev.init
 Zenoo::Window.singleton_class.prepend(Zenoo::Dev::WindowPatch)
+Zenoo::Input.singleton_class.prepend(Zenoo::Dev::InputPatch)
 
 puts "\e[32m[Zenoo]\e[0m 🛠️  Dev mode active: Hot-reload & Crash-free debugger enabled."
