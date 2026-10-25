@@ -357,6 +357,7 @@ module Zenoo
         @current_frame_ran_game = !is_paused || Zenoo::Dev.single_step_requested?
 
         # 通常のゲームブロック実行を begin ... rescue で保護
+        Window.__advance_time if @current_frame_ran_game
         Audio.update(delta_time)
         Tween.__update_step(delta_time) if @current_frame_ran_game
         GUI.begin_frame
