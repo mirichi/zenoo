@@ -57,6 +57,11 @@ module Zenoo
           @sprites_cache = []
           @cache_frame = 0
           @props_buffer = []
+
+          # Stats キャッシュ
+          @stats_cache_frame = 0
+          @cached_stat_lines = []
+          @prev_alloc_count = nil
         end
 
         def toggle
@@ -327,38 +332,42 @@ module Zenoo
           end
         end
 
-        # Stats タブ (高密度コンパクト表示)
+        # Stats タブ (高密度コンパクト表示 & 15フレーム間引き更新で自己アロケーション激減)
         def render_stats_dense(w, h, top_y)
           Window.draw_rect(0.0, top_y, w, h, color: COL_BG_SHEET, radius: 4.0, border_width: 1.0, border_color: COL_BORDER)
 
-          stat = GC.stat
+          @stats_cache_frame += 1
+          if @cached_stat_lines.empty? || (@stats_cache_frame % 15 == 0)
+            stat = GC.stat
+            cur_alloc = stat[:total_allocated_objects]
+            diff_alloc = @prev_alloc_count ? ((cur_alloc - @prev_alloc_count) / 15.0).round : 0
+            @prev_alloc_count = cur_alloc
+
+            @cached_stat_lines = [
+              ["FPS", "#{Window.fps.round(1)}  (#{(Window.delta_time * 1000.0).round(2)} ms)"],
+              ["Alloc / frame", "#{diff_alloc} objs/f"],
+              ["Total Allocated", "#{cur_alloc} objs"],
+              ["Minor GC (高速)", "#{stat[:minor_gc_count]} 回"],
+              ["Major GC (全停止)", "#{stat[:major_gc_count]} 回"],
+              ["Live Heap Slots", "#{stat[:heap_live_slots]} slots"],
+              ["Window Size", "#{Window.width} x #{Window.height}"],
+              ["Draw Target", Backend.current_target ? "FBO Texture" : "BackBuffer"]
+            ]
+          end
+
           y = top_y + 10.0
-
-          # アロケーション削減のため個別直接描画
-          Window.draw_text(10.0, y, "FPS", size: 12, color: COL_TXT_TITLE)
-          Window.draw_text(130.0, y, "#{Window.fps.round(1)} (#{(Window.delta_time * 1000.0).round(2)} ms)", size: 12, color: COL_VAL_NUM)
-          y += 20.0
-
-          Window.draw_text(10.0, y, "Window Size", size: 12, color: COL_TXT_TITLE)
-          Window.draw_text(130.0, y, "#{Window.width} x #{Window.height}", size: 12, color: COL_VAL_NUM)
-          y += 20.0
-
-          Window.draw_text(10.0, y, "GC Count", size: 12, color: COL_TXT_TITLE)
-          Window.draw_text(130.0, y, stat[:count].to_s, size: 12, color: COL_VAL_NUM)
-          y += 20.0
-
-          Window.draw_text(10.0, y, "Live Heap Slots", size: 12, color: COL_TXT_TITLE)
-          Window.draw_text(130.0, y, stat[:heap_live_slots].to_s, size: 12, color: COL_VAL_NUM)
-          y += 20.0
-
-          Window.draw_text(10.0, y, "Total Allocated", size: 12, color: COL_TXT_TITLE)
-          Window.draw_text(130.0, y, "#{stat[:total_allocated_objects]} objs", size: 12, color: COL_VAL_NUM)
-          y += 20.0
+          @cached_stat_lines.each do |(key, val)|
+            Window.draw_text(10.0, y, key, size: 12, color: COL_TXT_TITLE)
+            val_col = (key.include?("Major") && val.to_i > 0) ? [255, 100, 100, 255] : COL_VAL_NUM
+            Window.draw_text(130.0, y, val, size: 12, color: val_col)
+            y += 20.0
+          end
 
           # GC 実行ボタン (コンパクト)
           GUI.cursor(10.0, y + 10.0)
-          if GUI.button("Run GC (Garbage Collection)", w: w - 20.0, h: 26.0)
+          if GUI.button("Run Full GC (rb_gc)", w: w - 20.0, h: 26.0)
             GC.start
+            @cached_stat_lines.clear
           end
         end
 
