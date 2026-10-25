@@ -5,10 +5,12 @@
 # ※ このファイルは CRuby 実行時のみ動的にロードされ、Spinel AOT コンパイルからは除外されます。
 # ==============================================================================
 
+require_relative 'dev/inspector'
+
 module Zenoo
   module Dev
     class << self
-      attr_accessor :enabled, :watch_interval_frames, :current_error, :auto_reload, :test_frames
+      attr_accessor :enabled, :watch_interval_frames, :current_error, :auto_reload, :test_frames, :watch_dirs
 
       def init
         @enabled = ENV["ZENOO_DEV"] != "0"
@@ -127,6 +129,9 @@ module Zenoo
         if Input.key_pressed?(:f5)
           reload_all
         end
+
+        # F12キーでインスペクタトグル
+        Inspector.update
       end
 
       # フレーム終了フック (ZENOO_TEST_FRAMES 判定)
@@ -295,7 +300,7 @@ module Zenoo
         GUI.begin_frame
         if @main_loop_block
           begin
-            @main_loop_block.call
+            @main_loop_block.call unless (Zenoo::Dev.enabled && Zenoo::Dev::Inspector.pause_game)
           rescue ScriptError, StandardError => e
             if Zenoo::Dev.enabled
               Zenoo::Dev.handle_exception(e)
@@ -304,16 +309,25 @@ module Zenoo
             end
           end
         end
+
+        # F12 インスペクタ GUI の描画
+        Zenoo::Dev::Inspector.render_gui if Zenoo::Dev.enabled
+
         GUI.end_frame
         Input.__update_step
       end
 
       def __draw_step
         super
-        # 描画の最後にエラーオーバーレイを最前面描画
-        if Zenoo::Dev.enabled && Zenoo::Dev.current_error
-          Zenoo::Dev.draw_error_overlay
-          # オーバーレイを即時フラッシュ
+
+        if Zenoo::Dev.enabled
+          # コライダー可視化オーバーレイ描画
+          Zenoo::Dev::Inspector.draw_colliders
+
+          # エラーオーバーレイを最前面描画
+          if Zenoo::Dev.current_error
+            Zenoo::Dev.draw_error_overlay
+          end
           Backend.flush_screen
         end
       end
