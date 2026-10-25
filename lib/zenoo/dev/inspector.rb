@@ -140,6 +140,12 @@ module Zenoo
               @show_colliders = GUI.checkbox("Colliders", @show_colliders, h: 22.0)
               GUI.cursor(110, opt_y)
               @pause_game = GUI.checkbox("Pause", @pause_game, h: 22.0)
+              if @pause_game
+                GUI.cursor(185, opt_y)
+                if GUI.button("Step", w: 50.0, h: 22.0)
+                  Zenoo::Dev.step_frame!
+                end
+              end
 
               top_y = 60.0
               body_h = [content_h - top_y, 50.0].max

@@ -219,8 +219,14 @@ module Zenoo
         @cleared_this_frame = false
       end
 
+      # 画面キュー用: フレーム開始時にクリア状態をリセット
       def reset_frame
         @cleared_this_frame = false
+      end
+
+      # 画面キュー用: リプレイや外部フラッシュで画面クリアが行われたことを記録
+      def mark_cleared
+        @cleared_this_frame = true
       end
 
       def set_clear(color)
@@ -383,6 +389,7 @@ module Zenoo
     @clip_stack = []        # ClipContext のスタック
     @clip_context_pool = [] # 再利用可能な ClipContext プール
     @batch_buffer = String.new(encoding: Encoding::BINARY) # バッチ結合用再利用バッファ (Mesh等の元データを破壊しない)
+    @skip_ondemand_flush = false
 
     def self.current_clip
       @clip_stack.last&.rect
@@ -428,6 +435,10 @@ module Zenoo
 
     def self.reset_frame
       @screen_queue.reset_frame
+    end
+
+    def self.mark_screen_cleared
+      @screen_queue.mark_cleared
     end
 
     def self.current_target
@@ -520,9 +531,10 @@ module Zenoo
         register_pending_image(@current_target)
         if @current_target.sub_image?
           # sub_image はアトラス等の部分領域のため、FBO全体を glClear すると他のスロットが消える
-          # そのため該当矩形領域のみを塗りつぶす (最奥 Z = -Infinity, 透明色の場合は blend: :none で上書き)
+          # そのため該当矩形領域のみを塗りつぶす (最奥 Z = -Infinity, アルファ0なら blend: :none で上書き)
           actual_color = color || :clear
-          blend_mode = (actual_color == :clear || actual_color == [0, 0, 0, 0]) ? :none : :alpha
+          c4 = normalize_color(actual_color)
+          blend_mode = c4[3] <= 0.0001 ? :none : :alpha
           Zenoo::Window.draw_rect(
             0.0, 0.0, @current_target.width, @current_target.height,
             color: actual_color,
@@ -566,6 +578,14 @@ module Zenoo
       end
     end
 
+    def self.execute_snapshot_commands(pool, count)
+      return if count == 0
+      Native::Image.reset_render_target
+      @skip_ondemand_flush = true
+      execute_commands(pool, count)
+      @skip_ondemand_flush = false
+    end
+
     def self.execute_commands(pool, count)
       return if count == 0
 
@@ -587,7 +607,7 @@ module Zenoo
         cmd = pool[i]
 
         # 0. 描画元テクスチャに未消化キューがあれば先にフラッシュ (オンデマンド描画)
-        if cmd.image && has_pending_draws?(cmd.image)
+        if !@skip_ondemand_flush && cmd.image && has_pending_draws?(cmd.image)
           flush_image(cmd.image)
         end
 
@@ -641,13 +661,15 @@ module Zenoo
               end
               @batch_buffer << ncmd.data
               cur_count += ncmd.count
-              ncmd.data = nil
-              ncmd.image = nil
-              ncmd.shader = nil
-              ncmd.target = nil
-              ncmd.pipeline = nil
-              ncmd.uniforms = nil
-              ncmd.clip = nil
+              unless @skip_ondemand_flush
+                ncmd.data = nil
+                ncmd.image = nil
+                ncmd.shader = nil
+                ncmd.target = nil
+                ncmd.pipeline = nil
+                ncmd.uniforms = nil
+                ncmd.clip = nil
+              end
               next_idx += 1
             else
               break
@@ -671,13 +693,15 @@ module Zenoo
           cur_shader
         )
 
-        cmd.data = nil
-        cmd.image = nil
-        cmd.shader = nil
-        cmd.target = nil
-        cmd.pipeline = nil
-        cmd.uniforms = nil
-        cmd.clip = nil
+        unless @skip_ondemand_flush
+          cmd.data = nil
+          cmd.image = nil
+          cmd.shader = nil
+          cmd.target = nil
+          cmd.pipeline = nil
+          cmd.uniforms = nil
+          cmd.clip = nil
+        end
 
         i = next_idx
       end
