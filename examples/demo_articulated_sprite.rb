@@ -255,8 +255,7 @@ Window.loop(1280, 720, "Zenoo - Articulated Sprite & Hierarchical Collision Demo
       # 剣で斬撃中: 赤く激しく発光 & 弾き飛ばし
       target.color = [255, 60, 80, 255]
       sword_hit_count += 1
-      target.x += Math.cos(@sword.world_angle * Math::PI / 180.0) * 3.0
-      target.y += Math.sin(@sword.world_angle * Math::PI / 180.0) * 3.0
+      target.push_out_of(@sword)
     elsif hit_by_shield
       # シールドで防御中: シアンに発光
       target.color = [0, 240, 255, 255]
@@ -306,6 +305,7 @@ Window.loop(1280, 720, "Zenoo - Articulated Sprite & Hierarchical Collision Demo
   # UI / ガイド表示
   Window.draw_text(24, 20, "Zenoo 2D Articulated Sprite & Hierarchical Collision", font: Font::MPLUS, size: 26, color: :white)
   Window.draw_text(24, 56, "Sword Hits: #{sword_hit_count}  |  Shield Blocks: #{shield_hit_count}", font: Font::SINCLAIR, size: 16, color: (sword_hit_count > 0 ? [255, 90, 120, 255] : [100, 240, 180, 255]))
-  Window.draw_text(24, 80, "Body Scale: #{@body.scale_x.round(2)}x  |  Body Angle: #{@body.angle.round(1)} deg  |  Colliders [C]: #{@show_colliders ? 'ON' : 'OFF'}", font: Font::SINCLAIR, size: 14, color: [170, 185, 210, 255])
-  Window.draw_text(24, 680, "Controls: Mouse Move | Click / [SPACE]: Sword Slash | [Q][E] / [A][D]: Rotate Body | [W][S]: Scale Body | [R]: Reset Targets", font: Font::SINCLAIR, size: 14, color: [130, 145, 170, 255])
+  Window.draw_text(24, 80, "Scale: #{@body.scale_x.round(2)}x | Angle: #{@body.angle.round(1)} deg | Colliders: #{@show_colliders ? 'ON' : 'OFF'}", font: Font::SINCLAIR, size: 14, color: [170, 185, 210, 255])
+  Window.draw_text(24, 656, "Controls: Mouse Move | Click / [SPACE]: Sword Slash | [R]: Reset Targets", font: Font::SINCLAIR, size: 14, color: [130, 145, 170, 255])
+  Window.draw_text(24, 680, "[Q][E] / [A][D]: Rotate Body | [W][S]: Scale Body | [C]: Toggle Colliders", font: Font::SINCLAIR, size: 14, color: [130, 145, 170, 255])
 end

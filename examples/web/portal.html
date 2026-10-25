@@ -129,6 +129,9 @@
     .card.danmaku::before {
       background: linear-gradient(90deg, #ec4899, #8b5cf6);
     }
+    .card.articulated::before {
+      background: linear-gradient(90deg, #00ffcc, #38bdf8);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -330,6 +333,14 @@
     .card.danmaku .btn-launch:hover {
       background: #f472b6;
       box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
+    }
+    .card.articulated .btn-launch {
+      background: #06b6d4;
+      color: #0b0d14;
+    }
+    .card.articulated .btn-launch:hover {
+      background: #22d3ee;
+      box-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -639,6 +650,24 @@
         </ul>
       </div>
       <a href="danmaku/" class="btn-launch">弾幕デモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Articulated Sprite & Hierarchy Demo Card -->
+    <div class="card articulated">
+      <div>
+        <div class="card-tag">Sprite &amp; 2D Bone</div>
+        <h2>Articulated Sprite &amp; Hierarchy</h2>
+        <p class="desc">
+          親子階層構造 (Parent-Child Hierarchy) とアンカー＆ピボットによる多関節キャラクターデモ。親の移動・回転・拡縮が肩・肘・大剣・シールドのコライダーまで完全同期します。
+        </p>
+        <ul class="features">
+          <li>親子階層による 2D ボーン関節連動 (Body &rarr; Arm &rarr; Sword/Shield)</li>
+          <li>多段回転・不等スケールに完全追従するリアルタイム衝突判定 (GJK/SAT)</li>
+          <li>関節外れ防止 MTV めり込み解消 (ルートスプライト自動押し戻し)</li>
+          <li>[WASD / マウス] 移動・回転・拡縮、[Click / SPACE] 斬撃スイング、[C] コライダー表示</li>
+        </ul>
+      </div>
+      <a href="articulated/" class="btn-launch">多関節デモを起動 (Launch Demo) →</a>
     </div>
   </main>
 
