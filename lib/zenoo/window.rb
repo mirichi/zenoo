@@ -819,14 +819,22 @@ module Zenoo
 
       draw_w = img.width.to_f
       draw_h = img.height.to_f
-      tl_x = sprite.x.to_f - sprite.anchor_x * draw_w
-      tl_y = sprite.y.to_f - sprite.anchor_y * draw_h
-
       pv_x = sprite.pivot_x
       pv_y = sprite.pivot_y
 
-      sx = sprite.scale_x.to_f
-      sy = sprite.scale_y.to_f
+      if sprite.parent
+        tl_x = sprite.world_pivot_x - pv_x * draw_w
+        tl_y = sprite.world_pivot_y - pv_y * draw_h
+        sx = sprite.world_scale_x.to_f
+        sy = sprite.world_scale_y.to_f
+        ang = sprite.world_angle.to_f
+      else
+        tl_x = sprite.x.to_f - sprite.anchor_x * draw_w
+        tl_y = sprite.y.to_f - sprite.anchor_y * draw_h
+        sx = sprite.scale_x.to_f
+        sy = sprite.scale_y.to_f
+        ang = sprite.angle.to_f
+      end
 
       sp_cam = sprite.camera
       cam = if sp_cam.is_a?(Camera)
@@ -849,7 +857,7 @@ module Zenoo
         zh = draw_h
       end
 
-      rad = sprite.angle != 0.0 ? sprite.angle.to_f * (Math::PI / 180.0) : 0.0
+      rad = ang != 0.0 ? ang * (Math::PI / 180.0) : 0.0
 
       tw = img.texture_width.to_f
       th = img.texture_height.to_f

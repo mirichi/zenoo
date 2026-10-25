@@ -2,10 +2,10 @@
 
 module Zenoo
   class Sprite
-    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :anchor, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image
+    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :anchor, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image, :parent
     attr_accessor :blend, :shader, :uniforms, :camera
 
-    def initialize(x = 0.0, y = 0.0, image = nil, anchor: :top_left, pivot: :center, blend: :alpha, shader: nil, uniforms: nil, camera: true)
+    def initialize(x = 0.0, y = 0.0, image = nil, anchor: :top_left, pivot: :center, blend: :alpha, shader: nil, uniforms: nil, camera: true, parent: nil)
       @x = x.to_f
       @y = y.to_f
       @z = 0.0
@@ -28,8 +28,24 @@ module Zenoo
       @visible = true
       @vanished = false
 
+      # 親子階層・ワールド変換キャッシュ (単体利用時は遅延評価によりオーバーヘッドゼロ)
+      @parent = nil
+      @children = nil
+      @world_dirty = true
+      @world_x = @x
+      @world_y = @y
+      @world_pivot_x = 0.0
+      @world_pivot_y = 0.0
+      @world_angle = 0.0
+      @world_scale_x = 1.0
+      @world_scale_y = 1.0
+      @world_cos = 1.0
+      @world_sin = 0.0
+
       # コライダー管理
       @collider_shape = nil
+
+      self.parent = parent if parent
     end
 
     # ライフサイクル管理 (消滅)
@@ -49,14 +65,18 @@ module Zenoo
       vf = v.to_f
       return if @x == vf
       @x = vf
+      @world_dirty = true
       @collider_shape&.dirty_pos!
+      dirty_children_pos! if @children
     end
 
     def y=(v)
       vf = v.to_f
       return if @y == vf
       @y = vf
+      @world_dirty = true
       @collider_shape&.dirty_pos!
+      dirty_children_pos! if @children
     end
 
     def z=(v)
@@ -67,21 +87,27 @@ module Zenoo
       vf = v.to_f
       return if @angle == vf
       @angle = vf
+      @world_dirty = true
       @collider_shape&.dirty_angle!
+      dirty_children_geom! if @children
     end
 
     def scale_x=(v)
       vf = v.to_f
       return if @scale_x == vf
       @scale_x = vf
+      @world_dirty = true
       @collider_shape&.dirty_geom!
+      dirty_children_geom! if @children
     end
 
     def scale_y=(v)
       vf = v.to_f
       return if @scale_y == vf
       @scale_y = vf
+      @world_dirty = true
       @collider_shape&.dirty_geom!
+      dirty_children_geom! if @children
     end
 
     def scale=(v)
@@ -89,7 +115,9 @@ module Zenoo
       return if @scale_x == s && @scale_y == s
       @scale_x = s
       @scale_y = s
+      @world_dirty = true
       @collider_shape&.dirty_geom!
+      dirty_children_geom! if @children
     end
 
     def pivot=(v)
@@ -98,7 +126,9 @@ module Zenoo
       pv = Collision.parse_pivot(v)
       @pivot_x = pv[0]
       @pivot_y = pv[1]
+      @world_dirty = true
       @collider_shape&.dirty_geom!
+      dirty_children_pos! if @children
     end
 
     def pivot_x
@@ -110,15 +140,23 @@ module Zenoo
     end
 
     def pivot_x=(v)
-      @pivot_x = v.to_f
+      vf = v.to_f
+      return if @pivot_x == vf
+      @pivot_x = vf
       @pivot = [@pivot_x, pivot_y]
+      @world_dirty = true
       @collider_shape&.dirty_geom!
+      dirty_children_pos! if @children
     end
 
     def pivot_y=(v)
-      @pivot_y = v.to_f
+      vf = v.to_f
+      return if @pivot_y == vf
+      @pivot_y = vf
       @pivot = [pivot_x, @pivot_y]
+      @world_dirty = true
       @collider_shape&.dirty_geom!
+      dirty_children_pos! if @children
     end
 
     def anchor
@@ -137,7 +175,9 @@ module Zenoo
       ax, ay = Collision.parse_anchor(v)
       @anchor_x = ax
       @anchor_y = ay
+      @world_dirty = true
       @collider_shape&.dirty_pos!
+      dirty_children_pos! if @children
     end
 
     def anchor_x=(v)
@@ -145,7 +185,9 @@ module Zenoo
       return if @anchor_x == vf
       @anchor_x = vf
       @anchor = [@anchor_x, anchor_y]
+      @world_dirty = true
       @collider_shape&.dirty_pos!
+      dirty_children_pos! if @children
     end
 
     def anchor_y=(v)
@@ -153,7 +195,9 @@ module Zenoo
       return if @anchor_y == vf
       @anchor_y = vf
       @anchor = [anchor_x, @anchor_y]
+      @world_dirty = true
       @collider_shape&.dirty_pos!
+      dirty_children_pos! if @children
     end
 
     def alpha=(v); @alpha = v; end
@@ -172,11 +216,227 @@ module Zenoo
       new_h = v ? v.height : 0
       return if old_w == new_w && old_h == new_h
 
+      @world_dirty = true
       if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
         @collider_shape.dirty_size!
       else
         @collider_shape&.dirty_pos!
       end
+      dirty_children_pos! if @children
+    end
+
+    # ====================================================
+    # 親子階層・ワールド変換 (単体時はファストパスでゼロオーバーヘッド)
+    # ====================================================
+    def parent=(new_parent)
+      return if @parent.equal?(new_parent)
+      return if new_parent.equal?(self)
+
+      # 循環参照の防止
+      if new_parent
+        cur = new_parent.parent
+        while cur
+          return if cur.equal?(self)
+          cur = cur.parent
+        end
+      end
+
+      @parent&.__remove_child_internal(self)
+      @parent = new_parent
+      new_parent&.__add_child_internal(self)
+      dirty_world_geom!
+    end
+
+    def children
+      @children ||= []
+    end
+
+    def add_child(child)
+      child.parent = self if child
+      self
+    end
+
+    def remove_child(child)
+      child.parent = nil if child && child.parent.equal?(self)
+      self
+    end
+
+    def __add_child_internal(child)
+      ch = (@children ||= [])
+      ch << child unless ch.include?(child)
+    end
+
+    def __remove_child_internal(child)
+      return unless (ch = @children)
+      ch.delete(child)
+      @children = nil if ch.empty?
+    end
+
+    def world_dirty?
+      @world_dirty
+    end
+
+    def dirty_world_pos!
+      @world_dirty = true
+      @collider_shape&.dirty_pos!
+      dirty_children_pos! if @children
+    end
+
+    def dirty_world_geom!
+      @world_dirty = true
+      @collider_shape&.dirty_geom!
+      dirty_children_geom! if @children
+    end
+
+    def dirty_children_pos!
+      return unless (ch = @children)
+      i = 0
+      len = ch.length
+      while i < len
+        ch[i].dirty_world_pos!
+        i += 1
+      end
+    end
+
+    def dirty_children_geom!
+      return unless (ch = @children)
+      i = 0
+      len = ch.length
+      while i < len
+        ch[i].dirty_world_geom!
+        i += 1
+      end
+    end
+
+    def update_world_transform
+      @world_dirty = false
+      w = width
+      h = height
+      if (p = @parent)
+        p.update_world_transform if p.world_dirty?
+        p_wpv_x = p.world_pivot_x
+        p_wpv_y = p.world_pivot_y
+        p_sx = p.world_scale_x
+        p_sy = p.world_scale_y
+        p_cos = p.world_cos
+        p_sin = p.world_sin
+
+        pw = p.width
+        ph = p.height
+        lx = (p.anchor_x - p.pivot_x) * pw + @x
+        ly = (p.anchor_y - p.pivot_y) * ph + @y
+
+        slx = lx * p_sx
+        sly = ly * p_sy
+        @world_x = p_wpv_x + slx * p_cos - sly * p_sin
+        @world_y = p_wpv_y + slx * p_sin + sly * p_cos
+
+        pv_off_x = (@pivot_x - @anchor_x) * w
+        pv_off_y = (@pivot_y - @anchor_y) * h
+        if pv_off_x.abs < 0.0001 && pv_off_y.abs < 0.0001
+          @world_pivot_x = @world_x
+          @world_pivot_y = @world_y
+        else
+          spv_x = (lx + pv_off_x) * p_sx
+          spv_y = (ly + pv_off_y) * p_sy
+          @world_pivot_x = p_wpv_x + spv_x * p_cos - spv_y * p_sin
+          @world_pivot_y = p_wpv_y + spv_x * p_sin + spv_y * p_cos
+        end
+
+        @world_scale_x = p_sx * @scale_x
+        @world_scale_y = p_sy * @scale_y
+        @world_angle = p.world_angle + @angle
+      else
+        @world_x = @x
+        @world_y = @y
+        @world_pivot_x = @x + (@pivot_x - @anchor_x) * w
+        @world_pivot_y = @y + (@pivot_y - @anchor_y) * h
+        @world_scale_x = @scale_x
+        @world_scale_y = @scale_y
+        @world_angle = @angle
+      end
+
+      if @world_angle == 0.0
+        @world_cos = 1.0
+        @world_sin = 0.0
+      else
+        rad = @world_angle * (Math::PI / 180.0)
+        @world_cos = Math.cos(rad)
+        @world_sin = Math.sin(rad)
+      end
+    end
+
+    def world_x
+      if @parent
+        update_world_transform if @world_dirty
+        @world_x
+      else
+        @x
+      end
+    end
+
+    def world_y
+      if @parent
+        update_world_transform if @world_dirty
+        @world_y
+      else
+        @y
+      end
+    end
+
+    def world_pivot_x
+      if @parent
+        update_world_transform if @world_dirty
+        @world_pivot_x
+      else
+        @x + (@pivot_x - @anchor_x) * width
+      end
+    end
+
+    def world_pivot_y
+      if @parent
+        update_world_transform if @world_dirty
+        @world_pivot_y
+      else
+        @y + (@pivot_y - @anchor_y) * height
+      end
+    end
+
+    def world_angle
+      if @parent
+        update_world_transform if @world_dirty
+        @world_angle
+      else
+        @angle
+      end
+    end
+
+    def world_scale_x
+      if @parent
+        update_world_transform if @world_dirty
+        @world_scale_x
+      else
+        @scale_x
+      end
+    end
+
+    def world_scale_y
+      if @parent
+        update_world_transform if @world_dirty
+        @world_scale_y
+      else
+        @scale_y
+      end
+    end
+
+    def world_cos
+      update_world_transform if @world_dirty
+      @world_cos
+    end
+
+    def world_sin
+      update_world_transform if @world_dirty
+      @world_sin
     end
 
     def width
@@ -296,22 +556,49 @@ module Zenoo
       Collision.penetration(col_a, col_b)
     end
 
+    # 階層ツリーの最上位ルートスプライトを取得 (親がいない場合は self)
+    def root
+      cur = self
+      while (p = cur.parent)
+        cur = p
+      end
+      cur
+    end
+
     # other から自動的にめり込み解消 (位置を直接更新)
     # other が配列の場合は各オブジェクトに対して順次押し出しを行う
-    def push_out_of(other)
+    # target_root: true の場合、子パーツが衝突しても関節が外れないようルート親（キャラクター全体）を押し出します
+    def push_out_of(other, target_root: true)
       return nil if @vanished
       if other.is_a?(Array)
         resolved_hits = []
         other.each do |item|
-          hit = push_out_of(item)
+          hit = push_out_of(item, target_root: target_root)
           resolved_hits << hit if hit
         end
         resolved_hits.empty? ? nil : resolved_hits
       else
         hit = penetration(other)
         if hit
-          self.x += hit.overlap_x
-          self.y += hit.overlap_y
+          if target_root && @parent
+            r = root
+            r.x += hit.overlap_x
+            r.y += hit.overlap_y
+          elsif (p = @parent)
+            ox = hit.overlap_x
+            oy = hit.overlap_y
+            p_cos = p.world_cos
+            p_sin = p.world_sin
+            p_sx = p.world_scale_x
+            p_sy = p.world_scale_y
+            rx = ox * p_cos + oy * p_sin
+            ry = -ox * p_sin + oy * p_cos
+            self.x += (p_sx.abs > 0.0001 ? rx / p_sx : rx)
+            self.y += (p_sy.abs > 0.0001 ? ry / p_sy : ry)
+          else
+            self.x += hit.overlap_x
+            self.y += hit.overlap_y
+          end
           hit
         else
           nil
