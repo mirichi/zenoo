@@ -35,7 +35,7 @@ for f in "${SPINEL_DIR}"/lib/*.c; do
     bn=$(basename "$f" .c)
     obj="${CACHE_DIR}/rt/${bn}.o"
     if [ ! -f "$obj" ] || [ "$f" -nt "$obj" ]; then
-        emcc -c -O2 -I"${SPINEL_DIR}/lib" -I"${SPINEL_DIR}/lib/regexp" "$f" -o "$obj"
+        emcc -c -O2 -DSP_ONE_STRING -I"${SPINEL_DIR}/lib" -I"${SPINEL_DIR}/lib/regexp" "$f" -o "$obj"
     fi
 done
 
@@ -43,7 +43,7 @@ for f in "${SPINEL_DIR}"/lib/regexp/*.c; do
     bn=$(basename "$f" .c)
     obj="${CACHE_DIR}/regexp/${bn}.o"
     if [ ! -f "$obj" ] || [ "$f" -nt "$obj" ]; then
-        emcc -c -O2 -I"${SPINEL_DIR}/lib/regexp" "$f" -o "$obj"
+        emcc -c -O2 -DSP_ONE_STRING -I"${SPINEL_DIR}/lib/regexp" -I"${SPINEL_DIR}/lib/regexp/shim" "$f" -o "$obj"
     fi
 done
 
