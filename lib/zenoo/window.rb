@@ -468,6 +468,7 @@ module Zenoo
     end
 
     DEFAULT_SHADOW_COLOR = [0, 0, 0, 180].freeze
+    ZERO_COLOR_PARAMS = [0.0, 0.0, 0.0, 0.0].freeze
 
     # ----------------------------------------------------
     # 描画 API 
@@ -1262,12 +1263,12 @@ module Zenoo
       c_color = Backend.normalize_color(color)
 
       outline_w = outline_width.to_f
-      outline_c = (outline_w > 0.0) ? Backend.normalize_color(outline_color) : [0.0, 0.0, 0.0, 0.0]
+      outline_c = (outline_w > 0.0) ? Backend.normalize_color(outline_color) : ZERO_COLOR_PARAMS
 
       s_blur = shadow_blur.to_f
       s_dx = shadow_dx.to_f
       s_dy = shadow_dy.to_f
-      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : [0.0, 0.0, 0.0, 0.0]
+      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : ZERO_COLOR_PARAMS
 
       effective_sdf = if sdf.nil?
                         (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? true : nil
@@ -1283,9 +1284,12 @@ module Zenoo
       s_weight = weight.to_f
       s_atlas_weight = s_weight * scale_ratio
 
-      p0 = [s_atlas_outline_w, s_atlas_blur, s_atlas_dx, s_atlas_dy]
-      p1 = outline_c
-      p2 = s_c
+      p0_0 = s_atlas_outline_w.to_f
+      p0_1 = s_atlas_blur.to_f
+      p0_2 = s_atlas_dx.to_f
+      p0_3 = s_atlas_dy.to_f
+      p1_0 = outline_c[0].to_f; p1_1 = outline_c[1].to_f; p1_2 = outline_c[2].to_f; p1_3 = outline_c[3].to_f
+      p2_0 = s_c[0].to_f; p2_1 = s_c[1].to_f; p2_2 = s_c[2].to_f; p2_3 = s_c[3].to_f
       shader = sdf_font_shader
 
       metrics = target_font.metrics(f_size)
@@ -1298,23 +1302,15 @@ module Zenoo
       pen_x = ((x.to_f + @offset_x) * vp_scale).round * inv_vp_scale
       pen_y = ((y.to_f + @offset_y + ascent) * vp_scale).round * inv_vp_scale
 
-      str = text.to_s
-      chars = str.chars
-      len = chars.length
-      return if len == 0
-
-      batch = []
+      batch = (@text_batch ||= [])
+      batch.clear
       glyph_count = 0
 
       cr = c_color[0].to_f; cg = c_color[1].to_f; cb = c_color[2].to_f; ca = c_color[3].to_f
-      p0_0 = p0[0].to_f; p0_1 = p0[1].to_f; p0_2 = p0[2].to_f; p0_3 = p0[3].to_f
-      p1_0 = p1[0].to_f; p1_1 = p1[1].to_f; p1_2 = p1[2].to_f; p1_3 = p1[3].to_f
-      p2_0 = p2[0].to_f; p2_1 = p2[1].to_f; p2_2 = p2[2].to_f; p2_3 = p2[3].to_f
 
-      i = 0
-      while i < len
-        ch = chars[i]
-        glyph_data = target_font.get_glyph(ch, f_size, effective_sdf)
+      str = text.is_a?(String) ? text : text.to_s
+      str.each_char do |ch|
+        glyph_data = target_font.get_glyph(ch, f_size, effective_sdf, vp_scale)
         adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
 
         if glyph_data && glyph_data[0] # visible == true
@@ -1344,7 +1340,6 @@ module Zenoo
         end
 
         pen_x += adv
-        i += 1
       end
 
       if glyph_count > 0
