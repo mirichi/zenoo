@@ -2,7 +2,7 @@
 
 module Zenoo
   class Sprite
-    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image
+    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :anchor, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image
     attr_accessor :blend, :shader, :uniforms, :camera
 
     def initialize(x = 0.0, y = 0.0, image = nil, anchor: :top_left, pivot: :center, blend: :alpha, shader: nil, uniforms: nil, camera: true)
@@ -122,7 +122,7 @@ module Zenoo
     end
 
     def anchor
-      if (@anchor_x - 0.0).abs < 0.0001 && (@anchor_y - 0.0).abs < 0.0001
+      @anchor || if (@anchor_x - 0.0).abs < 0.0001 && (@anchor_y - 0.0).abs < 0.0001
         :top_left
       elsif (@anchor_x - 0.5).abs < 0.0001 && (@anchor_y - 0.5).abs < 0.0001
         :center
@@ -132,8 +132,9 @@ module Zenoo
     end
 
     def anchor=(v)
+      return if @anchor == v
+      @anchor = v
       ax, ay = Collision.parse_anchor(v)
-      return if @anchor_x == ax && @anchor_y == ay
       @anchor_x = ax
       @anchor_y = ay
       @collider_shape&.dirty_pos!
@@ -143,6 +144,7 @@ module Zenoo
       vf = v.to_f
       return if @anchor_x == vf
       @anchor_x = vf
+      @anchor = [@anchor_x, anchor_y]
       @collider_shape&.dirty_pos!
     end
 
@@ -150,6 +152,7 @@ module Zenoo
       vf = v.to_f
       return if @anchor_y == vf
       @anchor_y = vf
+      @anchor = [anchor_x, @anchor_y]
       @collider_shape&.dirty_pos!
     end
 
