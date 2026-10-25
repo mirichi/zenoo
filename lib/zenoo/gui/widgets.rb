@@ -551,6 +551,146 @@ module Zenoo
 
         @layout.advance(rw, rh) if x.nil? && y.nil?
       end
+
+      # ----------------------------------------------------
+      # 10. テーブル / リストビュー (Table / ListView)
+      # ----------------------------------------------------
+      # columns: カラム定義の配列 (文字列, [名前, 幅], { name:, width: } など)
+      # rows: 2次元配列 (行データの配列)
+      # selected_index: 選択中の行インデックス (Integer または nil)
+      # 返り値: 更新された selected_index
+      def table(label, columns, rows, selected_index = nil, x: nil, y: nil, w: nil, h: nil, item_height: 20.0, id: "", &block)
+        widget_id = id.to_s.empty? ? (label.to_s.empty? ? "table_#{columns.length}_#{rows.length}" : label.to_s) : id.to_s
+        rx = x ? x.to_f : @layout.cursor_x
+        ry = y ? y.to_f : @layout.cursor_y
+        rw = @layout.resolve_width(w, 280.0)
+        row_h = item_height.to_f > 0.0 ? item_height.to_f : 20.0
+        header_h = 22.0
+
+        has_label = !label.to_s.empty?
+        label_h = has_label ? 22.0 : 0.0
+        table_y = ry + label_h
+        table_h = if h
+                    [h.to_f - label_h, 30.0].max
+                  else
+                    [rows.length.to_f * row_h + header_h + 8.0, 180.0].min
+                  end
+
+        # 外枠描画
+        @renderer.draw_table_frame(rx, ry, rw, table_h, label, @theme)
+
+        # カラム幅の計算
+        pad_y = 2.0
+        total_content_h = rows.length.to_f * row_h + pad_y * 2.0
+        body_y = table_y + header_h + 2.0
+        body_h = [table_h - header_h - 6.0, 1.0].max
+
+        needs_scroll = total_content_h > body_h
+        scroll_w = needs_scroll ? 10.0 : 0.0
+        content_w = rw - scroll_w - 4.0
+
+        # カラム情報のパース (col_names, col_widths)
+        col_count = columns.length
+        col_names = []
+        col_widths = []
+        fixed_total = 0.0
+        flex_count = 0
+
+        ci = 0
+        while ci < col_count
+          col = columns[ci]
+          if col.is_a?(Array)
+            cname = col[0].to_s
+            cwidth = col[1] ? col[1].to_f : nil
+          elsif col.is_a?(Hash)
+            cname = (col[:name] || col["name"]).to_s
+            cwidth = (col[:width] || col["width"]) ? (col[:width] || col["width"]).to_f : nil
+          else
+            cname = col.to_s
+            cwidth = nil
+          end
+          col_names << cname
+          if cwidth && cwidth > 0.0
+            col_widths << cwidth
+            fixed_total += cwidth
+          else
+            col_widths << nil
+            flex_count += 1
+          end
+          ci += 1
+        end
+
+        # 未指定カラムの幅均等分配
+        flex_w = flex_count > 0 ? [((content_w - fixed_total) / flex_count.to_f), 20.0].max : 0.0
+        ci = 0
+        while ci < col_count
+          col_widths[ci] ||= flex_w
+          ci += 1
+        end
+
+        # ヘッダー描画
+        @renderer.draw_table_header(rx + 2.0, table_y + 2.0, content_w, header_h, col_names, col_widths, @theme)
+
+        # スクロールオフセットの計算
+        Widgets.scroll_states[widget_id] ||= 0.0
+        scroll_y = Widgets.scroll_states[widget_id]
+
+        box_hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, table_y, rw, table_h)
+        if box_hover && Input.mouse_wheel_y != 0
+          scroll_y -= Input.mouse_wheel_y.to_f * row_h * 1.5
+        end
+        max_s = [total_content_h - body_h, 0.0].max
+        scroll_y = [[scroll_y, 0.0].max, max_s].min
+        Widgets.scroll_states[widget_id] = scroll_y
+
+        new_selected = selected_index
+
+        # 行の描画 & カリング (Window.clip 内)
+        Window.clip(rx + 2.0, body_y, content_w, body_h, local: false) do
+          i = 0
+          len = rows.length
+          while i < len
+            iy = body_y + pad_y + (i.to_f * row_h) - scroll_y
+
+            # カリング: 領域内に少しでも掛かっていれば描画
+            if iy + row_h >= body_y && iy <= (body_y + body_h)
+              it_hover = box_hover && in_rect?(gui_mouse_x, gui_mouse_y, rx + 2.0, iy, content_w, row_h)
+              is_sel = (i == new_selected)
+
+              if it_hover
+                set_mouse_cursor(:hand)
+                @hot_id = "#{widget_id}_row_#{i}"
+                if @mouse_push
+                  new_selected = i
+                end
+              end
+
+              if block_given?
+                yield(rows[i], i, is_sel, it_hover, rx + 2.0, iy, content_w, row_h)
+              else
+                @renderer.draw_table_row(rx + 2.0, iy, content_w, row_h, rows[i], col_widths, is_sel, it_hover, i.even?, @theme)
+              end
+            end
+            i += 1
+          end
+        end
+
+        # スクロールバー描画 (必要な場合)
+        if needs_scroll
+          sb_x = rx + rw - scroll_w - 2.0
+          sb_y = body_y
+          sb_h = body_h
+          Widgets.scroll_states[widget_id] = scrollbar(
+            scroll_y, total_content_h, body_h,
+            x: sb_x, y: sb_y, w: scroll_w, h: sb_h, id: "#{widget_id}_sb"
+          )
+        end
+
+        total_advance_h = label_h + table_h
+        @layout.advance(rw, total_advance_h) if x.nil? && y.nil?
+        new_selected
+      end
+      alias list_view table
     end
   end
 end
