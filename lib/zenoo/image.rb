@@ -112,6 +112,14 @@ class Zenoo::Image
     Zenoo::Backend.current_target = old_target
   end
 
+  # 画像のクリア (引数省略時は透明色 [0, 0, 0, 0])
+  def clear(color = :clear)
+    Zenoo::Image.render_to(self) do
+      Zenoo::Window.clear(color)
+    end
+    self
+  end
+
   # シェーダーフィルターの適用 (画像加工・ポストプロセス)
   # 非破壊版: 加工済みの新しい Image を生成して返します
   def apply_filter(shader, uniforms: nil)

@@ -68,13 +68,9 @@ module Zenoo
 
     def self.__step_frame
       __update_fps
+      Backend.reset_frame
       Backend.current_target = nil
       Native::Image.reset_render_target
-      if Profiler.enabled
-        Profiler.measure(:draw) { Native::Window.clear(@bg_color) }
-      else
-        Native::Window.clear(@bg_color)
-      end
       __update_step
       __draw_step
       Profiler.end_frame
@@ -86,15 +82,17 @@ module Zenoo
       Native::Window.time
     end
 
-    # 画面またはレンダーターゲットのクリア (引数省略時は黒 [0, 0, 0, 255])
-    def self.clear(color = :black)
-      target = Backend.current_target
-      if target
-        draw_rect(0.0, 0.0, target.width, target.height, color: color)
-      else
-        @bg_color = Backend.color_to_uint32(color)
-        Native::Window.clear(@bg_color)
-      end
+    def self.bg_color
+      @bg_color
+    end
+
+    def self.bg_color=(val)
+      @bg_color = Backend.color_to_uint32(val)
+    end
+
+    # 画面またはレンダーターゲットのクリア (引数省略時: 画面は背景色、Imageは透明色)
+    def self.clear(color = nil)
+      Backend.enqueue_clear(color)
     end
 
     def self.width

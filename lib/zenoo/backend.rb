@@ -205,8 +205,8 @@ module Zenoo
     # 描画キュー管理クラス (画面用・各Image用で共通)
     # ----------------------------------------------------
     class DrawQueue
-      attr_reader :command_pool, :queue_count, :owner
-      attr_accessor :needs_z_sort
+      attr_reader :command_pool, :queue_count, :owner, :clear_color
+      attr_accessor :needs_z_sort, :auto_clear
 
       def initialize(owner = nil)
         @owner = owner # nil なら画面、Image ならその Image
@@ -214,10 +214,21 @@ module Zenoo
         @queue_count = 0
         @needs_z_sort = false
         @is_flushing = false
+        @auto_clear = (owner == nil)
+        @clear_color = nil
+        @cleared_this_frame = false
+      end
+
+      def reset_frame
+        @cleared_this_frame = false
+      end
+
+      def set_clear(color)
+        @clear_color = color
       end
 
       def has_pending_draws?
-        @queue_count > 0
+        @queue_count > 0 || !@clear_color.nil? || (@auto_clear && !@cleared_this_frame)
       end
 
       def allocate_command
@@ -298,6 +309,11 @@ module Zenoo
           @owner.set_as_render_target
           Backend.active_gl_target = @owner
 
+          if @clear_color
+            Native::Window.clear(Backend.color_to_uint32(@clear_color))
+            @clear_color = nil
+          end
+
           Backend.execute_commands(@command_pool, @queue_count)
 
           @queue_count = 0
@@ -314,6 +330,15 @@ module Zenoo
           Backend.cleanup_empty_queues
         else
           # 画面への描画
+          if @clear_color
+            Native::Window.clear(Backend.color_to_uint32(@clear_color))
+            @clear_color = nil
+            @cleared_this_frame = true
+          elsif @auto_clear && !@cleared_this_frame
+            Native::Window.clear(Backend.color_to_uint32(Zenoo::Window.bg_color || :black))
+            @cleared_this_frame = true
+          end
+
           Backend.execute_commands(@command_pool, @queue_count)
           @queue_count = 0
           @needs_z_sort = false
@@ -401,6 +426,10 @@ module Zenoo
       @screen_queue
     end
 
+    def self.reset_frame
+      @screen_queue.reset_frame
+    end
+
     def self.current_target
       @current_target
     end
@@ -484,6 +513,32 @@ module Zenoo
     def self.enqueue_draw(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0)
       active_queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z)
       register_pending_image(@current_target) if @current_target
+    end
+
+    def self.enqueue_clear(color = nil)
+      if @current_target
+        register_pending_image(@current_target)
+        if @current_target.sub_image?
+          # sub_image はアトラス等の部分領域のため、FBO全体を glClear すると他のスロットが消える
+          # そのため該当矩形領域のみを塗りつぶす (最奥 Z = -Infinity, 透明色の場合は blend: :none で上書き)
+          actual_color = color || :clear
+          blend_mode = (actual_color == :clear || actual_color == [0, 0, 0, 0]) ? :none : :alpha
+          Zenoo::Window.draw_rect(
+            0.0, 0.0, @current_target.width, @current_target.height,
+            color: actual_color,
+            blend: blend_mode,
+            z: -Float::INFINITY
+          )
+        else
+          color ||= :clear
+          q = queue_for(@current_target)
+          q.set_clear(color)
+        end
+      else
+        color ||= Zenoo::Window.bg_color
+        @screen_queue.set_clear(color)
+        Zenoo::Window.bg_color = color
+      end
     end
 
     def self.flush_screen
