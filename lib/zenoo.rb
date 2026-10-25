@@ -63,4 +63,16 @@ Tilemap       = Zenoo::Tilemap       unless defined?(Tilemap)
 PhysicsSprite = Zenoo::PhysicsSprite unless defined?(PhysicsSprite)
 Profiler      = Zenoo::Profiler      unless defined?(Profiler)
 
+# ====================================================
+# CRuby 専用 開発支援モジュール (Spinel 静的走査回避)
+# ====================================================
+if !(defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel")
+  begin
+    send(:require_relative, 'zenoo/dev')
+  rescue LoadError
+    # ロードできなかった場合は無視
+  end
+end
+
+
 
