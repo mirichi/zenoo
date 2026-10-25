@@ -128,7 +128,7 @@ module Zenoo
       def dirty_angle!; dirty_geom!; end
 
       def x
-        @parent ? @parent.x : @x
+        @parent ? @parent.world_x : @x
       end
 
       def x=(v)
@@ -139,7 +139,7 @@ module Zenoo
       end
 
       def y
-        @parent ? @parent.y : @y
+        @parent ? @parent.world_y : @y
       end
 
       def y=(v)
@@ -150,7 +150,7 @@ module Zenoo
       end
 
       def angle
-        @parent ? @parent.angle : @angle
+        @parent ? @parent.world_angle : @angle
       end
 
       def angle=(v)
@@ -161,7 +161,7 @@ module Zenoo
       end
 
       def scale_x
-        @parent ? @parent.scale_x : @scale_x
+        @parent ? @parent.world_scale_x : @scale_x
       end
 
       def scale_x=(v)
@@ -172,7 +172,7 @@ module Zenoo
       end
 
       def scale_y
-        @parent ? @parent.scale_y : @scale_y
+        @parent ? @parent.world_scale_y : @scale_y
       end
 
       def scale_y=(v)
@@ -190,6 +190,14 @@ module Zenoo
         dirty_geom!
       end
 
+      def world_x; x; end
+      def world_y; y; end
+      def world_angle; angle; end
+      def world_scale_x; scale_x; end
+      def world_scale_y; scale_y; end
+      def world_pivot_x; @parent ? @parent.world_pivot_x : @x; end
+      def world_pivot_y; @parent ? @parent.world_pivot_y : @y; end
+
       # 親 Sprite が存在する場合のワールド重心座標を1パスで算出
       def compute_parent_center(offset_x, offset_y, cos_v, sin_v, sx, sy)
         p = @parent
@@ -198,10 +206,8 @@ module Zenoo
         pv_x = p.pivot_x
         pv_y = p.pivot_y
 
-        tl_x = p.x - p.anchor_x * pw
-        tl_y = p.y - p.anchor_y * ph
-        wpv_x = tl_x + pv_x * pw
-        wpv_y = tl_y + pv_y * ph
+        wpv_x = p.world_pivot_x
+        wpv_y = p.world_pivot_y
 
         rel_cx = (0.5 - pv_x) * pw + offset_x
         rel_cy = (0.5 - pv_y) * ph + offset_y
