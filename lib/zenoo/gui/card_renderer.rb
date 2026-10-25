@@ -862,6 +862,153 @@ module Zenoo
           border_color: track_b ? track_b[1] : nil
         )
       end
+
+      # ----------------------------------------------------
+      # テーブル (Table) 定数カラー & 描画メソッド
+      # ----------------------------------------------------
+      COL_TBL_HDR_BG    = Color.new(25, 32, 45, 255).freeze
+      COL_TBL_HDR_TXT   = Color.new(130, 150, 180, 255).freeze
+      COL_TBL_SEP       = Color.new(50, 60, 80, 150).freeze
+      COL_TBL_ROW_EVEN  = Color.new(22, 28, 40, 100).freeze
+      COL_TBL_BORDER    = Color.new(50, 60, 80, 200).freeze
+
+      COL_VAL_NUM       = Color.new(255, 170, 90, 255).freeze  # オレンジ
+      COL_VAL_BOOL      = Color.new(120, 230, 140, 255).freeze # ライトグリーン
+      COL_VAL_SYM       = Color.new(230, 130, 230, 255).freeze # マゼンタ
+      COL_VAL_STR       = Color.new(240, 240, 140, 255).freeze # イエロー
+      COL_VAL_NIL       = Color.new(130, 130, 140, 255).freeze # グレー
+      COL_VAL_DEF       = Color.new(210, 215, 225, 255).freeze # デフォルト
+
+      # テーブル外枠描画
+      def draw_table_frame(x, y, w, h, label, theme, **_opts)
+        rx = x.to_f
+        ry = y.to_f
+        rw = w.to_f
+        rh = h.to_f
+        f_font = theme.font || Font.default
+        f_size = theme.font_size.to_i > 0 ? theme.font_size.to_i : 14
+
+        has_label = !label.to_s.empty?
+        if has_label
+          Profiler.measure(:gui_text) do
+            Window.draw_text(rx, ry + 2.0, label.to_s, font: f_font, size: f_size, color: theme.text_color)
+          end
+        end
+
+        label_h = has_label ? 22.0 : 0.0
+        tbl_y = ry + label_h
+        track_b = theme.track_border || theme.border_normal
+
+        Window.draw_rect(
+          rx, tbl_y, rw, rh,
+          radius: theme.corner_radius || 4.0,
+          color: theme.track_bg || theme.bg_normal,
+          border_width: track_b ? track_b[0].to_f : 1.0,
+          border_color: track_b ? track_b[1] : COL_TBL_BORDER
+        )
+      end
+
+      # テーブルヘッダー描画
+      def draw_table_header(x, y, w, h, col_names, col_widths, theme, **_opts)
+        rx = x.to_f
+        ry = y.to_f
+        rw = w.to_f
+        rh = h.to_f
+        f_font = theme.font || Font.default
+        f_size = 11
+
+        # ヘッダー背景
+        Window.draw_rect(rx, ry, rw, rh, color: COL_TBL_HDR_BG, radius: 2.0)
+
+        # ヘッダー下部セパレータ線
+        Window.draw_rect(rx, ry + rh - 1.0, rw, 1.0, color: COL_TBL_SEP)
+
+        # カラム描画
+        cx = rx
+        len = col_names.length
+        i = 0
+        while i < len
+          cw = col_widths[i].to_f
+          cname = col_names[i].to_s
+
+          # テキスト
+          Profiler.measure(:gui_text) do
+            Window.draw_text(cx + 6.0, ry + (rh - f_size.to_f) * 0.5, cname, font: f_font, size: f_size, color: COL_TBL_HDR_TXT)
+          end
+
+          # カラム右境界線 (最後のカラム以外)
+          if i < len - 1
+            Window.draw_rect(cx + cw - 1.0, ry + 2.0, 1.0, rh - 4.0, color: COL_TBL_SEP)
+          end
+
+          cx += cw
+          i += 1
+        end
+      end
+
+      # テーブル行描画
+      def draw_table_row(x, y, w, h, row_data, col_widths, selected, hover, stripe, theme, **_opts)
+        rx = x.to_f
+        ry = y.to_f
+        rw = w.to_f
+        rh = h.to_f
+        f_font = theme.font || Font.default
+        f_size = 12
+
+        # 行背景
+        if selected
+          Window.draw_rect(rx, ry, rw, rh, color: theme.bg_active, radius: 2.0)
+        elsif hover
+          Window.draw_rect(rx, ry, rw, rh, color: theme.bg_hover, radius: 2.0)
+        elsif stripe
+          Window.draw_rect(rx, ry, rw, rh, color: COL_TBL_ROW_EVEN, radius: 2.0)
+        end
+
+        # セル値の描画
+        cx = rx
+        len = col_widths.length
+        i = 0
+        while i < len
+          cw = col_widths[i].to_f
+          val = row_data.is_a?(Array) ? row_data[i] : (row_data.respond_to?(:[]) ? row_data[i] : nil)
+
+          if !val.nil? || row_data.is_a?(Array)
+            # 型に応じたカラー分け
+            val_col = if selected || hover
+                        Color::WHITE
+                      elsif val.is_a?(Numeric)
+                        COL_VAL_NUM
+                      elsif val == true || val == false
+                        COL_VAL_BOOL
+                      elsif val.is_a?(Symbol)
+                        COL_VAL_SYM
+                      elsif val.is_a?(String)
+                        COL_VAL_STR
+                      elsif val.nil?
+                        COL_VAL_NIL
+                      else
+                        COL_VAL_DEF
+                      end
+
+            val_str = val.is_a?(String) ? val : (val.nil? ? "nil" : val.to_s)
+            # セル幅に応じた簡易トリミング
+            max_chars = [((cw - 12.0) / 7.0).to_i, 3].max
+            val_str = val_str[0...max_chars] + "..." if val_str.length > max_chars
+
+            Profiler.measure(:gui_text) do
+              Window.draw_text(cx + 6.0, ry + (rh - f_size.to_f) * 0.5, val_str, font: f_font, size: f_size, color: val_col)
+            end
+          end
+
+          # セル間の薄い境界線
+          if i < len - 1
+            Window.draw_rect(cx + cw - 1.0, ry + 1.0, 1.0, rh - 2.0, color: COL_TBL_SEP)
+          end
+
+          cx += cw
+          i += 1
+        end
+      end
     end
   end
 end

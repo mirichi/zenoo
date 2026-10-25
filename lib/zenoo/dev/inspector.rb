@@ -179,72 +179,30 @@ module Zenoo
           sprites = active_sprites
 
           # 上部: スプライトリスト (高さ 130px)
-          list_h = [130.0, h * 0.35].min
-          prop_h = [h - list_h - 8.0, 40.0].max
+          list_h = [130.0, h * 0.38].min
+          prop_h = [h - list_h - 10.0, 40.0].max
 
-          # --- 1. スプライト一覧リスト ---
-          Window.draw_rect(0.0, top_y, w, list_h, color: COL_BG_LIST, radius: 4.0, border_width: 1.0, border_color: COL_BORDER)
-          Window.draw_text(6.0, top_y + 4.0, "Active Sprites (#{sprites.size})", size: 12, color: COL_TXT_TITLE)
-
-          item_h = 18.0
-          list_clip_y = top_y + 20.0
-          list_clip_h = [list_h - 22.0, 1.0].max
-          list_clip_w = w - 10.0
-          total_list_h = [sprites.size * item_h, list_clip_h].max
-
-          mx = GUI.gui_mouse_x
-          my = GUI.gui_mouse_y
-          click = Input.mouse_push?(:left)
-
-          # マウスホイールによるスクロール
-          if mx >= 0.0 && mx <= w && my >= top_y && my <= top_y + list_h
-            if Input.mouse_wheel_y != 0
-              @scroll_sprites -= Input.mouse_wheel_y.to_f * 24.0
-            end
+          # --- 1. スプライト一覧テーブル ---
+          sprite_cols = [["Type", 120], ["X", 60], ["Y", 60], "Angle"]
+          sprite_rows = sprites.map do |s|
+            [s.class.name || "Sprite", s.x.round(1), s.y.round(1), s.angle.round(1)]
           end
 
-          # スクロールバー描画 & ドラッグ操作
-          @scroll_sprites = GUI.scrollbar(
-            @scroll_sprites, total_list_h, list_clip_h,
-            x: w - 8.0, y: list_clip_y, w: 6.0, h: list_clip_h, id: "sp_scroll"
+          sel_idx = sprites.index(@selected_object)
+          new_sel_idx = GUI.table(
+            "Active Sprites (#{sprites.size})",
+            sprite_cols, sprite_rows, sel_idx,
+            x: 0.0, y: top_y, w: w, h: list_h, item_height: 18.0, id: "sp_tbl"
           )
-          max_sp_scroll = [total_list_h - list_clip_h, 0.0].max
-          @scroll_sprites = @scroll_sprites.clamp(0.0, max_sp_scroll)
-
-          # クリップ領域内でのアイテム描画
-          Window.clip(0.0, list_clip_y, list_clip_w, list_clip_h, local: false) do
-            sprites.each_with_index do |s, idx|
-              ry = list_clip_y - @scroll_sprites + idx * item_h
-              # カリング (可視範囲外は文字列生成・描画を完全スキップ)
-              next if ry + item_h < list_clip_y || ry > list_clip_y + list_clip_h
-
-              rx = 2.0
-              rw = list_clip_w - 4.0
-              is_hover = (mx >= rx && mx <= rx + rw && my >= ry && my <= ry + item_h && my >= list_clip_y && my <= list_clip_y + list_clip_h)
-              is_sel = (s == @selected_object)
-
-              if is_hover && click
-                @selected_object = s
-                @selected_var = nil
-                @scroll_props = 0.0
-              end
-
-              # 行背景
-              bg_col = is_sel ? COL_ROW_SEL : (is_hover ? COL_ROW_HOVER : (idx.even? ? COL_ROW_EVEN : nil))
-              Window.draw_rect(rx, ry, rw, item_h, color: bg_col, radius: 2.0) if bg_col
-
-              name = s.class.name || "Sprite"
-              text = "#{name} (x:#{s.x.round(1)}, y:#{s.y.round(1)})"
-              txt_col = is_sel ? COL_TXT_WHITE : (is_hover ? COL_TXT_HOVER : COL_TXT_MUTED)
-              Window.draw_text(rx + 6.0, ry + 2.0, text, size: 12, color: txt_col)
-            end
+          if new_sel_idx && sprites[new_sel_idx] && new_sel_idx != sel_idx
+            @selected_object = sprites[new_sel_idx]
+            @selected_var = nil
           end
 
-          # --- 2. 下部: プロパティシート (Inspector) ---
-          sheet_y = top_y + list_h + 6.0
-          Window.draw_rect(0.0, sheet_y, w, prop_h, color: COL_BG_SHEET, radius: 4.0, border_width: 1.0, border_color: COL_BORDER)
-
+          # --- 2. 下部: プロパティシート (Table) ---
+          sheet_y = top_y + list_h + 8.0
           unless @selected_object
+            Window.draw_rect(0.0, sheet_y, w, prop_h, color: COL_BG_SHEET, radius: 4.0, border_width: 1.0, border_color: COL_BORDER)
             Window.draw_text(8.0, sheet_y + 8.0, "Select a sprite above to inspect", size: 12, color: COL_TXT_HDR)
             return
           end
@@ -253,9 +211,7 @@ module Zenoo
           hex_id = obj.object_id.to_s(16)
           short_id = hex_id.length > 6 ? hex_id[-6..-1] : hex_id
           title_text = "#{obj.class} [0x#{short_id}]"
-          Window.draw_text(6.0, sheet_y + 4.0, title_text, size: 12, color: COL_TXT_GOLD)
 
-          # 変数バッファの再利用
           props = (@props_buffer ||= [])
           props.clear
           props << ["x", obj.x.round(2)]
@@ -270,78 +226,20 @@ module Zenoo
             props << [ivar.to_s, obj.instance_variable_get(ivar)]
           end
 
-          # テーブルヘッダー (Property / Value)
-          tbl_header_y = sheet_y + 22.0
-          Window.draw_rect(2.0, tbl_header_y, w - 4.0, 16.0, color: COL_TBL_HDR)
-          Window.draw_text(6.0, tbl_header_y + 1.0, "Property", size: 11, color: COL_TXT_HDR)
-          Window.draw_text(120.0, tbl_header_y + 1.0, "Value", size: 11, color: COL_TXT_HDR)
-
-          p_item_h = 18.0
-          prop_clip_y = tbl_header_y + 18.0
-          prop_clip_h = [sheet_y + prop_h - prop_clip_y - 2.0, 1.0].max
-          prop_clip_w = w - 10.0
-          total_prop_h = [props.size * p_item_h, prop_clip_h].max
-
-          # マウスホイールによるスクロール
-          if mx >= 0.0 && mx <= w && my >= sheet_y && my <= sheet_y + prop_h
-            if Input.mouse_wheel_y != 0
-              @scroll_props -= Input.mouse_wheel_y.to_f * 24.0
-            end
-          end
-
-          # スクロールバー描画 & ドラッグ操作
-          @scroll_props = GUI.scrollbar(
-            @scroll_props, total_prop_h, prop_clip_h,
-            x: w - 8.0, y: prop_clip_y, w: 6.0, h: prop_clip_h, id: "prop_scroll"
+          prop_cols = [["Property", 110], "Value"]
+          sel_prop_idx = props.find_index { |p| p[0] == @selected_var }
+          new_prop_idx = GUI.table(
+            title_text,
+            prop_cols, props, sel_prop_idx,
+            x: 0.0, y: sheet_y, w: w, h: prop_h, item_height: 18.0, id: "prop_tbl"
           )
-          max_prop_scroll = [total_prop_h - prop_clip_h, 0.0].max
-          @scroll_props = @scroll_props.clamp(0.0, max_prop_scroll)
-
-          # クリップ領域内でのプロパティ行描画
-          Window.clip(0.0, prop_clip_y, prop_clip_w, prop_clip_h, local: false) do
-            props.each_with_index do |(prop_name, val), p_idx|
-              ry = prop_clip_y - @scroll_props + p_idx * p_item_h
-              # 可視範囲外は完全スキップ
-              next if ry + p_item_h < prop_clip_y || ry > prop_clip_y + prop_clip_h
-
-              rx = 2.0
-              rw = prop_clip_w - 4.0
-              is_hover = (mx >= rx && mx <= rx + rw && my >= ry && my <= ry + p_item_h && my >= prop_clip_y && my <= prop_clip_y + prop_clip_h)
-              is_selected_var = (@selected_var == prop_name)
-
-              if is_hover && click
-                @selected_var = prop_name
-              end
-
-              # 行背景
-              bg_col = is_selected_var ? COL_PROP_SEL : (is_hover ? COL_PROP_HOVER : (p_idx.even? ? COL_PROP_EVEN : nil))
-              Window.draw_rect(rx, ry, rw, p_item_h, color: bg_col) if bg_col
-
-              # プロパティ名 (左カラム)
-              Window.draw_text(rx + 4.0, ry + 2.0, prop_name, size: 12, color: COL_TXT_PROP)
-
-              # 値 (右カラム) - 型に応じた色分け (定数参照)
-              val_str = val.is_a?(String) ? "\"#{val}\"" : val.to_s
-              val_str = val_str[0..26] + "..." if val_str.length > 26
-
-              val_col = case val
-                        when Numeric then COL_VAL_NUM
-                        when TrueClass, FalseClass then COL_VAL_BOOL
-                        when Symbol then COL_VAL_SYM
-                        when String then COL_VAL_STR
-                        when nil then COL_VAL_NIL
-                        else COL_VAL_DEF
-                        end
-
-              Window.draw_text(rx + 120.0, ry + 2.0, val_str, size: 12, color: val_col)
-            end
+          if new_prop_idx && props[new_prop_idx]
+            @selected_var = props[new_prop_idx][0]
           end
         end
 
         # Stats タブ (高密度コンパクト表示 & 15フレーム間引き更新で自己アロケーション激減)
         def render_stats_dense(w, h, top_y)
-          Window.draw_rect(0.0, top_y, w, h, color: COL_BG_SHEET, radius: 4.0, border_width: 1.0, border_color: COL_BORDER)
-
           @stats_cache_frame += 1
           if @cached_stat_lines.empty? || (@stats_cache_frame % 15 == 0)
             stat = GC.stat
@@ -361,16 +259,16 @@ module Zenoo
             ]
           end
 
-          y = top_y + 10.0
-          @cached_stat_lines.each do |(key, val)|
-            Window.draw_text(10.0, y, key, size: 12, color: COL_TXT_TITLE)
-            val_col = (key.include?("Major") && val.to_i > 0) ? [255, 100, 100, 255] : COL_VAL_NUM
-            Window.draw_text(130.0, y, val, size: 12, color: val_col)
-            y += 20.0
-          end
+          tbl_h = [h - 40.0, 60.0].max
+          GUI.table(
+            "Runtime Statistics",
+            [["Metric", 140], "Value"],
+            @cached_stat_lines, nil,
+            x: 0.0, y: top_y, w: w, h: tbl_h, item_height: 20.0, id: "stat_tbl"
+          )
 
           # GC 実行ボタン (コンパクト)
-          GUI.cursor(10.0, y + 10.0)
+          GUI.cursor(10.0, top_y + tbl_h + 8.0)
           if GUI.button("Run Full GC (rb_gc)", w: w - 20.0, h: 26.0)
             GC.start
             @cached_stat_lines.clear
@@ -379,23 +277,18 @@ module Zenoo
 
         # Globals タブ (高密度コンパクト表示)
         def render_globals_dense(w, h, top_y)
-          Window.draw_rect(0.0, top_y, w, h, color: COL_BG_SHEET, radius: 4.0, border_width: 1.0, border_color: COL_BORDER)
-
-          y = top_y + 10.0
-          Window.draw_text(10.0, y, "Program ($0)", size: 12, color: COL_TXT_TITLE)
-          Window.draw_text(110.0, y, File.basename($0.to_s), size: 12, color: COL_VAL_DEF)
-          y += 20.0
-
-          Window.draw_text(10.0, y, "Ruby Version", size: 12, color: COL_TXT_TITLE)
-          Window.draw_text(110.0, y, RUBY_VERSION, size: 12, color: COL_VAL_DEF)
-          y += 20.0
-
-          Window.draw_text(10.0, y, "Engine", size: 12, color: COL_TXT_TITLE)
-          Window.draw_text(110.0, y, defined?(RUBY_ENGINE) ? RUBY_ENGINE : "CRuby", size: 12, color: COL_VAL_DEF)
-          y += 20.0
-
-          Window.draw_text(10.0, y, "Dev Mode", size: 12, color: COL_TXT_TITLE)
-          Window.draw_text(110.0, y, Dev.enabled ? "Active (Hot-reload)" : "Disabled", size: 12, color: COL_VAL_DEF)
+          global_rows = [
+            ["Program ($0)", File.basename($0.to_s)],
+            ["Ruby Version", RUBY_VERSION],
+            ["Engine", defined?(RUBY_ENGINE) ? RUBY_ENGINE : "CRuby"],
+            ["Dev Mode", Dev.enabled ? "Active (Hot-reload)" : "Disabled"]
+          ]
+          GUI.table(
+            "System Environment",
+            [["Property", 140], "Value"],
+            global_rows, nil,
+            x: 0.0, y: top_y, w: w, h: h, item_height: 20.0, id: "sys_tbl"
+          )
         end
       end
     end

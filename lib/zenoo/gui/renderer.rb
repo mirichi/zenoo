@@ -82,6 +82,21 @@ module Zenoo
         raise NotImplementedError, "#{self.class}#draw_scroll_view_frame must be implemented"
       end
 
+      # テーブル外枠描画
+      def draw_table_frame(x, y, w, h, label, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_table_frame must be implemented"
+      end
+
+      # テーブルヘッダー描画
+      def draw_table_header(x, y, w, h, col_names, col_widths, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_table_header must be implemented"
+      end
+
+      # テーブル行描画
+      def draw_table_row(x, y, w, h, row_data, col_widths, selected, hover, stripe, theme, **opts)
+        raise NotImplementedError, "#{self.class}#draw_table_row must be implemented"
+      end
+
       # パネル (コンテナ枠) 描画
       def draw_panel(x, y, w, h, title, theme, **opts)
         # デフォルトはシンプルな矩形描画
