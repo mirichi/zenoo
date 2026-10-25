@@ -23,6 +23,11 @@ module Zenoo
         @current_error = nil
         @last_reported_error = nil
         @watch_dirs = []
+        @snapshot_pool = []
+        @snapshot_count = 0
+        @snapshot_clear_color = nil
+        @has_snapshot = false
+        @single_step_requested = false
 
         # 実行中スクリプトのディレクトリとカレントディレクトリを監視対象に追加
         add_watch_dir(Dir.pwd)
@@ -114,6 +119,60 @@ module Zenoo
           warn "\e[31m[Zenoo::Dev] ❌ Test run aborted due to exception.\e[0m"
           exit 1
         end
+      end
+
+      def step_frame!
+        @single_step_requested = true
+      end
+
+      def single_step_requested?
+        @single_step_requested
+      end
+
+      def clear_single_step!
+        @single_step_requested = false
+      end
+
+      def has_snapshot?
+        @has_snapshot
+      end
+
+      # 画面キューのコマンド群をスナップショットとして保持
+      def capture_screen_snapshot
+        q = Backend.screen_queue
+        # キューのソートを先に行う
+        q.sort
+        count = q.queue_count
+        @snapshot_clear_color = q.clear_color || Zenoo::Window.bg_color
+        @snapshot_count = count
+
+        while @snapshot_pool.length < count
+          @snapshot_pool << Backend::DrawCommand.new
+        end
+
+        pool = q.command_pool
+        i = 0
+        while i < count
+          src = pool[i]
+          dst = @snapshot_pool[i]
+          dst.set(
+            src.target, src.z, src.order,
+            src.pipeline, src.data, src.count,
+            src.image, src.shader, src.uniforms, src.blend, src.clip
+          )
+          i += 1
+        end
+        @has_snapshot = true
+      end
+
+      # ポーズ中: スナップショットのコマンド群を画面に再描画 (オフスクリーン描画はバイパス)
+      def replay_screen_snapshot
+        return unless @has_snapshot
+
+        clear_c = @snapshot_clear_color || Zenoo::Window.bg_color || :black
+        Native::Window.clear(Backend.color_to_uint32(clear_c))
+        Backend.mark_screen_cleared
+        Backend.execute_snapshot_commands(@snapshot_pool, @snapshot_count)
       end
 
       # フレーム毎の更新フック
@@ -294,13 +353,16 @@ module Zenoo
           return
         end
 
+        is_paused = Zenoo::Dev.enabled && Zenoo::Dev::Inspector.pause_game
+        @current_frame_ran_game = !is_paused || Zenoo::Dev.single_step_requested?
+
         # 通常のゲームブロック実行を begin ... rescue で保護
         Audio.update(delta_time)
-        Tween.__update_step(delta_time)
+        Tween.__update_step(delta_time) if @current_frame_ran_game
         GUI.begin_frame
         if @main_loop_block
           begin
-            @main_loop_block.call unless (Zenoo::Dev.enabled && Zenoo::Dev::Inspector.pause_game)
+            @main_loop_block.call if @current_frame_ran_game
           rescue ScriptError, StandardError => e
             if Zenoo::Dev.enabled
               Zenoo::Dev.handle_exception(e)
@@ -310,6 +372,9 @@ module Zenoo
           end
         end
 
+        # ゲームブロック直後: インスペクタGUIがキューに積まれる前に純粋なゲーム画面のスナップショットを取得！
+        Zenoo::Dev.capture_screen_snapshot if Zenoo::Dev.enabled && @current_frame_ran_game
+
         # F12 インスペクタ GUI の描画
         Zenoo::Dev::Inspector.render_gui if Zenoo::Dev.enabled
 
@@ -318,7 +383,18 @@ module Zenoo
       end
 
       def __draw_step
-        super
+        if @current_frame_ran_game || !Zenoo::Dev.has_snapshot?
+          # ゲームを実行したフレーム、またはスナップショット未取得時: 通常通りゲーム画面とGUIを描画
+          super
+          Zenoo::Dev.clear_single_step! if Zenoo::Dev.single_step_requested?
+        else
+          # ポーズ中でゲームを実行しなかったフレーム: 直前の純粋なゲーム画面スナップショットをリプレイ
+          Zenoo::Dev.replay_screen_snapshot
+          Backend.clear_clips
+          @offset_x = 0.0
+          @offset_y = 0.0
+          Native::Renderer.reset_scissor
+        end
 
         if Zenoo::Dev.enabled
           # コライダー可視化オーバーレイ描画
