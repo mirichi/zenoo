@@ -33,6 +33,7 @@ module Zenoo
   native_method :replace_texture!, [:self], :nil, "sp_ZenImage_replace_texture"
   native_method :raw_get_pixel, [:int, :int], :int, "sp_ZenImage_get_pixel"
   native_method :raw_set_pixel, [:int, :int, :int], :nil, "sp_ZenImage_set_pixel"
+  native_method :raw_set_pixel_rgba, [:int, :int, :int, :int, :int, :int], :nil, "sp_ZenImage_set_pixel_rgba"
   native_method :sync, [], :nil, "sp_ZenImage_sync"
   native_method :clone, [], :self, "sp_ZenImage_clone"
   native_method :dup, [], :self, "sp_ZenImage_clone"
@@ -48,7 +49,9 @@ module Zenoo
   native_method :set_vec2,  [:string, :float, :float], :nil, "sp_ZenShader_set_vec2"
   native_method :set_vec3,  [:string, :float, :float, :float], :nil, "sp_ZenShader_set_vec3"
   native_method :set_vec4,  [:string, :float, :float, :float, :float], :nil, "sp_ZenShader_set_vec4"
+  native_method :raw_set_vec4_array, [:string, :int, :string], :nil, "sp_ZenShader_set_vec4_array"
   native_method :set_mat4,  [:string, :string], :nil, "sp_ZenShader_set_mat4"
+  native_method :set_texture, [:string, :int, :any], :nil, "sp_ZenShader_set_texture"
 
   module Native
     # ==========================================
@@ -306,6 +309,14 @@ class Zenoo::Image
 
   def self.create_msaa(w, h, samples = 4)
     new(w.to_i, h.to_i, samples.to_i)
+  end
+end
+
+class Zenoo::Native::NativeShader
+  def set_vec4_array(name, data)
+    str = data.is_a?(Array) ? data.pack("f*") : data.to_s
+    count = str.bytesize / 16
+    raw_set_vec4_array(name.to_s, count, str) if count > 0
   end
 end
 

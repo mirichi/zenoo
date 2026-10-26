@@ -162,8 +162,8 @@ module Zenoo
       g = (gf * 255).to_i & 0xFF
       b = (bf * 255).to_i & 0xFF
       a = (af * 255).to_i & 0xFF
-      r_part = r >= 128 ? ((r - 256) * 16777216) : (r << 24)
-      r_part | (g << 16) | (b << 8) | a
+      val = ((r & 0x7F) << 24) | (g << 16) | (b << 8) | a
+      (r >= 128) ? (val | -2147483648) : val
     end
 
     # ----------------------------------------------------
@@ -562,17 +562,30 @@ module Zenoo
     def self.apply_uniforms(shader, uniforms)
       return unless uniforms && shader
 
+      tex_unit = 1
       uniforms.each do |k, v|
+        name = k.to_s
         case v
+        when Zenoo::Image
+          if !@skip_ondemand_flush && has_pending_draws?(v)
+            flush_image(v)
+          end
+          shader.set_texture(name, tex_unit, v) if tex_unit <= 15
+          tex_unit += 1
         when Integer
-          shader.set_int(k.to_s, v)
+          shader.set_int(name, v)
         when Float
-          shader.set_float(k.to_s, v)
+          shader.set_float(name, v)
+        when String
+          shader.set_vec4_array(name, v)
         when Array
           case v.length
-          when 2 then shader.set_vec2(k.to_s, v[0].to_f, v[1].to_f)
-          when 3 then shader.set_vec3(k.to_s, v[0].to_f, v[1].to_f, v[2].to_f)
-          when 4 then shader.set_vec4(k.to_s, v[0].to_f, v[1].to_f, v[2].to_f, v[3].to_f)
+          when 2 then shader.set_vec2(name, v[0].to_f, v[1].to_f)
+          when 3 then shader.set_vec3(name, v[0].to_f, v[1].to_f, v[2].to_f)
+          when 4 then shader.set_vec4(name, v[0].to_f, v[1].to_f, v[2].to_f, v[3].to_f)
+          when 16 then shader.set_mat4(name, v)
+          else
+            shader.set_vec4_array(name, v) if v.length >= 8 && (v.length % 4).zero?
           end
         end
       end

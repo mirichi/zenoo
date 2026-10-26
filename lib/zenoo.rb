@@ -38,6 +38,7 @@ require_relative 'zenoo/camera'
 require_relative 'zenoo/easing'
 require_relative 'zenoo/tween'
 require_relative 'zenoo/mesh'
+require_relative 'zenoo/skinned_mesh'
 require_relative 'zenoo/profiler'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
@@ -46,6 +47,8 @@ Canvas        = Zenoo::Canvas        unless defined?(Canvas)
 Input         = Zenoo::Input         unless defined?(Input)
 Image         = Zenoo::Image         unless defined?(Image)
 Mesh          = Zenoo::Mesh          unless defined?(Mesh)
+Bone          = Zenoo::Bone          unless defined?(Bone)
+SkinnedMesh   = Zenoo::SkinnedMesh   unless defined?(SkinnedMesh)
 Shader        = Zenoo::Shader        unless defined?(Shader)
 Color         = Zenoo::Color         unless defined?(Color)
 Font          = Zenoo::Font          unless defined?(Font)

@@ -38,6 +38,7 @@ mkdir -p "${DOCS_DIR}/zero_gravity"
 mkdir -p "${DOCS_DIR}/particles"
 mkdir -p "${DOCS_DIR}/danmaku"
 mkdir -p "${DOCS_DIR}/articulated"
+mkdir -p "${DOCS_DIR}/skinned_mesh"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -200,6 +201,7 @@ build_zero_gravity() { build_item "Zero-Gravity 2D Physics Demo" "zero_gravity" 
 build_particles()    { build_item "GPU Particle Storm Demo" "particles" "examples/gpu_particles.rb" "examples/web/shell_particles.html"; }
 build_danmaku()      { build_item "GPU Danmaku Storm Demo" "danmaku" "examples/demo_gpu_danmaku.rb" "examples/web/shell_danmaku.html"; }
 build_articulated()  { build_item "Articulated Sprite & Hierarchy Demo" "articulated" "examples/demo_articulated_sprite.rb" "examples/web/shell_articulated.html"; }
+build_skinned_mesh() { build_item "2D SkinnedMesh & Bone Demo" "skinned_mesh" "examples/demo_skinned_mesh.rb" "examples/web/shell_skinned_mesh.html"; }
 
 case "$TARGET" in
     game)         build_game ;;
@@ -218,6 +220,7 @@ case "$TARGET" in
     particles)    build_particles ;;
     danmaku)      build_danmaku ;;
     articulated)  build_articulated ;;
+    skinned_mesh) build_skinned_mesh ;;
     all)
         build_game
         sleep 0.5
@@ -250,10 +253,12 @@ case "$TARGET" in
         build_danmaku
         sleep 0.5
         build_articulated
+        sleep 0.5
+        build_skinned_mesh
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|articulated|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|articulated|skinned_mesh|all]"
         exit 1
         ;;
 esac
@@ -278,4 +283,5 @@ echo " Zero-Grav: ${DOCS_DIR}/zero_gravity/index.html"
 echo " Particles: ${DOCS_DIR}/particles/index.html"
 echo " Danmaku  : ${DOCS_DIR}/danmaku/index.html"
 echo " Articulated: ${DOCS_DIR}/articulated/index.html"
+echo " SkinnedMesh: ${DOCS_DIR}/skinned_mesh/index.html"
 echo "=========================================================="

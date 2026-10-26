@@ -1069,7 +1069,16 @@ module Zenoo
 
       eff_pipeline = mesh.pipeline
       eff_image = image || mesh.image
-      eff_shader = shader || mesh.shader || eff_pipeline.default_shader
+      eff_shader = shader || mesh.shader || eff_pipeline.default_shader ||
+                   if eff_pipeline == Backend::Pipelines::TEXTURED_TRIANGLES || eff_pipeline == Backend::Pipelines::TEXTURED_TRIANGLE_STRIP
+                     textured_primitive_shader
+                   elsif eff_pipeline == Backend::Pipelines::SPRITE
+                     default_sprite_shader
+                   elsif eff_pipeline == Backend::Pipelines::CARD
+                     card_shader
+                   else
+                     flat_primitive_shader
+                   end
       eff_blend = Backend.normalize_blend_mode(blend || mesh.blend)
       eff_uniforms = if mesh.uniforms && uniforms
                        mesh.uniforms.merge(uniforms)

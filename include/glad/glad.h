@@ -146,6 +146,7 @@ typedef void (APIENTRYP PFNGLUNIFORM1FPROC)(GLint location, GLfloat v0);
 typedef void (APIENTRYP PFNGLUNIFORM2FPROC)(GLint location, GLfloat v0, GLfloat v1);
 typedef void (APIENTRYP PFNGLUNIFORM3FPROC)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
 typedef void (APIENTRYP PFNGLUNIFORM4FPROC)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
+typedef void (APIENTRYP PFNGLUNIFORM4FVPROC)(GLint location, GLsizei count, const GLfloat *value);
 typedef void (APIENTRYP PFNGLUNIFORMMATRIX4FVPROC)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 
 typedef void (APIENTRYP PFNGLGENVERTEXARRAYSPROC)(GLsizei n, GLuint *arrays);
@@ -213,6 +214,7 @@ GLAPI PFNGLUNIFORM1FPROC glUniform1f;
 GLAPI PFNGLUNIFORM2FPROC glUniform2f;
 GLAPI PFNGLUNIFORM3FPROC glUniform3f;
 GLAPI PFNGLUNIFORM4FPROC glUniform4f;
+GLAPI PFNGLUNIFORM4FVPROC glUniform4fv;
 GLAPI PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 
 GLAPI PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;

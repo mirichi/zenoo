@@ -34,11 +34,13 @@ module Zenoo
     # 返り値: [visible, u0, v0, u1, v1, x0, y0, x1, y1, advance_x] または nil
     def get_glyph(char_or_cp, size = 24.0, sdf = nil, r_scale = 1.0)
       cp = char_or_cp.is_a?(String) ? char_or_cp.ord : char_or_cp.to_i
-      s_i = (size * 10).to_i
       sdf_flag = (sdf == true ? 1 : (sdf.nil? ? 0 : 2))
-      # Bignum 化を避けるため、即値 Fixnum (64bit) に収まる掛け算キーを使用 (ゼロアロケーション)
-      key = (cp * 10000 + s_i) * 10 + sdf_flag
-      key = (key * 100) + (r_scale * 10).to_i if r_scale != 1.0
+      # 31bit正のFixnum内に収まるビットパック (Wasm 32bit環境でオーバーフローゼロ)
+      # [cp: 16bit] [size: 10bit] [sdf: 2bit] [r_scale: 3bit] = 31bit
+      cp_16 = (cp ^ (cp >> 16)) & 0xFFFF
+      sz_10 = (size.to_f * 2.0).to_i & 0x3FF
+      r_3   = (r_scale.to_f * 2.0).to_i & 0x7
+      key   = (cp_16 << 15) | (sz_10 << 5) | (sdf_flag << 3) | r_3
 
       @glyph_cache[key] ||= begin
         s = size.to_f
@@ -56,7 +58,10 @@ module Zenoo
     def advance_x(char_or_cp, size = 24.0)
       s = size.to_f
       cp = char_or_cp.is_a?(String) ? char_or_cp.ord : char_or_cp.to_i
-      key = (cp << 16) | (s * 10).to_i
+      # [cp: 18bit] [size: 13bit] = 31bit (オーバーフローゼロ)
+      cp_18 = (cp ^ (cp >> 18)) & 0x3FFFF
+      sz_13 = (s * 2.0).to_i & 0x1FFF
+      key   = (cp_18 << 13) | sz_13
       @advance_cache[key] ||= begin
         g = get_glyph(char_or_cp, s)
         g ? g[9].to_f : (s * 0.6)
@@ -68,8 +73,11 @@ module Zenoo
       return 0.0 unless text
       s = size.to_f
       w = 0.0
+      sz_13 = (s * 2.0).to_i & 0x1FFF
       text.to_s.each_char do |ch|
-        key = (ch.ord << 16) | (s * 10).to_i
+        cp = ch.ord
+        cp_18 = (cp ^ (cp >> 18)) & 0x3FFFF
+        key   = (cp_18 << 13) | sz_13
         w += (@advance_cache[key] ||= begin
           g = get_glyph(ch, s)
           g ? g[9].to_f : (s * 0.6)
