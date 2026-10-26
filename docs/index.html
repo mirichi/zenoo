@@ -99,9 +99,6 @@
     .card.atlas::before {
       background: linear-gradient(90deg, #38bdf8, #f59e0b);
     }
-    .card.window::before {
-      background: linear-gradient(90deg, #6366f1, #a855f7);
-    }
     .card.clip::before {
       background: linear-gradient(90deg, #14b8a6, #3b82f6);
     }
@@ -153,7 +150,6 @@
     .card.vector .card-tag { color: #34d399; }
     .card.image .card-tag { color: #f472b6; }
     .card.atlas .card-tag { color: #38bdf8; }
-    .card.window .card-tag { color: #818cf8; }
     .card.clip .card-tag { color: #2dd4bf; }
     .card.sound .card-tag { color: #38bdf8; }
     .card.collision .card-tag { color: #fb7185; }
@@ -251,14 +247,6 @@
       background: #38bdf8;
       color: #0b0d14;
       box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
-    }
-    .card.window .btn-launch {
-      background: #6366f1;
-      color: #fff;
-    }
-    .card.window .btn-launch:hover {
-      background: #818cf8;
-      box-shadow: 0 0 20px rgba(129, 140, 248, 0.4);
     }
     .card.clip .btn-launch {
       background: #0d9488;
@@ -482,24 +470,6 @@
         </ul>
       </div>
       <a href="atlas/" class="btn-launch">アトラスデモを起動 (Launch Demo) →</a>
-    </div>
-
-    <!-- Multi-Window & Occlusion Demo Card -->
-    <div class="card window">
-      <div>
-        <div class="card-tag">Window System</div>
-        <h2>Multi-Window &amp; Occlusion</h2>
-        <p class="desc">
-          ドラッグ移動可能なフローティングウィンドウと前面化 (Bring to Front)。ウィンドウ背面へのクリック貫通防止や、内部コンテンツのハードウェアクリッピングを体験できます。
-        </p>
-        <ul class="features">
-          <li>GUI.window (タイトルカードラッグ移動・前面化)</li>
-          <li>クリック遮断 &amp; イベント透過防止 (Occlusion)</li>
-          <li>Window.clip によるウィンドウ内部コンテンツの保護</li>
-          <li>独立したローカル Z ソート階層管理</li>
-        </ul>
-      </div>
-      <a href="window/" class="btn-launch">ウィンドウデモを起動 (Launch Demo) →</a>
     </div>
 
     <!-- Hardware Clipping Demo Card -->
