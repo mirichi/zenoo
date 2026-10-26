@@ -439,11 +439,61 @@ void zen_shader_set_vec4(ZenShader* shader, const char* name, float x, float y, 
     if (loc >= 0) glUniform4f(loc, x, y, z, w);
 }
 
+void zen_shader_set_vec4_array(ZenShader* shader, const char* name, int count, const float* vec4_data) {
+    if (!shader || !name || !vec4_data || count <= 0) return;
+    glUseProgram(shader->program_id);
+    GLint loc = glGetUniformLocation(shader->program_id, name);
+    if (loc < 0) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s[0]", name);
+        loc = glGetUniformLocation(shader->program_id, buf);
+    }
+    if (loc >= 0) {
+        if (((uintptr_t)vec4_data & 3) != 0) {
+            // Emscripten/WebGL などの環境で 4バイト境界にアラインされていない場合の救済
+            float aligned_buf[64];
+            size_t bytes = (size_t)count * 4 * sizeof(float);
+            if (bytes <= sizeof(aligned_buf)) {
+                memcpy(aligned_buf, vec4_data, bytes);
+                glUniform4fv(loc, (GLsizei)count, aligned_buf);
+            } else {
+                float* heap_buf = (float*)malloc(bytes);
+                if (heap_buf) {
+                    memcpy(heap_buf, vec4_data, bytes);
+                    glUniform4fv(loc, (GLsizei)count, heap_buf);
+                    free(heap_buf);
+                }
+            }
+        } else {
+            glUniform4fv(loc, (GLsizei)count, vec4_data);
+        }
+    }
+}
+
 void zen_shader_set_mat4(ZenShader* shader, const char* name, const float* mat4) {
     if (!shader || !mat4) return;
     glUseProgram(shader->program_id);
     GLint loc = glGetUniformLocation(shader->program_id, name);
-    if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, mat4);
+    if (loc >= 0) {
+        if (((uintptr_t)mat4 & 3) != 0) {
+            float aligned[16];
+            memcpy(aligned, mat4, sizeof(aligned));
+            glUniformMatrix4fv(loc, 1, GL_FALSE, aligned);
+        } else {
+            glUniformMatrix4fv(loc, 1, GL_FALSE, mat4);
+        }
+    }
+}
+
+void zen_shader_set_texture(ZenShader* shader, const char* name, int unit, ZenImage* image) {
+    if (!shader || unit < 0 || unit > 15) return;
+    glUseProgram(shader->program_id);
+    GLuint tex_id = (image && image->texture) ? image->texture->id : s_white_texture;
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_2D, tex_id);
+    glActiveTexture(GL_TEXTURE0);
+    GLint loc = glGetUniformLocation(shader->program_id, name);
+    if (loc >= 0) glUniform1i(loc, unit);
 }
 
 // ------------------------------------------

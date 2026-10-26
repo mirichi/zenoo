@@ -313,6 +313,20 @@ static VALUE image_set_pixel(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_color)
     return self;
 }
 
+static VALUE image_set_pixel_rgba(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_r, VALUE rb_g, VALUE rb_b, VALUE rb_a) {
+    ZenImage* img;
+    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
+    int x = NUM2INT(rb_x);
+    int y = NUM2INT(rb_y);
+    uint32_t r = (uint32_t)(NUM2INT(rb_r) & 0xFF);
+    uint32_t g = (uint32_t)(NUM2INT(rb_g) & 0xFF);
+    uint32_t b = (uint32_t)(NUM2INT(rb_b) & 0xFF);
+    uint32_t a = (uint32_t)(NUM2INT(rb_a) & 0xFF);
+    uint32_t col = (a << 24) | (b << 16) | (g << 8) | r;
+    zen_image_set_pixel(img, x, y, col);
+    return self;
+}
+
 static VALUE image_get_pixels(VALUE self) {
     ZenImage* img;
     TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
@@ -428,6 +442,33 @@ static VALUE shader_set_vec4(VALUE self, VALUE rb_name, VALUE rb_x, VALUE rb_y, 
     return Qnil;
 }
 
+static VALUE shader_set_vec4_array(VALUE self, VALUE rb_name, VALUE rb_data) {
+    ZenShader* shader;
+    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
+    if (RB_TYPE_P(rb_data, T_STRING)) {
+        int count = (int)(RSTRING_LEN(rb_data) / (4 * sizeof(float)));
+        if (count > 0) {
+            zen_shader_set_vec4_array(shader, StringValueCStr(rb_name), count, (const float*)RSTRING_PTR(rb_data));
+        }
+    } else if (RB_TYPE_P(rb_data, T_ARRAY)) {
+        long len = RARRAY_LEN(rb_data);
+        int count = (int)(len / 4);
+        if (count > 0) {
+            float* buf = (float*)malloc(sizeof(float) * count * 4);
+            if (buf) {
+                for (int i = 0; i < count * 4; i++) {
+                    buf[i] = (float)NUM2DBL(rb_ary_entry(rb_data, i));
+                }
+                zen_shader_set_vec4_array(shader, StringValueCStr(rb_name), count, buf);
+                free(buf);
+            }
+        }
+    } else {
+        rb_raise(rb_eArgError, "Expected packed float String or flat Array of floats for vec4_array");
+    }
+    return Qnil;
+}
+
 static VALUE shader_set_mat4(VALUE self, VALUE rb_name, VALUE rb_mat) {
     ZenShader* shader;
     TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
@@ -442,6 +483,17 @@ static VALUE shader_set_mat4(VALUE self, VALUE rb_name, VALUE rb_mat) {
         rb_raise(rb_eArgError, "Expected 16-element Array of floats or packed String for mat4");
     }
     zen_shader_set_mat4(shader, StringValueCStr(rb_name), m);
+    return Qnil;
+}
+
+static VALUE shader_set_texture(VALUE self, VALUE rb_name, VALUE rb_unit, VALUE rb_img) {
+    ZenShader* shader;
+    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
+    ZenImage* img = NULL;
+    if (rb_obj_is_kind_of(rb_img, rb_cNativeImage)) {
+        TypedData_Get_Struct(rb_img, ZenImage, &zenoo_image_data_type, img);
+    }
+    zen_shader_set_texture(shader, StringValueCStr(rb_name), NUM2INT(rb_unit), img);
     return Qnil;
 }
 
@@ -1314,6 +1366,7 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "msaa_samples", image_get_msaa_samples, 0);
     rb_define_method(rb_cNativeImage, "raw_get_pixel", image_get_pixel, 2);
     rb_define_method(rb_cNativeImage, "raw_set_pixel", image_set_pixel, 3);
+    rb_define_method(rb_cNativeImage, "raw_set_pixel_rgba", image_set_pixel_rgba, 6);
     rb_define_method(rb_cNativeImage, "raw_get_pixels", image_get_pixels, 0);
     rb_define_method(rb_cNativeImage, "raw_set_pixels", image_set_pixels, 1);
     rb_define_method(rb_cNativeImage, "sync", image_sync, 0);
@@ -1331,7 +1384,9 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeShader, "set_vec2", shader_set_vec2, 3);
     rb_define_method(rb_cNativeShader, "set_vec3", shader_set_vec3, 4);
     rb_define_method(rb_cNativeShader, "set_vec4", shader_set_vec4, 5);
+    rb_define_method(rb_cNativeShader, "set_vec4_array", shader_set_vec4_array, 2);
     rb_define_method(rb_cNativeShader, "set_mat4", shader_set_mat4, 2);
+    rb_define_method(rb_cNativeShader, "set_texture", shader_set_texture, 3);
 
     // 5. Renderer
     VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");

@@ -354,7 +354,9 @@ void       zen_shader_set_float(ZenShader* shader, const char* name, float value
 void       zen_shader_set_vec2(ZenShader* shader, const char* name, float x, float y);
 void       zen_shader_set_vec3(ZenShader* shader, const char* name, float x, float y, float z);
 void       zen_shader_set_vec4(ZenShader* shader, const char* name, float x, float y, float z, float w);
+void       zen_shader_set_vec4_array(ZenShader* shader, const char* name, int count, const float* vec4_data);
 void       zen_shader_set_mat4(ZenShader* shader, const char* name, const float* mat4);
+void       zen_shader_set_texture(ZenShader* shader, const char* name, int unit, ZenImage* image);
 
 // ==========================================
 // 4. 汎用 Quad バッチ & GC フック

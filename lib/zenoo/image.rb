@@ -57,10 +57,10 @@ class Zenoo::Image
   # ピクセル色取得: image[x, y] -> Color
   def [](x, y)
     col = raw_get_pixel(x.to_i, y.to_i)
-    r = (col >> 24) & 0xFF
-    g = (col >> 16) & 0xFF
-    b = (col >> 8) & 0xFF
-    a = col & 0xFF
+    r = col & 0xFF
+    g = (col >> 8) & 0xFF
+    b = (col >> 16) & 0xFF
+    a = (col >> 24) & 0xFF
     Zenoo::Color.new(r, g, b, a)
   end
 
@@ -71,8 +71,7 @@ class Zenoo::Image
     g = (c[1] * 255.0).round.clamp(0, 255)
     b = (c[2] * 255.0).round.clamp(0, 255)
     a = (c[3] * 255.0).round.clamp(0, 255)
-    u32 = (r << 24) | (g << 16) | (b << 8) | a
-    raw_set_pixel(x.to_i, y.to_i, u32)
+    raw_set_pixel_rgba(x.to_i, y.to_i, r, g, b, a)
   end
 
   alias get_pixel []

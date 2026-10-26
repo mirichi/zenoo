@@ -5,11 +5,13 @@ module Zenoo
     attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :anchor, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image, :parent
     attr_accessor :blend, :shader, :uniforms, :camera
 
-    def initialize(x = 0.0, y = 0.0, image = nil, anchor: :top_left, pivot: :center, blend: :alpha, shader: nil, uniforms: nil, camera: true, parent: nil)
+    def initialize(x = 0.0, y = 0.0, image = nil, width: nil, height: nil, anchor: :top_left, pivot: :center, blend: :alpha, shader: nil, uniforms: nil, camera: true, parent: nil)
       @x = x.to_f
       @y = y.to_f
       @z = 0.0
       @image = image
+      @width = width ? width.to_f : nil
+      @height = height ? height.to_f : nil
       @angle = 0.0
       @scale_x = 1.0
       @scale_y = 1.0
@@ -209,11 +211,12 @@ module Zenoo
       old_img = @image
       @image = v
 
-      # 画像サイズが変わっていないならコライダーは影響を受けない (アニメーションやフラッシュ切り替え時の再計算を排除)
-      old_w = old_img ? old_img.width : 0
-      old_h = old_img ? old_img.height : 0
-      new_w = v ? v.width : 0
-      new_h = v ? v.height : 0
+      # 明示的に width / height が両方設定されている場合、または画像サイズが変わっていないならコライダーや子座標は影響を受けない
+      return if @width && @height
+      old_w = @width || (old_img ? old_img.width : 0)
+      old_h = @height || (old_img ? old_img.height : 0)
+      new_w = @width || (v ? v.width : 0)
+      new_h = @height || (v ? v.height : 0)
       return if old_w == new_w && old_h == new_h
 
       @world_dirty = true
@@ -440,11 +443,43 @@ module Zenoo
     end
 
     def width
-      @image ? @image.width.to_f : 0.0
+      @width || (@image ? @image.width.to_f : 0.0)
+    end
+
+    def width=(v)
+      vf = v ? v.to_f : nil
+      return if @width == vf
+      old_w = width
+      @width = vf
+      return if old_w == width
+
+      @world_dirty = true
+      if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
+        @collider_shape.dirty_size!
+      else
+        @collider_shape&.dirty_pos!
+      end
+      dirty_children_pos! if @children
     end
 
     def height
-      @image ? @image.height.to_f : 0.0
+      @height || (@image ? @image.height.to_f : 0.0)
+    end
+
+    def height=(v)
+      vf = v ? v.to_f : nil
+      return if @height == vf
+      old_h = height
+      @height = vf
+      return if old_h == height
+
+      @world_dirty = true
+      if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
+        @collider_shape.dirty_size!
+      else
+        @collider_shape&.dirty_pos!
+      end
+      dirty_children_pos! if @children
     end
 
     # コライダーの設定

@@ -132,6 +132,9 @@
     .card.articulated::before {
       background: linear-gradient(90deg, #00ffcc, #38bdf8);
     }
+    .card.skinned_mesh::before {
+      background: linear-gradient(90deg, #c084fc, #ec4899);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -158,6 +161,8 @@
     .card.coords .card-tag { color: #38bdf8; }
     .card.particles .card-tag { color: #f59e0b; }
     .card.danmaku .card-tag { color: #ec4899; }
+    .card.articulated .card-tag { color: #00ffcc; }
+    .card.skinned_mesh .card-tag { color: #c084fc; }
 
     .card h2 {
       font-size: 22px;
@@ -341,6 +346,14 @@
     .card.articulated .btn-launch:hover {
       background: #22d3ee;
       box-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
+    }
+    .card.skinned_mesh .btn-launch {
+      background: #a855f7;
+      color: #fff;
+    }
+    .card.skinned_mesh .btn-launch:hover {
+      background: #c084fc;
+      box-shadow: 0 0 20px rgba(192, 132, 252, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -668,6 +681,25 @@
         </ul>
       </div>
       <a href="articulated/" class="btn-launch">多関節デモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- 2D SkinnedMesh & Bone Demo Card -->
+    <div class="card skinned_mesh">
+      <div>
+        <div class="card-tag">Mesh &amp; 2D Skinning</div>
+        <h2>2D SkinnedMesh &amp; Bone</h2>
+        <p class="desc">
+          頂点シェーダーによる高速 2D スキンメッシュアニメーション。多関節チェーンの自動重み付け、白黒グラデーション Image による関節ブレンド、RGBA 4色塗り分けによる分岐スキニングを体験できます。
+        </p>
+        <ul class="features">
+          <li>2D ボーン階層 (Bone) と格子状メッシュ (SkinnedMesh) の連動</li>
+          <li>重みマップ (Weight Map) に基づく頂点シェーダー高速変形 (GPU スキニング)</li>
+          <li>白黒グラデーション (2ボーン) &amp; RGBA 4チャンネル (4ボーン) 塗り分け対応</li>
+          <li>通常 Sprite (武器・頭部パーツ) とのボーン階層混在表示</li>
+          <li>[SPACE] ボーン表示切替、[W] ウェイトマッププレビュー表示切替</li>
+        </ul>
+      </div>
+      <a href="skinned_mesh/" class="btn-launch">スキニングデモを起動 (Launch Demo) →</a>
     </div>
   </main>
 

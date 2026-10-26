@@ -58,7 +58,9 @@ void sp_ZenShader_set_float(sp_ZenShader* s, const char* name, double val);
 void sp_ZenShader_set_vec2(sp_ZenShader* s, const char* name, double x, double y);
 void sp_ZenShader_set_vec3(sp_ZenShader* s, const char* name, double x, double y, double z);
 void sp_ZenShader_set_vec4(sp_ZenShader* s, const char* name, double x, double y, double z, double w);
+void sp_ZenShader_set_vec4_array(sp_ZenShader* s, const char* name, sp_int count, const char* vec4_bytes);
 void sp_ZenShader_set_mat4(sp_ZenShader* s, const char* name, const char* mat4_bytes);
+void sp_ZenShader_set_texture(sp_ZenShader* s, const char* name, sp_int unit, sp_RbVal image_val);
 
 // Window / Input / Renderer ラッパー
 sp_int sp_zen_win_init(sp_int w, sp_int h, const char* title, sp_int fullscreen);

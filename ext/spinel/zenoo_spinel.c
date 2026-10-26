@@ -176,6 +176,12 @@ void sp_ZenImage_set_pixel(sp_ZenImage* s, sp_int x, sp_int y, sp_int color) {
     zen_image_set_pixel(s->image, (int)x, (int)y, (uint32_t)color);
 }
 
+void sp_ZenImage_set_pixel_rgba(sp_ZenImage* s, sp_int x, sp_int y, sp_int r, sp_int g, sp_int b, sp_int a) {
+    if (!s || !s->image) return;
+    uint32_t col = ((uint32_t)(a & 0xFF) << 24) | ((uint32_t)(b & 0xFF) << 16) | ((uint32_t)(g & 0xFF) << 8) | (uint32_t)(r & 0xFF);
+    zen_image_set_pixel(s->image, (int)x, (int)y, col);
+}
+
 void sp_ZenImage_sync(sp_ZenImage* s) {
     if (!s || !s->image) return;
     zen_image_sync_to_gpu(s->image);
@@ -235,9 +241,26 @@ void sp_ZenShader_set_vec4(sp_ZenShader* s, const char* name, double x, double y
     if (s && s->shader) zen_shader_set_vec4(s->shader, name, (float)x, (float)y, (float)z, (float)w);
 }
 
+void sp_ZenShader_set_vec4_array(sp_ZenShader* s, const char* name, sp_int count, const char* vec4_bytes) {
+    if (s && s->shader && vec4_bytes && count > 0) {
+        zen_shader_set_vec4_array(s->shader, name, (int)count, (const float*)vec4_bytes);
+    }
+}
+
 void sp_ZenShader_set_mat4(sp_ZenShader* s, const char* name, const char* mat4_bytes) {
     if (s && s->shader && mat4_bytes) {
         zen_shader_set_mat4(s->shader, name, (const float*)mat4_bytes);
+    }
+}
+
+void sp_ZenShader_set_texture(sp_ZenShader* s, const char* name, sp_int unit, sp_RbVal image_val) {
+    if (s && s->shader) {
+        ZenImage* img = NULL;
+        if (image_val.tag == SP_TAG_OBJ && image_val.v.p) {
+            sp_ZenImage* zimg = (sp_ZenImage*)image_val.v.p;
+            img = zimg->image;
+        }
+        zen_shader_set_texture(s->shader, name, (int)unit, img);
     }
 }
 
