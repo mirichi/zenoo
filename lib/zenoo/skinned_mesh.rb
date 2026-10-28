@@ -90,9 +90,13 @@ module Zenoo
 
     SKINNED_VERTEX_SHADER = <<~'GLSL'
       #version 330 core
-      layout (location = 0) in vec2 in_pos;
-      layout (location = 1) in vec2 in_uv;
-      layout (location = 2) in vec4 in_color;
+      layout (location = 0) in vec2  in_pos;
+      layout (location = 1) in vec2  in_uv;
+      layout (location = 2) in vec4  in_color;
+      layout (location = 3) in vec4  in_inst_mat;
+      layout (location = 4) in vec4  in_inst_trans;
+      layout (location = 5) in vec4  in_inst_color;
+      layout (location = 6) in vec4  in_inst_uv;
 
       uniform vec2 u_resolution;
       uniform float u_flip_y;
@@ -102,6 +106,7 @@ module Zenoo
       uniform int u_bone_count;
       uniform vec4 u_bone_m[8];          // 各ボーンの回転・拡大縮小 2x2 行列 (m00, m01, m10, m11)
       uniform vec4 u_bone_t[8];          // 各ボーンの平行移動ベクトル (tx, ty, 0, 0)
+      uniform vec2 u_bind_origin;        // バインド時の画像左上座標 (tl_x, tl_y)
       uniform vec4 u_view;               // tx, ty, zoom, 0 (カメラ・画面オフセット)
       uniform vec4 u_tint;               // 全体乗算カラー (r, g, b, a)
 
@@ -116,21 +121,22 @@ module Zenoo
       }
 
       void main() {
-          vec2 norm_uv = in_color.xy;
+          vec2 norm_uv = in_uv;
           vec2 w_uv = u_weight_uv_rect.xy + norm_uv * u_weight_uv_rect.zw;
           vec4 w_tex = texture(u_weight_map, w_uv);
 
-          vec2 skinned_pos = in_pos;
+          vec2 bind_pos = in_pos + u_bind_origin;
+          vec2 skinned_pos = bind_pos;
 
           if (u_bone_count <= 0) {
-              skinned_pos = in_pos;
+              skinned_pos = bind_pos;
           } else if (u_bone_count == 1 || u_weight_mode == 0) {
-              skinned_pos = transform_bone(0, in_pos);
+              skinned_pos = transform_bone(0, bind_pos);
           } else if (u_weight_mode == 1) {
               // 2ボーン 白黒(輝度/R)グラデーションモード: 黒(0.0)=Bone0, 白(1.0)=Bone1
               float t = clamp(w_tex.r, 0.0, 1.0);
-              vec2 p0 = transform_bone(0, in_pos);
-              vec2 p1 = transform_bone(1, in_pos);
+              vec2 p0 = transform_bone(0, bind_pos);
+              vec2 p1 = transform_bone(1, bind_pos);
               skinned_pos = mix(p0, p1, t);
           } else if (u_weight_mode == 3) {
               // 連続チェーンモード (ボーン数 2..8): Rチャンネルに正規化されたチェーン位置 (0.0 .. 1.0) が格納されている
@@ -140,8 +146,8 @@ module Zenoo
               float frac_t = pos_f - float(idx0);
               // smoothstep 補間で関節の折れを滑らかにする
               float smooth_t = frac_t * frac_t * (3.0 - 2.0 * frac_t);
-              vec2 p0 = transform_bone(idx0, in_pos);
-              vec2 p1 = transform_bone(idx1, in_pos);
+              vec2 p0 = transform_bone(idx0, bind_pos);
+              vec2 p1 = transform_bone(idx1, bind_pos);
               skinned_pos = mix(p0, p1, smooth_t);
           } else {
               // RGBA 4チャンネル独立ウェイトモード (R=Bone0, G=Bone1, B=Bone2, A=Bone3)
@@ -156,12 +162,12 @@ module Zenoo
                   w1 *= inv_sum;
                   w2 *= inv_sum;
                   w3 *= inv_sum;
-                  skinned_pos = transform_bone(0, in_pos) * w0;
-                  if (u_bone_count > 1 && w1 > 0.0) skinned_pos += transform_bone(1, in_pos) * w1;
-                  if (u_bone_count > 2 && w2 > 0.0) skinned_pos += transform_bone(2, in_pos) * w2;
-                  if (u_bone_count > 3 && w3 > 0.0) skinned_pos += transform_bone(3, in_pos) * w3;
+                  skinned_pos = transform_bone(0, bind_pos) * w0;
+                  if (u_bone_count > 1 && w1 > 0.0) skinned_pos += transform_bone(1, bind_pos) * w1;
+                  if (u_bone_count > 2 && w2 > 0.0) skinned_pos += transform_bone(2, bind_pos) * w2;
+                  if (u_bone_count > 3 && w3 > 0.0) skinned_pos += transform_bone(3, bind_pos) * w3;
               } else {
-                  skinned_pos = transform_bone(0, in_pos);
+                  skinned_pos = transform_bone(0, bind_pos);
               }
           }
 
@@ -173,8 +179,8 @@ module Zenoo
           ndc.y = ndc.y * flip;
           gl_Position = vec4(ndc, 0.0, 1.0);
 
-          v_color = u_tint;
-          v_uv = in_uv;
+          v_color = u_tint * in_color;
+          v_uv = in_inst_uv.xy + in_uv * in_inst_uv.zw;
       }
     GLSL
 
@@ -246,18 +252,15 @@ module Zenoo
 
     def x=(v)
       @x = v.to_f
-      build_mesh
     end
 
     def y=(v)
       @y = v.to_f
-      build_mesh
     end
 
     def anchor=(v)
       @anchor = v
       @anchor_x, @anchor_y = Collision.parse_anchor(v)
-      build_mesh
     end
 
     # 重み画像の設定
@@ -465,6 +468,11 @@ module Zenoo
       w_uv = @weight_map ? @weight_map.uv : [0.0, 0.0, 1.0, 1.0]
       bone_count = @active_bone_count || [@bones.length, MAX_BONES].min
 
+      img_w = @image.width.to_f
+      img_h = @image.height.to_f
+      tl_x = @x - @anchor_x * img_w
+      tl_y = @y - @anchor_y * img_h
+
       uniforms = {
         u_weight_map: @weight_map,
         u_weight_uv_rect: w_uv,
@@ -472,6 +480,7 @@ module Zenoo
         u_bone_count: bone_count,
         u_bone_m: @bone_m_packed,
         u_bone_t: @bone_t_packed,
+        u_bind_origin: [tl_x, tl_y],
         u_view: view_vec,
         u_tint: tint_vec
       }
@@ -560,60 +569,14 @@ module Zenoo
       @bone_t_packed = @bone_t_data.pack("f*")
     end
 
-    # 画像を div_x × div_y の格子状三角形メッシュに分割してバイナリ構築
-    # 頂点レイアウト: POS2_UV2_COLOR4 (8 floats/vertex)
-    # ※ color.xy に正規化ローカルUV (0.0 .. 1.0) を格納し、weight_map のサンプリングに使用
+    # 画像を div_x × div_y のインデックス付き格子メッシュ (Mesh.grid) として VRAM 上に構築
     def build_mesh
       return unless @image
 
-      img_w = @image.width.to_f
-      img_h = @image.height.to_f
-      u0, v0, uw, vh = @image.uv
-
-      tl_x = @x - @anchor_x * img_w
-      tl_y = @y - @anchor_y * img_h
-
-      nx = @div_x
-      ny = @div_y
-      inv_nx = 1.0 / nx.to_f
-      inv_ny = 1.0 / ny.to_f
-
-      verts = []
-      ny.times do |iy|
-        ty0 = iy * inv_ny
-        ty1 = (iy + 1) * inv_ny
-        py0 = tl_y + ty0 * img_h
-        py1 = tl_y + ty1 * img_h
-        tv0 = v0 + ty0 * vh
-        tv1 = v0 + ty1 * vh
-
-        nx.times do |ix|
-          tx0 = ix * inv_nx
-          tx1 = (ix + 1) * inv_nx
-          px0 = tl_x + tx0 * img_w
-          px1 = tl_x + tx1 * img_w
-          tu0 = u0 + tx0 * uw
-          tu1 = u0 + tx1 * uw
-
-          # Triangle 1: (0,0) -> (0,1) -> (1,0)
-          verts.push(
-            px0, py0, tu0, tv0, tx0, ty0, 1.0, 1.0,
-            px0, py1, tu0, tv1, tx0, ty1, 1.0, 1.0,
-            px1, py0, tu1, tv0, tx1, ty0, 1.0, 1.0,
-            # Triangle 2: (1,0) -> (0,1) -> (1,1)
-            px1, py0, tu1, tv0, tx1, ty0, 1.0, 1.0,
-            px0, py1, tu0, tv1, tx0, ty1, 1.0, 1.0,
-            px1, py1, tu1, tv1, tx1, ty1, 1.0, 1.0
-          )
-        end
-      end
-
-      total_vertices = nx * ny * 6
-      @mesh = Mesh.new(
-        data: verts.pack("f*"),
-        count: total_vertices,
-        pipeline: :textured_triangles,
-        image: @image,
+      @mesh = Mesh.grid(
+        @image,
+        cols: @div_x,
+        rows: @div_y,
         shader: self.class.shader,
         blend: @blend
       )

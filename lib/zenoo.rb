@@ -42,29 +42,30 @@ require_relative 'zenoo/skinned_mesh'
 require_relative 'zenoo/profiler'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
-Window        = Zenoo::Window        unless defined?(Window)
-Canvas        = Zenoo::Canvas        unless defined?(Canvas)
-Input         = Zenoo::Input         unless defined?(Input)
-Image         = Zenoo::Image         unless defined?(Image)
-Mesh          = Zenoo::Mesh          unless defined?(Mesh)
-Bone          = Zenoo::Bone          unless defined?(Bone)
-SkinnedMesh   = Zenoo::SkinnedMesh   unless defined?(SkinnedMesh)
-Shader        = Zenoo::Shader        unless defined?(Shader)
-Color         = Zenoo::Color         unless defined?(Color)
-Font          = Zenoo::Font          unless defined?(Font)
-GUI           = Zenoo::GUI           unless defined?(GUI)
-Audio         = Zenoo::Audio         unless defined?(Audio)
-Sound         = Zenoo::Sound         unless defined?(Sound)
-SoundEffect   = Zenoo::SoundEffect   unless defined?(SoundEffect)
-Collision     = Zenoo::Collision     unless defined?(Collision)
-Physics       = Zenoo::Physics       unless defined?(Physics)
-Camera        = Zenoo::Camera        unless defined?(Camera)
-Easing        = Zenoo::Easing        unless defined?(Easing)
-Tween         = Zenoo::Tween         unless defined?(Tween)
-Sprite        = Zenoo::Sprite        unless defined?(Sprite)
-Tilemap       = Zenoo::Tilemap       unless defined?(Tilemap)
-PhysicsSprite = Zenoo::PhysicsSprite unless defined?(PhysicsSprite)
-Profiler      = Zenoo::Profiler      unless defined?(Profiler)
+Window        = Zenoo::Window
+Canvas        = Zenoo::Canvas
+Input         = Zenoo::Input
+Image         = Zenoo::Image
+Mesh          = Zenoo::Mesh
+InstanceBuffer = Zenoo::InstanceBuffer
+Bone          = Zenoo::Bone
+SkinnedMesh   = Zenoo::SkinnedMesh
+Shader        = Zenoo::Shader
+Color         = Zenoo::Color
+Font          = Zenoo::Font
+GUI           = Zenoo::GUI
+Audio         = Zenoo::Audio
+Sound         = Zenoo::Sound
+SoundEffect   = Zenoo::SoundEffect
+Collision     = Zenoo::Collision
+Physics       = Zenoo::Physics
+Camera        = Zenoo::Camera
+Easing        = Zenoo::Easing
+Tween         = Zenoo::Tween
+Sprite        = Zenoo::Sprite
+Tilemap       = Zenoo::Tilemap
+PhysicsSprite = Zenoo::PhysicsSprite
+Profiler      = Zenoo::Profiler
 
 # ====================================================
 # CRuby 専用 開発支援モジュール (Spinel 静的走査回避)

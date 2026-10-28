@@ -19,6 +19,11 @@ typedef struct sp_ZenShader_s {
     ZenShader* shader;
 } sp_ZenShader;
 
+typedef struct sp_ZenMesh_s {
+    sp_int cls_id;
+    ZenMesh* mesh;
+} sp_ZenMesh;
+
 // Image メソッド
 void sp_ZenImage_free(void* p);
 sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h);
@@ -131,6 +136,33 @@ void sp_zen_renderer_draw_buffer(
     sp_int base_vertex_count,
     const char* data,
     sp_int count,
+    sp_RbVal image_val,
+    sp_RbVal shader_val
+);
+
+void sp_ZenMesh_free(void* p);
+sp_ZenMesh* sp_ZenMesh_new(
+    sp_int cls_id,
+    sp_int topology,
+    const char* layout,
+    const char* vdata,
+    sp_int vbytes,
+    sp_int vcount,
+    const char* idata,
+    sp_int icount
+);
+void sp_ZenMesh_update_vertices(sp_ZenMesh* s, const char* vdata, sp_int vbytes, sp_int offset, sp_int vcount);
+void sp_ZenMesh_update_indices(sp_ZenMesh* s, const char* idata, sp_int icount);
+sp_bool sp_ZenMesh_is_dynamic(sp_ZenMesh* s);
+sp_int sp_ZenMesh_vertex_count(sp_ZenMesh* s);
+sp_int sp_ZenMesh_index_count(sp_ZenMesh* s);
+
+void sp_zen_renderer_draw_mesh(
+    sp_RbVal geom_mesh_val,
+    sp_RbVal inst_buffer_val,
+    const char* inst_layout,
+    const char* inst_data,
+    sp_int inst_count,
     sp_RbVal image_val,
     sp_RbVal shader_val
 );

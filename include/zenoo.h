@@ -390,6 +390,47 @@ void       zen_draw_buffer(int topology,
                            ZenImage* texture,
                            ZenShader* shader);
 
+// ==========================================
+// 4.5. メッシュ (ZenMesh: VRAM VBO/IBO & 2バッファインスタンシング)
+// ==========================================
+typedef struct ZenMesh {
+    uint32_t vbo;          // バッファ ID (Stream 0 頂点VBO または Stream 1 インスタンスVBO)
+    uint32_t ibo;          // インデックスバッファ ID (0 = 未使用)
+    int      vertex_count; // 要素数 (頂点数 または インスタンス数)
+    int      index_count;  // インデックス数 (0 = インデックスなし)
+    int      topology;     // ZEN_TOPOLOGY_TRIANGLES 等
+    int      is_dynamic;   // 0 = GL_STATIC_DRAW, 1 = GL_DYNAMIC_DRAW (自動昇格)
+    size_t   vbo_bytes;    // 現在のVBO確保バイト数
+    size_t   ibo_bytes;    // 現在のIBO確保バイト数
+    uint8_t  layout[16];   // 属性レイアウト (null終端バイト列, 例: "\x02\x02\x01")
+} ZenMesh;
+
+ZenMesh*   zen_mesh_create(int topology,
+                           const uint8_t* layout,
+                           const void* vertex_data,
+                           size_t vertex_bytes,
+                           int vertex_count,
+                           const uint32_t* index_data,
+                           int index_count);
+void       zen_mesh_destroy(ZenMesh* mesh);
+void       zen_mesh_update_vertices(ZenMesh* mesh,
+                                    size_t offset_bytes,
+                                    const void* vertex_data,
+                                    size_t byte_size,
+                                    int vertex_count);
+void       zen_mesh_update_indices(ZenMesh* mesh,
+                                   const uint32_t* index_data,
+                                   int index_count);
+
+// 2ストリームVBO (Stream 0: 頂点VBO [geom_mesh または s_quad_vbo] + IBO, Stream 1: インスタンスVBO [inst_buffer または inst_data]) 描画 API
+void       zen_draw_mesh_instanced(ZenMesh* geom_mesh,
+                                   ZenMesh* inst_buffer,
+                                   const uint8_t* inst_layout,
+                                   const void* inst_data,
+                                   int instance_count,
+                                   ZenImage* texture,
+                                   ZenShader* shader);
+
 // ブレンドモード定数と制御 API
 enum ZenBlendMode {
     ZEN_BLEND_ALPHA    = 0, // 通常アルファブレンド

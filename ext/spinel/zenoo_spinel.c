@@ -555,6 +555,96 @@ static ZenShader* unpack_shader(sp_RbVal val) {
     return NULL;
 }
 
+static ZenMesh* unpack_mesh(sp_RbVal val) {
+    if (val.tag == SP_TAG_OBJ && val.v.p) {
+        sp_ZenMesh* m = (sp_ZenMesh*)val.v.p;
+        return m->mesh;
+    }
+    return NULL;
+}
+
+void sp_ZenMesh_free(void* p) {
+    sp_ZenMesh* s = (sp_ZenMesh*)p;
+    if (s && s->mesh) {
+        zen_mesh_destroy(s->mesh);
+        s->mesh = NULL;
+    }
+}
+
+sp_ZenMesh* sp_ZenMesh_new(
+    sp_int cls_id,
+    sp_int topology,
+    const char* layout,
+    const char* vdata,
+    sp_int vbytes,
+    sp_int vcount,
+    const char* idata,
+    sp_int icount
+) {
+    zen_set_gc_trigger_callback(spinel_gc_hook);
+    sp_ZenMesh* s = (sp_ZenMesh*)sp_gc_alloc(sizeof(sp_ZenMesh), sp_ZenMesh_free, NULL);
+    memset(s, 0, sizeof(*s));
+    s->cls_id = cls_id;
+    s->mesh = zen_mesh_create(
+        (int)topology,
+        (layout && layout[0]) ? (const uint8_t*)layout : NULL,
+        (vbytes > 0 && vdata) ? (const void*)vdata : NULL,
+        (size_t)(vbytes > 0 ? vbytes : 0),
+        (int)vcount,
+        (icount > 0 && idata) ? (const uint32_t*)idata : NULL,
+        (int)icount
+    );
+    return s;
+}
+
+void sp_ZenMesh_update_vertices(sp_ZenMesh* s, const char* vdata, sp_int vbytes, sp_int offset, sp_int vcount) {
+    if (s && s->mesh && vdata && vbytes > 0) {
+        zen_mesh_update_vertices(s->mesh, (size_t)offset, (const void*)vdata, (size_t)vbytes, (int)vcount);
+    }
+}
+
+void sp_ZenMesh_update_indices(sp_ZenMesh* s, const char* idata, sp_int icount) {
+    if (s && s->mesh) {
+        zen_mesh_update_indices(s->mesh, (icount > 0 && idata) ? (const uint32_t*)idata : NULL, (int)icount);
+    }
+}
+
+sp_bool sp_ZenMesh_is_dynamic(sp_ZenMesh* s) {
+    return (s && s->mesh && s->mesh->is_dynamic) ? true : false;
+}
+
+sp_int sp_ZenMesh_vertex_count(sp_ZenMesh* s) {
+    return (s && s->mesh) ? (sp_int)s->mesh->vertex_count : 0;
+}
+
+sp_int sp_ZenMesh_index_count(sp_ZenMesh* s) {
+    return (s && s->mesh) ? (sp_int)s->mesh->index_count : 0;
+}
+
+void sp_zen_renderer_draw_mesh(
+    sp_RbVal geom_mesh_val,
+    sp_RbVal inst_buffer_val,
+    const char* inst_layout,
+    const char* inst_data,
+    sp_int inst_count,
+    sp_RbVal image_val,
+    sp_RbVal shader_val
+) {
+    ZenMesh*   geom_mesh   = unpack_mesh(geom_mesh_val);
+    ZenMesh*   inst_buffer = unpack_mesh(inst_buffer_val);
+    ZenImage*  img         = unpack_image(image_val);
+    ZenShader* sh          = unpack_shader(shader_val);
+    zen_draw_mesh_instanced(
+        geom_mesh,
+        inst_buffer,
+        (inst_layout && inst_layout[0]) ? (const uint8_t*)inst_layout : NULL,
+        (inst_count > 0 && inst_data) ? (const void*)inst_data : NULL,
+        (int)inst_count,
+        img,
+        sh
+    );
+}
+
 
 
 void sp_zen_renderer_draw_buffer(

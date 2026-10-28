@@ -68,7 +68,8 @@ static double s_frame_start_time = 0.0;  // 現フレームの begin_frame 時�
 static float  s_delta_time = (float)ZEN_DEFAULT_DT;
 static int    s_target_fps = 60;         // デフォルト60fpsに固定
 static int    s_vsync = 0;               // デフォルト 0 (ソフトウェア精密制御)
-static int    s_window_msaa_samples = 0; // ウィンドウ直接描画のMSAA (デフォルト 0: 無効, msaa: 4等で有効化)
+static int    s_window_msaa_samples = 0; // ウィンドウ直接描画のMSAA (デフォルト 0: 完全無効・最高速、必要な場合のみ明示指定)
+static int    s_created_msaa_samples = 0;
 
 // ------------------------------------------
 // 内部: ビューポート計算
@@ -381,7 +382,9 @@ static void window_content_scale_callback(GLFWwindow* window, float xscale, floa
 // ------------------------------------------
 static int init_window(int width, int height, const char* title, GLFWmonitor* monitor, int win_width, int win_height, int visible) {
     if (s_window) {
-        // すでにウィンドウ(コンテキスト)が存在する場合は、サイズ・タイトル等の更新と可視化を行う
+        // すでにウィンドウ(コンテキスト)が存在する場合:
+        // Window.loop(..., msaa: 4) 等で MSAA サンプル数が後から変更された場合は、
+        // OpenGL オブジェクト (VBO/IBO/Texture/Shader) を共有したまま MSAA 対応ウィンドウへ再生成する
         s_viewport.base_w = width;
         s_viewport.base_h = height;
 
@@ -399,8 +402,35 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
         if (title && strlen(title) > 0) {
             strncpy(s_window_title, title, sizeof(s_window_title) - 1);
             s_window_title[sizeof(s_window_title) - 1] = '\0';
+        }
+
+#ifndef __EMSCRIPTEN__
+        if (s_created_msaa_samples != s_window_msaa_samples) {
+            glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+            glfwWindowHint(GLFW_FOCUSED, visible ? GLFW_TRUE : GLFW_FALSE);
+            glfwWindowHint(GLFW_SAMPLES, (s_window_msaa_samples > 0) ? s_window_msaa_samples : 0);
+            GLFWwindow* new_win = glfwCreateWindow(create_w, create_h, s_window_title, monitor, s_window);
+            if (new_win) {
+                GLFWwindow* old_win = s_window;
+                s_window = new_win;
+                s_created_msaa_samples = s_window_msaa_samples;
+                s_window_visible = 0;
+                glfwMakeContextCurrent(s_window);
+                glfwSwapInterval(s_vsync ? 1 : 0);
+                glfwSetFramebufferSizeCallback(s_window, framebuffer_size_callback);
+                glfwSetWindowContentScaleCallback(s_window, window_content_scale_callback);
+                zen__input_install(s_window);
+                zen__gfx_on_context_recreated();
+                glfwDestroyWindow(old_win);
+            }
+        } else if (title && strlen(title) > 0) {
             glfwSetWindowTitle(s_window, s_window_title);
         }
+#else
+        if (title && strlen(title) > 0) {
+            glfwSetWindowTitle(s_window, s_window_title);
+        }
+#endif
 
         if (monitor) {
             glfwSetWindowMonitor(s_window, monitor, 0, 0, width, height, GLFW_DONT_CARE);
@@ -472,6 +502,7 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     } else {
         glfwWindowHint(GLFW_SAMPLES, 0);
     }
+    s_created_msaa_samples = s_window_msaa_samples;
 
     s_viewport.base_w = width;
     s_viewport.base_h = height;
@@ -605,6 +636,7 @@ void zen_shutdown(void) {
     glfwTerminate();
     s_frame_open = 0;
     s_window_visible = 0;
+    s_created_msaa_samples = 0;
     s_current_monitor = NULL;
     s_in_auto_resize = 0;
 #ifdef _WIN32

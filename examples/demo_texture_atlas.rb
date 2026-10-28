@@ -209,7 +209,7 @@ def draw_gallery_item(bx, by, cat, sprite)
                    border_color: Color.new(45, 60, 85),
                    z: 6.0)
 
-  Window.draw_image(bx + 43.0, by + 30.0, sprite, z: 7.0)
+  Window.draw(bx + 43.0, by + 30.0, sprite, z: 7.0)
 
   Window.draw_text(bx + 20.0, by + 115.0, cat[:title],
                    font: Font::MPLUS, size: 13, color: Color::WHITE, z: 7.0)
@@ -262,7 +262,7 @@ def draw_ambient_field(field_x, field_y, field_w, field_h, particles, slots, dt)
   particles.each do |p|
     p.update(dt)
     sprite = slots[p.current_slot]
-    Window.draw_image(
+    Window.draw(
       p.x, p.y, sprite,
       scale: p.scale,
       pivot: :center,
@@ -297,7 +297,7 @@ def draw_atlas_preview(prev_x, prev_y, atlas, gallery_frame)
                    border_width: 1.0, border_color: Color.new(70, 90, 125), z: 51.0)
 
   sub = atlas.sub_image(gallery_frame * SLOT_SIZE, 3 * SLOT_SIZE, SLOT_SIZE, SLOT_SIZE)
-  Window.draw_image(
+  Window.draw(
     prev_x + 38.0, prev_y + 50.0, sub,
     scale: 1.0,
     z: 52.0
@@ -341,7 +341,7 @@ def draw_inspector_panel(panel_x, panel_y, panel_w, panel_h, atlas, gallery_fram
   Window.draw_rect(atlas_draw_x - 2.0, atlas_draw_y - 2.0, ATLAS_SIZE + 4.0, ATLAS_SIZE + 4.0,
                    radius: 4.0, color: Color.new(10, 12, 18),
                    border_width: 1.5, border_color: Color.new(70, 90, 125), z: 51.0)
-  Window.draw_image(atlas_draw_x, atlas_draw_y, atlas, z: 52.0)
+  Window.draw(atlas_draw_x, atlas_draw_y, atlas, z: 52.0)
 
   draw_atlas_grid(atlas_draw_x, atlas_draw_y)
   draw_atlas_preview(atlas_draw_x + ATLAS_SIZE + 20.0, atlas_draw_y + 20.0, atlas, gallery_frame)

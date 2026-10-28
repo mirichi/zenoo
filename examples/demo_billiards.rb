@@ -335,7 +335,7 @@ class Ball
       scale = diam / atlas.width
       c_f4 = [@color[0] / 255.0, @color[1] / 255.0, @color[2] / 255.0, 1.0]
 
-      Window.draw_image(
+      Window.draw(
         @x, @y, atlas,
         scale: scale,
         anchor: :center,

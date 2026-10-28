@@ -349,6 +349,10 @@ module Zenoo
       @active_camera = @camera_disabled_depth.zero? ? @camera : nil
     end
 
+    def self.active_camera
+      @active_camera
+    end
+
     # カメラ設定 (Zenoo::Camera)
     # - 引数なし: 現在のカメラを取得
     # - 引数あり (ブロックなし): カメラを設定
@@ -702,112 +706,76 @@ module Zenoo
       )
     end
 
-    def self.draw_image(x, y, image,
-                        anchor: :top_left,
-                        pivot: :center,
-                        color: :white,
-                        angle: 0.0,
-                        scale: nil,
-                        scale_x: 1.0,
-                        scale_y: 1.0,
-                        alpha: 255,
-                        blend: :alpha,
-                        shader: nil,
-                        uniforms: nil,
-                        camera: true,
-                        z: 0.0)
+    def self.draw(x, y, image,
+                  width: nil,
+                  height: nil,
+                  anchor: :top_left,
+                  pivot: :center,
+                  color: :white,
+                  angle: 0.0,
+                  scale: nil,
+                  scale_x: 1.0,
+                  scale_y: 1.0,
+                  alpha: 255,
+                  blend: nil,
+                  shader: nil,
+                  uniforms: nil,
+                  image_override: nil,
+                  camera: true,
+                  z: 0.0)
       return unless image
-      effective_shader = shader || default_sprite_shader
 
-      c_color = Backend.normalize_color(color || :white)
+      is_mesh = image.is_a?(Mesh)
+      if is_mesh
+        image.sync_to_gpu_if_dirty!
+        tex_img = image_override || image.image
+        native_mesh = image.native_mesh
+        eff_pipeline = image.pipeline
+        effective_shader = shader || image.shader || eff_pipeline.default_shader ||
+                           if eff_pipeline == Backend::Pipelines::SPRITE
+                             default_sprite_shader
+                           elsif eff_pipeline == Backend::Pipelines::TEXTURED_TRIANGLES || eff_pipeline == Backend::Pipelines::TEXTURED_TRIANGLE_STRIP
+                             textured_primitive_shader
+                           elsif eff_pipeline == Backend::Pipelines::CARD
+                             card_shader
+                           else
+                             flat_primitive_shader
+                           end
+        effective_uniforms = if image.uniforms && uniforms
+                               image.uniforms.merge(uniforms)
+                             else
+                               uniforms || image.uniforms
+                             end
+        eff_blend = blend || image.blend || :alpha
 
-      # alpha の適用 (0..255)
-      if alpha && alpha != 255
-        af = alpha.to_f / 255.0
-        af = 0.0 if af < 0.0
-        af = 1.0 if af > 1.0
-        c_color = [c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f * af]
-      end
-
-      # 画像サイズ
-      draw_w = image.width.to_f
-      draw_h = image.height.to_f
-
-      # アンカー (anchor: 配置基準点) から画像の左上原点 (tl_x, tl_y) を算出
-      anc_x, anc_y = Collision.parse_anchor(anchor)
-      tl_x = x.to_f - anc_x * draw_w
-      tl_y = y.to_f - anc_y * draw_h
-
-      # ピボット (pivot: 回転・拡縮の中心点 [0.0..1.0])
-      cx, cy = Collision.parse_pivot(pivot)
-
-      sx = scale ? scale.to_f : scale_x.to_f
-      sy = scale ? scale.to_f : scale_y.to_f
-
-      cam = @active_camera
-      if cam && camera
-        cz, cam_ox, cam_oy = cam.view
-        ax = (tl_x * cz) + cam_ox + @offset_x
-        ay = (tl_y * cz) + cam_oy + @offset_y
-        zw = draw_w * cz
-        zh = draw_h * cz
+        # カスタム頂点レイアウト (非 SPRITE パイプライン) の生 Mesh はそのまま描画
+        if eff_pipeline != Backend::Pipelines::SPRITE
+          return unless native_mesh && image.count > 0
+          Backend.enqueue_draw(
+            eff_pipeline,
+            nil,
+            1,
+            image: tex_img,
+            shader: effective_shader,
+            uniforms: effective_uniforms,
+            blend: Backend.normalize_blend_mode(eff_blend),
+            z: z,
+            mesh: native_mesh
+          )
+          return
+        end
       else
-        ax = tl_x + @offset_x
-        ay = tl_y + @offset_y
-        zw = draw_w
-        zh = draw_h
+        tex_img = image_override || image
+        native_mesh = nil
+        effective_shader = shader || default_sprite_shader
+        effective_uniforms = uniforms
+        eff_blend = blend || :alpha
       end
 
-      # 角度（度数法からラジアンへ変換）
-      rad = (angle ? angle.to_f : 0.0) * (Math::PI / 180.0)
-
-      # blend mode
-      b_mode = Backend.normalize_blend_mode(blend)
-
-      tw = image.texture_width.to_f
-      th = image.texture_height.to_f
-      uv0 = tw > 0.0 ? image.x.to_f / tw : 0.0
-      uv1 = th > 0.0 ? image.y.to_f / th : 0.0
-      uv2 = tw > 0.0 ? draw_w / tw : 1.0
-      uv3 = th > 0.0 ? draw_h / th : 1.0
-
-      # シェーダーへは常に左上座標 (top_left) を渡し、off_mode = 0.0 とする
-      data = [
-        ax, ay, zw, zh,
-        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        uv0, uv1, uv2, uv3,
-        rad, sx, sy, 0.0,
-        cx, cy, 0.0, 0.0
-      ].pack("f*")
-
-      Backend.enqueue_draw(
-        Backend::Pipelines::SPRITE,
-        data,
-        1,
-        image: image,
-        shader: effective_shader,
-        uniforms: uniforms,
-        blend: b_mode,
-        z: z
-      )
-    end
-
-    def self.draw_sprite(sprite)
-      return unless sprite
-      return if sprite.vanished?
-      return unless sprite.visible && (img = sprite.image)
-
-      eff_blend = sprite.blend || :alpha
-      b_mode = Backend.normalize_blend_mode(eff_blend)
-      eff_shader = sprite.shader || default_sprite_shader
-      eff_uniforms = sprite.uniforms
-
-      alpha = sprite.alpha
-      col = sprite.color
-      if col.nil? && (alpha.nil? || alpha == 255)
+      if color.nil? && (alpha.nil? || alpha == 255)
         c0 = 1.0; c1 = 1.0; c2 = 1.0; c3 = 1.0
       else
-        c_color = Backend.normalize_color(col || :white)
+        c_color = Backend.normalize_color(color || :white)
         c0 = c_color[0].to_f; c1 = c_color[1].to_f; c2 = c_color[2].to_f; c3 = c_color[3].to_f
         if alpha && alpha != 255
           af = alpha.to_f / 255.0
@@ -817,73 +785,93 @@ module Zenoo
         end
       end
 
-      draw_w = img.width.to_f
-      draw_h = img.height.to_f
-      pv_x = sprite.pivot_x
-      pv_y = sprite.pivot_y
+      draw_w = (width || image.width).to_f
+      draw_h = (height || image.height).to_f
 
-      if sprite.parent
-        tl_x = sprite.world_pivot_x - pv_x * draw_w
-        tl_y = sprite.world_pivot_y - pv_y * draw_h
-        sx = sprite.world_scale_x.to_f
-        sy = sprite.world_scale_y.to_f
-        ang = sprite.world_angle.to_f
-      else
-        tl_x = sprite.x.to_f - sprite.anchor_x * draw_w
-        tl_y = sprite.y.to_f - sprite.anchor_y * draw_h
-        sx = sprite.scale_x.to_f
-        sy = sprite.scale_y.to_f
-        ang = sprite.angle.to_f
-      end
+      anc_x, anc_y = Collision.parse_anchor(anchor)
+      pv_x, pv_y = Collision.parse_pivot(pivot)
+      wpv_x = x.to_f + (pv_x - anc_x) * draw_w
+      wpv_y = y.to_f + (pv_y - anc_y) * draw_h
 
-      sp_cam = sprite.camera
-      cam = if sp_cam.is_a?(Camera)
-              sp_cam
-            elsif sp_cam
+      sx = scale ? scale.to_f : scale_x.to_f
+      sy = scale ? scale.to_f : scale_y.to_f
+
+      cam = if camera.is_a?(Camera)
+              camera
+            elsif camera
               @active_camera
             else
               nil
             end
       if cam
         cz, cam_ox, cam_oy = cam.view
-        ax = (tl_x * cz) + cam_ox + @offset_x
-        ay = (tl_y * cz) + cam_oy + @offset_y
-        zw = draw_w * cz
-        zh = draw_h * cz
+        cox = cam_ox + @offset_x
+        coy = cam_oy + @offset_y
       else
-        ax = tl_x + @offset_x
-        ay = tl_y + @offset_y
-        zw = draw_w
-        zh = draw_h
+        cz = 1.0
+        cox = @offset_x
+        coy = @offset_y
       end
 
-      rad = ang != 0.0 ? ang * (Math::PI / 180.0) : 0.0
+      ang = angle ? angle.to_f : 0.0
+      if ang == 0.0
+        c_rot = 1.0
+        s_rot = 0.0
+      else
+        rad = ang * (Math::PI / 180.0)
+        c_rot = Math.cos(rad)
+        s_rot = Math.sin(rad)
+      end
 
-      tw = img.texture_width.to_f
-      th = img.texture_height.to_f
-      uv0 = tw > 0.0 ? img.x.to_f / tw : 0.0
-      uv1 = th > 0.0 ? img.y.to_f / th : 0.0
-      uv2 = tw > 0.0 ? draw_w / tw : 1.0
-      uv3 = th > 0.0 ? draw_h / th : 1.0
+      if is_mesh
+        m00 = sx * c_rot * cz
+        m01 = -sy * s_rot * cz
+        m10 = sx * s_rot * cz
+        m11 = sy * c_rot * cz
+        local_px = pv_x * draw_w
+        local_py = pv_y * draw_h
+      else
+        m00 = draw_w * sx * c_rot * cz
+        m01 = -draw_h * sy * s_rot * cz
+        m10 = draw_w * sx * s_rot * cz
+        m11 = draw_h * sy * c_rot * cz
+        local_px = pv_x
+        local_py = pv_y
+      end
+
+      tx = (wpv_x * cz + cox) - (m00 * local_px + m01 * local_py)
+      ty = (wpv_y * cz + coy) - (m10 * local_px + m11 * local_py)
+
+      b_mode = Backend.normalize_blend_mode(eff_blend)
+
+      if tex_img
+        tw = tex_img.texture_width.to_f
+        th = tex_img.texture_height.to_f
+        uv0 = tw > 0.0 ? tex_img.x.to_f / tw : 0.0
+        uv1 = th > 0.0 ? tex_img.y.to_f / th : 0.0
+        uv2 = tw > 0.0 ? tex_img.width.to_f / tw : 1.0
+        uv3 = th > 0.0 ? tex_img.height.to_f / th : 1.0
+      else
+        uv0 = 0.0; uv1 = 0.0; uv2 = 1.0; uv3 = 1.0
+      end
 
       data = [
-        ax, ay, zw, zh,
+        m00, m01, m10, m11,
+        tx, ty, 0.0, 0.0,
         c0, c1, c2, c3,
-        uv0, uv1, uv2, uv3,
-        rad, sx, sy, 0.0,
-        pv_x, pv_y, 0.0, 0.0
+        uv0, uv1, uv2, uv3
       ].pack("f*")
 
-      eff_z = sprite.z.to_f
       Backend.enqueue_draw(
         Backend::Pipelines::SPRITE,
         data,
         1,
-        image: img,
-        shader: eff_shader,
-        uniforms: eff_uniforms,
+        image: tex_img,
+        shader: effective_shader,
+        uniforms: effective_uniforms,
         blend: b_mode,
-        z: eff_z
+        z: z,
+        mesh: native_mesh
       )
     end
 
@@ -1052,48 +1040,6 @@ module Zenoo
         image: nil,
         shader: card_shader,
         blend: b_mode,
-        z: z
-      )
-    end
-
-    # ----------------------------------------------------
-    # 頂点バッファ (Mesh) 描画 API
-    # ----------------------------------------------------
-    def self.draw_mesh(mesh,
-                       z: 0.0,
-                       uniforms: nil,
-                       shader: nil,
-                       image: nil,
-                       blend: nil)
-      return unless mesh && mesh.data && mesh.count > 0
-
-      eff_pipeline = mesh.pipeline
-      eff_image = image || mesh.image
-      eff_shader = shader || mesh.shader || eff_pipeline.default_shader ||
-                   if eff_pipeline == Backend::Pipelines::TEXTURED_TRIANGLES || eff_pipeline == Backend::Pipelines::TEXTURED_TRIANGLE_STRIP
-                     textured_primitive_shader
-                   elsif eff_pipeline == Backend::Pipelines::SPRITE
-                     default_sprite_shader
-                   elsif eff_pipeline == Backend::Pipelines::CARD
-                     card_shader
-                   else
-                     flat_primitive_shader
-                   end
-      eff_blend = Backend.normalize_blend_mode(blend || mesh.blend)
-      eff_uniforms = if mesh.uniforms && uniforms
-                       mesh.uniforms.merge(uniforms)
-                     else
-                       uniforms || mesh.uniforms
-                     end
-
-      Backend.enqueue_draw(
-        eff_pipeline,
-        mesh.data,
-        mesh.count,
-        image: eff_image,
-        shader: eff_shader,
-        uniforms: eff_uniforms,
-        blend: eff_blend,
         z: z
       )
     end

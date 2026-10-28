@@ -140,13 +140,13 @@ module Zenoo
               if img
                 tx = draw_x + c * tw
                 ty = draw_y + r * th
-                Window.draw_image(tx, ty, img,
-                                  scale_x: @scale_x,
-                                  scale_y: @scale_y,
-                                  color: @color,
-                                  alpha: @alpha,
-                                  camera: draw_camera,
-                                  z: draw_z)
+                Window.draw(tx, ty, img,
+                            scale_x: @scale_x,
+                            scale_y: @scale_y,
+                            color: @color,
+                            alpha: @alpha,
+                            camera: draw_camera,
+                            z: draw_z)
               end
             end
             c += 1

@@ -5,6 +5,7 @@ static VALUE rb_mZenoo;
 static VALUE rb_mNative;
 static VALUE rb_cNativeImage;
 static VALUE rb_cNativeShader;
+static VALUE rb_cNativeMesh;
 static VALUE rb_cNativeFont;
 static VALUE rb_cNativeSound;
 
@@ -997,6 +998,137 @@ static VALUE input_set_ime_position(VALUE self, VALUE rb_x, VALUE rb_y) {
 }
 
 // ==========================================
+// Zenoo::Native::Mesh (TypedData)
+// ==========================================
+static void mesh_free(void* ptr) {
+    ZenMesh* mesh = (ZenMesh*)ptr;
+    if (mesh) {
+        zen_mesh_destroy(mesh);
+    }
+}
+
+static size_t mesh_memsize(const void* ptr) {
+    return ptr ? sizeof(ZenMesh) : 0;
+}
+
+static const rb_data_type_t zenoo_mesh_data_type = {
+    .wrap_struct_name = "Zenoo::Native::Mesh",
+    .function = {
+        .dmark = NULL,
+        .dfree = mesh_free,
+        .dsize = mesh_memsize,
+    },
+    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
+};
+
+static VALUE mesh_allocate(VALUE klass) {
+    return TypedData_Wrap_Struct(klass, &zenoo_mesh_data_type, NULL);
+}
+
+static VALUE mesh_init(int argc, VALUE* argv, VALUE self) {
+    VALUE rb_topology, rb_layout, rb_vdata, rb_arg4, rb_arg5, rb_arg6, rb_arg7;
+    int n = rb_scan_args(argc, argv, "43", &rb_topology, &rb_layout, &rb_vdata, &rb_arg4, &rb_arg5, &rb_arg6, &rb_arg7);
+
+    int topology = NUM2INT(rb_topology);
+    const uint8_t* layout = (NIL_P(rb_layout) || RSTRING_LEN(rb_layout) == 0) ? NULL : (const uint8_t*)StringValuePtr(rb_layout);
+
+    const void* vdata = NULL;
+    size_t vbytes = 0;
+    if (!NIL_P(rb_vdata)) {
+        Check_Type(rb_vdata, T_STRING);
+        vdata = (const void*)RSTRING_PTR(rb_vdata);
+        vbytes = (size_t)RSTRING_LEN(rb_vdata);
+    }
+
+    int vcount = 0;
+    VALUE rb_idata = Qnil;
+    VALUE rb_icount = Qnil;
+    if (n == 7) {
+        // Spinel 互換の 7 引数: (topology, layout, vdata, vbytes, vcount, idata, icount)
+        vcount = NUM2INT(rb_arg5);
+        rb_idata = rb_arg6;
+        rb_icount = rb_arg7;
+    } else {
+        // 4..6 引数: (topology, layout, vdata, vcount, idata=nil, icount=nil)
+        vcount = NUM2INT(rb_arg4);
+        rb_idata = rb_arg5;
+        rb_icount = rb_arg6;
+    }
+
+    const uint32_t* idata = NULL;
+    int icount = 0;
+    if (!NIL_P(rb_idata)) {
+        Check_Type(rb_idata, T_STRING);
+        if (RSTRING_LEN(rb_idata) > 0) {
+            idata = (const uint32_t*)RSTRING_PTR(rb_idata);
+            icount = !NIL_P(rb_icount) ? NUM2INT(rb_icount) : (int)(RSTRING_LEN(rb_idata) / sizeof(uint32_t));
+        }
+    }
+
+    ZenMesh* mesh = zen_mesh_create(topology, layout, vdata, vbytes, vcount, idata, icount);
+    if (!mesh) {
+        rb_raise(rb_eRuntimeError, "Failed to create Native::Mesh");
+    }
+    DATA_PTR(self) = mesh;
+    return self;
+}
+
+static VALUE mesh_update_vertices(int argc, VALUE* argv, VALUE self) {
+    VALUE rb_vdata, rb_offset, rb_vcount;
+    rb_scan_args(argc, argv, "12", &rb_vdata, &rb_offset, &rb_vcount);
+
+    ZenMesh* mesh;
+    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
+    if (!mesh || NIL_P(rb_vdata)) return self;
+
+    Check_Type(rb_vdata, T_STRING);
+    const void* vdata = (const void*)RSTRING_PTR(rb_vdata);
+    size_t vbytes = (size_t)RSTRING_LEN(rb_vdata);
+    size_t offset = NIL_P(rb_offset) ? 0 : (size_t)NUM2ULONG(rb_offset);
+    int vcount = NIL_P(rb_vcount) ? 0 : NUM2INT(rb_vcount);
+
+    zen_mesh_update_vertices(mesh, offset, vdata, vbytes, vcount);
+    return self;
+}
+
+static VALUE mesh_update_indices(int argc, VALUE* argv, VALUE self) {
+    VALUE rb_idata, rb_icount;
+    rb_scan_args(argc, argv, "11", &rb_idata, &rb_icount);
+
+    ZenMesh* mesh;
+    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
+    if (!mesh) return self;
+
+    const uint32_t* idata = NULL;
+    int icount = 0;
+    if (!NIL_P(rb_idata)) {
+        Check_Type(rb_idata, T_STRING);
+        idata = (const uint32_t*)RSTRING_PTR(rb_idata);
+        icount = !NIL_P(rb_icount) ? NUM2INT(rb_icount) : (int)(RSTRING_LEN(rb_idata) / sizeof(uint32_t));
+    }
+    zen_mesh_update_indices(mesh, idata, icount);
+    return self;
+}
+
+static VALUE mesh_is_dynamic(VALUE self) {
+    ZenMesh* mesh;
+    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
+    return (mesh && mesh->is_dynamic) ? Qtrue : Qfalse;
+}
+
+static VALUE mesh_get_vertex_count(VALUE self) {
+    ZenMesh* mesh;
+    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
+    return mesh ? INT2NUM(mesh->vertex_count) : INT2NUM(0);
+}
+
+static VALUE mesh_get_index_count(VALUE self) {
+    ZenMesh* mesh;
+    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
+    return mesh ? INT2NUM(mesh->index_count) : INT2NUM(0);
+}
+
+// ==========================================
 // Zenoo::Native::Renderer
 // ==========================================
 static VALUE renderer_flush(VALUE self) {
@@ -1032,6 +1164,40 @@ static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout
     }
 
     zen_draw_buffer(topology, layout, divisors, base_vertex_count, data, count, img, sh);
+    return Qnil;
+}
+
+static VALUE renderer_draw_mesh(VALUE self, VALUE rb_geom_mesh, VALUE rb_inst_buffer, VALUE rb_inst_layout, VALUE rb_inst_data, VALUE rb_inst_count, VALUE rb_tex, VALUE rb_shader) {
+    (void)self;
+    ZenMesh* geom_mesh = NULL;
+    if (!NIL_P(rb_geom_mesh) && rb_obj_is_kind_of(rb_geom_mesh, rb_cNativeMesh)) {
+        TypedData_Get_Struct(rb_geom_mesh, ZenMesh, &zenoo_mesh_data_type, geom_mesh);
+    }
+
+    ZenMesh* inst_buffer = NULL;
+    if (!NIL_P(rb_inst_buffer) && rb_obj_is_kind_of(rb_inst_buffer, rb_cNativeMesh)) {
+        TypedData_Get_Struct(rb_inst_buffer, ZenMesh, &zenoo_mesh_data_type, inst_buffer);
+    }
+
+    const uint8_t* inst_layout = NIL_P(rb_inst_layout) ? NULL : (const uint8_t*)StringValuePtr(rb_inst_layout);
+    const void* inst_data = NULL;
+    if (!NIL_P(rb_inst_data)) {
+        Check_Type(rb_inst_data, T_STRING);
+        inst_data = (const void*)RSTRING_PTR(rb_inst_data);
+    }
+    int inst_count = NUM2INT(rb_inst_count);
+
+    ZenImage* img = NULL;
+    if (rb_obj_is_kind_of(rb_tex, rb_cNativeImage)) {
+        TypedData_Get_Struct(rb_tex, ZenImage, &zenoo_image_data_type, img);
+    }
+
+    ZenShader* sh = NULL;
+    if (rb_obj_is_kind_of(rb_shader, rb_cNativeShader)) {
+        TypedData_Get_Struct(rb_shader, ZenShader, &zenoo_shader_data_type, sh);
+    }
+
+    zen_draw_mesh_instanced(geom_mesh, inst_buffer, inst_layout, inst_data, inst_count, img, sh);
     return Qnil;
 }
 
@@ -1388,9 +1554,20 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeShader, "set_mat4", shader_set_mat4, 2);
     rb_define_method(rb_cNativeShader, "set_texture", shader_set_texture, 3);
 
+    // 4.5. Native::Mesh (Zenoo::Native::Mesh)
+    rb_cNativeMesh = rb_define_class_under(rb_mNative, "Mesh", rb_cObject);
+    rb_define_alloc_func(rb_cNativeMesh, mesh_allocate);
+    rb_define_method(rb_cNativeMesh, "initialize", mesh_init, -1);
+    rb_define_method(rb_cNativeMesh, "update_vertices", mesh_update_vertices, -1);
+    rb_define_method(rb_cNativeMesh, "update_indices", mesh_update_indices, -1);
+    rb_define_method(rb_cNativeMesh, "dynamic?", mesh_is_dynamic, 0);
+    rb_define_method(rb_cNativeMesh, "vertex_count", mesh_get_vertex_count, 0);
+    rb_define_method(rb_cNativeMesh, "index_count", mesh_get_index_count, 0);
+
     // 5. Renderer
     VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");
     rb_define_singleton_method(mRenderer, "draw_buffer", renderer_draw_buffer, 8);
+    rb_define_singleton_method(mRenderer, "draw_mesh", renderer_draw_mesh, 7);
     rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
     rb_define_singleton_method(mRenderer, "set_blend_mode", renderer_set_blend_mode, 1);
     rb_define_singleton_method(mRenderer, "set_scissor", renderer_set_scissor, 4);

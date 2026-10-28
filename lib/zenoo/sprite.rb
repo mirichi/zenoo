@@ -641,10 +641,34 @@ module Zenoo
       end
     end
 
-    # 描画
+    # 描画 (Window.draw へ委譲)
     def draw
-      return if @vanished
-      Window.draw_sprite(self)
+      return if @vanished || !@visible || !@image
+
+      if @parent
+        pv = [@pivot_x, @pivot_y]
+        Window.draw(
+          world_pivot_x, world_pivot_y, @image,
+          width: @width, height: @height,
+          anchor: pv, pivot: pv,
+          scale_x: world_scale_x, scale_y: world_scale_y,
+          angle: world_angle,
+          color: @color, alpha: @alpha,
+          blend: @blend, shader: @shader, uniforms: @uniforms,
+          camera: @camera, z: @z
+        )
+      else
+        Window.draw(
+          @x, @y, @image,
+          width: @width, height: @height,
+          anchor: [@anchor_x, @anchor_y], pivot: [@pivot_x, @pivot_y],
+          scale_x: @scale_x, scale_y: @scale_y,
+          angle: @angle,
+          color: @color, alpha: @alpha,
+          blend: @blend, shader: @shader, uniforms: @uniforms,
+          camera: @camera, z: @z
+        )
+      end
     end
 
     # 単一または配列スプライトの一括描画 (DXRuby互換)
