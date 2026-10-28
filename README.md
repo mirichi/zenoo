@@ -2,7 +2,7 @@
 
 **Zenoo** は、**Pure Ruby** の親しみやすい記述力と、**Spinel AOT コンパイラ** による C / WebAssembly への直接トランスパイル、そして **OpenGL 3.3 / WebGL 2.0** によるハードウェアアクセラレーションを融合させた、軽量・ハイパフォーマンスな次世代 2D ゲーム＆グラフィックスエンジンです。
 
-DXRuby に着想を得た直感的な API を備え、デスクトップ（CRuby / ネイティブバイナリ）でも Web ブラウザ（Wasm / スマホ対応）でも、まったく同一の Ruby コードが 60fps で軽快に動作します。
+DXRuby に着想を得た直感的な API を備え、デスクトップ（CRuby / ネイティブバイナリ）でも Web ブラウザ（WebAssembly）でも、同一の Ruby コードが 60fps で軽快に動作します。
 
 ※開発中なのでAPIや機能は予告/遠慮なく変わります。
 
@@ -11,61 +11,25 @@ DXRuby に着想を得た直感的な API を備え、デスクトップ（CRuby
 ## 🌟 主な特徴
 
 1. **Pure Ruby 記述 $\to$ Spinel AOT による Wasm / ネイティブ超高速実行**
-   - ゲームロジック、UI、シェーダー管理、フォントレイアウト、ベクターテセレーションのすべてを Pure Ruby で記述。
-   - Spinel AOT コンパイラによって C 言語に変換され、WebAssembly（Wasm）またはネイティブ ELF/EXE として高速実行。
+   - ゲームロジック、UI、衝突判定、シェーダー管理のすべてを Pure Ruby で記述。
+   - Spinel AOT コンパイラにより C / WebAssembly へ直接トランスパイルされ、デスクトップ（ネイティブ）でもブラウザでも 60fps で軽快に動作します。
 
-2. **極小 C マイクロカーネル & WebGL 2.0 インスタンス描画**
-   - C 言語コアは「ウィンドウ管理」「入力」「Quad バッチ描画（GPU Instancing）」「テクスチャ・FBO」「シェーダー Uniform 転送」のみを担当。
-   - 大量のスプライトやパーティクル、弾幕を 1 ドローコールで一括描画。
+2. **GPU SDF & インスタンシングによる美麗・軽量グラフィックス**
+   - MSAA 不要でジャギーが出ない SDF プリミティブ（角丸矩形・線・影）と、日本語対応のリアルタイム動的 SDF フォントエンジン。
+   - 極小 C カーネルと OpenGL 3.3 / WebGL 2.0 による GPU Instancing で、大量のスプライトや弾幕を 1 ドローコールで一括描画。
 
-3. **オンデマンド動的 SDF フォントエンジン**
-   - `stb_truetype` によるリアルタイム SDF（Signed Distance Field）ラスタライズ。
-   - 日本語フォント（M+ 1p）およびレトロ 8x8（Sinclair ZX Spectrum）を内蔵。
-   - 拡大・回転しても一切ジャギーが出ない高品質テキスト、袋文字（アウトライン）、ドロップシャドウ、リアルタイム文字アニメーション（ウェーブ等）を標準サポート。
-
-4. **HTML5 Canvas 2D 互換 ベクターグラフィックス**
-   - `move_to`, `line_to`, `bezier_curve_to`, `arc` などの直感的なパス構築 API。
-   - **耳刈り取り法 (Ear Clipping)** による凹凸多角形のリアルタイム GPU メッシュ化。
-   - モバイル GPU に最適化された 32bit 高精度（`highp`）シェーダーによる線形 (Linear) / 放射 (Radial) グラデーション。
-
-5. **Pure Ruby 即時モード (Immediate Mode) GUI (`Zenoo::GUI`)**
-   - ステートレスに毎フレーム構築可能な本格 UI システム。
-   - ボタン、スライダー、テキストボックス、チェックボックス、ラジオボタン、タブバー、スピンボタン、ドロップダウンリスト、リストボックス、スクロールビュー（自動高さ計測・ホイール対応）を標準装備。
-   - マルチウィンドウのドラッグ移動・前面化（Bring to Front）および右下ドラッグによるインタラクティブなサイズ変更（`resizable: true`）に対応。
-   - GPU SDF シェーダーによるモダン角丸カードと、テーマ・スタイルのリアルタイム切り替え。
-
-6. **スマートフォン・マルチプラットフォーム完全最適化**
-   - 16:9 仮想解像度のアスペクト比自動維持。
-   - スマホ横画面時の自動全画面フィット（上下見切れ解消）＆半透明フローティング操作ボタン。
-   - 画面の **2本指タップで右クリック（メニュー開閉など）** を直感的にエミュレート。
-   - ワンタップでアドレスバーを消す全画面（イマーシブ）モード対応。
-
-7. **miniaudio & stb_vorbis 統合オーディオエンジン**
-   - WAV, MP3, Ogg Vorbis の透過的デコード＆ストリーミング再生。
-   - DXRuby 風の動的波形生成（`SoundEffect.tone`, `sweep`, `noise`, `create`）。
-   - 音量・ピッチ・パン・ループ・シーク・一時停止などのフルコントロール。
-   - ファイル音と動的生成音を共通の `Sound` インスタンスとして透過操作可能。
-
-8. **GJK 2D 衝突判定エンジン (`Zenoo::Collision`)**
-   - Pure Ruby による GJK (Gilbert-Johnson-Keerthi) / SAT アルゴリズム実装。
-   - 円 (Circle)、点 (Point)、線分 (Segment)、矩形 (AABB)、回転矩形 (OBB)、カプセル (Capsule)、任意凸多角形 (Polygon) の高精度・リアルタイム交差判定。
-   - ゲームロジックへの組み込みやデバッグ可視化が容易。
-
-9. **Sprite & 変形同期 2D コライダー (`Zenoo::Sprite`)**
-   - 位置 (`x, y`)、回転 (`angle`)、拡大縮小 (`scale_x, scale_y`)、ピボット (`pivot`) を一元管理するスプライトクラス。
-   - `Window.draw_sprite` による単一・配列の一括描画キューイング。
-   - GPU シェーダーの頂点変換と **ピクセル単位で完全同期する幾何コライダー**（`Collision::Shape`）。
-   - 回転矩形・円・多角形・点へのワンタッチ変更（`set_collider`）と、ゼロアロケーションでのキャッシュ更新。
-   - `sprite.collide?(other)`, `sprite === other`, `Collision.check(a, b)` による直感的な交差判定。
+3. **2D ゲーム開発に直結する組み込み機能**
+   - スプライト＆変形同期コライダー、GJK/SAT 衝突判定、および滑らかな壁ずりを実現する MTV（めり込み解消）、剛体物理応答。
+   - キーボード・マウス・ゲームパッドを統合するアクションマップ、miniaudio 音源再生＆動的波形合成、Tween、タイルマップ、即時モード GUI、メッシュ変形を標準搭載。
 
 ---
 
 ## 🎮 WebAssembly ショーケース (デモ一覧)
 
-Web ブラウザ上で動作するインタラクティブデモは、GitHub Pages にて公開されています。
+Spinel AOT コンパイラにより WebAssembly 出力に対応しており、ブラウザ上で動作するインタラクティブデモを GitHub Pages にて公開しています。
 👉 **[Zenoo WebAssembly Showcase (GitHub Pages)](https://mirichi.github.io/zenoo/)**
 
-リポジトリ内の `docs/` ディレクトリに、WebAssembly 向けにビルド済みの全 15 種類のデモとポータルハブが収録されています。
+リポジトリ内の `docs/` ディレクトリに、WebAssembly 向けにビルド済みの全 19 種類のデモとポータルハブが収録されています。
 
 | デモ名 | パス | 内容 |
 |---|---|---|
@@ -85,12 +49,16 @@ Web ブラウザ上で動作するインタラクティブデモは、GitHub Pag
 | **Zero-Gravity Physics** | `docs/zero_gravity/` | 即時モード 2D 剛体物理 (PhysicsSprite / SAT / MTV) による無重力反発・投擲・摩擦スピン |
 | **GPU Particle Storm** | `docs/particles/` | GPU Instancing による 10万〜20万パーティクル・リアルタイム引力＆衝撃波ストーム |
 | **GPU Danmaku Storm** | `docs/danmaku/` | GPU Instancing による 75,000発 弾幕 &amp; 円環セクター（Annular Sector）階層衝突判定 |
+| **Articulated Sprite & Hierarchy** | `docs/articulated/` | 親子階層構造・多関節キャラクター＆コライダー連動・関節外れ防止 MTV |
+| **2D SkinnedMesh & Bone** | `docs/skinned_mesh/` | GPU 頂点スキニング、ボーン連動、ウェイトマップによるリアルタイムメッシュ変形 |
+| **Canvas to Mesh & Vector Sprites** | `docs/canvas_mesh/` | Canvas ベクターパスの VBO メッシュ化＆120個のベクター弾幕 1 ドローコール一括描画 |
+| **2D Mesh Deformation** | `docs/mesh_deform/` | 2ストリーム VBO パイプライン、旗の波打ち・リボン剣閃・4隅バイリニア自由変形 |
 
 ---
 
 ## 🚀 クイックスタート (サンプルコード)
 
-### 1. 基本的なゲームループと図形描画
+### 1. 最小ゲームループと SDF プリミティブ描画
 
 ```ruby
 require 'zenoo'
@@ -99,99 +67,71 @@ require 'zenoo'
 Window.loop(1280, 720, "Zenoo Quickstart") do
   t = Window.time
 
-  # 画面クリア
+  # 画面クリア (デフォルトは黒クリア)
   Window.clear([15, 23, 42, 255])
 
-  # SDF 矩形・カード描画 (角丸・ボーダー・ドロップシャドウ・回転を統合)
-  Window.draw_rect(100, 100, 300, 180, angle: t * 10, radius: 16, color: [30, 41, 59, 255], border_width: 2, border_color: :cyan, shadow_blur: 20)
+  # SDF 角丸カード (枠線・外光彩ドロップシャドウ付き、MSAA不要)
+  Window.draw_rect(100, 100, 320, 180, radius: 16, color: [30, 41, 59, 255], border_width: 2, border_color: :cyan, shadow_blur: 20)
 
-  # SDF 日本語テキスト描画
-  Window.draw_text(130, 140, "こんにちは、Zenoo！", size: 24, color: :white)
-  Window.draw_text(130, 180, "Time: #{t.round(2)}s", font: Font::SINCLAIR, size: 16, color: :green)
+  # SDF 丸端ネオンライン
+  Window.draw_line(120, 220, 380, 220, width: 4.0, cap: :round, color: [255, 200, 50, 255], shadow_blur: 8)
 
-  # マウス入力
-  mx, my = Input.mouse_pos
-  if Input.mouse_pressed?(:left)
-    Window.draw_circle(mx, my, 20, color: :yellow)
-  end
+  # SDF 日本語テキスト描画 (動的アトラス生成)
+  Window.draw_text(130, 130, "こんにちは、Zenoo！", size: 24, color: :white)
+  Window.draw_text(130, 170, "Time: #{t.round(2)}s", font: Font::SINCLAIR, size: 16, color: :green)
 end
 ```
 
-### 2. ベクターグラフィックス (Canvas 2D スタイル)
+### 2. アクションマップ入力 & スプライト
+
+キーボード、マウス、ゲームパッド（Xbox / PS）を透過的に統合します。
 
 ```ruby
-Window.draw_path do |c|
-  c.save
-  c.translate(640, 360)
-  c.rotate(Window.time)
+# アクションマップの登録
+Input.define_action(:attack, keys: [:j, :z], mouse: :left, gamepad: [:x, :a])
+Input.define_action(:dash,   keys: [:space, :left_shift], gamepad: [:b, :rb])
 
-  # 線形グラデーション
-  grad = c.create_linear_gradient(-100, -100, 100, 100)
-  grad.add_color_stop(0.0, [1.0, 0.8, 0.2, 1.0])
-  grad.add_color_stop(1.0, [1.0, 0.2, 0.5, 1.0])
+# 毎フレームの移動ベクトル取得 (WASD・矢印・パッドスティック統合、斜め移動正規化済み)
+dx, dy = Input.vector
 
-  # パス構築と塗りつぶし
-  c.begin_path
-  c.round_rect(-100, -100, 200, 200, 24)
-  c.fill(grad)
-  c.stroke(:white, 4)
-
-  c.restore
+# アクション判定
+if Input.action_pressed?(:attack)
+  # 攻撃処理
 end
 ```
 
-### 3. サウンド再生 & 動的効果音生成 (DXRuby スタイル)
+### 3. 2D 幾何コライダー & MTV めり込み解消 (壁ずり)
 
 ```ruby
-# ファイルから再生 (WAV, MP3, Ogg Vorbis 対応)
+# 幾何コライダーの作成 (円、OBB、カプセル、多角形に対応)
+player_box = Collision.rect(player_x, player_y, 40, 40)
+wall_box   = Collision.rect(200, 200, 80, 80)
+
+# GJK / SAT アルゴリズムによる交差判定
+if Collision.check(player_box, wall_box)
+  # 衝突検知
+end
+
+# めり込み量・押し出しベクトル (MTV) を取得してスムーズに壁ずり
+if (hit = Collision.penetration(player_box, wall_box))
+  player_x += hit.push_x
+  player_y += hit.push_y
+end
+```
+
+### 4. サウンド再生 & 動的効果音生成 (DXRuby スタイル)
+
+```ruby
+# 音声ファイルの再生 (WAV, MP3, Ogg Vorbis 対応)
 bgm = Sound.load("assets/sounds/bgm.ogg")
 bgm.looping = true
-bgm.volume = 0.7
 bgm.play
 
-# 動的波形生成 (DXRuby 風 SoundEffect)
-jump_sound = SoundEffect.sweep(250, 700, 0.2, type: :square) # ジャンプ音
-boom_sound = SoundEffect.noise(0.4, volume: 0.8)             # 爆発音
-sine_sound = SoundEffect.tone(440, 0.3)                       # 単音サイン波
+# 動的波形生成 (DXRuby 風 SoundEffect / チップチューン即時合成)
+jump_sound = SoundEffect.sweep(250, 700, 0.2, type: :square) # ピープ音
+boom_sound = SoundEffect.noise(0.4, volume: 0.8)             # 爆発ノイズ
 
-# 再生・ピッチ変更
-jump_sound.pitch = 1.2
 jump_sound.play
-
-# マスター音量調整
-Audio.master_volume = 0.8
-```
-
-### 4. 2D 幾何・GJK 衝突判定 (`Zenoo::Collision`)
-
-```ruby
-# 回転矩形 (OBB) と円の作成
-box = Collision.rect(200, 200, 120, 60, angle: 30)
-ball = Collision.circle(230, 210, 30)
-
-# GJK アルゴリズムによる交差判定
-if Collision.check(box, ball)
-  puts "Hit detected!"
-end
-
-# 線分（カプセル）や凸多角形との交差判定も同一インターフェース
-capsule = Collision.segment(100, 100, 300, 200, 15)
-poly = Collision.polygon([[0, 0], [50, -30], [80, 20], [30, 60]])
-puts "Intersecting!" if Collision.check(capsule, poly)
-```
-
-### 5. めり込み解消＆押し出しベクトル (`Collision.penetration`)
-
-```ruby
-# 衝突判定とめり込み量・押し出しベクトル (MTV) を 1 回の呼び出しで同時に取得
-if (hit = Collision.penetration(player.shape, wall.shape))
-  # 壁の外側へ押し戻す
-  player.x += hit.push_x
-  player.y += hit.push_y
-
-  # またはスプライトの push_out_of で 1 行解決
-  # player.push_out_of(wall)
-end
 ```
 
 ---
@@ -228,8 +168,8 @@ WSL2 または Linux 環境で以下を実行します：
 | **`release`** (デフォルト) | `./build_pages.sh game` | `-O2` | **実行速度重視**。60 FPS を維持する本番用標準ビルド |
 | **`max`** / `o3` | `BUILD_MODE=max ./build_pages.sh game` | `-O3` | **最高実行速度**。重い計算を極限まで最適化 |
 
-> **Note (Wasm メモリ & Fiber 最適化)**:
-> ブラウザ上でのメモリ肥大化防止および Fiber スタックオーバーフロー回避のため、Spinel に Wasm 向けパッチを適用しています。詳細は patches/README.md を参照してください。
+> **Note (Spinel 向けパッチについて)**:
+> ブラウザ上でのメモリ肥大化防止、Fiber スタックオーバーフロー回避、およびクラスエイリアス / `native_struct` 連携の正常化のため、Spinel にパッチを適用しています。詳細は `patches/README.md` を参照してください。
 
 ### 任意の Ruby スクリプトを単体 Wasm ビルド
 
@@ -269,7 +209,7 @@ Spinel を用いてスタンドアロンの ELF ネイティブバイナリを�
 ./build_spinel.sh examples/game_zenoo.rb
 ./build/game_zenoo
 
-# 全 10 デモの一括コンパイル
+# 全デモの一括コンパイル
 ./build_all_linux.sh
 ```
 
@@ -279,9 +219,8 @@ Spinel を用いてスタンドアロンの ELF ネイティブバイナリを�
 
 ```
 zenoo/
-├── docs/                      # GitHub Pages 配信用 Web 成果物
+├── docs/                      # GitHub Pages 配信用 Web 成果物 (全 19 デモ & ポータル)
 │   ├── index.html             # ショーケースポータル
-│   ├── favicon.ico            # ファビコン
 │   ├── game/                  # Survival Shooting デモ
 │   ├── gui/                   # Extended GUI & Resizable Windows デモ
 │   ├── font/                  # SDF Font & Sinclair デモ
@@ -290,29 +229,29 @@ zenoo/
 │   ├── atlas/                 # Texture Atlas & sub_image デモ
 │   ├── clip/                  # Hardware Clipping デモ
 │   ├── sound/                 # Audio & Sound Synthesis デモ
-│   └── collision/             # 2D Collision Playground デモ
+│   ├── collision/             # 2D Collision Playground デモ
+│   ├── tween/                 # Tween & Easing Animation デモ
+│   ├── coords/                # Sprite Coords Visualizer デモ
+│   ├── billiards/             # Billiards & 3D Rolling Shader デモ
+│   ├── zero_gravity/          # Zero-Gravity 2D Rigid Body Physics デモ
+│   ├── particles/             # GPU Particle Storm デモ
+│   ├── danmaku/               # GPU Danmaku Storm デモ
+│   ├── articulated/           # Articulated Sprite & Hierarchy デモ
+│   ├── skinned_mesh/          # 2D SkinnedMesh & Bone デモ
+│   ├── canvas_mesh/           # Canvas to Mesh & Vector Sprites デモ
+│   └── mesh_deform/           # 2D Mesh Deformation デモ
 ├── examples/                  # サンプルコード集
-│   ├── game_zenoo.rb          # サバイバルシューティング
-│   ├── demo_gui_widgets.rb    # 拡張 GUI ウィジェット & サイズ変更ウィンドウ
-│   ├── demo_ttf_sdf_font.rb   # SDF フォント描画
-│   ├── demo_vector_graphics.rb# ベクターグラフィックス
-│   ├── demo_draw_image.rb     # スプライト描画 & ブレンド合成
-│   ├── demo_texture_atlas.rb  # テクスチャアトラス & sub_image
-│   ├── demo_window_clip.rb    # ハードウェアクリッピング
-│   ├── demo_sound.rb          # オーディオ & 動的波形合成
-│   ├── demo_collision.rb      # 2D GJK 衝突判定プレイグラウンド
-│   └── web/                   # Wasm 配信用 HTML シェルテンプレート
 ├── include/                   # C 言語ヘッダー & サードパーティライブラリ
 │   ├── zenoo.h                # マイクロカーネル C API
 │   ├── miniaudio.h            # miniaudio オーディオエンジン
 │   ├── stb_image.h            # stb_image 画像デコーダー
 │   ├── stb_truetype.h         # stb_truetype フォントパーサー
 │   └── stb_vorbis.c           # stb_vorbis Ogg Vorbis デコーダー
-├── src/                       # C 言語マイクロカーネル実装
+├── src/                       # C 言語マイクロカーネル実装 (OpenGL 3.3 / WebGL 2.0)
 │   ├── glad.c                 # OpenGL 3.3 ローダー
 │   ├── zenoo_window.c         # ウィンドウ・ライフサイクル・フレーム制御
-│   ├── zenoo_input.c          # 入力 (キー・マウス・ゲームパッド・IME)
-│   ├── zenoo_vibration.c      # 振動 (XInput / Linux FF / Web)
+│   ├── zenoo_input.c          # 入力 (キー・マウス・ゲームパッド・マルチタッチ)
+│   ├── zenoo_vibration.c      # 振動 (XInput / Linux FF / Web Gamepad)
 │   ├── zenoo_image.c          # テクスチャ・画像・FBO
 │   ├── zenoo_gfx.c            # 描画状態・GLSL・動的頂点バッファ
 │   ├── zenoo_font.c           # SDF アトラス・stb_truetype 統合
@@ -321,25 +260,33 @@ zenoo/
 │   ├── zenoo.rb               # エントリポイント
 │   └── zenoo/
 │       ├── window.rb          # メインループ & 描画 DSL
+│       ├── sprite.rb          # スプライト & 変形同期コライダー
+│       ├── collision.rb       # GJK / SAT 2D 凸図形衝突判定 & MTV
+│       ├── input.rb           # アクションマップ・入力統合
+│       ├── camera.rb          # 2D カメラ & ビューポート制御
+│       ├── tilemap.rb         # タイルマップ描画
+│       ├── tween.rb           # Tween / イージングアニメーション
+│       ├── mesh.rb            # 2D メッシュ・頂点変形 & インスタンシング
+│       ├── skinned_mesh.rb    # 2D ボーン＆GPU スキニング
+│       ├── physics.rb         # 即時モード 2D 剛体物理応答
 │       ├── canvas.rb          # HTML5 Canvas 互換ベクター API & 耳刈り取り
-│       ├── collision.rb       # GJK / SAT 2D 凸図形衝突判定
-│       ├── font.rb            # フォント & テキスト配置 API
+│       ├── font.rb            # 動的 SDF フォント & テキスト配置 API
 │       ├── gui.rb             # 即時モード GUI ウィジェット & ウィンドウ
-│       ├── input.rb           # キーボード・マウス・ゲームパッド入力
 │       ├── color.rb           # 色操作 & プリセット
 │       ├── image.rb           # テクスチャ、sub_image & オフスクリーン FBO
 │       ├── shader.rb          # カスタムシェーダー管理
 │       ├── sound.rb           # サウンド再生 (Sound)
 │       ├── sound_effect.rb    # 動的波形合成 (SoundEffect)
 │       ├── backend.rb         # CRuby / Spinel 抽象化バックエンド
-│       └── layout.rb          # レイアウトヘルパー
+│       └── profiler.rb        # パフォーマンス・プロファイラ
 ├── ext/                       # バインディング
 │   ├── zenoo/                 # CRuby C 拡張 (mkmf)
 │   └── spinel/                # Spinel AOT コンパイル用グルー
 ├── patches/                   # 外部依存 (Spinel 等) 向けパッチ
 │   ├── README.md              # パッチ概要・適用手順
 │   ├── 0001-fix-sp_slab-emscripten-wasm-memory.patch # Wasm メモリ肥大化対策
-│   └── 0002-fix-sp_fiber-emscripten-stack.patch      # Fiber スタック確保パッチ
+│   ├── 0002-fix-sp_fiber-emscripten-stack.patch      # Fiber スタック確保パッチ
+│   └── 0003-fix-avoid-qualifying-own-native-struct-and-alias.patch # クラスエイリアス & native_struct 連携修正
 ├── server.rb                  # 統合開発サーバー (docs / wasm 切り替え対応)
 ├── build_pages.sh             # GitHub Pages 全デモ一括ビルドスクリプト
 ├── build_wasm.sh              # 単体 Wasm ビルドスクリプト
