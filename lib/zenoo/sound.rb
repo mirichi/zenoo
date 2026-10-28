@@ -46,12 +46,14 @@ module Zenoo
         v
       end
 
-      # 多重代入 Audio.bus_volume = :bgm, 0.8 対応
-      def bus_volume=(args)
-        if args.is_a?(Array) && args.length >= 2
-          set_bus_volume(args[0], args[1])
-        elsif args.is_a?(Hash)
-          args.each { |k, val| set_bus_volume(k, val) }
+      # バス音量セッター（単一引数 / 多重代入 / 2引数呼び出し対応）
+      def bus_volume=(bus_or_args, vol = nil)
+        if vol
+          set_bus_volume(bus_or_args, vol)
+        elsif bus_or_args.is_a?(Array) && bus_or_args.length >= 2
+          set_bus_volume(bus_or_args[0], bus_or_args[1])
+        elsif bus_or_args.is_a?(Hash)
+          bus_or_args.each { |k, val| set_bus_volume(k, val) }
         end
       end
 

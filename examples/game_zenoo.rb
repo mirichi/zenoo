@@ -1731,13 +1731,13 @@ class Game
           @post_screen ||= Image.new(1280, 720)
           Image.render_to(@post_screen) do
             Window.clear(Color::BLACK)
-            Window.draw_image(0, 0, current_source, shader: @shockwave_shader)
+            Window.draw(0, 0, current_source, shader: @shockwave_shader)
           end
           current_source = @post_screen
         else
           # CRT 無効時はメイン画面へ直接描画
           Window.clear(Color::BLACK)
-          Window.draw_image(0, 0, current_source, shader: @shockwave_shader)
+          Window.draw(0, 0, current_source, shader: @shockwave_shader)
           current_source = nil
         end
       end
@@ -1750,7 +1750,7 @@ class Game
         @crt_shader.set_float("u_glitch", glitch_val.to_f)
 
         Window.clear(Color::BLACK)
-        Window.draw_image(0, 0, current_source, shader: @crt_shader)
+        Window.draw(0, 0, current_source, shader: @crt_shader)
       end
     else
       # エフェクトが一切ない場合は直接メイン画面にクリア＆レンダリング

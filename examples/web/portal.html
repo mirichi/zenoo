@@ -132,6 +132,12 @@
     .card.skinned_mesh::before {
       background: linear-gradient(90deg, #c084fc, #ec4899);
     }
+    .card.canvas_mesh::before {
+      background: linear-gradient(90deg, #00ffcc, #10b981);
+    }
+    .card.mesh_deform::before {
+      background: linear-gradient(90deg, #38bdf8, #f59e0b);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -159,6 +165,8 @@
     .card.danmaku .card-tag { color: #ec4899; }
     .card.articulated .card-tag { color: #00ffcc; }
     .card.skinned_mesh .card-tag { color: #c084fc; }
+    .card.canvas_mesh .card-tag { color: #00ffcc; }
+    .card.mesh_deform .card-tag { color: #38bdf8; }
 
     .card h2 {
       font-size: 22px;
@@ -342,6 +350,23 @@
     .card.skinned_mesh .btn-launch:hover {
       background: #c084fc;
       box-shadow: 0 0 20px rgba(192, 132, 252, 0.4);
+    }
+    .card.canvas_mesh .btn-launch {
+      background: #00ffcc;
+      color: #0b0d14;
+    }
+    .card.canvas_mesh .btn-launch:hover {
+      background: #34d399;
+      box-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
+    }
+    .card.mesh_deform .btn-launch {
+      background: #0284c7;
+      color: #fff;
+    }
+    .card.mesh_deform .btn-launch:hover {
+      background: #38bdf8;
+      color: #0b0d14;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
     }
     footer {
       margin-top: 60px;
@@ -670,6 +695,44 @@
         </ul>
       </div>
       <a href="skinned_mesh/" class="btn-launch">スキニングデモを起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- Canvas to Mesh & Vector Sprites Demo Card -->
+    <div class="card canvas_mesh">
+      <div>
+        <div class="card-tag">Vector &amp; Mesh Instancing</div>
+        <h2>Canvas to Mesh &amp; Vector Sprites</h2>
+        <p class="desc">
+          Canvas のベクター描画 (fill / stroke / グラデーション) を 8-float 頂点カラー VBO メッシュに変換。毎フレームの耳刈り分割負荷ゼロで、120個のベクター弾幕スプライトをたった 1 回のドローコールで一括描画します。
+        </p>
+        <ul class="features">
+          <li>Mesh.canvas によるベクターパスの VRAM (VBO+IBO) 常駐化</li>
+          <li>120個のベクタークリスタル弾を 1 ドローコールで超高速バッチ描画</li>
+          <li>親子 Sprite 階層による多重ベクター魔法陣 (拡縮・回転してもベクター品質)</li>
+          <li>多段グラデーション・ベクタースライムのリアルタイム頂点変形 (Mesh#deform)</li>
+          <li>毎フレームの耳刈り分割・CPU 計算負荷ゼロ (60fps 張り付き)</li>
+        </ul>
+      </div>
+      <a href="canvas_mesh/" class="btn-launch">Canvas Mesh起動 (Launch Demo) →</a>
+    </div>
+
+    <!-- 2D Mesh Deformation & 2-Stream Instancing Demo Card -->
+    <div class="card mesh_deform">
+      <div>
+        <div class="card-tag">Geometry &amp; Deformation</div>
+        <h2>2D Mesh Deformation</h2>
+        <p class="desc">
+          2ストリームVBOパイプライン (Stream0 頂点+IBO / Stream1 インスタンス) による 2D メッシュ変形デモ。格子メッシュ・リングメッシュ・多角形分割のリアルタイム変形と 1 ドローコール共有描画を体験できます。
+        </p>
+        <ul class="features">
+          <li>Mesh.grid による旗の波打ち変形 &amp; 頂点アルファフェード</li>
+          <li>同一メッシュを共有する複数 Sprite の 1 ドローコール一括描画</li>
+          <li>Mesh#set_corners による 4隅バイリニア自由変形 (台形パース)</li>
+          <li>Mesh#set_ribbon による軌跡・剣閃リボン (taper &amp; fade 減衰)</li>
+          <li>Mesh.ring の渦巻きねじり変形 &amp; Mesh.polygon の凹多角形耳刈り分割</li>
+        </ul>
+      </div>
+      <a href="mesh_deform/" class="btn-launch">メッシュ変形デモ起動 (Launch Demo) →</a>
     </div>
   </main>
 

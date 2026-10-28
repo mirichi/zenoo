@@ -20,8 +20,8 @@ end
 ogg_path = find_asset_file("assets/sounds/sample.ogg")
 wav_path = find_asset_file("assets/sounds/sample.wav")
 
-bgm_ogg = File.exist?(ogg_path) ? Sound.load(ogg_path, bus: :bgm) : nil
-bgm_wav = File.exist?(wav_path) ? Sound.load(wav_path, bus: :se) : nil
+bgm_ogg = File.exist?(ogg_path) ? Zenoo::Sound.load(ogg_path, bus: :bgm) : nil
+bgm_wav = File.exist?(wav_path) ? Zenoo::Sound.load(wav_path, bus: :se) : nil
 
 
 # 動的波形効果音 (SoundEffect) のプリセット
@@ -165,11 +165,11 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
     # カテゴリ / バス管理スライダー
     bgm_bus_vol = Audio.bus_volume(:bgm)
     new_bgm_bus = GUI.slider("BGM Bus Vol", bgm_bus_vol, 0.0, 1.5)
-    Audio.bus_volume = :bgm, new_bgm_bus if (new_bgm_bus - bgm_bus_vol).abs > 0.01
+    Audio.set_bus_volume(:bgm, new_bgm_bus) if (new_bgm_bus - bgm_bus_vol).abs > 0.01
 
     se_bus_vol = Audio.bus_volume(:se)
     new_se_bus = GUI.slider("SE Bus Vol", se_bus_vol, 0.0, 1.5)
-    Audio.bus_volume = :se, new_se_bus if (new_se_bus - se_bus_vol).abs > 0.01
+    Audio.set_bus_volume(:se, new_se_bus) if (new_se_bus - se_bus_vol).abs > 0.01
 
     # マスター音量
     new_vol = GUI.slider("Master Vol", master_vol, 0.0, 1.0)

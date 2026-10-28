@@ -498,10 +498,10 @@ def create_danmaku_mesh(groups, shader, pipeline)
   elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t_start) * 1000.0
   puts "VBO Packed: #{groups.sum(&:total_bullets)} bullets, #{packed.bytesize / 1024 / 1024} MB (#{elapsed.round(1)} ms)"
 
-  Mesh.new(
+  InstanceBuffer.new(
     data: packed,
     count: groups.sum(&:total_bullets),
-    pipeline: pipeline,
+    layout: [4, 4, 4, 4],
     shader: shader,
     blend: :add # アルファ合成 (重なっても白飛びしない)
   )
@@ -512,18 +512,10 @@ end
 # ------------------------------------------------------------------------------
 danmaku_shader = Shader.new(DANMAKU_VERT, DANMAKU_FRAG)
 
-# パイプライン: vec4 x 4 (16 floats per bullet)
-danmaku_pipeline = Zenoo::Backend::Pipeline.new(
-  Zenoo::Backend::Topology::TRIANGLE_STRIP,
-  "\x04\x04\x04\x04",
-  "\x01\x01\x01\x01",
-  4
-)
-
 target_count = 60_000
 danmaku_systems = {}
 groups_75k, count_75k = build_danmaku_system(60_000)
-mesh_75k = create_danmaku_mesh(groups_75k, danmaku_shader, danmaku_pipeline)
+mesh_75k = create_danmaku_mesh(groups_75k, danmaku_shader, nil)
 danmaku_systems[75_000] = [groups_75k, count_75k, mesh_75k]
 groups, total_count, active_mesh = danmaku_systems[75_000]
 
@@ -560,7 +552,7 @@ Window.loop(WIDTH, HEIGHT, "Zenoo GPU Danmaku Storm", vsync: false) do
   if Input.key_push?(:"1")
     danmaku_systems[37_500] ||= begin
       g, c = build_danmaku_system(30_000)
-      m = create_danmaku_mesh(g, danmaku_shader, danmaku_pipeline)
+      m = create_danmaku_mesh(g, danmaku_shader, nil)
       [g, c, m]
     end
     groups, total_count, active_mesh = danmaku_systems[37_500]

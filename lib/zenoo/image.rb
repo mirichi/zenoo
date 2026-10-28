@@ -125,7 +125,7 @@ class Zenoo::Image
     result = Zenoo::Image.new(width, height)
     Zenoo::Image.render_to(result) do
       Zenoo::Window.clear([0, 0, 0, 0])
-      Zenoo::Window.draw_image(0, 0, self, shader: shader, uniforms: uniforms)
+      Zenoo::Window.draw(0, 0, self, shader: shader, uniforms: uniforms)
     end
     Zenoo::Backend.flush_image(result)
     result

@@ -60,6 +60,7 @@ void zen__vibration_shutdown(void);
 // gfx (zenoo_gfx.c)
 // ------------------------------------------
 void      zen__gfx_init(void);
+void      zen__gfx_on_context_recreated(void);
 void      zen__gfx_shutdown(void);
 void      zen__gfx_begin_frame(void);        // 画面を描画先にし、余白を黒で塗り、描画状態を初期化
 ZenImage* zen__gfx_render_target(void);      // 現在のレンダーターゲット (画面なら NULL)

@@ -172,13 +172,13 @@ Window.loop(1100, 650, "Zenoo 2D SkinnedMesh & Bone Demo") do
   # ウェイトマップのプレビュー表示
   if show_weights
     Window.draw_text(480, 150, "自動生成ウェイト(Chain)", size: 15, color: [180, 200, 220, 255])
-    Window.draw_image(480, 175, tentacle_skin.weight_map, scale_x: 2.0, scale_y: 0.5)
+    Window.draw(480, 175, tentacle_skin.weight_map, scale_x: 2.0, scale_y: 0.5)
 
     Window.draw_text(480, 390, "白黒グラデーションImage", size: 15, color: [180, 200, 220, 255])
-    Window.draw_image(480, 415, arm_weight_img, scale_x: 0.6, scale_y: 2.0)
+    Window.draw(480, 415, arm_weight_img, scale_x: 0.6, scale_y: 2.0)
 
     Window.draw_text(760, 500, "RGBA 4色ウェイトマップ (R/G/B/A)", size: 15, color: [180, 200, 220, 255])
-    Window.draw_image(820, 525, star_skin.weight_map, scale: 1.2)
+    Window.draw(820, 525, star_skin.weight_map, scale: 1.2)
   end
 
   # UI ガイド

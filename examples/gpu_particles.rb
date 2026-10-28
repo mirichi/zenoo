@@ -187,10 +187,10 @@ def create_particle_mesh(count, shader, pipeline)
   elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t_start) * 1000.0
   puts "Generated #{count} particles in #{elapsed.round(1)} ms (Buffer size: #{(packed_binary.bytesize / 1024.0 / 1024.0).round(2)} MB)"
 
-  Mesh.new(
+  InstanceBuffer.new(
     data: packed_binary,
     count: count,
-    pipeline: pipeline,
+    layout: [4, 4, 4],
     shader: shader,
     blend: :add
   )
@@ -206,25 +206,13 @@ time = 0.0
 current_count = 100_000
 
 # ------------------------------------------------------------------------------
-# 初期化 (Window.loop 前にシェーダーとメッシュを生成)
+# 初期化 (Window.loop 前にシェーダーとインスタンスバッファを生成)
 # ------------------------------------------------------------------------------
 particle_shader = Shader.new(PARTICLE_VERT, PARTICLE_FRAG)
 
-# インスタンシングパイプラインの定義:
-# トポロジー: TRIANGLE_STRIP
-# レイアウト: vec4, vec4, vec4 (合計12 floats)
-# Divisors: 1, 1, 1 (各属性が1インスタンスごとに進む)
-# base_vertex_count: 4 (1インスタンスあたり4頂点のクアッドを展開)
-particle_pipeline = Zenoo::Backend::Pipeline.new(
-  Zenoo::Backend::Topology::TRIANGLE_STRIP,
-  "\x04\x04\x04",
-  "\x01\x01\x01",
-  4
-)
-
 mesh_cache = {}
-mesh_cache[50_000]  = create_particle_mesh(50_000, particle_shader, particle_pipeline)
-mesh_cache[100_000] = create_particle_mesh(100_000, particle_shader, particle_pipeline)
+mesh_cache[50_000]  = create_particle_mesh(50_000, particle_shader, nil)
+mesh_cache[100_000] = create_particle_mesh(100_000, particle_shader, nil)
 active_mesh = mesh_cache[100_000]
 
 fps_timer = 0.0
@@ -248,7 +236,7 @@ Window.loop(WIDTH, HEIGHT, "Zenoo GPU Particle Storm", vsync: false) do
     active_mesh = mesh_cache[100_000]
   elsif Input.key_push?(:"3")
     current_count = 200_000
-    mesh_cache[200_000] ||= create_particle_mesh(200_000, particle_shader, particle_pipeline)
+    mesh_cache[200_000] ||= create_particle_mesh(200_000, particle_shader, nil)
     active_mesh = mesh_cache[200_000]
   end
 

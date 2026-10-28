@@ -349,7 +349,7 @@ class CoordsSimulator
     Window.draw_line(wpv_x, wpv_y - 120, wpv_x, wpv_y + 120, color: [70, 75, 95, 180], width: 1.0)
 
     # 3. スプライト本体の描画
-    Window.draw_sprite(sp)
+    sp.draw
 
     # 4. スプライト画像の外枠 (回転後バウンディング矩形)
     Window.draw_path do |c|

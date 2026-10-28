@@ -112,20 +112,20 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   Window.draw_text(p1_x + 18, p1_y + 36, "angle: 0..360 (度数法) / 中心軸回転", size: 13, color: [150, 165, 190, 255])
 
   # 静止 (0度)
-  Window.draw_image(p1_x + 30, p1_y + 70, @ship_img)
+  Window.draw(p1_x + 30, p1_y + 70, @ship_img)
   Window.draw_text(p1_x + 45, p1_y + 160, "angle: 0", size: 13, color: :white)
 
   # 45度固定
-  Window.draw_image(p1_x + 155, p1_y + 70, @ship_img, angle: 45)
+  Window.draw(p1_x + 155, p1_y + 70, @ship_img, angle: 45)
   Window.draw_text(p1_x + 165, p1_y + 160, "angle: 45", size: 13, color: :white)
 
   # 連続回転
   rot_angle = (t * 120.0) % 360.0
-  Window.draw_image(p1_x + 280, p1_y + 70, @ship_img, angle: rot_angle)
+  Window.draw(p1_x + 280, p1_y + 70, @ship_img, angle: rot_angle)
   Window.draw_text(p1_x + 275, p1_y + 160, "angle: #{rot_angle.round}°", size: 13, color: :yellow)
 
   # 逆回転 ＆ チント色付き
-  Window.draw_image(p1_x + 100, p1_y + 195, @ship_img, color: [255, 150, 150, 255], angle: -rot_angle, scale: 0.8)
+  Window.draw(p1_x + 100, p1_y + 195, @ship_img, color: [255, 150, 150, 255], angle: -rot_angle, scale: 0.8)
   Window.draw_text(p1_x + 180, p1_y + 225, "逆回転 + color tint", size: 13, color: [255, 180, 180, 255])
 
   # ----------------------------------------------------
@@ -137,23 +137,23 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   Window.draw_text(p2_x + 18, p2_y + 36, "scale:, scale_x:, scale_y: (負値で反転)", size: 13, color: [150, 165, 190, 255])
 
   # 等倍 (1.0x)
-  Window.draw_image(p2_x + 25, p2_y + 70, @ship_img, scale: 0.75)
+  Window.draw(p2_x + 25, p2_y + 70, @ship_img, scale: 0.75)
   Window.draw_text(p2_x + 35, p2_y + 160, "scale: 0.75", size: 13, color: :white)
 
   # 脈動アニメーション
   pulse = 0.75 + Math.sin(t * 4.0) * 0.25
-  Window.draw_image(p2_x + 150, p2_y + 70, @ship_img, scale: pulse)
+  Window.draw(p2_x + 150, p2_y + 70, @ship_img, scale: pulse)
   Window.draw_text(p2_x + 145, p2_y + 160, "scale: #{pulse.round(2)}", size: 13, color: :yellow)
 
   # 左右反転 (キャラの振り向き: scale_x: -1.0)
   flip_toggle = ((t * 1.5).to_i.even? ? 1.0 : -1.0)
-  Window.draw_image(p2_x + 280, p2_y + 70, @ship_img, scale_x: flip_toggle, scale_y: 1.0)
+  Window.draw(p2_x + 280, p2_y + 70, @ship_img, scale_x: flip_toggle, scale_y: 1.0)
   Window.draw_text(p2_x + 265, p2_y + 160, "scale_x: #{flip_toggle}", size: 13, color: (flip_toggle < 0 ? :magenta : :green))
 
   # 縦横比変形 (ストレッチ)
   stretch_x = 1.1 + Math.sin(t * 3.0) * 0.3
   stretch_y = 1.1 - Math.sin(t * 3.0) * 0.3
-  Window.draw_image(p2_x + 60, p2_y + 195, @ship_img, scale_x: stretch_x * 0.7, scale_y: stretch_y * 0.7)
+  Window.draw(p2_x + 60, p2_y + 195, @ship_img, scale_x: stretch_x * 0.7, scale_y: stretch_y * 0.7)
   Window.draw_text(p2_x + 160, p2_y + 225, "個別スケール (stretch)", size: 13, color: [180, 220, 255, 255])
 
   # ----------------------------------------------------
@@ -171,7 +171,7 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   Window.draw_rect(c1_x, c1_y, 80, 80, color: [40, 50, 75, 120])
   Window.draw_line(c1_x - 8, c1_y, c1_x + 8, c1_y, color: :red)
   Window.draw_line(c1_x, c1_y - 8, c1_x, c1_y + 8, color: :red)
-  Window.draw_image(c1_x, c1_y, @ship_img, angle: rot_angle, anchor: :top_left)
+  Window.draw(c1_x, c1_y, @ship_img, angle: rot_angle, anchor: :top_left)
   Window.draw_text(c1_x - 5, p3_y + 175, "anchor: :top_left", size: 13, color: :white)
 
   # モード B: anchor: :center
@@ -181,14 +181,14 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   Window.draw_line(c2_x - 14, c2_y, c2_x + 14, c2_y, color: :red)
   Window.draw_line(c2_x, c2_y - 14, c2_x, c2_y + 14, color: :red)
   Window.draw_circle(c2_x, c2_y, 40, color: [40, 50, 75, 100])
-  Window.draw_image(c2_x, c2_y, @ship_img, angle: rot_angle, anchor: :center)
+  Window.draw(c2_x, c2_y, @ship_img, angle: rot_angle, anchor: :center)
   Window.draw_text(c2_x - 45, p3_y + 175, "anchor: :center", size: 13, color: :white)
 
   # ピボット変更デモ (先端回転 vs 根元回転)
   tip_pivot = [0.85, 0.5]
   tip_x, tip_y = p3_x + 90, p3_y + 225
   Window.draw_circle(tip_x, tip_y, 4, color: :yellow) # ピボット位置
-  Window.draw_image(tip_x, tip_y, @ship_img, angle: rot_angle * 1.5, scale: 0.6, pivot: tip_pivot, anchor: tip_pivot)
+  Window.draw(tip_x, tip_y, @ship_img, angle: rot_angle * 1.5, scale: 0.6, pivot: tip_pivot, anchor: tip_pivot)
   Window.draw_text(p3_x + 150, p3_y + 220, "先端ピボット [0.85, 0.5]", size: 13, color: :yellow)
   Window.draw_text(p3_x + 150, p3_y + 238, "剣先を振るような動き", size: 11, color: [140, 160, 190, 255])
 
@@ -211,13 +211,13 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   alphas = [255, 166, 89, 38]
   alphas.each_with_index do |a, idx|
     ax = p4_x + 25 + idx * 115
-    Window.draw_image(ax, p4_y + 75, @ship_img, alpha: a, scale: 0.9)
+    Window.draw(ax, p4_y + 75, @ship_img, alpha: a, scale: 0.9)
     Window.draw_text(ax + 12, p4_y + 185, "alpha: #{a}", size: 13, color: :white)
   end
 
   # 滑らかフェードイン・フェードアウト
   sine_alpha = ((0.5 + 0.5 * Math.sin(t * 3.0)) * 255.0).round
-  Window.draw_image(p4_x + 40, p4_y + 220, @ship_img, alpha: sine_alpha, angle: t * 45, scale: 0.8)
+  Window.draw(p4_x + 40, p4_y + 220, @ship_img, alpha: sine_alpha, angle: t * 45, scale: 0.8)
   Window.draw_text(p4_x + 150, p4_y + 245, "リアルタイムフェード (Sine Wave)", size: 14, color: :yellow)
   Window.draw_text(p4_x + 150, p4_y + 265, "alpha: #{sine_alpha}", size: 13, color: [200, 215, 235, 255])
 
@@ -234,16 +234,16 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # 1. :alpha (標準アルファブレンド)
   b1_x, b1_y = p5_x + 25, p5_y + 65
   Window.draw_rect(b1_x, b1_y, 210, 175, radius: 8, color: [16, 22, 34, 255], border_width: 1, border_color: [45, 55, 75, 255])
-  Window.draw_image(b1_x + 25 - osc * 0.5, b1_y + 20, @disc_img, color: [0, 200, 255, 200], blend: :alpha)
-  Window.draw_image(b1_x + 65 + osc * 0.5, b1_y + 20, @disc_img, color: [255, 60, 140, 200], blend: :alpha)
+  Window.draw(b1_x + 25 - osc * 0.5, b1_y + 20, @disc_img, color: [0, 200, 255, 200], blend: :alpha)
+  Window.draw(b1_x + 65 + osc * 0.5, b1_y + 20, @disc_img, color: [255, 60, 140, 200], blend: :alpha)
   Window.draw_text(b1_x + 16, b1_y + 125, "1. :alpha (標準透過)", size: 14, color: :white)
   Window.draw_text(b1_x + 16, b1_y + 148, "手前が奥を透過上書き", size: 12, color: [160, 175, 195, 255])
 
   # 2. :add (加算合成: 暗い背景で光輝く)
   b2_x, b2_y = p5_x + 255, p5_y + 65
   Window.draw_rect(b2_x, b2_y, 210, 175, radius: 8, color: [10, 12, 18, 255], border_width: 1, border_color: [45, 55, 75, 255])
-  Window.draw_image(b2_x + 25 - osc * 0.5, b2_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :add)
-  Window.draw_image(b2_x + 65 + osc * 0.5, b2_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :add)
+  Window.draw(b2_x + 25 - osc * 0.5, b2_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :add)
+  Window.draw(b2_x + 65 + osc * 0.5, b2_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :add)
   Window.draw_text(b2_x + 16, b2_y + 125, "2. :add (加算合成)", size: 14, color: :yellow)
   Window.draw_text(b2_x + 16, b2_y + 148, "重なりが激しく発光！(光/炎)", size: 12, color: [255, 230, 160, 255])
 
@@ -254,14 +254,14 @@ Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
   # 市松模様のガイド線
   Window.draw_rect(b3_x + 10, b3_y + 10, 190, 100, color: [215, 222, 235, 255])
   # 2つのカラーフィルターを乗算合成 (シアン x マゼンタ -> 重なりが濃い青紫に！)
-  Window.draw_image(b3_x + 25 - osc * 0.5, b3_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :multiply)
-  Window.draw_image(b3_x + 65 + osc * 0.5, b3_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :multiply)
+  Window.draw(b3_x + 25 - osc * 0.5, b3_y + 20, @disc_img, color: [0, 200, 255, 255], blend: :multiply)
+  Window.draw(b3_x + 65 + osc * 0.5, b3_y + 20, @disc_img, color: [255, 60, 140, 255], blend: :multiply)
   Window.draw_text(b3_x + 16, b3_y + 125, "3. :multiply (乗算)", size: 14, color: [30, 40, 70, 255])
   Window.draw_text(b3_x + 16, b3_y + 148, "重なりが濃く混色 (影/セロハン)", size: 12, color: [70, 90, 120, 255])
 
   # 下部に加算パーティクル演出のワンポイント
   orb_pulse = 0.8 + Math.sin(t * 5.0) * 0.2
-  Window.draw_image(p5_x + 30, p5_y + 245, @orb_img, color: :yellow, blend: :add, scale: orb_pulse * 0.6)
+  Window.draw(p5_x + 30, p5_y + 245, @orb_img, color: :yellow, blend: :add, scale: orb_pulse * 0.6)
   Window.draw_text(p5_x + 85, p5_y + 256, "エフェクト演出: 加算ブレンドによる美しい発光オーラ・弾幕・ビーム", size: 13, color: [255, 230, 150, 255])
 
   # キーボード終了 & 自動テスト判定

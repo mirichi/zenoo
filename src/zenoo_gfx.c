@@ -9,12 +9,14 @@
 
 static GLuint s_dynamic_vao = 0;
 static GLuint s_dynamic_vbo = 0;
+static GLuint s_quad_vbo = 0;
 static size_t s_dynamic_vbo_capacity = 0;
 
 static GLuint s_white_texture = 0;
 static GLuint s_active_texture = 0;
 static GLuint s_active_program = 0;
 static int s_current_blend_mode = -1;
+static int s_context_gen = 1;
 static ZenImage* s_current_render_target = NULL;
 
 static void color_to_floats(uint32_t c, float out[4]) {
@@ -81,8 +83,35 @@ void zen__gfx_init(void) {
     glGenBuffers(1, &s_dynamic_vbo);
     glGenVertexArrays(1, &s_dynamic_vao);
 
+    // 共有 4頂点 Quad VBO 初期化 (layout: pos2, uv2, color4 = 8 floats/頂点)
+    static const float quad_vertices[4 * 8] = {
+        0.0f, 0.0f,  0.0f, 0.0f,  1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, 0.0f,  1.0f, 0.0f,  1.0f, 1.0f, 1.0f, 1.0f,
+        0.0f, 1.0f,  0.0f, 1.0f,  1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f,  1.0f, 1.0f,  1.0f, 1.0f, 1.0f, 1.0f
+    };
+    glGenBuffers(1, &s_quad_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, s_quad_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), quad_vertices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
     s_current_render_target = NULL;
     s_current_blend_mode = -1;
+#if !defined(__EMSCRIPTEN__) && defined(GL_MULTISAMPLE)
+    glEnable(GL_MULTISAMPLE);
+#endif
+}
+
+void zen__gfx_on_context_recreated(void) {
+    // 共有コンテキスト再生成時: テクスチャ・VBO・IBO・Shaderは共有されるが、
+    // VAO・FBO はコンテキスト固有オブジェクトのため新しいコンテキスト側で再生成する
+    s_context_gen++;
+    s_dynamic_vao = 0;
+    glGenVertexArrays(1, &s_dynamic_vao);
+    s_current_render_target = NULL;
+    s_current_blend_mode = -1;
+    s_active_program = 0;
+    s_active_texture = s_white_texture;
 #if !defined(__EMSCRIPTEN__) && defined(GL_MULTISAMPLE)
     glEnable(GL_MULTISAMPLE);
 #endif
@@ -92,6 +121,10 @@ void zen__gfx_shutdown(void) {
     if (s_white_texture) {
         glDeleteTextures(1, &s_white_texture);
         s_white_texture = 0;
+    }
+    if (s_quad_vbo) {
+        glDeleteBuffers(1, &s_quad_vbo);
+        s_quad_vbo = 0;
     }
     if (s_dynamic_vbo) {
         glDeleteBuffers(1, &s_dynamic_vbo);
@@ -209,11 +242,12 @@ void zen_set_render_target(ZenImage* target) {
 
     if (target != NULL && target->texture != NULL) {
         // 1. 通常 FBO の確保 (テクスチャのアタッチ)
-        if (!target->has_fbo) {
+        if (target->has_fbo != s_context_gen) {
             glGenFramebuffers(1, &target->fbo);
             glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->texture->id, 0);
-            target->has_fbo = 1;
+            target->has_fbo = s_context_gen;
+            target->msaa_fbo = 0;
         }
 
         // 2. MSAA が有効な場合
@@ -599,5 +633,317 @@ void zen_draw_buffer(int topology,
         glDisableVertexAttribArray(i);
     }
 
+    glBindVertexArray(0);
+}
+
+// ------------------------------------------
+// メッシュ (ZenMesh: VRAM VBO/IBO & 2バッファインスタンシング)
+// ------------------------------------------
+static GLenum topology_to_gl_mode(int topology) {
+    switch (topology) {
+        case ZEN_TOPOLOGY_POINTS:         return GL_POINTS;
+        case ZEN_TOPOLOGY_LINES:          return GL_LINES;
+        case ZEN_TOPOLOGY_LINE_LOOP:      return GL_LINE_LOOP;
+        case ZEN_TOPOLOGY_LINE_STRIP:     return GL_LINE_STRIP;
+        case ZEN_TOPOLOGY_TRIANGLES:      return GL_TRIANGLES;
+        case ZEN_TOPOLOGY_TRIANGLE_STRIP: return GL_TRIANGLE_STRIP;
+        case ZEN_TOPOLOGY_TRIANGLE_FAN:   return GL_TRIANGLE_FAN;
+        default:                          return GL_TRIANGLES;
+    }
+}
+
+ZenMesh* zen_mesh_create(int topology,
+                         const uint8_t* layout,
+                         const void* vertex_data,
+                         size_t vertex_bytes,
+                         int vertex_count,
+                         const uint32_t* index_data,
+                         int index_count) {
+    zen_ensure_context();
+
+    ZenMesh* mesh = (ZenMesh*)zen__alloc(sizeof(ZenMesh));
+    if (!mesh) return NULL;
+
+    mesh->topology = topology;
+    mesh->vertex_count = vertex_count;
+    mesh->index_count = index_count;
+    mesh->is_dynamic = 0;
+
+    if (layout && layout[0] != 0) {
+        int i = 0;
+        while (i < 15 && layout[i] != 0) {
+            mesh->layout[i] = layout[i];
+            i++;
+        }
+        mesh->layout[i] = 0;
+    } else {
+        // デフォルト標準レイアウト: pos(2), uv(2), color(4)
+        mesh->layout[0] = 2;
+        mesh->layout[1] = 2;
+        mesh->layout[2] = 4;
+        mesh->layout[3] = 0;
+    }
+
+    if (vertex_bytes > 0) {
+        GLuint vbo = 0;
+        glGenBuffers(1, &vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)vertex_bytes, vertex_data, GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        mesh->vbo = (uint32_t)vbo;
+        mesh->vbo_bytes = vertex_bytes;
+    }
+
+    if (index_data && index_count > 0) {
+        size_t ibo_bytes = (size_t)index_count * sizeof(uint32_t);
+        GLuint ibo = 0;
+        glGenBuffers(1, &ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)ibo_bytes, index_data, GL_STATIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        mesh->ibo = (uint32_t)ibo;
+        mesh->ibo_bytes = ibo_bytes;
+    }
+
+    return mesh;
+}
+
+void zen_mesh_destroy(ZenMesh* mesh) {
+    if (!mesh) return;
+    if (zen__window() != NULL) {
+        if (mesh->vbo) {
+            GLuint vbo = (GLuint)mesh->vbo;
+            glDeleteBuffers(1, &vbo);
+        }
+        if (mesh->ibo) {
+            GLuint ibo = (GLuint)mesh->ibo;
+            glDeleteBuffers(1, &ibo);
+        }
+    }
+    free(mesh);
+}
+
+void zen_mesh_update_vertices(ZenMesh* mesh,
+                              size_t offset_bytes,
+                              const void* vertex_data,
+                              size_t byte_size,
+                              int vertex_count) {
+    if (!mesh || !vertex_data || byte_size == 0) return;
+    zen_ensure_context();
+
+    // 頂点が更新された時点で自動的に GL_DYNAMIC_DRAW へ昇格
+    mesh->is_dynamic = 1;
+    if (vertex_count > 0) {
+        mesh->vertex_count = vertex_count;
+    }
+
+    if (mesh->vbo == 0) {
+        GLuint vbo = 0;
+        glGenBuffers(1, &vbo);
+        mesh->vbo = (uint32_t)vbo;
+        mesh->vbo_bytes = 0;
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, (GLuint)mesh->vbo);
+    if (offset_bytes == 0 && byte_size == mesh->vbo_bytes) {
+        // Buffer Orphaning: GPU使用中のストールを回避して高速更新
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)mesh->vbo_bytes, NULL, GL_DYNAMIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)byte_size, vertex_data);
+    } else if (offset_bytes + byte_size <= mesh->vbo_bytes) {
+        glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)offset_bytes, (GLsizeiptr)byte_size, vertex_data);
+    } else {
+        size_t total = offset_bytes + byte_size;
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)total, NULL, GL_DYNAMIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)offset_bytes, (GLsizeiptr)byte_size, vertex_data);
+        mesh->vbo_bytes = total;
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+void zen_mesh_update_indices(ZenMesh* mesh,
+                             const uint32_t* index_data,
+                             int index_count) {
+    if (!mesh) return;
+    zen_ensure_context();
+
+    mesh->index_count = index_count;
+    if (!index_data || index_count <= 0) {
+        return;
+    }
+
+    size_t ibo_bytes = (size_t)index_count * sizeof(uint32_t);
+    if (mesh->ibo == 0) {
+        GLuint ibo = 0;
+        glGenBuffers(1, &ibo);
+        mesh->ibo = (uint32_t)ibo;
+        mesh->ibo_bytes = 0;
+    }
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, (GLuint)mesh->ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)ibo_bytes, index_data, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    mesh->ibo_bytes = ibo_bytes;
+}
+
+void zen_draw_mesh_instanced(ZenMesh* geom_mesh,
+                             ZenMesh* inst_buffer,
+                             const uint8_t* inst_layout,
+                             const void* inst_data,
+                             int instance_count,
+                             ZenImage* texture,
+                             ZenShader* shader) {
+    if (!shader) return;
+
+    // 1. シェーダーと共通Uniformの準備
+    GLuint prog = shader->program_id;
+    glUseProgram(prog);
+    s_active_program = prog;
+
+    int cur_w, cur_h;
+    if (s_current_render_target) {
+        cur_w = (s_current_render_target->texture) ? s_current_render_target->texture->width : s_current_render_target->width;
+        cur_h = (s_current_render_target->texture) ? s_current_render_target->texture->height : s_current_render_target->height;
+    } else {
+        const ZenViewport* vp = zen__viewport();
+        cur_w = vp->base_w;
+        cur_h = vp->base_h;
+    }
+    if (shader->loc_resolution >= 0) {
+        glUniform2f(shader->loc_resolution, (float)cur_w, (float)cur_h);
+    }
+    if (shader->loc_flip_y >= 0) {
+        glUniform1f(shader->loc_flip_y, s_current_render_target ? 1.0f : -1.0f);
+    }
+
+    // 2. テクスチャのバインド
+    GLuint tex_id = (texture && texture->texture) ? texture->texture->id : s_white_texture;
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex_id);
+    s_active_texture = tex_id;
+    if (shader->loc_texture >= 0) {
+        glUniform1i(shader->loc_texture, 0);
+    }
+
+    glBindVertexArray(s_dynamic_vao);
+
+    int attr_idx = 0;
+
+    // 3. Stream 0: 頂点バッファ (divisor = 0)
+    // - geom_mesh が指定されていればその VBO を使用
+    // - geom_mesh が NULL かつ inst_buffer も NULL (通常の Image 描画) なら共通4頂点 s_quad_vbo を使用
+    // - geom_mesh が NULL かつ inst_buffer が指定されている場合 (gl_VertexID ビルボードの GPU パーティクル等) は Stream 0 属性なし
+    if (geom_mesh || !inst_buffer) {
+        GLuint geom_vbo = geom_mesh ? (GLuint)geom_mesh->vbo : s_quad_vbo;
+        if (!geom_vbo) {
+            glBindVertexArray(0);
+            return;
+        }
+
+        static const uint8_t default_quad_layout[] = { 2, 2, 4, 0 };
+        const uint8_t* v_layout = (geom_mesh && geom_mesh->layout[0] != 0) ? geom_mesh->layout : default_quad_layout;
+
+        int v_stride = 0;
+        for (int i = 0; v_layout[i] != 0; i++) {
+            v_stride += (int)v_layout[i] * (int)sizeof(float);
+        }
+        if (v_stride == 0) {
+            glBindVertexArray(0);
+            return;
+        }
+
+        glBindBuffer(GL_ARRAY_BUFFER, geom_vbo);
+        uintptr_t v_offset = 0;
+        for (int i = 0; v_layout[i] != 0; i++) {
+            int size = (int)v_layout[i];
+            glEnableVertexAttribArray(attr_idx);
+            glVertexAttribPointer(attr_idx, size, GL_FLOAT, GL_FALSE, v_stride, (void*)v_offset);
+            v_offset += (size_t)size * sizeof(float);
+            attr_idx++;
+        }
+    }
+    int geom_attr_count = attr_idx;
+
+    // 4. Stream 1: インスタンスバッファ (divisor = 1)
+    // - inst_buffer (VRAM 常駐 InstanceBuffer) または inst_data (CPU 動的転送バッチ)
+    int eff_instances = 1;
+    int has_inst_stream = 0;
+
+    if (inst_buffer && inst_buffer->vbo != 0 && inst_buffer->vertex_count > 0) {
+        const uint8_t* ib_layout = inst_buffer->layout;
+        int i_stride = 0;
+        for (int i = 0; ib_layout[i] != 0; i++) {
+            i_stride += (int)ib_layout[i] * (int)sizeof(float);
+        }
+        if (i_stride > 0) {
+            glBindBuffer(GL_ARRAY_BUFFER, (GLuint)inst_buffer->vbo);
+            uintptr_t i_offset = 0;
+            for (int i = 0; ib_layout[i] != 0; i++) {
+                int size = (int)ib_layout[i];
+                glEnableVertexAttribArray(attr_idx);
+                glVertexAttribPointer(attr_idx, size, GL_FLOAT, GL_FALSE, i_stride, (void*)i_offset);
+                glVertexAttribDivisor(attr_idx, 1);
+                i_offset += (size_t)size * sizeof(float);
+                attr_idx++;
+            }
+            eff_instances = inst_buffer->vertex_count;
+            has_inst_stream = 1;
+        }
+    } else if (inst_layout && inst_layout[0] != 0 && inst_data && instance_count > 0) {
+        int i_stride = 0;
+        for (int i = 0; inst_layout[i] != 0; i++) {
+            i_stride += (int)inst_layout[i] * (int)sizeof(float);
+        }
+        if (i_stride > 0) {
+            size_t total_inst_bytes = (size_t)i_stride * (size_t)instance_count;
+            glBindBuffer(GL_ARRAY_BUFFER, s_dynamic_vbo);
+            glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)total_inst_bytes, NULL, GL_STREAM_DRAW);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)total_inst_bytes, inst_data);
+
+            uintptr_t i_offset = 0;
+            for (int i = 0; inst_layout[i] != 0; i++) {
+                int size = (int)inst_layout[i];
+                glEnableVertexAttribArray(attr_idx);
+                glVertexAttribPointer(attr_idx, size, GL_FLOAT, GL_FALSE, i_stride, (void*)i_offset);
+                glVertexAttribDivisor(attr_idx, 1);
+                i_offset += (size_t)size * sizeof(float);
+                attr_idx++;
+            }
+            eff_instances = instance_count;
+            has_inst_stream = 1;
+        }
+    } else if (instance_count > 1) {
+        eff_instances = instance_count;
+    }
+
+    // 5. ドローコール (IBO があれば glDrawElementsInstanced、なければ glDrawArraysInstanced)
+    GLenum gl_mode = geom_mesh ? topology_to_gl_mode(geom_mesh->topology) : GL_TRIANGLE_STRIP;
+
+    if (geom_mesh && geom_mesh->ibo != 0 && geom_mesh->index_count > 0) {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, (GLuint)geom_mesh->ibo);
+        if (has_inst_stream || eff_instances > 1) {
+            glDrawElementsInstanced(gl_mode, geom_mesh->index_count, GL_UNSIGNED_INT, (void*)0, eff_instances);
+        } else {
+            glDrawElements(gl_mode, geom_mesh->index_count, GL_UNSIGNED_INT, (void*)0);
+        }
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    } else {
+        int v_count = geom_mesh ? geom_mesh->vertex_count : 4;
+        if (v_count > 0) {
+            if (has_inst_stream || eff_instances > 1) {
+                glDrawArraysInstanced(gl_mode, 0, v_count, eff_instances);
+            } else {
+                glDrawArrays(gl_mode, 0, v_count);
+            }
+        }
+    }
+
+    // 6. クリーンアップ
+    for (int i = 0; i < attr_idx; i++) {
+        if (i >= geom_attr_count) {
+            glVertexAttribDivisor(i, 0);
+        }
+        glDisableVertexAttribArray(i);
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }

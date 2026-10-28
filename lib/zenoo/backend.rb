@@ -31,10 +31,11 @@ module Zenoo
     module Layout
       POS2_COLOR4         = "\x02\x04"
       POS2_UV2_COLOR4     = "\x02\x02\x04"
+      POS2_UV2_ALPHA1     = "\x02\x02\x04"
       LINE                = "\x02\x04"
       CARD_INSTANCED      = "\x04\x04\x04\x04\x04\x04\x04"
       QUAD_INSTANCED      = CARD_INSTANCED
-      SPRITE_INSTANCED    = "\x04\x04\x04\x04\x04"
+      SPRITE_INSTANCED    = "\x04\x04\x04\x04"
       FONT_INSTANCED      = "\x04\x04\x04\x04\x04\x04\x04"
     end
 
@@ -45,10 +46,11 @@ module Zenoo
       DIRECT              = "\x00\x00"
       POS2_COLOR4         = "\x00\x00"
       POS2_UV2_COLOR4     = "\x00\x00\x00"
+      POS2_UV2_ALPHA1     = "\x00\x00\x00"
       LINE                = "\x00\x00"
       CARD_INSTANCED      = "\x01\x01\x01\x01\x01\x01\x01"
       QUAD_INSTANCED      = CARD_INSTANCED
-      SPRITE_INSTANCED    = "\x01\x01\x01\x01\x01"
+      SPRITE_INSTANCED    = "\x01\x01\x01\x01"
       FONT_INSTANCED      = "\x01\x01\x01\x01\x01\x01\x01"
     end
 
@@ -170,7 +172,7 @@ module Zenoo
     # 描画コマンド
     # ----------------------------------------------------
     class DrawCommand
-      attr_accessor :target, :z, :order, :pipeline, :data, :count, :image, :shader, :uniforms, :blend, :clip
+      attr_accessor :target, :z, :order, :pipeline, :data, :count, :image, :shader, :uniforms, :blend, :clip, :mesh, :inst_buffer
 
       def initialize
         @target = nil
@@ -184,9 +186,11 @@ module Zenoo
         @uniforms = nil
         @blend = 0
         @clip = nil
+        @mesh = nil
+        @inst_buffer = nil
       end
 
-      def set(target, z, order, pipeline, data, count, image = nil, shader = nil, uniforms = nil, blend = 0, clip = nil)
+      def set(target, z, order, pipeline, data, count, image = nil, shader = nil, uniforms = nil, blend = 0, clip = nil, mesh = nil, inst_buffer = nil)
         @target = target
         @z = z.to_f
         @order = order
@@ -198,6 +202,8 @@ module Zenoo
         @uniforms = uniforms
         @blend = blend.to_i
         @clip = clip
+        @mesh = mesh
+        @inst_buffer = inst_buffer
       end
     end
 
@@ -251,12 +257,12 @@ module Zenoo
         @queue_count += 1
       end
 
-      def enqueue(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0)
+      def enqueue(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0, mesh: nil, inst_buffer: nil)
         cmd = allocate_command
         zf = z.to_f
         @needs_z_sort = true if zf != 0.0
         clip = Backend.current_clip
-        cmd.set(@owner, zf, @queue_count, pipeline, data, count, image, shader, uniforms, blend, clip)
+        cmd.set(@owner, zf, @queue_count, pipeline, data, count, image, shader, uniforms, blend, clip, mesh, inst_buffer)
         @queue_count += 1
       end
 
@@ -279,7 +285,7 @@ module Zenoo
           parent_cmd.set(
             parent_queue.owner, target_zf, parent_queue.queue_count,
             cmd.pipeline, cmd.data, cmd.count,
-            cmd.image, cmd.shader, cmd.uniforms, cmd.blend, cmd.clip
+            cmd.image, cmd.shader, cmd.uniforms, cmd.blend, cmd.clip, cmd.mesh, cmd.inst_buffer
           )
           parent_queue.increment_count
           i += 1
@@ -521,8 +527,8 @@ module Zenoo
       cleanup_empty_queues
     end
 
-    def self.enqueue_draw(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0)
-      active_queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z)
+    def self.enqueue_draw(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0, mesh: nil, inst_buffer: nil)
+      active_queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z, mesh: mesh, inst_buffer: inst_buffer)
       register_pending_image(@current_target) if @current_target
     end
 
@@ -632,6 +638,8 @@ module Zenoo
         cur_uniforms = cmd.uniforms
         cur_blend = cmd.blend
         cur_clip = cmd.clip
+        cur_mesh = cmd.mesh
+        cur_inst_buffer = cmd.inst_buffer
 
         # シザーテストの適用（変更があった場合のみ切り替え）
         if cur_clip != active_gl_clip
@@ -643,10 +651,12 @@ module Zenoo
           active_gl_clip = cur_clip
         end
 
-        can_batch = cur_pipeline.base_vertex_count > 0 ||
-                    cur_pipeline.topology == Topology::TRIANGLES ||
-                    cur_pipeline.topology == Topology::LINES ||
-                    cur_pipeline.topology == Topology::POINTS
+        can_batch = !cur_data.nil? && cur_inst_buffer.nil? && (
+                      cur_pipeline.base_vertex_count > 0 ||
+                      cur_pipeline.topology == Topology::TRIANGLES ||
+                      cur_pipeline.topology == Topology::LINES ||
+                      cur_pipeline.topology == Topology::POINTS
+                    )
 
         next_idx = i + 1
         final_data = cur_data
@@ -662,6 +672,9 @@ module Zenoo
             same_image = (ncmd.image == cur_image) ||
                          (ncmd.image && cur_image && ncmd.image.texture_id == cur_image.texture_id)
             if ncmd.pipeline == cur_pipeline &&
+               ncmd.mesh == cur_mesh &&
+               ncmd.inst_buffer.nil? &&
+               !ncmd.data.nil? &&
                same_image &&
                n_shader == cur_shader &&
                ncmd.uniforms == cur_uniforms &&
@@ -682,6 +695,8 @@ module Zenoo
                 ncmd.pipeline = nil
                 ncmd.uniforms = nil
                 ncmd.clip = nil
+                ncmd.mesh = nil
+                ncmd.inst_buffer = nil
               end
               next_idx += 1
             else
@@ -695,16 +710,29 @@ module Zenoo
         apply_uniforms(cur_shader, cur_uniforms) if cur_uniforms
 
         $last_draw_calls = ($last_draw_calls || 0) + 1
-        Native::Renderer.draw_buffer(
-          cur_pipeline.topology,
-          cur_pipeline.layout,
-          cur_pipeline.divisors,
-          cur_pipeline.base_vertex_count,
-          final_data,
-          cur_count,
-          cur_image,
-          cur_shader
-        )
+        if cur_mesh || cur_inst_buffer || cur_pipeline == Pipelines::SPRITE
+          inst_layout = final_data ? cur_pipeline.layout : nil
+          Native::Renderer.draw_mesh(
+            cur_mesh,
+            cur_inst_buffer,
+            inst_layout,
+            final_data,
+            cur_count,
+            cur_image,
+            cur_shader
+          )
+        else
+          Native::Renderer.draw_buffer(
+            cur_pipeline.topology,
+            cur_pipeline.layout,
+            cur_pipeline.divisors,
+            cur_pipeline.base_vertex_count,
+            final_data,
+            cur_count,
+            cur_image,
+            cur_shader
+          )
+        end
 
         unless @skip_ondemand_flush
           cmd.data = nil
@@ -714,6 +742,8 @@ module Zenoo
           cmd.pipeline = nil
           cmd.uniforms = nil
           cmd.clip = nil
+          cmd.mesh = nil
+          cmd.inst_buffer = nil
         end
 
         i = next_idx

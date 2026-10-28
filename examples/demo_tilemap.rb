@@ -148,7 +148,7 @@ Window.loop(960, 540, "Zenoo - Tilemap & Image.load_tiles Demo") do
                      border_color: is_sel ? Color.new(255, 220, 80) : nil, border_width: is_sel ? 2.0 : 0.0)
 
     # タイルアイコン
-    Window.draw_image(px + 8, py + 6, t_img)
+    Window.draw(px + 8, py + 6, t_img)
     Window.draw_text(px + 48, py + 14, tile_names[idx], size: 14, color: Color.new(240, 240, 240))
 
     # パレットクリックで選択

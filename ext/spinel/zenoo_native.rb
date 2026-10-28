@@ -53,6 +53,17 @@ module Zenoo
   native_method :set_mat4,  [:string, :string], :nil, "sp_ZenShader_set_mat4"
   native_method :set_texture, [:string, :int, :any], :nil, "sp_ZenShader_set_texture"
 
+  # ==========================================
+  # 2.5. Native::Mesh (Spinel native_struct)
+  # ==========================================
+  native_struct "Zenoo::Native::Mesh", "sp_ZenMesh", "sp_ZenMesh_free"
+  native_new [:int, :string, :string, :int, :int, :string, :int], "sp_ZenMesh_new"
+  native_method :raw_update_vertices, [:string, :int, :int, :int], :nil, "sp_ZenMesh_update_vertices"
+  native_method :raw_update_indices,  [:string, :int], :nil, "sp_ZenMesh_update_indices"
+  native_method :dynamic?,     [], :bool, "sp_ZenMesh_is_dynamic"
+  native_method :vertex_count, [], :int,  "sp_ZenMesh_vertex_count"
+  native_method :index_count,  [], :int,  "sp_ZenMesh_index_count"
+
   module Native
     # ==========================================
     # 3. Native::Window
@@ -194,6 +205,9 @@ module Zenoo
       native_func :raw_draw_buffer, [
         :int, :string, :string, :int, :string, :int, :any, :any
       ], :nil, "sp_zen_renderer_draw_buffer"
+      native_func :raw_draw_mesh, [
+        :any, :any, :string, :string, :int, :any, :any
+      ], :nil, "sp_zen_renderer_draw_mesh"
 
       def self.set_scissor(x, y, w, h)
         Zenoo::Native::Renderer.raw_set_scissor(x.to_i, y.to_i, w.to_i, h.to_i)
@@ -207,6 +221,18 @@ module Zenoo
           base_vertex_count.to_i,
           data.to_s,
           count.to_i,
+          img,
+          sh
+        )
+      end
+
+      def self.draw_mesh(geom_mesh, inst_buffer, inst_layout, inst_data, inst_count, img, sh)
+        Zenoo::Native::Renderer.raw_draw_mesh(
+          geom_mesh,
+          inst_buffer,
+          inst_layout ? inst_layout.to_s : "",
+          inst_data ? inst_data.to_s : "",
+          inst_count.to_i,
           img,
           sh
         )
@@ -320,6 +346,27 @@ class Zenoo::Native::NativeShader
   end
 end
 
+class Zenoo::Native::Mesh
+  def self.canvas(*args, &block)
+    Zenoo::Mesh.canvas(*args, &block)
+  end
+
+  def self.grid(*args, &block)
+    Zenoo::Mesh.grid(*args, &block)
+  end
+
+  def update_vertices(vdata, offset = 0, vcount = 0)
+    s = vdata.to_s
+    raw_update_vertices(s, s.bytesize, offset.to_i, vcount.to_i)
+  end
+
+  def update_indices(idata, icount = 0)
+    s = idata ? idata.to_s : ""
+    cnt = icount.to_i > 0 ? icount.to_i : (s.bytesize / 4)
+    raw_update_indices(s, cnt)
+  end
+end
+
 class Zenoo::Native::Font
   def self.load(path)
     new(path.to_s)
@@ -355,8 +402,12 @@ class Zenoo::Native::Font
 end
 
 class Zenoo::Native::Sound
-  def self.load(path)
-    new(path.to_s)
+  def self.load(path, stream = false)
+    if stream
+      new(path.to_s, true)
+    else
+      new(path.to_s)
+    end
   end
 
   def self.load_pcm(samples_binary, channels, sample_rate)

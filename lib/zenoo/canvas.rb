@@ -137,7 +137,96 @@ module Zenoo
       @transform = Transform.new
       @state_stack = []
       @subpaths = []
+      @mesh_capture = nil
       begin_path
+    end
+
+    # Canvas の描画内容を頂点カラー付き Zenoo::Mesh に変換するクラスメソッド
+    # 例:
+    #   mesh = Zenoo::Canvas.to_mesh(100, 100) do |c|
+    #     c.fill_circle(50, 50, 40, :orange)
+    #     c.stroke_circle(50, 50, 40, :white, 4)
+    #   end
+    def self.to_mesh(width_or_image = nil, height_arg = nil, width: nil, height: nil, image: nil, shader: nil, uniforms: nil, blend: :alpha, &block)
+      new.to_mesh(width_or_image, height_arg, width: width, height: height, image: image, shader: shader, uniforms: uniforms, blend: blend, &block)
+    end
+
+    # 現在の Canvas またはブロック内の描画命令 (fill / stroke / fill_rect 等) をキャプチャし、
+    # Sprite や Window.draw にそのまま渡せる Zenoo::Mesh (8 floats/頂点) を生成して返します。
+    def to_mesh(width_or_image = nil, height_arg = nil, width: nil, height: nil, image: nil, shader: nil, uniforms: nil, blend: :alpha)
+      if width_or_image.is_a?(Image)
+        img = width_or_image
+        explicit_w = width || img.width
+        explicit_h = height || img.height
+      else
+        img = image
+        explicit_w = width || width_or_image
+        explicit_h = height || height_arg || (img ? img.height : nil)
+      end
+
+      prev_capture = @mesh_capture
+      cap_verts = []
+      cap_indices = []
+      @mesh_capture = { vertices: cap_verts, indices: cap_indices }
+      begin
+        yield(self) if block_given?
+        # ブロック内でパスだけ構築されて fill / stroke がまだ呼ばれていない場合は自動 fill
+        if cap_verts.empty? && @subpaths.any? { |s| s.points.size >= 3 }
+          fill
+        end
+      ensure
+        @mesh_capture = prev_capture
+      end
+
+      v_count = cap_verts.length / 8
+      if v_count == 0
+        w = (explicit_w || 1.0).to_f
+        h = (explicit_h || explicit_w || 1.0).to_f
+        return Mesh.from_vertices([0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0] * 3, [0, 1, 2], width: w, height: h, image: img, shader: shader, uniforms: uniforms, blend: blend)
+      end
+
+      min_x = Float::INFINITY
+      min_y = Float::INFINITY
+      max_x = -Float::INFINITY
+      max_y = -Float::INFINITY
+      vi = 0
+      while vi < cap_verts.length
+        px = cap_verts[vi]
+        py = cap_verts[vi + 1]
+        min_x = px if px < min_x
+        min_y = py if py < min_y
+        max_x = px if px > max_x
+        max_y = py if py > max_y
+        vi += 8
+      end
+
+      # サイズ未指定かつ負の座標を含む場合 (例: 原点(0,0)中心で描画した場合) は左上を (0,0) に自動シフト
+      if explicit_w.nil? && explicit_h.nil? && (min_x < 0.0 || min_y < 0.0)
+        shift_x = -min_x
+        shift_y = -min_y
+        vi = 0
+        while vi < cap_verts.length
+          cap_verts[vi]     += shift_x
+          cap_verts[vi + 1] += shift_y
+          vi += 8
+        end
+        w = [max_x - min_x, 1.0].max
+        h = [max_y - min_y, 1.0].max
+      else
+        w = (explicit_w || [max_x, 1.0].max).to_f
+        h = (explicit_h || explicit_w || [max_y, 1.0].max).to_f
+      end
+
+      inv_w = w > 0.0 ? (1.0 / w) : 0.0
+      inv_h = h > 0.0 ? (1.0 / h) : 0.0
+      vi = 0
+      while vi < cap_verts.length
+        cap_verts[vi + 2] = cap_verts[vi] * inv_w
+        cap_verts[vi + 3] = cap_verts[vi + 1] * inv_h
+        vi += 8
+      end
+
+      Mesh.from_vertices(cap_verts, cap_indices, width: w, height: h, image: img, shader: shader, uniforms: uniforms, blend: blend)
     end
 
     # ----------------------------------------------------
@@ -411,6 +500,11 @@ module Zenoo
     private
 
     def render_triangles_with_style(coords, style)
+      if @mesh_capture
+        capture_triangles_to_mesh(coords, style)
+        return
+      end
+
       num_verts = coords.size / 2
       verts = []
       i = 0
@@ -472,6 +566,139 @@ module Zenoo
         shader: shader,
         uniforms: uniforms
       )
+    end
+
+    def capture_triangles_to_mesh(coords, style)
+      cap_verts = @mesh_capture[:vertices]
+      cap_indices = @mesh_capture[:indices]
+      # 同一描画ステップ内の共有頂点をインデックス化
+      vert_map = {}
+
+      if style.is_a?(LinearGradient) || style.is_a?(RadialGradient)
+        # グラデーション塗りつぶし時は外周頂点のみだと中間色ストップが欠落するため、
+        # 全三角形を均一に中点4分割してTジャンクション(隙間)のない内部頂点を自動生成する
+        passes = (coords.size / 6 <= 48) ? 2 : 1
+        work_coords = subdivide_triangles_uniform(coords, passes)
+        i = 0
+        while i < work_coords.size
+          px = work_coords[i].to_f
+          py = work_coords[i + 1].to_f
+          cr, cg, cb, ca = evaluate_gradient_color(style, px, py)
+          key = [(px * 1000.0).round, (py * 1000.0).round]
+          v_idx = vert_map[key]
+          unless v_idx
+            v_idx = cap_verts.length / 8
+            cap_verts.push(px, py, 0.0, 0.0, cr, cg, cb, ca)
+            vert_map[key] = v_idx
+          end
+          cap_indices << v_idx
+          i += 2
+        end
+      else
+        color = resolve_color(style)
+        cr = color[0].to_f
+        cg = color[1].to_f
+        cb = color[2].to_f
+        ca = (color[3] * @global_alpha).to_f
+        i = 0
+        while i < coords.size
+          px = coords[i].to_f
+          py = coords[i + 1].to_f
+          key = [(px * 1000.0).round, (py * 1000.0).round]
+          v_idx = vert_map[key]
+          unless v_idx
+            v_idx = cap_verts.length / 8
+            cap_verts.push(px, py, 0.0, 0.0, cr, cg, cb, ca)
+            vert_map[key] = v_idx
+          end
+          cap_indices << v_idx
+          i += 2
+        end
+      end
+    end
+
+    # グラデーションおよび頂点変形向けに全三角形を均一に中点4分割 (Tジャンクションが発生しない適合分割)
+    def subdivide_triangles_uniform(coords, passes = 1)
+      current = coords
+      passes.times do
+        next_coords = Array.new(current.size * 4)
+        ni = 0
+        i = 0
+        while i < current.size
+          ax = current[i];     ay = current[i + 1]
+          bx = current[i + 2]; by = current[i + 3]
+          cx = current[i + 4]; cy = current[i + 5]
+
+          mab_x = (ax + bx) * 0.5; mab_y = (ay + by) * 0.5
+          mbc_x = (bx + cx) * 0.5; mbc_y = (by + cy) * 0.5
+          mca_x = (cx + ax) * 0.5; mca_y = (cy + ay) * 0.5
+
+          next_coords[ni]      = ax;    next_coords[ni + 1]  = ay
+          next_coords[ni + 2]  = mab_x; next_coords[ni + 3]  = mab_y
+          next_coords[ni + 4]  = mca_x; next_coords[ni + 5]  = mca_y
+
+          next_coords[ni + 6]  = mab_x; next_coords[ni + 7]  = mab_y
+          next_coords[ni + 8]  = bx;    next_coords[ni + 9]  = by
+          next_coords[ni + 10] = mbc_x; next_coords[ni + 11] = mbc_y
+
+          next_coords[ni + 12] = mca_x; next_coords[ni + 13] = mca_y
+          next_coords[ni + 14] = mbc_x; next_coords[ni + 15] = mbc_y
+          next_coords[ni + 16] = cx;    next_coords[ni + 17] = cy
+
+          next_coords[ni + 18] = mab_x; next_coords[ni + 19] = mab_y
+          next_coords[ni + 20] = mbc_x; next_coords[ni + 21] = mbc_y
+          next_coords[ni + 22] = mca_x; next_coords[ni + 23] = mca_y
+
+          ni += 24
+          i += 6
+        end
+        current = next_coords
+      end
+      current
+    end
+
+    def evaluate_gradient_color(grad, px, py)
+      stops = grad.stops
+      return [1.0, 1.0, 1.0, @global_alpha.to_f] if stops.empty?
+
+      if grad.is_a?(LinearGradient)
+        dx = grad.x1 - grad.x0
+        dy = grad.y1 - grad.y0
+        len_sq = dx * dx + dy * dy
+        t = len_sq > 1e-8 ? (((px - grad.x0) * dx + (py - grad.y0) * dy) / len_sq).clamp(0.0, 1.0) : 0.0
+      else
+        dist = Math.hypot(px - grad.x1, py - grad.y1)
+        span = grad.r1 - grad.r0
+        t = span.abs > 1e-8 ? ((dist - grad.r0) / span).clamp(0.0, 1.0) : 1.0
+      end
+
+      if stops.length == 1 || t <= stops.first[0]
+        c = Backend.normalize_color(stops.first[1])
+        return [c[0], c[1], c[2], c[3] * @global_alpha]
+      elsif t >= stops.last[0]
+        c = Backend.normalize_color(stops.last[1])
+        return [c[0], c[1], c[2], c[3] * @global_alpha]
+      end
+
+      (stops.length - 1).times do |si|
+        o0, col0 = stops[si]
+        o1, col1 = stops[si + 1]
+        if t >= o0 && t <= o1
+          span_o = o1 - o0
+          lt = span_o > 1e-8 ? ((t - o0) / span_o) : 0.0
+          c0 = Backend.normalize_color(col0)
+          c1 = Backend.normalize_color(col1)
+          return [
+            c0[0] + (c1[0] - c0[0]) * lt,
+            c0[1] + (c1[1] - c0[1]) * lt,
+            c0[2] + (c1[2] - c0[2]) * lt,
+            (c0[3] + (c1[3] - c0[3]) * lt) * @global_alpha
+          ]
+        end
+      end
+
+      c = Backend.normalize_color(stops.last[1])
+      [c[0], c[1], c[2], c[3] * @global_alpha]
     end
 
     public

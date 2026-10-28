@@ -38,6 +38,8 @@ mkdir -p "${DOCS_DIR}/particles"
 mkdir -p "${DOCS_DIR}/danmaku"
 mkdir -p "${DOCS_DIR}/articulated"
 mkdir -p "${DOCS_DIR}/skinned_mesh"
+mkdir -p "${DOCS_DIR}/canvas_mesh"
+mkdir -p "${DOCS_DIR}/mesh_deform"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -201,6 +203,8 @@ build_particles()    { build_item "GPU Particle Storm Demo" "particles" "example
 build_danmaku()      { build_item "GPU Danmaku Storm Demo" "danmaku" "examples/demo_gpu_danmaku.rb" "examples/web/shell_danmaku.html"; }
 build_articulated()  { build_item "Articulated Sprite & Hierarchy Demo" "articulated" "examples/demo_articulated_sprite.rb" "examples/web/shell_articulated.html"; }
 build_skinned_mesh() { build_item "2D SkinnedMesh & Bone Demo" "skinned_mesh" "examples/demo_skinned_mesh.rb" "examples/web/shell_skinned_mesh.html"; }
+build_canvas_mesh()  { build_item "Canvas to Mesh & Vector Sprites" "canvas_mesh" "examples/demo_canvas_mesh.rb" "examples/web/shell_canvas_mesh.html"; }
+build_mesh_deform()  { build_item "2D Mesh Deformation & 2-Stream Instancing" "mesh_deform" "examples/demo_mesh_deform.rb" "examples/web/shell_mesh_deform.html"; }
 
 case "$TARGET" in
     game)         build_game ;;
@@ -220,6 +224,8 @@ case "$TARGET" in
     danmaku)      build_danmaku ;;
     articulated)  build_articulated ;;
     skinned_mesh) build_skinned_mesh ;;
+    canvas_mesh)  build_canvas_mesh ;;
+    mesh_deform)  build_mesh_deform ;;
     all)
         build_game
         sleep 0.5
@@ -254,6 +260,10 @@ case "$TARGET" in
         build_articulated
         sleep 0.5
         build_skinned_mesh
+        sleep 0.5
+        build_canvas_mesh
+        sleep 0.5
+        build_mesh_deform
         ;;
     *)
         echo "Unknown target: $TARGET"
@@ -283,4 +293,6 @@ echo " Particles: ${DOCS_DIR}/particles/index.html"
 echo " Danmaku  : ${DOCS_DIR}/danmaku/index.html"
 echo " Articulated: ${DOCS_DIR}/articulated/index.html"
 echo " SkinnedMesh: ${DOCS_DIR}/skinned_mesh/index.html"
+echo " CanvasMesh : ${DOCS_DIR}/canvas_mesh/index.html"
+echo " MeshDeform : ${DOCS_DIR}/mesh_deform/index.html"
 echo "=========================================================="
