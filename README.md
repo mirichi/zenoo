@@ -219,7 +219,7 @@ Spinel を用いてスタンドアロンの ELF ネイティブバイナリを�
 
 ```
 zenoo/
-├── docs/                      # GitHub Pages 配信用 Web 成果物 (全 19 デモ & ポータル)
+├── docs/                      # GitHub Pages 配信用 Web 成果物 (全 21 デモ & ポータル)
 │   ├── index.html             # ショーケースポータル
 │   ├── game/                  # Survival Shooting デモ
 │   ├── gui/                   # Extended GUI & Resizable Windows デモ
@@ -233,6 +233,15 @@ zenoo/
 │   ├── tween/                 # Tween & Easing Animation デモ
 │   ├── coords/                # Sprite Coords Visualizer デモ
 │   ├── billiards/             # Billiards & 3D Rolling Shader デモ
+│   ├── zero_gravity/          # 2D 剛体物理エンジンデモ
+│   ├── particles/             # GPU パーティクルストームデモ
+│   ├── danmaku/               # GPU 弾幕ストームデモ
+│   ├── articulated/           # 多関節スプライト & 階層構造デモ
+│   ├── skinned_mesh/          # 2D スキニングメッシュ & ボーンデモ
+│   ├── canvas_mesh/           # Canvas to Mesh & ベクタースプライトデモ
+│   ├── mesh_deform/           # 2D メッシュ変形 & 2ストリームVBOデモ
+│   ├── scene/                 # スタック型シーン管理 & フェードデモ
+│   └── sound_generator/       # レトロ効果音シンセサイザ & SEジェネレータデモ
 │   ├── zero_gravity/          # Zero-Gravity 2D Rigid Body Physics デモ
 │   ├── particles/             # GPU Particle Storm デモ
 │   ├── danmaku/               # GPU Danmaku Storm デモ
@@ -260,6 +269,7 @@ zenoo/
 │   ├── zenoo.rb               # エントリポイント
 │   └── zenoo/
 │       ├── window.rb          # メインループ & 描画 DSL
+│       ├── scene.rb           # スタック型シーン管理 (描画キュー保存・ポーズ・フェード)
 │       ├── sprite.rb          # スプライト & 変形同期コライダー
 │       ├── collision.rb       # GJK / SAT 2D 凸図形衝突判定 & MTV
 │       ├── input.rb           # アクションマップ・入力統合

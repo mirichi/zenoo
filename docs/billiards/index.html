@@ -169,6 +169,15 @@
         opacity: 1.0;
       }
     }
+  
+    .btn-source {
+      border-color: #10b981;
+      color: #34d399;
+    }
+    .btn-source:hover, .btn-source:active {
+      background: #34d399;
+      color: #0f172a;
+    }
   </style>
 </head>
 <body>
@@ -181,6 +190,7 @@
   </div>
   <div id="controls-bar">
     <a href="../" class="btn btn-back">← ポータルに戻る</a>
+    <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_billiards.rb" target="_blank" rel="noopener noreferrer" class="btn btn-source">📄 ソースコード</a>
     <button class="btn" id="btn-fullscreen">全画面</button>
   </div>
   <div id="status">Loading WebAssembly module...</div>

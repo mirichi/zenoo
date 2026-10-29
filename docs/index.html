@@ -381,6 +381,61 @@
     footer a:hover {
       text-decoration: underline;
     }
+  
+    .card.scene::before {
+      background: linear-gradient(90deg, #ec4899, #38bdf8);
+    }
+    .card.scene .btn-launch {
+      background: #ec4899;
+      color: #fff;
+    }
+    .card.scene .btn-launch:hover {
+      background: #f43f5e;
+      box-shadow: 0 0 20px rgba(244, 63, 94, 0.4);
+    }
+    .card.sound_generator::before {
+      background: linear-gradient(90deg, #f59e0b, #10b981);
+    }
+    .card.sound_generator .btn-launch {
+      background: #f59e0b;
+      color: #0b0d14;
+    }
+    .card.sound_generator .btn-launch:hover {
+      background: #fbbf24;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      align-items: stretch;
+    }
+    .card-actions .btn-launch {
+      flex: 1;
+      margin-top: 0;
+    }
+    .btn-source-card {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 14px;
+      background: #1e293b;
+      border: 1px solid #10b981;
+      color: #34d399;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+    .btn-source-card:hover {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: #34d399;
+      color: #6ee7b7;
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+    }
   </style>
 </head>
 <body>
@@ -408,7 +463,10 @@
           <li>マウス・タッチ・キーボード完全対応</li>
         </ul>
       </div>
-      <a href="game/" class="btn-launch">ゲームをプレイ (Play Game) →</a>
+      <div class="card-actions">
+        <a href="game/" class="btn-launch">ゲームをプレイ (Play Game) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/game_zenoo.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- GUI Demo Card -->
@@ -425,7 +483,10 @@
           <li>Style ボタンでモダンカード ↔ レトロフラットの即時切り替え</li>
         </ul>
       </div>
-      <a href="gui/" class="btn-launch">GUI デモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="gui/" class="btn-launch">GUI デモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_gui_widgets.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Font Demo Card -->
@@ -442,7 +503,10 @@
           <li>袋文字・ドロップシャドウ・Siv3D風リアルタイムウェーブ</li>
         </ul>
       </div>
-      <a href="font/" class="btn-launch">フォントデモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="font/" class="btn-launch">フォントデモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_ttf_sdf_font.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Vector Graphics Demo Card -->
@@ -459,7 +523,10 @@
           <li>GPU 高精度シェーダーによる線形 &amp; 放射グラデーション</li>
         </ul>
       </div>
-      <a href="vector/" class="btn-launch">ベクターデモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="vector/" class="btn-launch">ベクターデモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_vector_graphics.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Image & Blend Modes Demo Card -->
@@ -476,7 +543,10 @@
           <li>:alpha, :add (加算発光), :multiply (乗算影) のブレンド合成</li>
         </ul>
       </div>
-      <a href="image/" class="btn-launch">画像・合成デモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="image/" class="btn-launch">画像・合成デモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_draw_image.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Texture Atlas & sub_image Demo Card -->
@@ -494,7 +564,10 @@
           <li>Window.draw_image の src_rect サンプリング</li>
         </ul>
       </div>
-      <a href="atlas/" class="btn-launch">アトラスデモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="atlas/" class="btn-launch">アトラスデモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_texture_atlas.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Hardware Clipping Demo Card -->
@@ -512,7 +585,10 @@
           <li>GPU レベルのピクセル単位ハードウェア切り抜き</li>
         </ul>
       </div>
-      <a href="clip/" class="btn-launch">クリップデモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="clip/" class="btn-launch">クリップデモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_window_clip.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Audio & Sound Demo Card -->
@@ -530,7 +606,10 @@
           <li>音量・ピッチ・パン・ループのリアルタイムコントロール</li>
         </ul>
       </div>
-      <a href="sound/" class="btn-launch">サウンドデモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="sound/" class="btn-launch">サウンドデモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_sound.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- 2D Collision Playground Demo Card -->
@@ -548,7 +627,10 @@
           <li>DXRuby 風の直感的かつ高速な API 設計</li>
         </ul>
       </div>
-      <a href="collision/" class="btn-launch">衝突判定デモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="collision/" class="btn-launch">衝突判定デモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_collision.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Tween & Easing Animation Demo Card -->
@@ -566,7 +648,10 @@
           <li>Tween.kill による上書き＆クリック追従スムーズ移動</li>
         </ul>
       </div>
-      <a href="tween/" class="btn-launch">Tween デモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="tween/" class="btn-launch">Tween デモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_tween.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Sprite Coords & Collision Visualizer Demo Card -->
@@ -584,7 +669,10 @@
           <li>矩形・角丸矩形・円・楕円・六角形コライダーとリアルタイム衝突判定テスト</li>
         </ul>
       </div>
-      <a href="coords/" class="btn-launch">シミュレーターを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="coords/" class="btn-launch">シミュレーターを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_sprite_coords.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Billiards & 3D Rolling Shader Demo Card -->
@@ -603,7 +691,10 @@
           <li>マウス左ドラッグによるエイム＆パワーショット操作</li>
         </ul>
       </div>
-      <a href="billiards/" class="btn-launch">ビリヤード起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="billiards/" class="btn-launch">ビリヤード起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_billiards.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Zero-Gravity 2D Rigid Body Physics Demo Card -->
@@ -621,7 +712,10 @@
           <li>左ドラッグで掴んで投擲 (Fling)、右ドラッグでスピン回転操作</li>
         </ul>
       </div>
-      <a href="zero_gravity/" class="btn-launch">物理デモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="zero_gravity/" class="btn-launch">物理デモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_zero_gravity.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- GPU Particle Storm Demo Card -->
@@ -639,7 +733,10 @@
           <li>キー [1], [2], [3] によるパーティクル数 (5万/10万/20万) リアルタイム切り替え</li>
         </ul>
       </div>
-      <a href="particles/" class="btn-launch">パーティクル起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="particles/" class="btn-launch">パーティクル起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/gpu_particles.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- GPU Danmaku Storm Demo Card -->
@@ -657,7 +754,10 @@
           <li>[WASD / マウスドラッグ] 移動、[Shift] 精密低速、[C] 円環セクター可視化、[SPACE] ボム</li>
         </ul>
       </div>
-      <a href="danmaku/" class="btn-launch">弾幕デモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="danmaku/" class="btn-launch">弾幕デモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_gpu_danmaku.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Articulated Sprite & Hierarchy Demo Card -->
@@ -675,7 +775,10 @@
           <li>[WASD / マウス] 移動・回転・拡縮、[Click / SPACE] 斬撃スイング、[C] コライダー表示</li>
         </ul>
       </div>
-      <a href="articulated/" class="btn-launch">多関節デモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="articulated/" class="btn-launch">多関節デモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_articulated_sprite.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- 2D SkinnedMesh & Bone Demo Card -->
@@ -694,7 +797,10 @@
           <li>[SPACE] ボーン表示切替、[W] ウェイトマッププレビュー表示切替</li>
         </ul>
       </div>
-      <a href="skinned_mesh/" class="btn-launch">スキニングデモを起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="skinned_mesh/" class="btn-launch">スキニングデモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_skinned_mesh.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- Canvas to Mesh & Vector Sprites Demo Card -->
@@ -713,7 +819,10 @@
           <li>毎フレームの耳刈り分割・CPU 計算負荷ゼロ (60fps 張り付き)</li>
         </ul>
       </div>
-      <a href="canvas_mesh/" class="btn-launch">Canvas Mesh起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="canvas_mesh/" class="btn-launch">Canvas Mesh起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_canvas_mesh.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
 
     <!-- 2D Mesh Deformation & 2-Stream Instancing Demo Card -->
@@ -732,7 +841,53 @@
           <li>Mesh.ring の渦巻きねじり変形 &amp; Mesh.polygon の凹多角形耳刈り分割</li>
         </ul>
       </div>
-      <a href="mesh_deform/" class="btn-launch">メッシュ変形デモ起動 (Launch Demo) →</a>
+      <div class="card-actions">
+        <a href="mesh_deform/" class="btn-launch">メッシュ変形デモ起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_mesh_deform.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
+    </div>
+
+    <!-- Scene Management & Transition Demo Card -->
+    <div class="card scene">
+      <div>
+        <div class="card-tag">Scene &amp; State Machine</div>
+        <h2>Scene &amp; Transition Demo</h2>
+        <p class="desc">
+          Pure Ruby によるスタック型シーン管理システム (Zenoo::Scene)。フェード遷移 (黒/白)、背景静止 (:freeze) と背景動作継続 (:live) のスタック重ね合わせ、インラインブロックダイアログをGUIで体験できます。
+        </p>
+        <ul class="features">
+          <li>メソッド1個 (call) で更新と描画を兼ねる超シンプル設計</li>
+          <li>スタック操作 (change / push / pop) とフェードイン・アウト</li>
+          <li>below: :freeze による背景スナップショット静止表示 (Zオーダー完全分離)</li>
+          <li>below: :live による背景ゲーム動作継続オーバーレイ</li>
+          <li>クラス不要のブロック構文による即席ダイアログ (Scene.push { ... })</li>
+        </ul>
+      </div>
+      <div class="card-actions">
+        <a href="scene/" class="btn-launch">シーンデモ起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_scene.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
+    </div>
+
+    <!-- Retro Sound Effect Generator Card -->
+    <div class="card sound_generator">
+      <div>
+        <div class="card-tag">Audio Tool &amp; Synthesizer</div>
+        <h2>Retro Sound Effect Generator</h2>
+        <p class="desc">
+          8-bit / アーケードゲーム風の効果音（コイン、レーザー、爆発、ジャンプ等）を波形パラメータでリアルタイム合成・試聴し、ワンクリックでRubyコードを生成するオーディオツール。
+        </p>
+        <ul class="features">
+          <li>矩形波 / 鋸波 / 正弦波 / 三角波 / ノイズのリアルタイムシンセシス</li>
+          <li>エンベロープ・周波数スライド・ビブラート・アルペジオ調整</li>
+          <li>リアルタイム波形スコープ &amp; 再生ヘッド表示</li>
+          <li>1クリックでゲームに組み込める Ruby コードスニペット生成</li>
+        </ul>
+      </div>
+      <div class="card-actions">
+        <a href="sound_generator/" class="btn-launch">SEジェネレータ起動 (Launch Tool) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/tools/sound_generator.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
     </div>
   </main>
 

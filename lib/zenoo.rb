@@ -40,6 +40,7 @@ require_relative 'zenoo/tween'
 require_relative 'zenoo/mesh'
 require_relative 'zenoo/skinned_mesh'
 require_relative 'zenoo/profiler'
+require_relative 'zenoo/scene'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
 Window        = Zenoo::Window
@@ -66,6 +67,7 @@ Sprite        = Zenoo::Sprite
 Tilemap       = Zenoo::Tilemap
 PhysicsSprite = Zenoo::PhysicsSprite
 Profiler      = Zenoo::Profiler
+Scene         = Zenoo::Scene
 
 # ====================================================
 # CRuby 専用 開発支援モジュール (Spinel 静的走査回避)

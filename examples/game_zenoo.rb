@@ -166,12 +166,8 @@ COLOR_HEART_RED    = Color.new(255, 70, 90)
 COLOR_EXP_BAR_BG   = Color.new(30, 40, 35)
 COLOR_BOSS_HP      = Color.new(255, 60, 100)
 
-# ゲーム状態
-STATE_PLAY     = 0 # プレイ中
-STATE_PAUSE    = 1 # ポーズ (ステータス確認)
-STATE_TITLE    = 2 # タイトル画面
-STATE_LEVELUP  = 3 # レベルアップ 3 択
-STATE_GAMEOVER = 4 # リザルト画面
+# 画面 (タイトル / プレイ / ポーズ / レベルアップ / リザルト) は Zenoo::Scene で管理
+# → 末尾の「7. シーン」を参照
 
 # アップグレード種別数 (0..7)
 UPGRADE_COUNT = 8
@@ -885,10 +881,13 @@ class Player < Sprite
 end
 
 # ==========================================
-# 6. メインゲーム (Game)
+# 6. ゲームワールド (Game)
+#    自機・敵・弾などの「ステージを跨いで共有されるもの」を一括保持する。
+#    どの画面 (シーン) からも同じ Game インスタンスを参照して使う。
 # ==========================================
 class Game
-  attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :game_state, :crt_enabled, :collision_mode
+  attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :crt_enabled, :collision_mode
+  attr_reader :sfx, :best_score, :new_record, :kills, :max_combo, :frames_alive
 
   def spawn_particle(p)
     @particles.shift if @particles.size >= MAX_PARTICLES
@@ -906,7 +905,6 @@ class Game
 
     @sfx = Sfx.new
     @best_score = 0
-    @title_timer = 0
     @crt_enabled = true
     @crt_shader = nil
     @shockwave_shader = nil
@@ -914,7 +912,13 @@ class Game
     @show_profiler = false
     @crt_time = 0.0
     reset_world
-    @game_state = STATE_TITLE
+  end
+
+  # 新しいゲームを開始 (ワールドを初期化して開始音を鳴らす)
+  def new_game
+    reset_world
+    @sfx.play(Sfx::LEVELUP, 10)
+    self
   end
 
   # ワールド全体を初期状態に戻す (リトライ時にも使用)
@@ -927,10 +931,6 @@ class Game
     @items = []
     @particles = []
     @damage_texts = []
-    @game_state = STATE_PLAY
-    @menu_cursor = 0
-    @prev_mouse_x = -1.0
-    @prev_mouse_y = -1.0
     @spawn_timer = 0
     @spawn_interval = 50.0
     @enemy_stock = 0
@@ -940,7 +940,6 @@ class Game
     # 演出
     @hitstop = 0         # ヒットストップ残りフレーム
     @damage_flash = 0    # 被弾時の赤フラッシュ残りフレーム
-    @levelup_flash = 0   # レベルアップ時の白フラッシュ
 
     # ポストエフェクト演出 (衝撃波 & グリッチ)
     @shockwave_timer = 0
@@ -959,13 +958,9 @@ class Game
     @max_combo = 0
     @new_record = false
 
-    # 死亡演出 / 画面遷移
+    # 死亡演出
     @player_dead = false
     @death_timer = 0
-    @state_timer = 0 # 画面遷移直後の誤入力防止用
-
-    # レベルアップ選択肢 (アップグレード種別の index)
-    @choices = []
   end
 
   def add_shake(amount)
@@ -1358,95 +1353,117 @@ class Game
   end
 
   # ==========================================
-  # 入力ヘルパー
+  # フレーム共通更新 & ポストエフェクト描画
   # ==========================================
-  def confirm_pressed?
-    Input.action_push?(:ui_accept)
-  end
-
-  def update_draw_frame
+  def update_frame_common
     # プロファイラ表示トグル ([F3] または [TAB] キー)
     if Input.key_push?(:f3) || Input.key_push?(:tab)
       @show_profiler = !@show_profiler
     end
 
-    Profiler.measure(:update) do
-      @sfx.tick
-      @state_timer += 1
+    @sfx.tick
 
-      case @game_state
-      when STATE_TITLE
-        update_title
-      when STATE_PLAY
-        update_play
-      when STATE_PAUSE
-        update_pause
-      when STATE_LEVELUP
-        update_levelup
-      when STATE_GAMEOVER
-        update_gameover
-      end
+    # ポストエフェクトタイマー更新 (衝撃波 & CRTグリッチ)
+    if @shockwave_timer > 0
+      @shockwave_timer -= 1
+      progress = 1.0 - (@shockwave_timer.to_f / @shockwave_max_timer.to_f)
+      @shockwave_radius = progress * 1.5
+      @shockwave_force = (1.0 - progress) * 0.08
+    end
+    @glitch_timer -= 1 if @glitch_timer > 0
+    @crt_time += 0.05
 
-      # カメラ更新 (ターゲット追従 & 画面シェイク減衰)
-      @camera.update
-
-      @damage_flash -= 1 if @damage_flash > 0
-      @levelup_flash -= 1 if @levelup_flash > 0
-
-      # ポストエフェクトタイマー更新 (衝撃波 & CRTグリッチ)
-      if @shockwave_timer > 0
-        @shockwave_timer -= 1
-        progress = 1.0 - (@shockwave_timer.to_f / @shockwave_max_timer.to_f)
-        @shockwave_radius = progress * 1.5
-        @shockwave_force = (1.0 - progress) * 0.08
-      end
-      @glitch_timer -= 1 if @glitch_timer > 0
-      @crt_time += 0.05
-
-      # CRT エフェクトの初期化とトグル切り替え ([C] キー)
-      @crt_shader ||= Shader.new(CRT_FRAGMENT_SHADER)
-
-      if Input.key_push?(:c)
-        @crt_enabled = !@crt_enabled
-      end
-
-      # デバッグ操作: [B] キーでボスを即座に召喚
-      if Input.key_push?(:b) && @game_state == STATE_PLAY
-        @enemies << Enemy.new(@player.x + 200.0, @player.y, :boss, enemy_hp_multiplier)
-      end
-
-      if Input.key_push?(:m)
-        @collision_mode = (@collision_mode == :exact ? :simple : :exact)
-      end
+    # CRT エフェクトの初期化とトグル切り替え ([C] キー)
+    @crt_shader ||= Shader.new(CRT_FRAGMENT_SHADER)
+    if Input.key_push?(:c)
+      @crt_enabled = !@crt_enabled
     end
 
+    if Input.key_push?(:m)
+      @collision_mode = (@collision_mode == :exact ? :simple : :exact)
+    end
+  end
+
+  # ポストエフェクト (衝撃波 / CRT) を適用してブロック内の描画を実行 (Profiler.measure(:render) で計測)
+  def render_with_post_effects
     Profiler.measure(:render) do
-      draw_game
+      if @crt_enabled || @shockwave_timer > 0
+        @game_screen ||= Image.create_msaa(1280, 720)
+        Image.render_to(@game_screen) do
+          Window.clear(Color::BLACK)
+          yield
+        end
+
+        current_source = @game_screen
+
+        # 第1段: 衝撃波エフェクト (ボス撃破時の歪み波面)
+        if @shockwave_timer > 0
+          @shockwave_shader ||= Shader.new(SHOCKWAVE_FRAGMENT_SHADER)
+          @shockwave_shader.set_vec2("u_center", @shockwave_cx.to_f, @shockwave_cy.to_f)
+          @shockwave_shader.set_float("u_radius", @shockwave_radius.to_f)
+          @shockwave_shader.set_float("u_force", @shockwave_force.to_f)
+
+          if @crt_enabled
+            @post_screen ||= Image.new(1280, 720)
+            Image.render_to(@post_screen) do
+              Window.clear(Color::BLACK)
+              Window.draw(0, 0, current_source, shader: @shockwave_shader)
+            end
+            current_source = @post_screen
+          else
+            Window.clear(Color::BLACK)
+            Window.draw(0, 0, current_source, shader: @shockwave_shader)
+            current_source = nil
+          end
+        end
+
+        # 第2段: レトロCRTシェーダー + 受信障害グリッチ
+        if @crt_enabled && current_source
+          @crt_shader.set_float("u_time", @crt_time.to_f)
+          glitch_val = @glitch_timer > 0 ? (@glitch_timer.to_f / 70.0) : 0.0
+          @crt_shader.set_float("u_glitch", glitch_val.to_f)
+
+          Window.clear(Color::BLACK)
+          Window.draw(0, 0, current_source, shader: @crt_shader)
+        end
+      else
+        Window.clear(Color::BLACK)
+        yield
+      end
     end
   end
 
-  def change_state(state)
-    @game_state = state
-    @state_timer = 0
+  # プロファイラGUIの描画 (ポストエフェクトの歪みを受けないよう最前面に描画)
+  def draw_profiler_gui
+    if @show_profiler
+      Profiler.measure(:gui) do
+        GUI.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 270) do
+          GUI.profile_graph(w: 290, h: 80, max_ms: 33.33)
+        end
+      end
+    end
   end
 
-  def update_title
-    @title_timer += 1
-    return unless @state_timer > 10 && confirm_pressed?
-    reset_world
-    @sfx.play(Sfx::LEVELUP, 10)
-    change_state(STATE_PLAY)
-  end
-
+  # ==========================================
+  # プレイ本編の更新と描画
+  # ==========================================
   def update_play
     if Input.action_push?(:pause) && !@player_dead
-      change_state(STATE_PAUSE)
+      Scene.push(PauseScene.new(self))
       return
     end
 
-    # ヒットストップ中はワールドを止める (描画のみ継続)
+    # デバッグ操作: [B] キーでボスを即座に召喚
+    if Input.key_push?(:b)
+      @enemies << Enemy.new(@player.x + 200.0, @player.y, :boss, enemy_hp_multiplier)
+    end
+
+    @damage_flash -= 1 if @damage_flash > 0
+
+    # ヒットストップ中はワールドを止める (カメラ減衰と描画のみ継続)
     if @hitstop > 0
       @hitstop -= 1
+      @camera.update
       return
     end
 
@@ -1510,7 +1527,10 @@ class Game
       end
     end
 
-    # 5. 死亡演出 → リザルトへ
+    # カメラ更新 (ターゲット追従 & 画面シェイク減衰)
+    @camera.update
+
+    # 5. 死亡演出 → リザルト画面を上に重ねる (背景の戦場はそのまま静止表示)
     if @player_dead
       @death_timer -= 1
       if @death_timer <= 0
@@ -1518,34 +1538,46 @@ class Game
           @best_score = @player.score
           @new_record = true
         end
-        change_state(STATE_GAMEOVER)
+        Scene.push(GameOverScene.new(self))
       end
       return
     end
 
-    # 6. レベルアップ判定
+    # 6. レベルアップ判定 → レベルアップ画面を上に重ねる
     if @player.exp >= @player.exp_to_next
-      start_levelup
+      Scene.push(LevelUpScene.new(self))
     end
   end
 
-  def update_pause
-    if Input.action_push?(:pause) || Input.action_push?(:ui_cancel)
-      change_state(STATE_PLAY)
-      return
+  def draw_play
+    # 画面外カリング用の可視矩形 (1280x720 + マージン)
+    cam_x = @camera.x
+    cam_y = @camera.y
+    cull_l = cam_x - 720.0
+    cull_r = cam_x + 720.0
+    cull_t = cam_y - 440.0
+    cull_b = cam_y + 440.0
+
+    # ワールド空間描画 (Window.camera ブロック構文)
+    Window.camera(@camera) do
+      draw_grid
+      @items.each { |i| i.draw if i.x >= cull_l && i.x <= cull_r && i.y >= cull_t && i.y <= cull_b }
+      @particles.each { |p| p.draw if p.x >= cull_l && p.x <= cull_r && p.y >= cull_t && p.y <= cull_b }
+      @enemies.each { |e| e.draw if e.x >= cull_l && e.x <= cull_r && e.y >= cull_t && e.y <= cull_b }
+      @bullets.each { |b| b.draw if b.x >= cull_l && b.x <= cull_r && b.y >= cull_t && b.y <= cull_b }
+      @missiles.each(&:draw)
+      @player.draw unless @player_dead
+      @damage_texts.each { |d| d.draw if d.x >= cull_l && d.x <= cull_r && d.y >= cull_t && d.y <= cull_b }
     end
 
-    # Q / Y ボタンでタイトルへ戻る
-    if Input.key_push?(:q) || Input.gamepad_button_push?(:y)
-      change_state(STATE_TITLE)
+    # 被弾の赤フラッシュ
+    if @damage_flash > 0
+      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 0, 0, @damage_flash * 8), z: 10.0)
     end
-  end
 
-  def update_gameover
-    return unless @state_timer > 45 && confirm_pressed?
-    reset_world
-    @sfx.play(Sfx::LEVELUP, 10)
-    change_state(STATE_PLAY)
+    Profiler.measure(:hud) do
+      draw_hud
+    end
   end
 
   # ==========================================
@@ -1564,79 +1596,23 @@ class Game
     end
   end
 
-  def start_levelup
+  # レベルを 1 上げ、選択可能なアップグレードから最大 3 つ抽選して返す
+  def prepare_levelup_choices
     @player.exp -= @player.exp_to_next
     @player.level += 1
+    @sfx.play(Sfx::LEVELUP, 10)
 
-    # 選択可能なアップグレードから重複なしで最大 3 つ抽選
     candidates = []
     UPGRADE_COUNT.times do |i|
       candidates << i if upgrade_available?(i)
     end
-    @choices = []
-    while @choices.size < 3 && candidates.size > 0
+    choices = []
+    while choices.size < 3 && candidates.size > 0
       pick = rand(candidates.size)
-      @choices << candidates[pick]
+      choices << candidates[pick]
       candidates.delete_at(pick)
     end
-
-    @menu_cursor = 0
-    @levelup_flash = 10
-    @sfx.play(Sfx::LEVELUP, 10)
-    change_state(STATE_LEVELUP)
-  end
-
-  def update_levelup
-    # 上下選択入力 (十字キー / WSキー / 上下矢印 / 左スティックを自動統合)
-    up_pressed = Input.action_push?(:ui_up)
-    down_pressed = Input.action_push?(:ui_down)
-
-    count = @choices.size
-    if up_pressed
-      @menu_cursor = (@menu_cursor - 1) % count
-      @sfx.play(Sfx::SELECT, 2)
-    elsif down_pressed
-      @menu_cursor = (@menu_cursor + 1) % count
-      @sfx.play(Sfx::SELECT, 2)
-    end
-
-    # マウスによる選択（ホバー）: マウスが動いたときだけカーソルを奪う
-    mx = Input.mouse_x
-    my = Input.mouse_y
-    mouse_moved = (mx != @prev_mouse_x || my != @prev_mouse_y)
-    @prev_mouse_x = mx
-    @prev_mouse_y = my
-    mouse_hover_idx = -1
-    count.times do |i|
-      top = levelup_row_top(i)
-      if mx >= 240.0 && mx <= 1040.0 && my >= top && my <= top + 80.0
-        mouse_hover_idx = i
-        @menu_cursor = i if mouse_moved
-        break
-      end
-    end
-
-    # 遷移直後の誤爆防止
-    return if @state_timer < 20
-
-    # 決定操作 (Action: :ui_accept またはマウスホバークリック)
-    buy_pressed = Input.action_push?(:ui_accept)
-    if mouse_hover_idx >= 0 && Input.mouse_push?(:left)
-      @menu_cursor = mouse_hover_idx
-      buy_pressed = true
-    end
-
-    return unless buy_pressed
-
-    execute_skill_upgrade(@choices[@menu_cursor])
-    @sfx.play(Sfx::HEAL, 4)
-    change_state(STATE_PLAY)
-    # 経験値が余っていれば連続レベルアップ
-    start_levelup if @player.exp >= @player.exp_to_next
-  end
-
-  def levelup_row_top(i)
-    250.0 + i.to_f * 100.0
+    choices
   end
 
   def execute_skill_upgrade(idx)
@@ -1693,7 +1669,7 @@ class Game
   end
 
   # ==========================================
-  # 描画
+  # 描画ヘルパー
   # ==========================================
   def time_str(frames)
     sec = frames / 60
@@ -1705,115 +1681,6 @@ class Game
 
   def draw_centered(y, text, size, color, font = Font::SINCLAIR, z: 0.0)
     Window.draw_text(640.0, y, text, font: font, size: size, color: color, align: :center, z: z)
-  end
-
-  def draw_game
-    # ポストエフェクト (衝撃波 / CRT) を適用するため、まずはゲーム画面を
-    # 自前のオフスクリーンバッファ (@game_screen) にレンダリング
-    if @crt_enabled || @shockwave_timer > 0
-      @game_screen ||= Image.create_msaa(1280, 720)
-      Image.render_to(@game_screen) do
-        Window.clear(Color::BLACK)
-        render_game_scene
-      end
-
-      current_source = @game_screen
-
-      # 第1段: 衝撃波エフェクト (ボス撃破時の歪み波面)
-      if @shockwave_timer > 0
-        @shockwave_shader ||= Shader.new(SHOCKWAVE_FRAGMENT_SHADER)
-        @shockwave_shader.set_vec2("u_center", @shockwave_cx.to_f, @shockwave_cy.to_f)
-        @shockwave_shader.set_float("u_radius", @shockwave_radius.to_f)
-        @shockwave_shader.set_float("u_force", @shockwave_force.to_f)
-
-        if @crt_enabled
-          # 衝撃波の後に CRT が控えている場合は中間バッファへ描画
-          @post_screen ||= Image.new(1280, 720)
-          Image.render_to(@post_screen) do
-            Window.clear(Color::BLACK)
-            Window.draw(0, 0, current_source, shader: @shockwave_shader)
-          end
-          current_source = @post_screen
-        else
-          # CRT 無効時はメイン画面へ直接描画
-          Window.clear(Color::BLACK)
-          Window.draw(0, 0, current_source, shader: @shockwave_shader)
-          current_source = nil
-        end
-      end
-
-      # 第2段: レトロCRTシェーダー + 受信障害グリッチ
-      if @crt_enabled && current_source
-        @crt_shader ||= Shader.new(CRT_FRAGMENT_SHADER)
-        @crt_shader.set_float("u_time", @crt_time.to_f)
-        glitch_val = @glitch_timer > 0 ? (@glitch_timer.to_f / 70.0) : 0.0
-        @crt_shader.set_float("u_glitch", glitch_val.to_f)
-
-        Window.clear(Color::BLACK)
-        Window.draw(0, 0, current_source, shader: @crt_shader)
-      end
-    else
-      # エフェクトが一切ない場合は直接メイン画面にクリア＆レンダリング
-      Window.clear(Color::BLACK)
-      render_game_scene
-    end
-
-    # プロファイラGUIはポストエフェクトの歪みを受けないよう、メイン画面の一番手前にクリアに描画
-    if @show_profiler
-      Profiler.measure(:gui) do
-        GUI.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 270) do
-          GUI.profile_graph(w: 290, h: 80, max_ms: 33.33)
-        end
-      end
-    end
-  end
-
-  def render_game_scene
-    if @game_state == STATE_TITLE
-      draw_title
-      return
-    end
-
-    # 画面外カリング用の可視矩形 (1280x720 + マージン)
-    cam_x = @camera.x
-    cam_y = @camera.y
-    cull_l = cam_x - 720.0
-    cull_r = cam_x + 720.0
-    cull_t = cam_y - 440.0
-    cull_b = cam_y + 440.0
-
-    # ワールド空間描画 (Window.camera ブロック構文)
-    Window.camera(@camera) do
-      draw_grid
-      @items.each { |i| i.draw if i.x >= cull_l && i.x <= cull_r && i.y >= cull_t && i.y <= cull_b }
-      @particles.each { |p| p.draw if p.x >= cull_l && p.x <= cull_r && p.y >= cull_t && p.y <= cull_b }
-      @enemies.each { |e| e.draw if e.x >= cull_l && e.x <= cull_r && e.y >= cull_t && e.y <= cull_b }
-      @bullets.each { |b| b.draw if b.x >= cull_l && b.x <= cull_r && b.y >= cull_t && b.y <= cull_b }
-      @missiles.each(&:draw)
-      @player.draw unless @player_dead
-      @damage_texts.each { |d| d.draw if d.x >= cull_l && d.x <= cull_r && d.y >= cull_t && d.y <= cull_b }
-    end
-
-    # 画面空間描画 (被弾の赤フラッシュ / レベルアップの白フラッシュ / HUD)
-    if @damage_flash > 0
-      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 0, 0, @damage_flash * 8), z: 10.0)
-    end
-    if @levelup_flash > 0
-      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 255, 255, @levelup_flash * 10), z: 10.0)
-    end
-
-    Profiler.measure(:hud) do
-      draw_hud
-    end
-
-    case @game_state
-    when STATE_PAUSE
-      draw_pause_menu
-    when STATE_LEVELUP
-      draw_levelup_menu
-    when STATE_GAMEOVER
-      draw_gameover
-    end
   end
 
   # ワールド座標系での背景グリッド描画 (カメラの可視範囲のみ描画)
@@ -1889,11 +1756,25 @@ class Game
     dbg_str = "FPS: #{Window.fps.to_i}  ENEMY: #{@enemies.size}#{stock_str}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
     Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY, z: 5.0)
   end
+end
 
-  def draw_title
-    t = @title_timer
-    # 背景グリッドをゆっくりスクロール
-    draw_screen_grid(t.to_f * 0.6, t.to_f * 0.3)
+# ==========================================
+# 7. シーン定義 (Zenoo::Scene)
+#    - 各シーンは `call` メソッド 1 個だけ (更新と描画を分けない)
+#    - ポーズ / レベルアップ / ゲームオーバーは PlayScene の上に `Scene.push` で重ねる
+#      → 下の PlayScene は自動的に停止し、直前の描画キューがそのまま背景として再描画される
+#    - 各シーンで更新と描画を Profiler.measure で計測するため、処理負荷の内訳を正確に追跡可能
+# ==========================================
+
+# タイトル画面
+class TitleScene < Scene
+  def initialize(game)
+    @game = game
+  end
+
+  def call
+    t = frames
+    @game.draw_screen_grid(t.to_f * 0.6, t.to_f * 0.3)
 
     # 中央で回転する多角形 (頂点数が徐々に増える)
     sides = 3 + (t / 90) % 6
@@ -1910,49 +1791,107 @@ class Game
       Window.draw_line(x1, y1, x2, y2, color: Color::WHITE, width: 2.0)
     end
 
-    draw_centered(100.0, "ZENOO SURVIVOR", 56, Color::WHITE, Font::MPLUS)
-    draw_centered(180.0, "Grow your shape. Survive the swarm.", 20, COLOR_TEXT_GRAY)
+    @game.draw_centered(100.0, "ZENOO SURVIVOR", 56, Color::WHITE, Font::MPLUS)
+    @game.draw_centered(180.0, "Grow your shape. Survive the swarm.", 20, COLOR_TEXT_GRAY)
 
     if (t / 30) % 2 == 0
-      draw_centered(470.0, "PRESS ENTER / A / CLICK TO START", 24, Color::CYAN)
+      @game.draw_centered(470.0, "PRESS ENTER / A / CLICK TO START", 24, Color::CYAN)
     end
 
-    draw_centered(540.0, "MOVE: WASD / Stick / Hold Left Click    AIM: Mouse / Right Stick", 18, Color::WHITE)
-    draw_centered(570.0, "PAUSE: ESC / START / Right Click    CRT: [C]", 18, Color::WHITE)
-    draw_centered(630.0, "BEST SCORE: #{@best_score}", 22, COLOR_ORANGE) if @best_score > 0
+    @game.draw_centered(540.0, "MOVE: WASD / Stick / Hold Left Click    AIM: Mouse / Right Stick", 18, Color::WHITE)
+    @game.draw_centered(570.0, "PAUSE: ESC / START / Right Click    CRT: [C]", 18, Color::WHITE)
+    @game.draw_centered(630.0, "BEST SCORE: #{@game.best_score}", 22, COLOR_ORANGE) if @game.best_score > 0
+
+    Profiler.measure(:update) do
+      if frames > 10 && Input.action_push?(:ui_accept)
+        Scene.change(PlayScene.new(@game.new_game))
+      end
+    end
+  end
+end
+
+# プレイ本編画面
+class PlayScene < Scene
+  def initialize(game)
+    @game = game
   end
 
-  def draw_pause_menu
+  def call
+    Profiler.measure(:update) do
+      @game.update_play
+    end
+    @game.draw_play
+  end
+end
+
+# ポーズ画面 (PlayScene の上に push して重ねる)
+class PauseScene < Scene
+  def initialize(game)
+    @game = game
+  end
+
+  def call
+    p = @game.player
     Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG, z: 10.0)
-    draw_centered(130.0, "=== PAUSED ===", 40, Color::WHITE, Font::SINCLAIR, z: 10.0)
+    @game.draw_centered(130.0, "=== PAUSED ===", 40, Color::WHITE, Font::SINCLAIR, z: 10.0)
 
     lines = [
-      "LEVEL      : #{@player.level}",
-      "HP         : #{@player.hp} / #{@player.max_hp}",
-      "SHAPE      : #{@player.sides} sides",
-      "SPREAD     : #{@player.shot_level} way",
-      "ORBITER    : #{@player.orbiter_count} blades",
-      "MISSILE    : Lv #{@player.missile_level}",
-      "SPEED      : #{@player.speed.to_i}",
-      "FIRE RATE  : #{@player.fire_rate} frames",
-      "MAGNET     : #{@player.magnet_radius.to_i}"
+      "LEVEL      : #{p.level}",
+      "HP         : #{p.hp} / #{p.max_hp}",
+      "SHAPE      : #{p.sides} sides",
+      "SPREAD     : #{p.shot_level} way",
+      "ORBITER    : #{p.orbiter_count} blades",
+      "MISSILE    : Lv #{p.missile_level}",
+      "SPEED      : #{p.speed.to_i}",
+      "FIRE RATE  : #{p.fire_rate} frames",
+      "MAGNET     : #{p.magnet_radius.to_i}"
     ]
     lines.each_with_index do |line, i|
       Window.draw_text(460.0, 210.0 + i.to_f * 34.0, line, font: Font::SINCLAIR, size: 22, color: Color::WHITE, z: 10.0)
     end
 
-    draw_centered(560.0, "ESC / START / Right Click / (B) to Resume", 20, Color::WHITE, Font::SINCLAIR, z: 10.0)
-    draw_centered(595.0, "Q / (Y) to Title    [C] CRT: #{@crt_enabled ? 'ON' : 'OFF'}    Collision: [Sprite.check / SAP]", 18, COLOR_TEXT_GRAY, Font::SINCLAIR, z: 10.0)
+    @game.draw_centered(560.0, "ESC / START / Right Click / (B) to Resume", 20, Color::WHITE, Font::SINCLAIR, z: 10.0)
+    @game.draw_centered(595.0, "Q / (Y) to Title    [C] CRT: #{@game.crt_enabled ? 'ON' : 'OFF'}    Collision: [Sprite.check / SAP]", 18, COLOR_TEXT_GRAY, Font::SINCLAIR, z: 10.0)
+
+    Profiler.measure(:update) do
+      if Input.action_push?(:pause) || Input.action_push?(:ui_cancel)
+        Scene.pop
+      elsif Input.key_push?(:q) || Input.gamepad_button_push?(:y)
+        Scene.change(TitleScene.new(@game))
+      end
+    end
+  end
+end
+
+# レベルアップ 3 択画面 (PlayScene の上に push して重ねる)
+class LevelUpScene < Scene
+  def initialize(game)
+    @game = game
+    @choices = @game.prepare_levelup_choices
+    @cursor = 0
+    @prev_mx = Input.mouse_x
+    @prev_my = Input.mouse_y
+    @flash = 10
   end
 
-  def draw_levelup_menu
+  def row_top(i)
+    250.0 + i.to_f * 100.0
+  end
+
+  def call
+    # レベルアップ瞬間の白フラッシュ
+    if @flash > 0
+      Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: Color.new(255, 255, 255, @flash * 10), z: 10.0)
+      @flash -= 1
+    end
+
     Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG, z: 10.0)
-    draw_centered(130.0, "LEVEL UP!", 56, COLOR_EXP_GREEN, Font::SINCLAIR, z: 10.0)
-    draw_centered(200.0, "Choose one upgrade", 20, COLOR_TEXT_GRAY, Font::SINCLAIR, z: 10.0)
+    @game.draw_centered(130.0, "LEVEL UP!", 56, COLOR_EXP_GREEN, Font::SINCLAIR, z: 10.0)
+    @game.draw_centered(200.0, "Choose one upgrade", 20, COLOR_TEXT_GRAY, Font::SINCLAIR, z: 10.0)
 
     @choices.each_with_index do |idx, i|
-      top = levelup_row_top(i)
-      is_selected = (@menu_cursor == i)
+      top = row_top(i)
+      is_selected = (@cursor == i)
 
       if is_selected
         Window.draw_rect(240.0, top, 800.0, 80.0, color: COLOR_BUTTON_HOVER, z: 10.0)
@@ -1963,48 +1902,110 @@ class Game
 
       title_color = is_selected ? Color::CYAN : Color::WHITE
       prefix = is_selected ? "> " : "  "
-      Window.draw_text(260.0, top + 14.0, "#{prefix}#{upgrade_title(idx)}", font: Font::SINCLAIR, size: 26, color: title_color, z: 10.0)
-      Window.draw_text(300.0, top + 48.0, upgrade_desc(idx), font: Font::SINCLAIR, size: 18, color: COLOR_TEXT_GRAY, z: 10.0)
+      Window.draw_text(260.0, top + 14.0, "#{prefix}#{@game.upgrade_title(idx)}", font: Font::SINCLAIR, size: 26, color: title_color, z: 10.0)
+      Window.draw_text(300.0, top + 48.0, @game.upgrade_desc(idx), font: Font::SINCLAIR, size: 18, color: COLOR_TEXT_GRAY, z: 10.0)
     end
 
-    draw_centered(570.0, "[UP/DOWN/Stick] Select   [A / ENTER / Click] Choose", 20, Color::WHITE, Font::SINCLAIR, z: 10.0)
+    @game.draw_centered(570.0, "[UP/DOWN/Stick] Select   [A / ENTER / Click] Choose", 20, Color::WHITE, Font::SINCLAIR, z: 10.0)
+
+    Profiler.measure(:update) do
+      # 上下選択入力
+      count = @choices.size
+      if Input.action_push?(:ui_up)
+        @cursor = (@cursor - 1) % count
+        @game.sfx.play(Sfx::SELECT, 2)
+      elsif Input.action_push?(:ui_down)
+        @cursor = (@cursor + 1) % count
+        @game.sfx.play(Sfx::SELECT, 2)
+      end
+
+      # マウスホバー選択 (マウスが動いたときだけカーソルを合わせる)
+      mx = Input.mouse_x
+      my = Input.mouse_y
+      mouse_moved = (mx != @prev_mx || my != @prev_my)
+      @prev_mx = mx
+      @prev_my = my
+      mouse_hover_idx = -1
+      count.times do |i|
+        top = row_top(i)
+        if mx >= 240.0 && mx <= 1040.0 && my >= top && my <= top + 80.0
+          mouse_hover_idx = i
+          @cursor = i if mouse_moved
+          break
+        end
+      end
+
+      # 画面が開いた直後の誤入力防止も frames で 1 行
+      return if frames < 20
+
+      buy_pressed = Input.action_push?(:ui_accept)
+      if mouse_hover_idx >= 0 && Input.mouse_push?(:left)
+        @cursor = mouse_hover_idx
+        buy_pressed = true
+      end
+      return unless buy_pressed
+
+      @game.execute_skill_upgrade(@choices[@cursor])
+      @game.sfx.play(Sfx::HEAL, 4)
+      Scene.pop
+    end
+  end
+end
+
+# ゲームオーバー画面 (PlayScene の上に push して重ねる)
+class GameOverScene < Scene
+  def initialize(game)
+    @game = game
   end
 
-  def draw_gameover
+  def call
+    p = @game.player
     Window.draw_rect(0.0, 0.0, 1280.0, 720.0, color: COLOR_MENU_BG, z: 10.0)
-    draw_centered(110.0, "GAME OVER", 64, COLOR_HEART_RED, Font::SINCLAIR, z: 10.0)
+    @game.draw_centered(110.0, "GAME OVER", 64, COLOR_HEART_RED, Font::SINCLAIR, z: 10.0)
 
     lines = [
-      "TIME       : #{time_str(@frames_alive)}",
-      "LEVEL      : #{@player.level}",
-      "KILLS      : #{@kills}",
-      "MAX COMBO  : #{@max_combo}",
-      "SCORE      : #{@player.score}",
-      "BEST       : #{@best_score}"
+      "TIME       : #{@game.time_str(@game.frames_alive)}",
+      "LEVEL      : #{p.level}",
+      "KILLS      : #{@game.kills}",
+      "MAX COMBO  : #{@game.max_combo}",
+      "SCORE      : #{p.score}",
+      "BEST       : #{@game.best_score}"
     ]
     lines.each_with_index do |line, i|
       Window.draw_text(470.0, 220.0 + i.to_f * 40.0, line, font: Font::SINCLAIR, size: 26, color: Color::WHITE, z: 10.0)
     end
 
-    if @new_record && (@state_timer / 15) % 2 == 0
-      draw_centered(480.0, "NEW RECORD!", 32, COLOR_ORANGE, Font::SINCLAIR, z: 10.0)
+    if @game.new_record && (frames / 15) % 2 == 0
+      @game.draw_centered(480.0, "NEW RECORD!", 32, COLOR_ORANGE, Font::SINCLAIR, z: 10.0)
     end
 
-    if @state_timer > 45 && (@state_timer / 30) % 2 == 0
-      draw_centered(570.0, "PRESS ENTER / A / CLICK TO RETRY", 26, Color::CYAN, Font::SINCLAIR, z: 10.0)
+    if frames > 45 && (frames / 30) % 2 == 0
+      @game.draw_centered(570.0, "PRESS ENTER / A / CLICK TO RETRY", 26, Color::CYAN, Font::SINCLAIR, z: 10.0)
+    end
+
+    Profiler.measure(:update) do
+      if frames > 45 && Input.action_push?(:ui_accept)
+        Scene.change(PlayScene.new(@game.new_game))
+      end
     end
   end
 end
 
 # ==========================================
-# 7. 初期化 & メインループ
+# 8. 初期化 & メインループ
 # ==========================================
 Enemy.init_atlas
 game = Game.new
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
-# 自動テスト時はタイトルを飛ばしてプレイ状態から開始 (ZENOO_TEST_TITLE 指定時はタイトルをテスト)
-game.game_state = STATE_PLAY if test_max > 0 && ENV['ZENOO_TEST_TITLE'] != '1'
+
+# 自動テスト時はタイトルを飛ばしてプレイ画面から開始 (ZENOO_TEST_TITLE 指定時はタイトルをテスト)
+if test_max > 0 && ENV['ZENOO_TEST_TITLE'] != '1'
+  Scene.change(PlayScene.new(game))
+else
+  Scene.change(TitleScene.new(game))
+end
+
 if ENV['ZENOO_TEST_ENEMIES']
   ENV['ZENOO_TEST_ENEMIES'].to_i.times do
     game.enemies << Enemy.new(game.player.x, game.player.y, :normal)
@@ -2012,7 +2013,14 @@ if ENV['ZENOO_TEST_ENEMIES']
 end
 
 Window.loop(1280, 720, "Zenoo Survival Shooting Game") do
-  game.update_draw_frame
+  game.update_frame_common
+
+  game.render_with_post_effects do
+    Scene.call
+  end
+
+  game.draw_profiler_gui
+
   if test_max > 0
     frame_count += 1
     if frame_count >= test_max

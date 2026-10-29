@@ -386,6 +386,65 @@ module Zenoo
     end
 
     # ----------------------------------------------------
+    # 描画スナップショット (あるフレームの描画コマンド列を記録し、後のフレームで再投入)
+    # - 記録: キューの指定位置以降のコマンドを自前のプールへ浅くコピー (頂点データ String は共有)
+    # - 再投入: 現在のアクティブキュー (画面 / render_to 先 / クリップ) へ通常の描画として積み直す
+    #   → Z ソート・バッチング・ポストエフェクトの対象にそのまま乗る
+    # ※ Mesh / InstanceBuffer など GPU 側で書き換わるリソースは「再投入時点の内容」で描画されます
+    # ----------------------------------------------------
+    class DrawSnapshot
+      attr_reader :count
+
+      def initialize
+        @pool = []
+        @count = 0
+      end
+
+      def empty?
+        @count == 0
+      end
+
+      # queue の from 番目以降 (このフレームに積まれた分) を記録
+      def capture(queue, from = 0)
+        n = queue.queue_count - from
+        n = 0 if n < 0
+        while @pool.length < n
+          @pool << DrawCommand.new
+        end
+
+        src_pool = queue.command_pool
+        i = 0
+        while i < n
+          s = src_pool[from + i]
+          @pool[i].set(nil, s.z, i, s.pipeline, s.data, s.count, s.image, s.shader, s.uniforms, s.blend, s.clip, s.mesh, s.inst_buffer)
+          i += 1
+        end
+
+        # 前回分の余りは参照を切って GC 可能にする
+        j = n
+        while j < @count
+          @pool[j].set(nil, 0.0, 0, nil, nil, 0)
+          j += 1
+        end
+        @count = n
+      end
+
+      # 記録したコマンドを現在のアクティブキューへ再投入
+      def replay
+        Backend.enqueue_snapshot(@pool, @count)
+      end
+
+      def clear
+        i = 0
+        while i < @count
+          @pool[i].set(nil, 0.0, 0, nil, nil, 0)
+          i += 1
+        end
+        @count = 0
+      end
+    end
+
+    # ----------------------------------------------------
     # バックエンド状態管理
     # ----------------------------------------------------
     @screen_queue = DrawQueue.new(nil)
@@ -529,6 +588,23 @@ module Zenoo
 
     def self.enqueue_draw(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0, mesh: nil, inst_buffer: nil)
       active_queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z, mesh: mesh, inst_buffer: inst_buffer)
+      register_pending_image(@current_target) if @current_target
+    end
+
+    # DrawSnapshot の再投入: 記録済みコマンドを現在のアクティブキューへ積み直す
+    # (Z 値・クリップ矩形・ブレンド等は記録時のものを維持し、登録順は現在のキュー末尾に続く)
+    def self.enqueue_snapshot(pool, count)
+      return if count == 0
+      q = active_queue
+      i = 0
+      while i < count
+        s = pool[i]
+        cmd = q.allocate_command
+        cmd.set(q.owner, s.z, q.queue_count, s.pipeline, s.data, s.count, s.image, s.shader, s.uniforms, s.blend, s.clip, s.mesh, s.inst_buffer)
+        q.needs_z_sort = true if s.z != 0.0
+        q.increment_count
+        i += 1
+      end
       register_pending_image(@current_target) if @current_target
     end
 
