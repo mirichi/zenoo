@@ -40,6 +40,8 @@ mkdir -p "${DOCS_DIR}/articulated"
 mkdir -p "${DOCS_DIR}/skinned_mesh"
 mkdir -p "${DOCS_DIR}/canvas_mesh"
 mkdir -p "${DOCS_DIR}/mesh_deform"
+mkdir -p "${DOCS_DIR}/scene"
+mkdir -p "${DOCS_DIR}/sound_generator"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -51,21 +53,21 @@ cp examples/web/portal.html "${DOCS_DIR}/index.html"
 
 # ビルドモード判定 (サイズより速度優先)
 #   BUILD_MODE=dev  (または fast) : -O1 (Clang最適化を軽量化し、ビルド時間を短縮)
-#   BUILD_MODE=release (デフォルト) : -O2 (実行速度重視の標準最適化)
-#   BUILD_MODE=max  (または o3)   : -O3 (最高速の実行速度)
-case "${BUILD_MODE:-release}" in
+#   BUILD_MODE=release            : -O2 (実行速度重視の標準最適化)
+#   BUILD_MODE=max  (または o3)   : -O3 (最高速の実行速度, デフォルト)
+case "${BUILD_MODE:-max}" in
     dev|fast)
         OPT_LEVEL="${OPT_LEVEL:--O1}"
         ;;
-    max|o3)
-        OPT_LEVEL="${OPT_LEVEL:--O3}"
-        ;;
-    *)
+    release)
         OPT_LEVEL="${OPT_LEVEL:--O2}"
+        ;;
+    max|o3|*)
+        OPT_LEVEL="${OPT_LEVEL:--O3}"
         ;;
 esac
 DEBUG_FLAGS="${DEBUG_FLAGS:--g0}"
-echo "=== Build Mode: ${BUILD_MODE:-release} (${OPT_LEVEL}) ==="
+echo "=== Build Mode: ${BUILD_MODE:-max} (${OPT_LEVEL}) ==="
 
 echo "=== [2/5] Building Common Spinel Runtime for Wasm ==="
 for f in "${SPINEL_DIR}"/lib/*.c; do
@@ -205,6 +207,8 @@ build_articulated()  { build_item "Articulated Sprite & Hierarchy Demo" "articul
 build_skinned_mesh() { build_item "2D SkinnedMesh & Bone Demo" "skinned_mesh" "examples/demo_skinned_mesh.rb" "examples/web/shell_skinned_mesh.html"; }
 build_canvas_mesh()  { build_item "Canvas to Mesh & Vector Sprites" "canvas_mesh" "examples/demo_canvas_mesh.rb" "examples/web/shell_canvas_mesh.html"; }
 build_mesh_deform()  { build_item "2D Mesh Deformation & 2-Stream Instancing" "mesh_deform" "examples/demo_mesh_deform.rb" "examples/web/shell_mesh_deform.html"; }
+build_scene()        { build_item "Scene & Transition Demo" "scene" "examples/demo_scene.rb" "examples/web/shell_scene.html"; }
+build_sound_generator() { build_item "Retro Sound Generator" "sound_generator" "tools/sound_generator.rb" "examples/web/shell_sound_generator.html"; }
 
 case "$TARGET" in
     game)         build_game ;;
@@ -226,6 +230,8 @@ case "$TARGET" in
     skinned_mesh) build_skinned_mesh ;;
     canvas_mesh)  build_canvas_mesh ;;
     mesh_deform)  build_mesh_deform ;;
+    scene)        build_scene ;;
+    sound_generator) build_sound_generator ;;
     all)
         build_game
         sleep 0.5
@@ -264,10 +270,14 @@ case "$TARGET" in
         build_canvas_mesh
         sleep 0.5
         build_mesh_deform
+        sleep 0.5
+        build_scene
+        sleep 0.5
+        build_sound_generator
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|articulated|skinned_mesh|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|articulated|skinned_mesh|canvas_mesh|mesh_deform|scene|sound_generator|all]"
         exit 1
         ;;
 esac
@@ -295,4 +305,6 @@ echo " Articulated: ${DOCS_DIR}/articulated/index.html"
 echo " SkinnedMesh: ${DOCS_DIR}/skinned_mesh/index.html"
 echo " CanvasMesh : ${DOCS_DIR}/canvas_mesh/index.html"
 echo " MeshDeform : ${DOCS_DIR}/mesh_deform/index.html"
+echo " Scene      : ${DOCS_DIR}/scene/index.html"
+echo " SFX Gen    : ${DOCS_DIR}/sound_generator/index.html"
 echo "=========================================================="
