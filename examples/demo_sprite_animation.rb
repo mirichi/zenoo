@@ -54,7 +54,6 @@ module WorldBounds
     self.x = x.clamp(margin_x, WORLD_WIDTH - margin_x)
     self.y = y.clamp(margin_y, WORLD_HEIGHT - margin_y)
     if tilemap
-      sync_foot_collider
       tilemap.resolve_collision(self)
       self.x = x.clamp(margin_x, WORLD_WIDTH - margin_x)
       self.y = y.clamp(margin_y, WORLD_HEIGHT - margin_y)
@@ -366,14 +365,8 @@ class SlimeEnemy < Zenoo::Sprite
     @facing_x = 1.0
     self.z = y
 
-    # 足元の接地コライダー (楕円)
-    set_collider(:circle, radius_x: 16.0, radius_y: 10.0)
-  end
-
-  def sync_foot_collider
-    # pivot (:bottom_center) 基準で足元 (y - 8px) にコライダー中心を維持
-    sy = scale_y.abs > 0.001 ? scale_y.abs : 1.0
-    self.collider_offset_y = height * 0.5 - (8.0 / sy)
+    # 足元の接地コライダー (楕円: anchor: :bottom_center で足元 y - 8px に配置)
+    set_collider(:circle, radius_x: 16.0, radius_y: 10.0, anchor: :bottom_center, offset_y: -8.0)
   end
 
   def dying?
@@ -558,15 +551,9 @@ class IsoPlayer < Zenoo::Sprite
     load_animations
     play(IDLE_ANIMS[@dir_y])
 
-    # ★ 足元の接地コライダー (横半径11px, 縦半径8px の楕円、下端がちょうど足元 y に一致)
-    set_collider(:circle, radius_x: 11.0, radius_y: 8.0)
-    sync_foot_collider
+    # ★ 足元の接地コライダー (横半径11px, 縦半径8px の楕円、anchor: :bottom_center で足元 y - 8px に配置)
+    set_collider(:circle, radius_x: 11.0, radius_y: 8.0, anchor: :bottom_center, offset_y: -8.0)
     self.z = y
-  end
-
-  def sync_foot_collider
-    # 歩行(64x80)と攻撃(96x96)で画像高さが変わっても、常に足元(y - 8px)にコライダー中心を固定
-    self.collider_offset_y = height * 0.5 - 8.0
   end
 
   def update

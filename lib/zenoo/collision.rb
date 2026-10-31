@@ -97,12 +97,13 @@ module Zenoo
         @offset_y = offset_y.to_f
         @_support = [0.0, 0.0]
 
-        @anchor_x = 0.0
-        @anchor_y = 0.0
+        @anchor = nil
+        @anchor_x = 0.5
+        @anchor_y = 0.5
         @pivot_x = 0.5
         @pivot_y = 0.5
 
-        self.anchor = anchor
+        self.anchor = anchor || :center
         self.pivot = pivot
         dirty_pos!
         dirty_geom!
@@ -199,6 +200,7 @@ module Zenoo
       def world_pivot_y; @parent ? @parent.world_pivot_y : @y; end
 
       # 親 Sprite が存在する場合のワールド重心座標を1パスで算出
+      # コライダーの配置基準 (anchor: :center, :bottom_center, :pivot 等) を反映
       def compute_parent_center(offset_x, offset_y, cos_v, sin_v, sx, sy)
         p = @parent
         pw = p.width
@@ -209,8 +211,11 @@ module Zenoo
         wpv_x = p.world_pivot_x
         wpv_y = p.world_pivot_y
 
-        rel_cx = (0.5 - pv_x) * pw + offset_x
-        rel_cy = (0.5 - pv_y) * ph + offset_y
+        anc_x = @anchor == :pivot ? pv_x : @anchor_x
+        anc_y = @anchor == :pivot ? pv_y : @anchor_y
+
+        rel_cx = (anc_x - pv_x) * pw + offset_x
+        rel_cy = (anc_y - pv_y) * ph + offset_y
 
         if rel_cx.abs < 0.0001 && rel_cy.abs < 0.0001
           [wpv_x, wpv_y]
@@ -235,16 +240,25 @@ module Zenoo
 
       # アンカー (取得)
       def anchor
+        return :pivot if @anchor == :pivot
         if (@anchor_x - 0.0).abs < 0.0001 && (@anchor_y - 0.0).abs < 0.0001
           :top_left
         elsif (@anchor_x - 0.5).abs < 0.0001 && (@anchor_y - 0.5).abs < 0.0001
           :center
+        elsif (@anchor_x - 0.5).abs < 0.0001 && (@anchor_y - 1.0).abs < 0.0001
+          :bottom_center
         else
           [@anchor_x, @anchor_y]
         end
       end
 
       def anchor=(val)
+        if val == :pivot
+          @anchor = :pivot
+          dirty_pos!
+          return
+        end
+        @anchor = nil
         ax, ay = Collision.parse_anchor(val)
         return if @anchor_x == ax && @anchor_y == ay
         @anchor_x = ax
@@ -400,8 +414,10 @@ module Zenoo
           if @parent
             pw = @parent.width
             ph = @parent.height
-            rel_cx = (0.5 - @parent.pivot_x) * pw + @offset_x
-            rel_cy = (0.5 - @parent.pivot_y) * ph + @offset_y
+            anc_x = @anchor == :pivot ? @parent.pivot_x : @anchor_x
+            anc_y = @anchor == :pivot ? @parent.pivot_y : @anchor_y
+            rel_cx = (anc_x - @parent.pivot_x) * pw + @offset_x
+            rel_cy = (anc_y - @parent.pivot_y) * ph + @offset_y
           else
             rel_cx = (0.5 - @pivot_x) * w + @offset_x
             rel_cy = (0.5 - @pivot_y) * h + @offset_y
@@ -522,8 +538,10 @@ module Zenoo
           if @parent
             pw = @parent.width
             ph = @parent.height
-            rel_cx = (0.5 - @parent.pivot_x) * pw + @offset_x
-            rel_cy = (0.5 - @parent.pivot_y) * ph + @offset_y
+            anc_x = @anchor == :pivot ? @parent.pivot_x : @anchor_x
+            anc_y = @anchor == :pivot ? @parent.pivot_y : @anchor_y
+            rel_cx = (anc_x - @parent.pivot_x) * pw + @offset_x
+            rel_cy = (anc_y - @parent.pivot_y) * ph + @offset_y
           else
             rel_cx = @offset_x
             rel_cy = @offset_y
