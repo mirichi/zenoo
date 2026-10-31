@@ -231,6 +231,20 @@ double sp_ZenSound_get_pan(sp_ZenSound* s);
 void sp_ZenSound_seek(sp_ZenSound* s, double sec);
 double sp_ZenSound_get_cursor(sp_ZenSound* s);
 double sp_ZenSound_get_length(sp_ZenSound* s);
+sp_int sp_ZenSound_get_sample_rate(sp_ZenSound* s);
+sp_int sp_ZenSound_get_length_pcm(sp_ZenSound* s);
+void sp_ZenSound_set_loop_points_pcm(sp_ZenSound* s, sp_int start_pcm, sp_int end_pcm);
+void sp_ZenSound_set_loop_points_seconds(sp_ZenSound* s, double start_sec, double end_sec);
+double sp_ZenSound_get_loop_start(sp_ZenSound* s);
+double sp_ZenSound_get_loop_end(sp_ZenSound* s);
+void sp_ZenSound_set_loop_start(sp_ZenSound* s, double start_sec);
+void sp_ZenSound_set_loop_end(sp_ZenSound* s, double end_sec);
+sp_int sp_ZenSound_get_loop_start_pcm(sp_ZenSound* s);
+sp_int sp_ZenSound_get_loop_end_pcm(sp_ZenSound* s);
+void sp_ZenSound_set_loop_start_pcm(sp_ZenSound* s, sp_int start_pcm);
+void sp_ZenSound_set_loop_end_pcm(sp_ZenSound* s, sp_int end_pcm);
+sp_bool sp_ZenSound_has_loop_points(sp_ZenSound* s);
+void sp_ZenSound_clear_loop_points(sp_ZenSound* s);
 
 // Audio モジュール用
 sp_bool sp_zen_audio_init(void);

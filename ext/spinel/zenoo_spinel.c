@@ -854,6 +854,99 @@ double sp_ZenSound_get_length(sp_ZenSound* s) {
     return (double)zen_sound_get_length(s->sound);
 }
 
+sp_int sp_ZenSound_get_sample_rate(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0;
+    return (sp_int)zen_sound_get_sample_rate(s->sound);
+}
+
+sp_int sp_ZenSound_get_length_pcm(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0;
+    return (sp_int)zen_sound_get_length_pcm(s->sound);
+}
+
+void sp_ZenSound_set_loop_points_pcm(sp_ZenSound* s, sp_int start_pcm, sp_int end_pcm) {
+    if (s && s->sound) {
+        zen_sound_set_loop_points_pcm(s->sound, (uint64_t)start_pcm, (uint64_t)end_pcm);
+    }
+}
+
+void sp_ZenSound_set_loop_points_seconds(sp_ZenSound* s, double start_sec, double end_sec) {
+    if (s && s->sound) {
+        zen_sound_set_loop_points_seconds(s->sound, (float)start_sec, (float)end_sec);
+    }
+}
+
+double sp_ZenSound_get_loop_start(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0.0;
+    float start = 0.0f;
+    zen_sound_get_loop_points_seconds(s->sound, &start, NULL);
+    return (double)start;
+}
+
+double sp_ZenSound_get_loop_end(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0.0;
+    float end = 0.0f;
+    zen_sound_get_loop_points_seconds(s->sound, NULL, &end);
+    return (double)end;
+}
+
+void sp_ZenSound_set_loop_start(sp_ZenSound* s, double start_sec) {
+    if (s && s->sound) {
+        float end = 0.0f;
+        zen_sound_get_loop_points_seconds(s->sound, NULL, &end);
+        zen_sound_set_loop_points_seconds(s->sound, (float)start_sec, end);
+    }
+}
+
+void sp_ZenSound_set_loop_end(sp_ZenSound* s, double end_sec) {
+    if (s && s->sound) {
+        float start = 0.0f;
+        zen_sound_get_loop_points_seconds(s->sound, &start, NULL);
+        zen_sound_set_loop_points_seconds(s->sound, start, (float)end_sec);
+    }
+}
+
+sp_int sp_ZenSound_get_loop_start_pcm(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0;
+    uint64_t start = 0;
+    zen_sound_get_loop_points_pcm(s->sound, &start, NULL);
+    return (sp_int)start;
+}
+
+sp_int sp_ZenSound_get_loop_end_pcm(sp_ZenSound* s) {
+    if (!s || !s->sound) return 0;
+    uint64_t end = 0;
+    zen_sound_get_loop_points_pcm(s->sound, NULL, &end);
+    return (sp_int)end;
+}
+
+void sp_ZenSound_set_loop_start_pcm(sp_ZenSound* s, sp_int start_pcm) {
+    if (s && s->sound) {
+        uint64_t end = 0;
+        zen_sound_get_loop_points_pcm(s->sound, NULL, &end);
+        zen_sound_set_loop_points_pcm(s->sound, (uint64_t)start_pcm, end);
+    }
+}
+
+void sp_ZenSound_set_loop_end_pcm(sp_ZenSound* s, sp_int end_pcm) {
+    if (s && s->sound) {
+        uint64_t start = 0;
+        zen_sound_get_loop_points_pcm(s->sound, &start, NULL);
+        zen_sound_set_loop_points_pcm(s->sound, start, (uint64_t)end_pcm);
+    }
+}
+
+sp_bool sp_ZenSound_has_loop_points(sp_ZenSound* s) {
+    if (!s || !s->sound) return false;
+    return zen_sound_has_loop_points(s->sound) ? true : false;
+}
+
+void sp_ZenSound_clear_loop_points(sp_ZenSound* s) {
+    if (s && s->sound) {
+        zen_sound_clear_loop_points(s->sound);
+    }
+}
+
 sp_bool sp_zen_audio_init(void) {
     return zen_audio_init() ? true : false;
 }

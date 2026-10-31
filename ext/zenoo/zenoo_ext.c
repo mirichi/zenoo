@@ -1397,6 +1397,123 @@ static VALUE sound_get_length(VALUE self) {
     return DBL2NUM((double)zen_sound_get_length(sound));
 }
 
+static VALUE sound_get_sample_rate(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return UINT2NUM(zen_sound_get_sample_rate(sound));
+}
+
+static VALUE sound_get_length_pcm(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return ULL2NUM(zen_sound_get_length_pcm(sound));
+}
+
+static VALUE sound_set_loop_points_pcm(int argc, VALUE* argv, VALUE self) {
+    VALUE rb_start, rb_end;
+    rb_scan_args(argc, argv, "11", &rb_start, &rb_end);
+    uint64_t start_pcm = (uint64_t)NUM2ULL(rb_start);
+    uint64_t end_pcm = NIL_P(rb_end) ? 0 : (uint64_t)NUM2ULL(rb_end);
+
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_set_loop_points_pcm(sound, start_pcm, end_pcm);
+    return self;
+}
+
+static VALUE sound_get_loop_start_pcm(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    uint64_t start_pcm = 0;
+    zen_sound_get_loop_points_pcm(sound, &start_pcm, NULL);
+    return ULL2NUM(start_pcm);
+}
+
+static VALUE sound_set_loop_start_pcm(VALUE self, VALUE rb_start) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    uint64_t end_pcm = 0;
+    zen_sound_get_loop_points_pcm(sound, NULL, &end_pcm);
+    zen_sound_set_loop_points_pcm(sound, (uint64_t)NUM2ULL(rb_start), end_pcm);
+    return rb_start;
+}
+
+static VALUE sound_get_loop_end_pcm(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    uint64_t end_pcm = 0;
+    zen_sound_get_loop_points_pcm(sound, NULL, &end_pcm);
+    return ULL2NUM(end_pcm);
+}
+
+static VALUE sound_set_loop_end_pcm(VALUE self, VALUE rb_end) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    uint64_t start_pcm = 0;
+    zen_sound_get_loop_points_pcm(sound, &start_pcm, NULL);
+    zen_sound_set_loop_points_pcm(sound, start_pcm, (uint64_t)NUM2ULL(rb_end));
+    return rb_end;
+}
+
+static VALUE sound_set_loop_points_sec(int argc, VALUE* argv, VALUE self) {
+    VALUE rb_start, rb_end;
+    rb_scan_args(argc, argv, "11", &rb_start, &rb_end);
+    float start_sec = (float)NUM2DBL(rb_start);
+    float end_sec = NIL_P(rb_end) ? 0.0f : (float)NUM2DBL(rb_end);
+
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_set_loop_points_seconds(sound, start_sec, end_sec);
+    return self;
+}
+
+static VALUE sound_get_loop_start_sec(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    float start_sec = 0.0f;
+    zen_sound_get_loop_points_seconds(sound, &start_sec, NULL);
+    return DBL2NUM((double)start_sec);
+}
+
+static VALUE sound_set_loop_start_sec(VALUE self, VALUE rb_start) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    float end_sec = 0.0f;
+    zen_sound_get_loop_points_seconds(sound, NULL, &end_sec);
+    zen_sound_set_loop_points_seconds(sound, (float)NUM2DBL(rb_start), end_sec);
+    return rb_start;
+}
+
+static VALUE sound_get_loop_end_sec(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    float end_sec = 0.0f;
+    zen_sound_get_loop_points_seconds(sound, NULL, &end_sec);
+    return DBL2NUM((double)end_sec);
+}
+
+static VALUE sound_set_loop_end_sec(VALUE self, VALUE rb_end) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    float start_sec = 0.0f;
+    zen_sound_get_loop_points_seconds(sound, &start_sec, NULL);
+    zen_sound_set_loop_points_seconds(sound, start_sec, (float)NUM2DBL(rb_end));
+    return rb_end;
+}
+
+static VALUE sound_has_loop_points(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    return zen_sound_has_loop_points(sound) ? Qtrue : Qfalse;
+}
+
+static VALUE sound_clear_loop_points(VALUE self) {
+    ZenSound* sound;
+    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
+    zen_sound_clear_loop_points(sound);
+    return self;
+}
+
 // ==========================================
 // Zenoo::Native::Audio
 // ==========================================
@@ -1606,6 +1723,20 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeSound, "time", sound_get_cursor, 0);
     rb_define_method(rb_cNativeSound, "time=", sound_seek, 1);
     rb_define_method(rb_cNativeSound, "length", sound_get_length, 0);
+    rb_define_method(rb_cNativeSound, "sample_rate", sound_get_sample_rate, 0);
+    rb_define_method(rb_cNativeSound, "length_pcm", sound_get_length_pcm, 0);
+    rb_define_method(rb_cNativeSound, "set_loop_points", sound_set_loop_points_sec, -1);
+    rb_define_method(rb_cNativeSound, "set_loop_points_pcm", sound_set_loop_points_pcm, -1);
+    rb_define_method(rb_cNativeSound, "loop_start", sound_get_loop_start_sec, 0);
+    rb_define_method(rb_cNativeSound, "loop_start=", sound_set_loop_start_sec, 1);
+    rb_define_method(rb_cNativeSound, "loop_end", sound_get_loop_end_sec, 0);
+    rb_define_method(rb_cNativeSound, "loop_end=", sound_set_loop_end_sec, 1);
+    rb_define_method(rb_cNativeSound, "loop_start_pcm", sound_get_loop_start_pcm, 0);
+    rb_define_method(rb_cNativeSound, "loop_start_pcm=", sound_set_loop_start_pcm, 1);
+    rb_define_method(rb_cNativeSound, "loop_end_pcm", sound_get_loop_end_pcm, 0);
+    rb_define_method(rb_cNativeSound, "loop_end_pcm=", sound_set_loop_end_pcm, 1);
+    rb_define_method(rb_cNativeSound, "has_loop_points?", sound_has_loop_points, 0);
+    rb_define_method(rb_cNativeSound, "clear_loop_points", sound_clear_loop_points, 0);
 
     // 8. Audio (Zenoo::Native::Audio)
     VALUE mAudio = rb_define_module_under(rb_mNative, "Audio");

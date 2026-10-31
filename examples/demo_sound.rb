@@ -49,12 +49,12 @@ end
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
 
-Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + SoundEffect)") do
+Window.loop(1080, 760, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + SoundEffect)") do
   frame_count += 1
   break if test_max > 0 && frame_count >= test_max
 
   # 背景
-  Window.draw_rect(0, 0, 1080, 700, color: Color.new(20, 24, 32))
+  Window.draw_rect(0, 0, 1080, 760, color: Color.new(20, 24, 32))
 
   # ヘッダー描画
   Window.draw_rect(0, 0, 1080, 60, color: Color.new(30, 36, 48))
@@ -62,12 +62,12 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
   Window.draw_text(420, 22, "Powered by miniaudio & stb_vorbis", size: 14, color: Color.new(160, 170, 190))
 
   # ステータスバー
-  Window.draw_rect(0, 650, 1080, 50, color: Color.new(24, 28, 38))
-  Window.draw_text(30, 665, "Status: #{current_status}", size: 15, color: Color.new(150, 220, 120))
+  Window.draw_rect(0, 710, 1080, 50, color: Color.new(24, 28, 38))
+  Window.draw_text(30, 725, "Status: #{current_status}", size: 15, color: Color.new(150, 220, 120))
 
   # 左側: 動的波形生成 (SoundEffect)
   GUI.cursor(30.0, 80.0)
-  GUI.panel("Dynamic Sound Effects (PCM)", w: 490.0, h: 560.0) do
+  GUI.panel("Dynamic Sound Effects (PCM)", w: 495.0, h: 615.0) do
     GUI.label("Generated on-the-fly with mathematical waveforms", size: 13, color: Color.new(150, 160, 180))
 
     GUI.row(cols: 2, spacing: 12) do
@@ -111,11 +111,32 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
       sound_boom.play
       current_status = "Playing White Noise explosion sound"
     end
+
+    GUI.divider
+    GUI.label("Polyphony & Limiter Test (Anti-Clipping):", size: 14, color: Color.new(120, 220, 180))
+
+    GUI.row(cols: 2, spacing: 10) do
+      if GUI.button("Rapid Fire (10x in 1 frame)", h: 36.0)
+        # 同一フレームで10回 play 呼んでも重複抑制され、安全に鳴る
+        sound_laser.max_polyphony = 3
+        sound_laser.dedup_frame = true
+        10.times { sound_laser.play }
+        current_status = "Triggered 10x in same frame (Dedup: 1 sound played, 0 clipping!)"
+      end
+
+      if GUI.button("Multi-Voice (Polyphony 3)", h: 36.0)
+        # 3音まで重なるポリフォニー
+        sound_laser.max_polyphony = 3
+        sound_laser.dedup_frame = false
+        sound_laser.play
+        current_status = "Multi-voice laser (Max polyphony: 3)"
+      end
+    end
   end
 
   # 右側: ファイルオーディオ (OGG / WAV) & オーディオコントロール
   GUI.cursor(550.0, 80.0)
-  GUI.panel("File Audio & Engine Controls", w: 490.0, h: 560.0) do
+  GUI.panel("File Audio & Engine Controls", w: 495.0, h: 615.0) do
     GUI.label("Decoded via stb_vorbis & miniaudio engine", size: 13, color: Color.new(150, 160, 180))
 
     if bgm_ogg
@@ -194,10 +215,25 @@ Window.loop(1080, 700, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
         bgm_ogg.pan = bgm_pan
       end
 
-      if GUI.button(bgm_loop ? "BGM Loop: Enabled" : "BGM Loop: Disabled", w: 220.0, h: 36.0)
-        bgm_loop = !bgm_loop
-        bgm_ogg.looping = bgm_loop
-        current_status = "BGM Loop set to #{bgm_loop}"
+      has_lp = bgm_ogg.has_loop_points?
+      lp_label = has_lp ? "Loop Point: Active (1.0s~)" : "Set Loop Point (1.0s~)"
+
+      GUI.row(cols: 2, spacing: 10) do
+        if GUI.button(bgm_loop ? "BGM Loop: Enabled" : "BGM Loop: Disabled", h: 36.0)
+          bgm_loop = !bgm_loop
+          bgm_ogg.looping = bgm_loop
+          current_status = "BGM Loop set to #{bgm_loop}"
+        end
+
+        if GUI.button(lp_label, h: 36.0)
+          if has_lp
+            bgm_ogg.clear_loop_points
+            current_status = "Cleared BGM loop points"
+          else
+            bgm_ogg.set_loop_points(1.0)
+            current_status = "Set BGM loop point: Intro=1.0s (loops back to 1.0s)"
+          end
+        end
       end
     end
   end

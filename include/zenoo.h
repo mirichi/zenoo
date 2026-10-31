@@ -496,9 +496,19 @@ void  zen_sound_set_pan(ZenSound* sound, float pan);
 float zen_sound_get_pan(const ZenSound* sound);
 
 // シーク & 時間情報
-void  zen_sound_seek(ZenSound* sound, float seconds);
-float zen_sound_get_cursor(const ZenSound* sound);
-float zen_sound_get_length(const ZenSound* sound);
+void     zen_sound_seek(ZenSound* sound, float seconds);
+float    zen_sound_get_cursor(const ZenSound* sound);
+float    zen_sound_get_length(const ZenSound* sound);
+uint32_t zen_sound_get_sample_rate(const ZenSound* sound);
+uint64_t zen_sound_get_length_pcm(const ZenSound* sound);
+
+// ループポイント制御 (イントロ付きループ等)
+void     zen_sound_set_loop_points_pcm(ZenSound* sound, uint64_t start_frame, uint64_t end_frame);
+void     zen_sound_get_loop_points_pcm(const ZenSound* sound, uint64_t* out_start, uint64_t* out_end);
+void     zen_sound_set_loop_points_seconds(ZenSound* sound, float start_sec, float end_sec);
+void     zen_sound_get_loop_points_seconds(const ZenSound* sound, float* out_start, float* out_end);
+int      zen_sound_has_loop_points(const ZenSound* sound);
+void     zen_sound_clear_loop_points(ZenSound* sound);
 
 #ifdef __cplusplus
 }
