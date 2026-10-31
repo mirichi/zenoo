@@ -315,29 +315,51 @@ module Zenoo
       end
 
       # ウィンドウの開始
-      def begin_window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, resizable: false, min_w: 120.0, min_h: 80.0)
+      def begin_window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, resizable: false, min_w: 120.0, min_h: 80.0, collapsible: true)
         win_id = id.to_s.empty? ? title.to_s : id.to_s
-        win = @win_mgr.find_or_create(win_id, title, x, y, w, h, resizable: resizable, min_w: min_w, min_h: min_h)
+        win = @win_mgr.find_or_create(win_id, title, x, y, w, h, resizable: resizable, min_w: min_w, min_h: min_h, collapsible: collapsible)
         return nil unless win.open
 
+        title_bar_h = 36.0
         wx = win.x
         wy = win.y
         ww = win.w
-        wh = win.h
-        title_bar_h = 36.0
+        wh = win.collapsed ? title_bar_h : win.h
         pad = padding.to_f
         is_active = @win_mgr.active?(win_id)
         win_z = win.z
 
-        unless @win_mgr.check_resize_start(win, @mouse_x, @mouse_y, @mouse_push)
-          @win_mgr.check_drag_start(win, title_bar_h, @mouse_x, @mouse_y, @mouse_push)
+        # 最小化ボタンの操作判定
+        btn_hover = @win_mgr.check_collapse_click(win, title_bar_h, @mouse_x, @mouse_y, @mouse_push)
+
+        # ダブルクリック判定 (ボタン外のタイトルバー)
+        double_clicked = false
+        if @mouse_push && !btn_hover
+          cur_time = (defined?(Audio) ? Audio.time : 0.0)
+          double_clicked = @win_mgr.check_title_bar_double_click(win, title_bar_h, @mouse_x, @mouse_y, cur_time)
         end
-        @renderer.draw_window(wx, wy, ww, wh, win.title, is_active, @theme, z: win_z, title_bar_h: title_bar_h, resizable: win.resizable)
+
+        unless btn_hover || double_clicked
+          unless @win_mgr.check_resize_start(win, @mouse_x, @mouse_y, @mouse_push)
+            @win_mgr.check_drag_start(win, title_bar_h, @mouse_x, @mouse_y, @mouse_push)
+          end
+        end
+
+        # 折りたたみ状態に応じた描画高さを反映
+        wh = win.collapsed ? title_bar_h : win.h
+        @renderer.draw_window(
+          wx, wy, ww, wh, win.title, is_active, @theme,
+          z: win_z, title_bar_h: title_bar_h,
+          resizable: (win.resizable && !win.collapsed),
+          collapsible: win.collapsible,
+          collapsed: win.collapsed,
+          btn_hover: btn_hover
+        )
 
         content_x = wx + pad
         content_y = wy + title_bar_h + 8.0
         content_w = [ww - pad * 2.0, 0.0].max
-        content_h = [wh - title_bar_h - pad - 8.0, 0.0].max
+        content_h = win.collapsed ? 0.0 : [wh - title_bar_h - pad - 8.0, 0.0].max
 
         container_state = @layout.begin_container(content_x, content_y, content_w, content_h, clip: true, z: win_z + 10.0)
         [win, win_id, container_state]
@@ -352,16 +374,17 @@ module Zenoo
 
       # フローティングウィンドウ (Window)
       # - ドラッグ移動、タイトルバー、最前面フォーカス切り替え
+      # - 最小化ボタン（タイトルバー右端アイコンクリック、またはタイトルバーダブルクリックで折りたたみ）
       # - Window.clip(local: true) によるコンテンツのビューポートクリッピング
       # - resizable: true で右下ドラッグによるサイズ変更を許可 (オプション)
-      def window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, resizable: false, min_w: 120.0, min_h: 80.0)
-        state = begin_window(title, x: x, y: y, w: w, h: h, id: id, padding: padding, resizable: resizable, min_w: min_w, min_h: min_h)
+      def window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, resizable: false, min_w: 120.0, min_h: 80.0, collapsible: true)
+        state = begin_window(title, x: x, y: y, w: w, h: h, id: id, padding: padding, resizable: resizable, min_w: min_w, min_h: min_h, collapsible: collapsible)
         return unless state
         return unless block_given?
 
         win, win_id, _cs = state
         @win_mgr.with_window_context(win_id) do
-          yield win
+          yield win unless win.collapsed
           end_window(state)
         end
       end

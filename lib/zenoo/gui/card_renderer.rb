@@ -391,13 +391,15 @@ module Zenoo
           z: win_z + 1.0
         )
 
-        # タイトルバー境界線
-        Window.draw_line(
-          wx + 1.0, wy + title_bar_h + 1.0,
-          wx + ww - 1.0, wy + title_bar_h + 1.0,
-          color: border_color,
-          z: win_z + 1.5
-        )
+        # タイトルバー境界線 (展開時のみ描画)
+        unless opts[:collapsed]
+          Window.draw_line(
+            wx + 1.0, wy + title_bar_h + 1.0,
+            wx + ww - 1.0, wy + title_bar_h + 1.0,
+            color: border_color,
+            z: win_z + 1.5
+          )
+        end
 
         # タイトル文字列
         if title && !title.to_s.empty?
@@ -413,6 +415,26 @@ module Zenoo
               color: title_col,
               z: win_z + 2.0
             )
+          end
+        end
+
+        # 最小化 / 折りたたみボタン (タイトルバー右端)
+        if opts[:collapsible]
+          btn_size = 22.0
+          bx = wx + ww - btn_size - 7.0
+          by = wy + (title_bar_h - btn_size) * 0.5
+          icon_col = active ? (theme.text_color || Color::WHITE) : (theme.text_disabled || Color.new(160, 160, 165))
+
+          if opts[:btn_hover]
+            Window.draw_rect(bx, by, btn_size, btn_size, radius: 4.0, color: Color.new(255, 255, 255, 45), z: win_z + 2.0)
+          end
+
+          if opts[:collapsed]
+            # 展開 / 元に戻すアイコン (□)
+            Window.draw_rect(bx + 5.0, by + 5.0, 12.0, 12.0, radius: 2.0, color: nil, border_width: 1.5, border_color: icon_col, z: win_z + 2.5)
+          else
+            # 最小化アイコン (−)
+            Window.draw_line(bx + 5.0, by + 11.0, bx + 17.0, by + 11.0, color: icon_col, width: 2.0, z: win_z + 2.5)
           end
         end
 

@@ -127,13 +127,32 @@ module Zenoo
 
         Window.draw_rect(x, y, w, h, color: bg_col, border_width: border_w, border_color: border_col, z: win_z)
         Window.draw_rect(x + 1.0, y + 1.0, w - 2.0, title_bar_h, color: title_bg, z: win_z + 1.0)
-        Window.draw_line(x + 1.0, y + title_bar_h + 1.0, x + w - 1.0, y + title_bar_h + 1.0, color: border_col, z: win_z + 1.5)
+        unless opts[:collapsed]
+          Window.draw_line(x + 1.0, y + title_bar_h + 1.0, x + w - 1.0, y + title_bar_h + 1.0, color: border_col, z: win_z + 1.5)
+        end
 
         if title && !title.to_s.empty?
           f_font = theme.font || Font.default
           f_size = 14
           title_col = active ? (theme.text_color || Color::WHITE) : (theme.text_disabled || Color.new(160, 160, 165))
           Window.draw_text(x + 10.0, y + (title_bar_h - f_size.to_f) / 2.0 + 1.0, title.to_s, font: f_font, size: f_size, color: title_col, z: win_z + 2.0)
+        end
+
+        if opts[:collapsible]
+          btn_size = 22.0
+          bx = x + w - btn_size - 7.0
+          by = y + (title_bar_h - btn_size) * 0.5
+          icon_col = active ? (theme.text_color || Color::WHITE) : (theme.text_disabled || Color.new(160, 160, 165))
+
+          if opts[:btn_hover]
+            Window.draw_rect(bx, by, btn_size, btn_size, radius: 4.0, color: Color.new(255, 255, 255, 45), z: win_z + 2.0)
+          end
+
+          if opts[:collapsed]
+            Window.draw_rect(bx + 5.0, by + 5.0, 12.0, 12.0, radius: 2.0, color: nil, border_width: 1.5, border_color: icon_col, z: win_z + 2.5)
+          else
+            Window.draw_line(bx + 5.0, by + 11.0, bx + 17.0, by + 11.0, color: icon_col, width: 2.0, z: win_z + 2.5)
+          end
         end
       end
 
