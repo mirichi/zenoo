@@ -25,25 +25,59 @@ module Zenoo
         @finished = false
       end
 
-      def add(name, images, wait: 4, loop: true, offset: nil, offset_x: nil, offset_y: nil)
+      def add(name, images, wait: 4, loop: true, offset_x: 0.0, offset_y: 0.0, offset: nil)
         imgs = images.is_a?(Array) ? images : [images]
-        ox = (offset_x || (offset ? offset[0] : 0.0) || 0.0).to_f
-        oy = (offset_y || (offset ? offset[1] : 0.0) || 0.0).to_f
+
+        # offset_x / offset_y に統一 (数値または配列)
+        # 後方互換のため offset: [x, y] が指定された場合はフォールバックとして採用
+        ox = if offset_x && offset_x != 0.0 && offset_x != 0
+          offset_x
+        elsif offset && offset.is_a?(Array)
+          offset.first.is_a?(Array) ? offset.map { |o| o ? o[0] : 0.0 } : offset[0]
+        else
+          offset_x || 0.0
+        end
+
+        oy = if offset_y && offset_y != 0.0 && offset_y != 0
+          offset_y
+        elsif offset && offset.is_a?(Array)
+          offset.first.is_a?(Array) ? offset.map { |o| o ? o[1] : 0.0 } : offset[1]
+        else
+          offset_y || 0.0
+        end
+
+        final_ox = ox.is_a?(Array) ? ox.map(&:to_f) : ox.to_f
+        final_oy = oy.is_a?(Array) ? oy.map(&:to_f) : oy.to_f
+
         @animations[name.to_sym] = {
           images: imgs,
           wait: wait,
           loop: loop,
-          offset_x: ox,
-          offset_y: oy
+          offset_x: final_ox,
+          offset_y: final_oy
         }
       end
 
       def offset_x
-        @current_data ? @current_data[:offset_x] : 0.0
+        return 0.0 unless @current_data
+        ox = @current_data[:offset_x]
+        if ox.is_a?(Array)
+          return 0.0 if ox.empty?
+          (ox[@frame_index] || ox[-1] || 0.0).to_f
+        else
+          ox.to_f
+        end
       end
 
       def offset_y
-        @current_data ? @current_data[:offset_y] : 0.0
+        return 0.0 unless @current_data
+        oy = @current_data[:offset_y]
+        if oy.is_a?(Array)
+          return 0.0 if oy.empty?
+          (oy[@frame_index] || oy[-1] || 0.0).to_f
+        else
+          oy.to_f
+        end
       end
 
       def play(sprite, name, reset: false, keep_frame: false)
@@ -183,13 +217,13 @@ module Zenoo
     # アニメーションを登録
     # @param name [Symbol, String] アニメーション名
     # @param images [Array<Image>, Image] 画像配列
-    # @param wait [Integer, Array<Integer>] 1コマあたりの表示フレーム数 (配列でコマごと可変指定可能)
+    # @param wait [Integer, Array<Integer>] 1コマあたりの表示フレーム数 (配列でコマごと指定可、足りない場合は最後の値を使用)
     # @param loop [Boolean] ループ再生するかどうか (デフォルト: true)
-    # @param offset [Array<Numeric>] 描画位置オフセット [x, y] (画像サイズが異なる攻撃モーション等の位置合わせ用)
-    # @param offset_x [Numeric] 描画位置オフセット X
-    # @param offset_y [Numeric] 描画位置オフセット Y
-    def add_animation(name, images, wait: 4, loop: true, offset: nil, offset_x: nil, offset_y: nil)
-      animator.add(name, images, wait: wait, loop: loop, offset: offset, offset_x: offset_x, offset_y: offset_y)
+    # @param offset_x [Numeric, Array<Numeric>] 描画位置オフセット X (コマごと配列指定可、足りない場合は最後の値を使用)
+    # @param offset_y [Numeric, Array<Numeric>] 描画位置オフセット Y (コマごと配列指定可、足りない場合は最後の値を使用)
+    # @param offset [Array<Numeric>] 後方互換用 [x, y]
+    def add_animation(name, images, wait: 4, loop: true, offset_x: 0.0, offset_y: 0.0, offset: nil)
+      animator.add(name, images, wait: wait, loop: loop, offset_x: offset_x, offset_y: offset_y, offset: offset)
       self
     end
 
