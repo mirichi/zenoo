@@ -4,6 +4,12 @@
 
 // stb_vorbis を先にインクルードして、miniaudio のビルトイン stb_vorbis バインディングを有効化
 #include "stb_vorbis.c"
+#undef L
+#undef C
+#undef R
+#undef PLAYBACK_LEFT
+#undef PLAYBACK_RIGHT
+#undef PLAYBACK_MONO
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"

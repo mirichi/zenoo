@@ -7,7 +7,7 @@ Zenoo を WebAssembly (Emscripten / ブラウザ) 環境向けにビルドする
 ## 0001-fix-sp_slab-emscripten-wasm-memory.patch
 
 - **対象ファイル**: `~/spinel/lib/sp_slab.c`
-- **対象バージョン**: Spinel master (commit: `2814693f6` / 2026.10.25)
+- **対象バージョン**: Spinel master (commit: `abbfc73b0` / 2026.10.31 / 旧 `2814693f6`)
 
 ### 発生していた現象
 - ブラウザ上でデモ（GUI、Font、Game 等）を開いた際、**初回起動だけでタブのメモリ消費が 700MB に達し**、ページ遷移（戻る・進む）を繰り返すたびに **1.3GB → 1.9GB** とメモリが累積・肥大化する現象が発生していました。
@@ -36,7 +36,7 @@ Zenoo を WebAssembly (Emscripten / ブラウザ) 環境向けにビルドする
 ## 0002-fix-sp_fiber-emscripten-stack.patch
 
 - **対象ファイル**: `~/spinel/lib/sp_fiber.c`
-- **対象バージョン**: Spinel master (commit: `2814693f6` / 2026.10.25)
+- **対象バージョン**: Spinel master (commit: `abbfc73b0` / 2026.10.31 / 旧 `2814693f6`)
 
 ### 発生していた現象
 - WebAssembly (Emscripten / ブラウザ) 環境において、アプリ起動時にクラッシュまたはスタックオーバーフロー等の例外が発生し、正常にメインループが開始しない現象が発生していました。
@@ -69,7 +69,7 @@ void sp_main_stack_run(void (*body)(void)) {
 ## 0003-fix-avoid-qualifying-own-native-struct-and-alias.patch
 
 - **対象ファイル**: `~/spinel/src/analyze.c`, `~/spinel/src/analyze_scope.c`
-- **対象バージョン**: Spinel master (commit: `2814693f6` / 2026.10.25)
+- **対象バージョン**: Spinel master (commit: `abbfc73b0` / 2026.10.31 / 旧 `2814693f6`)
 
 > [!NOTE]
 > 以前含まれていた「自身の `native_struct` との衝突誤認（`qc_native_leaf_declared`）」は、Spinel 公式 upstream のコミット `6712b2678` にて本体に取り込まれました。そのため本パッチでは、残る「クラスエイリアス衝突誤認」および「名前修飾後のクラスに対する `native_struct` 紐付け処理」に絞り込まれています。

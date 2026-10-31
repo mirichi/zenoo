@@ -99,8 +99,8 @@ Window.loop(1024, 640, "Zenoo 2D Mesh Deformation & 2-Stream Instancing Demo") d
     wave = Math.sin(t * 5.0 - v.base_u * 6.0 + v.base_v * 1.5) * amp
     v.x = v.base_x + wave * 0.25
     v.y = v.base_y + wave
-    # 右端に向かって少し透ける頂点アルファ演出
-    v.alpha = 1.0 - v.base_u * 0.35 * (0.5 + 0.5 * Math.sin(t * 3.0 + v.base_v * 2.0))
+    # 右端に向かって少し透ける頂点アルファ演出 (0〜255)
+    v.alpha = (1.0 - v.base_u * 0.35 * (0.5 + 0.5 * Math.sin(t * 3.0 + v.base_v * 2.0))) * 255.0
   end
 
   # 同じ flag_mesh を持つ 3 つの Sprite を 1 ドローコールで描画
@@ -116,7 +116,7 @@ Window.loop(1024, 640, "Zenoo 2D Mesh Deformation & 2-Stream Instancing Demo") d
     [135.0 + sway_x,      10.0 + sway_y * 0.5], # 右上
     [165.0 - sway_x * 0.6, 115.0 + sway_y],     # 右下
     [-5.0 - sway_x * 0.6,  115.0 - sway_y],     # 左下
-    alphas: [0.85, 0.85, 1.0, 1.0]
+    alphas: [217, 217, 255, 255]
   )
   Window.draw(480, 125, corner_mesh)
 
@@ -146,7 +146,7 @@ Window.loop(1024, 640, "Zenoo 2D Mesh Deformation & 2-Stream Instancing Demo") d
     sa = Math.sin(twist)
     v.x = 80.0 + dx * ca - dy * sa
     v.y = 80.0 + dx * sa + dy * ca
-    v.alpha = 0.5 + 0.5 * (dist / 80.0).clamp(0.0, 1.0)
+    v.alpha = (0.5 + 0.5 * (dist / 80.0).clamp(0.0, 1.0)) * 255.0
   end
   vortex_mesh.draw(500, 390, angle: t * 25.0)
 

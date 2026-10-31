@@ -11,9 +11,11 @@ module Zenoo
   # ====================================================================
   class Mesh
     VERTEX_STRIDE = 8
+    INV_255 = 1.0 / 255.0
 
     # ------------------------------------------------------------------
     # Mesh#deform ブロック内で使い回される頂点カーソル (GCアロケーションゼロ)
+    # 色・アルファはすべて 0〜255 で表現されます (内部で GPU 用の 0.0..1.0 と自動相互変換)
     # ------------------------------------------------------------------
     class VertexCursor
       attr_accessor :index, :col, :row
@@ -22,10 +24,10 @@ module Zenoo
 
       def color=(val)
         c = Backend.normalize_color(val)
-        @r = c[0]
-        @g = c[1]
-        @b = c[2]
-        @alpha = c[3]
+        @r     = c[0] * 255.0
+        @g     = c[1] * 255.0
+        @b     = c[2] * 255.0
+        @alpha = c[3] * 255.0
       end
 
       def color
@@ -446,19 +448,19 @@ module Zenoo
         v.base_y     = base[vi + 1]
         v.base_u     = base[vi + 2]
         v.base_v     = base[vi + 3]
-        v.base_r     = base[vi + 4]
-        v.base_g     = base[vi + 5]
-        v.base_b     = base[vi + 6]
-        v.base_alpha = base[vi + 7]
+        v.base_r     = base[vi + 4] * 255.0
+        v.base_g     = base[vi + 5] * 255.0
+        v.base_b     = base[vi + 6] * 255.0
+        v.base_alpha = base[vi + 7] * 255.0
 
         v.x      = verts[vi]
         v.y      = verts[vi + 1]
         v.u      = verts[vi + 2]
         v.v      = verts[vi + 3]
-        v.r      = verts[vi + 4]
-        v.g      = verts[vi + 5]
-        v.b      = verts[vi + 6]
-        v.alpha  = verts[vi + 7]
+        v.r      = verts[vi + 4] * 255.0
+        v.g      = verts[vi + 5] * 255.0
+        v.b      = verts[vi + 6] * 255.0
+        v.alpha  = verts[vi + 7] * 255.0
 
         yield(v)
 
@@ -466,10 +468,10 @@ module Zenoo
         verts[vi + 1] = v.y.to_f
         verts[vi + 2] = v.u.to_f
         verts[vi + 3] = v.v.to_f
-        verts[vi + 4] = v.r.to_f
-        verts[vi + 5] = v.g.to_f
-        verts[vi + 6] = v.b.to_f
-        verts[vi + 7] = self.class.normalize_alpha_val(v.alpha)
+        verts[vi + 4] = (v.r.to_f * INV_255).clamp(0.0, 1.0)
+        verts[vi + 5] = (v.g.to_f * INV_255).clamp(0.0, 1.0)
+        verts[vi + 6] = (v.b.to_f * INV_255).clamp(0.0, 1.0)
+        verts[vi + 7] = (v.alpha.to_f * INV_255).clamp(0.0, 1.0)
 
         i += 1
         vi += VERTEX_STRIDE
@@ -562,13 +564,22 @@ module Zenoo
       self
     end
 
-    # 通し番号 (index) の頂点情報 [x, y, u, v, alpha, r, g, b] を取得 (互換性のため index 4 は alpha)
+    # 通し番号 (index) の頂点情報 [x, y, u, v, alpha, r, g, b] を取得 (色・アルファは 0〜255)
     def get_vertex(index)
       return nil unless @managed && @vertices
       idx = index.to_i
       return nil if idx < 0 || idx >= @vertex_count
       vi = idx * VERTEX_STRIDE
-      [@vertices[vi], @vertices[vi + 1], @vertices[vi + 2], @vertices[vi + 3], @vertices[vi + 7], @vertices[vi + 4], @vertices[vi + 5], @vertices[vi + 6]]
+      [
+        @vertices[vi],
+        @vertices[vi + 1],
+        @vertices[vi + 2],
+        @vertices[vi + 3],
+        @vertices[vi + 7] * 255.0,
+        @vertices[vi + 4] * 255.0,
+        @vertices[vi + 5] * 255.0,
+        @vertices[vi + 6] * 255.0
+      ]
     end
 
     # 4隅の座標 (左上, 右上, 右下, 左下) を指定してメッシュ全体をバイリニア補間変形
@@ -637,9 +648,9 @@ module Zenoo
 
     # 中心線の点列 [[x0, y0], [x1, y1], ...] に沿って帯状（リボン・軌跡・触手）に頂点を配置
     # - width: リボンの太さ（ピクセル単位、または各節の太さの配列）
-    # - fade: true の場合、先頭 (alpha=1.0) から末端 (alpha=0.0) へ自動的に透明度を減衰
+    # - fade: true の場合、先頭 (alpha=255) から末端 (alpha=0) へ自動的に透明度を減衰
     # - taper: true の場合、末端に向かって太さを徐々に細くする
-    def set_ribbon(points, width: 24.0, fade: false, taper: false, start_alpha: 1.0, end_alpha: 0.0)
+    def set_ribbon(points, width: 24.0, fade: false, taper: false, start_alpha: 255.0, end_alpha: 0.0)
       return self unless @managed && @vertices && @cols && @rows
       return self if points.nil? || points.length < 2
 
@@ -832,15 +843,10 @@ module Zenoo
       )
     end
 
-    # アルファ値の正規化 (0.0..1.0 はそのまま、1.0 超の整数 2..255 が渡された場合は / 255.0 も許容)
+    # アルファ値の正規化 (0〜255 -> 0.0..1.0)
     def self.normalize_alpha_val(val)
       return 1.0 if val.nil?
-      vf = val.to_f
-      if val.is_a?(Integer) && val > 1
-        (vf / 255.0).clamp(0.0, 1.0)
-      else
-        vf.clamp(0.0, 1.0)
-      end
+      (val.to_f * INV_255).clamp(0.0, 1.0)
     end
 
     # 多角形の耳刈り法 (Ear Clipping) による自動三角形分割 (凸・凹多角形対応)
