@@ -2,25 +2,29 @@
 
 module Zenoo
   module GUI
-    # ウィンドウ状態オブジェクト (位置・サイズ・フォーカス・開閉状態)
+    # ウィンドウ状態オブジェクト (位置・サイズ・フォーカス・開閉状態・折りたたみ)
     class WindowState
       attr_accessor :id, :title, :x, :y, :w, :h, :z, :open,
-                    :resizable, :min_w, :min_h, :max_w, :max_h
+                    :resizable, :min_w, :min_h, :max_w, :max_h,
+                    :collapsed, :expanded_h, :collapsible
 
-      def initialize(id, title, x, y, w, h, resizable: false, min_w: 120.0, min_h: 80.0, max_w: 2000.0, max_h: 2000.0)
-        @id        = id.to_s
-        @title     = title.to_s
-        @x         = x.to_f
-        @y         = y.to_f
-        @w         = w.to_f
-        @h         = h.to_f
-        @z         = 0.0
-        @open      = true
-        @resizable = !!resizable
-        @min_w     = min_w.to_f
-        @min_h     = min_h.to_f
-        @max_w     = max_w.to_f
-        @max_h     = max_h.to_f
+      def initialize(id, title, x, y, w, h, resizable: false, min_w: 120.0, min_h: 80.0, max_w: 2000.0, max_h: 2000.0, collapsible: true)
+        @id          = id.to_s
+        @title       = title.to_s
+        @x           = x.to_f
+        @y           = y.to_f
+        @w           = w.to_f
+        @h           = h.to_f
+        @z           = 0.0
+        @open        = true
+        @resizable   = !!resizable
+        @min_w       = min_w.to_f
+        @min_h       = min_h.to_f
+        @max_w       = max_w.to_f
+        @max_h       = max_h.to_f
+        @collapsed   = false
+        @expanded_h  = @h
+        @collapsible = !!collapsible
       end
     end
 
@@ -43,6 +47,12 @@ module Zenoo
         @resize_start_mouse_x = 0.0
         @resize_start_mouse_y = 0.0
         @current_window_id    = nil
+
+        # タイトルバーダブルクリック検知用
+        @last_click_win_id    = nil
+        @last_click_time      = 0.0
+        @last_click_x         = 0.0
+        @last_click_y         = 0.0
       end
 
       def begin_frame(mouse_x, mouse_y, mouse_down, mouse_push)
@@ -107,17 +117,18 @@ module Zenoo
         @current_window_id = nil
       end
 
-      def find_or_create(win_id, title, x, y, w, h, resizable: false, min_w: 120.0, min_h: 80.0)
+      def find_or_create(win_id, title, x, y, w, h, resizable: false, min_w: 120.0, min_h: 80.0, collapsible: true)
         win = @windows[win_id]
         unless win
           def_x = x ? x.to_f : (60.0 + (@windows.size * 30.0) % 400.0)
           def_y = y ? y.to_f : (60.0 + (@windows.size * 30.0) % 300.0)
-          win = WindowState.new(win_id, title.to_s, def_x, def_y, w.to_f, h.to_f, resizable: resizable, min_w: min_w, min_h: min_h)
+          win = WindowState.new(win_id, title.to_s, def_x, def_y, w.to_f, h.to_f, resizable: resizable, min_w: min_w, min_h: min_h, collapsible: collapsible)
           @windows[win_id] = win
           @window_order.push(win_id)
           win.z = 100.0 + (@window_order.size - 1) * 100.0
         else
           win.resizable = !!resizable
+          win.collapsible = !!collapsible
           win.min_w = min_w.to_f if min_w
           win.min_h = min_h.to_f if min_h
         end
@@ -128,8 +139,69 @@ module Zenoo
         @window_order.last == win_id
       end
 
-      # リサイズハンドルの操作判定 (右下 16x16 領域)
+      # 最小化ボタンの領域 (タイトルバー右端)
+      def collapse_button_rect(win, title_bar_h)
+        btn_size = 22.0
+        bx = win.x + win.w - btn_size - 7.0
+        by = win.y + (title_bar_h - btn_size) * 0.5
+        [bx, by, btn_size, btn_size]
+      end
+
+      # 最小化ボタンのクリック判定
+      def check_collapse_click(win, title_bar_h, mouse_x, mouse_y, mouse_push)
+        return false unless win.collapsible
+        bx, by, bw, bh = collapse_button_rect(win, title_bar_h)
+        if in_rect?(mouse_x, mouse_y, bx, by, bw, bh)
+          if mouse_push
+            toggle_collapse(win, title_bar_h)
+          end
+          true
+        else
+          false
+        end
+      end
+
+      # ウィンドウの最小化 / 復元トグル
+      def toggle_collapse(win, title_bar_h = 36.0)
+        win.collapsed = !win.collapsed
+        if win.collapsed
+          win.expanded_h = [win.h, win.min_h].max
+          win.h = title_bar_h
+        else
+          win.h = win.expanded_h && win.expanded_h > title_bar_h ? win.expanded_h : 240.0
+        end
+      end
+
+      # タイトルバーのダブルクリック検知 (0.3秒以内の連続クリックで最小化トグル)
+      def check_title_bar_double_click(win, title_bar_h, mouse_x, mouse_y, current_time)
+        return false unless win.collapsible
+        return false unless in_rect?(mouse_x, mouse_y, win.x, win.y, win.w, title_bar_h)
+
+        # 最小化ボタンの上ならダブルクリック処理は行わない
+        bx, by, bw, bh = collapse_button_rect(win, title_bar_h)
+        return false if in_rect?(mouse_x, mouse_y, bx, by, bw, bh)
+
+        dt = current_time.to_f - @last_click_time
+        dx = (mouse_x - @last_click_x).abs
+        dy = (mouse_y - @last_click_y).abs
+
+        if @last_click_win_id == win.id && dt < 0.35 && dx < 6.0 && dy < 6.0
+          toggle_collapse(win, title_bar_h)
+          @last_click_time = 0.0
+          @last_click_win_id = nil
+          true
+        else
+          @last_click_win_id = win.id
+          @last_click_time = current_time.to_f
+          @last_click_x = mouse_x
+          @last_click_y = mouse_y
+          false
+        end
+      end
+
+      # リサイズハンドルの操作判定 (右下 16x16 領域, 最小化時は不可)
       def check_resize_start(win, mouse_x, mouse_y, mouse_push)
+        return false if win.collapsed
         return false unless win.resizable
         return false unless @hovered_window_id == win.id
         handle_size = 18.0
@@ -152,7 +224,12 @@ module Zenoo
       def check_drag_start(win, title_bar_h, mouse_x, mouse_y, mouse_push)
         return if @resizing_window_id
         return unless mouse_push && @hovered_window_id == win.id
+        # 最小化ボタン領域を除外してドラッグ開始判定
         if in_rect?(mouse_x, mouse_y, win.x, win.y, win.w, title_bar_h)
+          if win.collapsible
+            bx, by, bw, bh = collapse_button_rect(win, title_bar_h)
+            return if in_rect?(mouse_x, mouse_y, bx, by, bw, bh)
+          end
           @dragging_window_id = win.id
           @drag_offset_x = mouse_x - win.x
           @drag_offset_y = mouse_y - win.y
