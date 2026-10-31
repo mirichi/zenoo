@@ -154,6 +154,7 @@ module Zenoo
 
     def self.title=(val)
       Native::Window.title = val.to_s
+      val
     end
 
     def self.window_position
