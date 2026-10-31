@@ -731,6 +731,7 @@ module Zenoo
         image.sync_to_gpu_if_dirty!
         tex_img = image_override || image.image
         native_mesh = image.native_mesh
+        return unless native_mesh && image.count > 0
         eff_pipeline = image.pipeline
         effective_shader = shader || image.shader || eff_pipeline.default_shader ||
                            if eff_pipeline == Backend::Pipelines::SPRITE
