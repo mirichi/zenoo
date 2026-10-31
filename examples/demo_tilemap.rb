@@ -116,8 +116,7 @@ Window.loop(960, 540, "Zenoo - Tilemap & Image.load_tiles Demo") do
   # ----------------------------------------------------
   # タイルマップの描画
   # ----------------------------------------------------
-  # Window.draw_tilemap(tilemap) または tilemap.draw
-  Window.draw_tilemap(tilemap)
+  tilemap.draw
 
   # ホバー枠の表示
   if hover_coords
