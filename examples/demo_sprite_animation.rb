@@ -402,30 +402,30 @@ class SlimeEnemy < Zenoo::Sprite
     @vy = kb_y * spd * Y_RATIO
   end
 
-  # ★ 描画時はジャンプ高さ分だけ上に浮かせて描画！ (地面の y 座標・Z値・影の位置は維持)
+  # ★ 影 (SHADOW_Z) → 本体 (z = y) → 頭上HPドット (HP_BAR_Z) を draw 内で一括描画
   def draw
-    self.z = y
-    orig_y = y
-    self.y -= @jump_z
-    super
-    self.y = orig_y
-  end
+    return if vanished? || !visible
 
-  # 足元のドロップシャドウ (浮き上がり中は縮んで薄くなり、消滅時はフェードアウト)
-  def draw_shadow
+    # 1. 足元のドロップシャドウ (浮き上がり中は縮んで薄くなり、消滅時はフェードアウト)
     z_ratio = (1.0 - @jump_z / 40.0).clamp(0.45, 1.0)
     sw = 30.0 * (scale_x.abs / BASE_SCALE) * z_ratio
     sh = 11.5 * z_ratio
     a  = (140 * z_ratio * alpha / 255.0).to_i
     Zenoo::Window.draw_ellipse(x, y - 3.0, sw, sh, color: [*SHADOW_COLOR_RGB, a], z: SHADOW_Z)
-  end
 
-  # 頭上 HP ドット (ジャンプ中も重ならないよう頭上高めに配置、浮き上がりに追従)
-  def draw_hp
-    return if @dying
-    hp_y = y - @jump_z - 64.0
-    MAX_HP.times do |i|
-      Zenoo::Window.draw_circle(x.to_i - 12 + i * 12, hp_y, 3.5, color: i < @hp ? HP_ON_COLOR : HP_OFF_COLOR, z: HP_BAR_Z)
+    # 2. スライム本体 (ジャンプ高さ分だけ上に浮かせて描画、Z値は地面の y を維持)
+    self.z = y
+    orig_y = y
+    self.y -= @jump_z
+    super
+    self.y = orig_y
+
+    # 3. 頭上 HP ドット
+    unless @dying
+      hp_y = y - @jump_z - 64.0
+      MAX_HP.times do |i|
+        Zenoo::Window.draw_circle(x.to_i - 12 + i * 12, hp_y, 3.5, color: i < @hp ? HP_ON_COLOR : HP_OFF_COLOR, z: HP_BAR_Z)
+      end
     end
   end
 
@@ -582,9 +582,11 @@ class IsoPlayer < Zenoo::Sprite
     resolve_map_and_bounds(@tilemap, 24.0, 32.0)
   end
 
-  # 足元のドロップシャドウ
-  def draw_shadow
+  # ★ 影 (SHADOW_Z) と本体 (z = y) をまとめて描画
+  def draw
+    return if vanished? || !visible
     Zenoo::Window.draw_ellipse(x, y - 2.0, 22.0, 9.0, color: [*SHADOW_COLOR_RGB, 140], z: SHADOW_Z)
+    super
   end
 
   # 現在向いている斜め方向の名称
@@ -764,17 +766,15 @@ SPAWN_POINTS = [
 ].freeze
 
 # ゲーム世界 (640x360 仮想解像度、Camera 追従)
-# ★ Backend の Z ソートにより、Tilemap の各行 Mesh とキャラの前後関係が完全自動で解決！
+# ★ 影・キャラ本体・HPバー・Tilemap各行にそれぞれ Z が設定されているため、
+#   draw でまとめて呼ぶだけで Backend が前後関係をすべて自動でソートします！
 def draw_world(tilemap, camera, player, enemies, effects)
   Zenoo::Window.camera = camera
   Zenoo::Window.clear([24, 28, 38, 255])
 
   tilemap.draw
-  player.draw_shadow
-  enemies.each(&:draw_shadow)
   player.draw
-  enemies.each(&:draw)
-  enemies.each(&:draw_hp)
+  Zenoo::Sprite.draw(enemies)
   Zenoo::Sprite.draw(effects)
 end
 

@@ -322,6 +322,20 @@ module Zenoo
   native_method :time, [], :float, "sp_ZenSound_get_cursor"
   native_method :time=, [:float], :nil, "sp_ZenSound_seek"
   native_method :length, [], :float, "sp_ZenSound_get_length"
+  native_method :sample_rate, [], :int, "sp_ZenSound_get_sample_rate"
+  native_method :length_pcm, [], :int, "sp_ZenSound_get_length_pcm"
+  native_method :set_loop_points_pcm, [:int, :int], :nil, "sp_ZenSound_set_loop_points_pcm"
+  native_method :set_loop_points, [:float, :float], :nil, "sp_ZenSound_set_loop_points_seconds"
+  native_method :loop_start, [], :float, "sp_ZenSound_get_loop_start"
+  native_method :loop_start=, [:float], :nil, "sp_ZenSound_set_loop_start"
+  native_method :loop_end, [], :float, "sp_ZenSound_get_loop_end"
+  native_method :loop_end=, [:float], :nil, "sp_ZenSound_set_loop_end"
+  native_method :loop_start_pcm, [], :int, "sp_ZenSound_get_loop_start_pcm"
+  native_method :loop_start_pcm=, [:int], :nil, "sp_ZenSound_set_loop_start_pcm"
+  native_method :loop_end_pcm, [], :int, "sp_ZenSound_get_loop_end_pcm"
+  native_method :loop_end_pcm=, [:int], :nil, "sp_ZenSound_set_loop_end_pcm"
+  native_method :has_loop_points?, [], :bool, "sp_ZenSound_has_loop_points"
+  native_method :clear_loop_points, [], :nil, "sp_ZenSound_clear_loop_points"
 end
 
 class Zenoo::Image
