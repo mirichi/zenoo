@@ -129,11 +129,15 @@ module Zenoo
 
     # カメラのスクリーン中心座標
     def screen_center_x
-      @offset_x || (Window.width.to_f * 0.5)
+      return @offset_x if @offset_x
+      t = Backend.current_target
+      (t ? t.width.to_f : Window.width.to_f) * 0.5
     end
 
     def screen_center_y
-      @offset_y || (Window.height.to_f * 0.5)
+      return @offset_y if @offset_y
+      t = Backend.current_target
+      (t ? t.height.to_f : Window.height.to_f) * 0.5
     end
 
     # 描画用変換 [zoom, ox, oy] (screen = world * zoom + o)
@@ -141,8 +145,9 @@ module Zenoo
     def view
       # offset 未指定時は画面中心に依存するため、画面サイズ変化も検知する
       if @offset_x.nil? || @offset_y.nil?
-        w = Window.width
-        h = Window.height
+        t = Backend.current_target
+        w = t ? t.width : Window.width
+        h = t ? t.height : Window.height
         if w != @view_w || h != @view_h
           @view_w = w
           @view_h = h

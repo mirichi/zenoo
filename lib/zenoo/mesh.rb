@@ -728,14 +728,22 @@ module Zenoo
     alias reset_deform! reset!
 
     # 低レベル互換: パック済みバイナリによる部分/全体更新
-    def update(binary_data, offset: 0)
+    def update(binary_data, offset: 0, count: nil)
       return self unless binary_data
+      if count
+        @count = count.to_i
+        @vertex_count = @count
+      end
       if @data && offset > 0 && offset + binary_data.bytesize <= @data.bytesize
         @data[offset, binary_data.bytesize] = binary_data
       elsif offset == 0
         @data = binary_data
       end
-      @native_mesh&.update_vertices(binary_data, offset, @count)
+      if @native_mesh
+        @native_mesh.update_vertices(binary_data, offset, @count)
+      elsif @data && @count > 0
+        rebuild_raw_native_mesh
+      end
       self
     end
 
@@ -1006,9 +1014,11 @@ module Zenoo
 
     def rebuild_raw_native_mesh
       idx_bin = (@indices && !@indices.empty?) ? @indices.pack("I*") : ""
+      topo = (@pipeline == Backend::Pipelines::SPRITE) ? Backend::Topology::TRIANGLES : @pipeline.topology
+      lay  = (@pipeline == Backend::Pipelines::SPRITE) ? Backend::Layout::POS2_UV2_COLOR4 : @pipeline.layout
       @native_mesh = Native::Mesh.new(
-        @pipeline.topology,
-        @pipeline.layout,
+        topo,
+        lay,
         @data,
         @data.bytesize,
         @count,

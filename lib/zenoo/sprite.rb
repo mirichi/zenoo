@@ -814,7 +814,9 @@ module Zenoo
 
     # 衝突判定
     def collide?(other)
-      return false if @vanished || other.vanished?
+      return false if @vanished || other.nil?
+      return other.collide?(self) if other.is_a?(Tilemap)
+      return false if other.vanished?
       col_a = self.collider
       return false unless col_a
       col_b = other.is_a?(Collision::Shape) ? other : (other.respond_to?(:collider) ? other.collider : nil)
@@ -849,7 +851,8 @@ module Zenoo
     # other が配列の場合は各オブジェクトに対して順次押し出しを行う
     # target_root: true の場合、子パーツが衝突しても関節が外れないようルート親（キャラクター全体）を押し出します
     def push_out_of(other, target_root: true)
-      return nil if @vanished
+      return nil if @vanished || other.nil?
+      return other.resolve_collision(self, target_root: target_root) if other.is_a?(Tilemap)
       if other.is_a?(Array)
         resolved_hits = []
         other.each do |item|
