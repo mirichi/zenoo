@@ -48,20 +48,6 @@ GROUND_Z         = -100.0
 EFFECT_Z         = 2000.0
 HP_BAR_Z         = 2100.0
 
-# ワールド境界クランプ & マップ衝突解決
-module WorldBounds
-  def resolve_map_and_bounds(tilemap, margin_x, margin_y)
-    self.x = x.clamp(margin_x, WORLD_WIDTH - margin_x)
-    self.y = y.clamp(margin_y, WORLD_HEIGHT - margin_y)
-    if tilemap
-      tilemap.resolve_collision(self)
-      self.x = x.clamp(margin_x, WORLD_WIDTH - margin_x)
-      self.y = y.clamp(margin_y, WORLD_HEIGHT - margin_y)
-    end
-    self.z = y
-  end
-end
-
 # ==============================================================================
 # タイルセット生成 (32x32 × 10種類 = 320x32) & マップ構築
 # ==============================================================================
@@ -330,8 +316,6 @@ def create_slime_mesh
 end
 
 class SlimeEnemy < Zenoo::Sprite
-  include WorldBounds
-
   BASE_SCALE    = 0.75
   MAX_HP        = 3
   BODY_CENTER_Y = 20.0  # 当たり判定の中心 (足元から上へ 20px)
@@ -379,7 +363,8 @@ class SlimeEnemy < Zenoo::Sprite
 
     self.scale_x = @facing_x * BASE_SCALE * sx
     self.scale_y = BASE_SCALE * sy
-    resolve_map_and_bounds(tilemap, 28.0, 36.0)
+    tilemap&.resolve_collision(self)
+    self.z = y
   end
 
   def hit(kb_x, kb_y)
@@ -500,8 +485,6 @@ end
 # 斜め4方向プレイヤー
 # ==============================================================================
 class IsoPlayer < Zenoo::Sprite
-  include WorldBounds
-
   SPEED         = 4.2
   ATTACK_DASH   = 6.5  # 踏み込み初速 (入力の強弱に関わらず常にフルパワー)
   DASH_FRICTION = 0.85
@@ -566,7 +549,8 @@ class IsoPlayer < Zenoo::Sprite
     end
 
     super # アニメーション更新 (update_animation)
-    resolve_map_and_bounds(@tilemap, 24.0, 32.0)
+    @tilemap&.resolve_collision(self)
+    self.z = y
   end
 
   # ★ 影 (SHADOW_Z) と本体 (z = y) をまとめて描画
