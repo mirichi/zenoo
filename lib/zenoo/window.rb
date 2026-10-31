@@ -877,11 +877,6 @@ module Zenoo
       )
     end
 
-    def self.draw_tilemap(tilemap, x: nil, y: nil, z: nil, camera: nil)
-      return unless tilemap
-      tilemap.draw(x: x, y: y, z: z, camera: camera)
-    end
-
 
     # 三角形描画 (GPUポリゴンラスタライズ描画)
     # 複数三角形を組み合わせたメッシュでも継ぎ目(シーム)が出ないハードウェア描画です。
