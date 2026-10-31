@@ -3,18 +3,52 @@
 module Zenoo
   # ============================================================================
   # 2D タイルマップ描画・レイヤー・衝突管理クラス (Zenoo::Tilemap)
-  # - 行 (Row) 単位の Mesh 構築により、高速描画・部分更新・視錐台カリングを実現
-  # - Zオーダー (固定Z / 行単位のYソートZ) と根元オフセットにより、
-  #   見下ろしゲームでの「柱や壁の裏への回り込み・手前での重なり」を自動解決
-  # - 単一レイヤーでも複数レイヤーでも同じシンプルな記述で利用可能
+  # ============================================================================
+  #
+  # 【設計コンセプト】
+  # 1. 行 (Row) 単位の Mesh 化:
+  #    - タイル1枚ずつ draw を呼ぶのではなく、1行のタイル群を 1 つの Zenoo::Mesh
+  #      (VBO頂点バッファ) にまとめて GPU へ転送します。
+  #    - タイルが書き換わった時も、該当する 1 行の VBO のみをピンポイントで再構築・
+  #      更新するため、VRAM 負荷と CPU-GPU 転送が最小限で済みます。
+  #
+  # 2. Zオーダーと行単位 Yソートの自動解決:
+  #    - 見下ろし (クォータービュー) ゲームでは、Y座標が大きい (手前にある) 物体ほど
+  #      手前に描画する必要があります。
+  #    - レイヤーに `y_sort: true` を設定すると、各行の Mesh の Z値にその行の足元Y座標が
+  #      自動設定されます。キャラ側も `sprite.z = sprite.y` とするだけで、
+  #      エンジンの Z ソート機能によって「奥の壁 → キャラ → 手前の壁」の重なりが
+  #      ソート処理のコードなしで完全自動解決します。
+  #
+  # 3. 柱や背の高い立体物の「根元Z統合 (root_offset)」:
+  #    - 3マス分の高さがある柱などの場合、先端や中段パーツを行通りに描画すると
+  #      キャラが裏へ回った時に頭を突き抜けてしまう問題が生じます。
+  #    - 本クラスでは、上段パーツの頂点を「根元 (最下段) の行 Mesh」へ自動帰属させます。
+  #      これにより、柱全体が「根元の足元Y座標の Z値」で描画されるため、
+  #      「キャラが柱の手前に立つとキャラが手前に出る」「裏へ回ると柱の裏に綺麗に隠れる」
+  #      が両立します。
+  #
+  # 4. 最寄り優先 MTV 壁ずり衝突判定:
+  #    - キャラの足元コライダーと接触している周囲の障害物タイルを収集し、
+  #      足元中心から最も近い順にソートして押し出し (MTV) を適用します。
+  #    - これにより、ブロック同士の継ぎ目や角での引っかかりが原理的に排除され、
+  #      滑らかな壁ずり移動が実現します。
   # ============================================================================
   class Tilemap
+    # --------------------------------------------------------------------------
     # セル値のビットフィールド定義 (符号ビットに触れない正整数 28bit 構成)
-    # - bit  0..15 (0x0000FFFF): タイルID (0..65535)
-    # - bit 16..23 (0x00FF0000): 根元オフセット+1 (0=タイル定義に従う, 1..255=0..254マス下が根元)
+    # --------------------------------------------------------------------------
+    # マップ配列 (data[row][col]) を純粋な Integer 配列のまま維持しつつ、
+    # タイルごとの反転・回転・オフセットを表現するために上位ビットを活用します。
+    #
+    # - bit  0..15 (0x0000FFFF): 純粋なタイルID (0..65535)
+    # - bit 16..23 (0x00FF0000): 根元オフセット+1
+    #                             0: 未指定 (タイル属性 set_tile の設定に従う)
+    #                             1..255: このマスから 0..254 行下が根元
     # - bit 24     (0x01000000): 左右反転 (FLIP_H)
     # - bit 25     (0x02000000): 上下反転 (FLIP_V)
-    # - bit 26..27 (0x0C000000): 90度単位の時計回り回転 (0:0度, 1:90度, 2:180度, 3:270度)
+    # - bit 26..27 (0x0C000000): 90度単位の時計回り回転
+    #                             0: 0度, 1: 90度, 2: 180度, 3: 270度
     ID_MASK      = 0x0000FFFF
     OFFSET_SHIFT = 16
     OFFSET_MASK  = 0xFF
@@ -26,7 +60,11 @@ module Zenoo
     ROT_180      = 2 << ROT_SHIFT
     ROT_270      = 3 << ROT_SHIFT
 
-    # タイル番号に反転・回転・根元オフセットをパックした整数値を生成
+    # タイル番号に反転・回転・根元オフセットをパックした整数値を生成するヘルパー
+    # 例:
+    #   H = Tilemap.tile(10, flip_h: true)             # 10番タイルを左右反転
+    #   R = Tilemap.tile(15, rotate: 90)               # 15番タイルを時計回りに90度回転
+    #   P = Tilemap.tile(20, root_offset: 2)           # 20番タイルは2行下が根元
     def self.tile(tile_id, flip_h: false, flip_v: false, rotate: 0, root_offset: nil)
       return nil if tile_id.nil? || tile_id < 0
       val = tile_id.to_i & ID_MASK
@@ -53,10 +91,23 @@ module Zenoo
     # ==========================================================================
     # Layer: 行単位 Mesh を管理する単一タイルレイヤー
     # ==========================================================================
+    # 1つのタイル層 (床、壁、装飾、屋根など) を保持・描画するクラスです。
+    # 通常は Tilemap#add_layer または Tilemap.from_array 経由で生成されます。
     class Layer
       attr_reader   :name, :tilemap, :rows, :cols
       attr_accessor :z, :y_sort, :z_offset, :solid, :visible, :alpha, :color, :blend
 
+      # @param tilemap [Tilemap] 親の Tilemap インスタンス
+      # @param name [Symbol] レイヤー名 (:ground, :walls など)
+      # @param data [Array<Array<Integer, nil>>] 2次元マップ配列 (data[row][col])
+      # @param z [Float] 基準深度 Z
+      # @param y_sort [Boolean] true の場合、各行の足元Y座標を自動的に Z値として描画
+      # @param z_offset [Float] Yソート時の微調整オフセット (キャラより少し手前/奥にする場合など)
+      # @param solid [Boolean] true の場合、このレイヤーの全タイルを通行不可 (壁) として扱う
+      # @param visible [Boolean] 表示 / 非表示
+      # @param alpha [Integer] 不透明度 (0..255)
+      # @param color [Symbol, Array] 乗算カラー
+      # @param blend [Symbol] ブレンドモード (:alpha, :add 等)
       def initialize(tilemap, name, data,
                      z: 0.0,
                      y_sort: false,
@@ -80,26 +131,29 @@ module Zenoo
 
         @rows = 0
         @cols = 0
-        @row_meshes = []
-        @row_extras = []
-        @row_dirty = []
-        @all_dirty = true
-        @max_cell_offset = 0
-        @max_tall_rows = 0
-        @temp_verts = []
+        @row_meshes = []      # 各行の Zenoo::Mesh (代表テクスチャの頂点バッファ)
+        @row_extras = []      # 代表テクスチャ以外の別画像タイル群 [col, rel_row, raw, ...]
+        @row_dirty = []       # 行ごとの再構築フラグ (true の行のみ rebuild_row! を実行)
+        @all_dirty = true     # 全行再構築フラグ
+        @max_cell_offset = 0  # マップ配列内で使われている最大の root_offset (カリング余白計算用)
+        @max_tall_rows = 0    # 大判タイルで上方向に突き出る最大行数 (カリング余白計算用)
+        @temp_verts = []      # 行Mesh構築用の一時頂点配列 (GC削減のため再利用)
 
         refresh_size!
       end
 
+      # 2次元マップ配列を取得
       def data
         @data
       end
 
+      # 2次元マップ配列を差し替え
       def data=(new_data)
         @data = new_data || []
         refresh_size!
       end
 
+      # 行列サイズの更新と、行管理バッファのリサイズ
       def refresh_size!
         @rows = @data.is_a?(Array) ? @data.size : 0
         @cols = (@rows > 0 && @data[0].is_a?(Array)) ? @data[0].size : 0
@@ -112,24 +166,26 @@ module Zenoo
         scan_cell_offsets!
       end
 
+      # レイヤー全体の Mesh を再構築対象としてマーク
       def invalidate!
         @all_dirty = true
       end
 
-      # 生のセル整数値を取得
+      # 指定したマス (col, row) の生のセル整数値 (ビットフラグ込み) を取得
       def raw_at(col, row)
         return nil if row < 0 || row >= @rows || col < 0 || col >= @cols
         row_data = @data[row]
         row_data ? row_data[col] : nil
       end
 
-      # タイルID (フラグを除いた番号) を取得
+      # 指定したマス (col, row) の純粋なタイルID (0..65535) を取得
       def [](col, row)
         raw = raw_at(col, row)
         (raw && raw >= 0) ? (raw & ID_MASK) : nil
       end
 
-      # タイルID (または Tilemap.tile で生成したセル値) を設定
+      # 指定したマス (col, row) にタイルID (または Tilemap.tile で作成したセル値) を設定
+      # タイルが変更された行と、オフセット先 (帰属する行) の Mesh のみが Dirty 化されます。
       def []=(col, row, val)
         return if row < 0 || row >= @rows || col < 0 || col >= @cols
         row_data = @data[row]
@@ -139,11 +195,13 @@ module Zenoo
         return if old_raw == val
         row_data[col] = val
 
-        # 変更前のタイルが帰属していた行と、変更後のタイルが帰属する行を Dirty にする
+        # 変更前のタイルが帰属していた行と、変更後のタイルが帰属する行をピンポイントで Dirty 化
         mark_dirty_row_for_raw(row, old_raw)
         mark_dirty_row_for_raw(row, val)
       end
 
+      # レイヤーの描画処理
+      # 画面内に映っている行 (min_row..max_row) の Mesh のみを描画します (視錐台カリング)。
       def draw(x: nil, y: nil, z: nil, camera: nil)
         return unless @visible
         tw_base = @tilemap.tile_width.to_f
@@ -164,7 +222,10 @@ module Zenoo
         eff_alpha = (@alpha * @tilemap.alpha) / 255
         eff_color = (@color == :white || @color.nil?) ? @tilemap.color : @color
 
-        # 可視行範囲の算出 (Frustum Culling)
+        # ----------------------------------------------------------------------
+        # 画面可視範囲 (Frustum Culling) の算出
+        # オフスクリーン (Image.render_to) 描画時もその解像度を正しく取得して判定
+        # ----------------------------------------------------------------------
         cur_target = Backend.current_target
         win_w = cur_target ? cur_target.width.to_f : Window.width.to_f
         win_h = cur_target ? cur_target.height.to_f : Window.height.to_f
@@ -175,6 +236,8 @@ module Zenoo
           bottom = win_h
         end
 
+        # 背の高い柱や大判タイルの先端が画面下端から上に伸びるため、
+        # 画面外下端のマージンを「最大の root_offset / 大判高さ」分だけ広げてカリング
         max_off = @tilemap.max_root_offset
         max_off = @max_cell_offset if @max_cell_offset > max_off
         tall_margin = [max_off, @max_tall_rows].max + 1
@@ -185,16 +248,22 @@ module Zenoo
 
         rebuild_all_dirty! if @all_dirty
 
+        # ----------------------------------------------------------------------
+        # 可視行の描画ループ
+        # ----------------------------------------------------------------------
         r = min_row
         while r <= max_row
           rebuild_row!(r) if @row_dirty[r]
 
+          # Yソートが有効な場合、その行の下端 Y 座標を Z値として渡す
+          # (これによりキャラの sprite.z = sprite.y と完全に連動して前後関係が成立)
           row_z = if @y_sort
                     base_z + draw_y + ((r + 1) * th) + (@z_offset * sy)
                   else
                     base_z
                   end
 
+          # メインの行 Mesh の描画 (同一テクスチャの全タイルを 1 回のドローコールで描画)
           mesh = @row_meshes[r]
           if mesh && mesh.count > 0
             Window.draw(
@@ -213,6 +282,7 @@ module Zenoo
             )
           end
 
+          # 別テクスチャ画像が混ざっていた場合のフォールバック個別描画
           extras = @row_extras[r]
           if extras
             draw_row_extras(extras, draw_x, draw_y, sx, sy, tw, th, eff_color, eff_alpha, draw_camera, row_z)
@@ -224,6 +294,7 @@ module Zenoo
 
       private
 
+      # 指定したマスのセル値 (raw) が帰属する行 (row + root_offset) を Dirty にする
       def mark_dirty_row_for_raw(row, raw)
         @row_dirty[row] = true
         return if raw.nil? || raw < 0
@@ -240,6 +311,7 @@ module Zenoo
         @row_dirty[target_r] = true if target_r >= 0
       end
 
+      # マップ配列内の全セルから、個別に指定されている最大の root_offset を走査
       def scan_cell_offsets!
         max_off = 0
         r = 0
@@ -274,7 +346,14 @@ module Zenoo
         @all_dirty = false
       end
 
-      # 指定した行 target_row に帰属するタイル群から 1 行分の Mesh を構築
+      # ------------------------------------------------------------------------
+      # 指定した行 (target_row) の Mesh を再構築
+      # ------------------------------------------------------------------------
+      # 【重要: root_offset の集約】
+      # 柱のように何マスか下の行に根元があるパーツは、配置されている行 (例: row 3)
+      # ではなく、根元の行 (target_row = row 5) の Mesh に頂点を追加します。
+      # そのため、走査範囲は target_row だけでなく、上方の行 (target_row - max_off)
+      # から target_row までを対象とし、「この行に帰属するタイル」を漏れなく集めます。
       def rebuild_row!(target_row)
         @row_dirty[target_row] = false
         tiles = @tilemap.tiles
@@ -292,6 +371,7 @@ module Zenoo
         min_r = target_row - max_off
         min_r = 0 if min_r < 0
 
+        # 上方の行から target_row までを走査し、target_row に帰属するタイルを抽出
         r = min_r
         while r <= target_row
           row_data = @data[r]
@@ -305,11 +385,13 @@ module Zenoo
                 tid = raw & ID_MASK
                 img = tiles[tid]
                 if img
+                  # マスごとの個別オフセット または タイル定義のオフセットを取得
                   cell_off = (raw >> OFFSET_SHIFT) & OFFSET_MASK
                   off = cell_off > 0 ? (cell_off - 1) : @tilemap.tile_root_offset(tid)
                   eff_row = r + off
                   eff_row = @rows - 1 if eff_row >= @rows
 
+                  # このタイルの帰属先が現在構築中の target_row と一致する場合のみ追加
                   if eff_row == target_row
                     iw = img.width.to_f
                     ih = img.height.to_f
@@ -318,6 +400,12 @@ module Zenoo
                       @max_tall_rows = tall_rows if tall_rows > @max_tall_rows
                     end
 
+                    # ----------------------------------------------------------
+                    # テクスチャ一致判定:
+                    # 代表テクスチャと同じ画像なら行Mesh頂点バッファへ格納。
+                    # 別ファイル等から読み込んだ異なるテクスチャの場合は、
+                    # 1つのMeshに混在できないため extras へ退避して個別描画に回す。
+                    # ----------------------------------------------------------
                     if img.texture_id == base_tex_id
                       append_tile_vertices(verts, img, c, r - target_row, tw, th, iw, ih, raw)
                     else
@@ -337,12 +425,15 @@ module Zenoo
         v_count = verts.size / 8
         existing = @row_meshes[target_row]
 
+        # 頂点バッファを GPU (VRAM) へ転送・更新
         if v_count > 0 && full_img
           bin = verts.pack("f*")
           if existing
+            # 既存の Mesh があれば VBO を破棄せずバッファ上書き (メモリ再割り当て回避)
             existing.image = full_img
             existing.update(bin, count: v_count)
           else
+            # 初回生成時は新しい Mesh を作成
             @row_meshes[target_row] = Mesh.new(
               data: bin,
               count: v_count,
@@ -357,20 +448,28 @@ module Zenoo
         end
       end
 
+      # ------------------------------------------------------------------------
+      # 1 タイル分の 4頂点 (2三角形 / 6頂点 / 48 floats) を頂点バッファに追加
+      # ------------------------------------------------------------------------
+      # 左右反転・上下反転・90度回転は、シェーダーやアフィン行列を使わず
+      # 頂点ごとの UV 割り当てを入れ替えるだけでコストゼロで実現しています。
       def append_tile_vertices(verts, img, col, rel_row, tw, th, iw, ih, raw)
         if iw == tw && ih == th
+          # 標準サイズ (32x32 等) の場合
           x0 = col * tw
           y0 = rel_row * th
           x1 = x0 + tw
           y1 = y0 + th
         else
-          # 大判タイルはマスの下端・水平中央を基準に上方向へ配置
+          # 大判タイル (32x96 等) の場合:
+          # マスの足元下端・水平中央を基準にして、上方向へ突き出るように座標を計算
           x0 = col * tw + (tw - iw) * 0.5
           y1 = (rel_row + 1) * th
           y0 = y1 - ih
           x1 = x0 + iw
         end
 
+        # テクスチャ全体に対する正規化 UV (0.0..1.0)
         tex_w = img.texture_width.to_f
         tex_h = img.texture_height.to_f
         u0 = tex_w > 0.0 ? (img.x.to_f / tex_w) : 0.0
@@ -378,37 +477,44 @@ module Zenoo
         u1 = tex_w > 0.0 ? ((img.x + img.width).to_f / tex_w) : 1.0
         v1 = tex_h > 0.0 ? ((img.y + img.height).to_f / tex_h) : 1.0
 
+        # 水平反転 (U 座標を左右逆転)
         if (raw & FLIP_H) != 0
           tmp = u0; u0 = u1; u1 = tmp
         end
+        # 垂直反転 (V 座標を上下逆転)
         if (raw & FLIP_V) != 0
           tmp = v0; v0 = v1; v1 = tmp
         end
 
+        # 90度単位の時計回り回転 (4隅の UV をサイクリックに巡回)
         rot = (raw >> ROT_SHIFT) & ROT_MASK
         if rot == 0
-          ua = u0; va = v0
-          ub = u1; vb = v0
-          uc = u1; vc = v1
-          ud = u0; vd = v1
-        elsif rot == 1 # 90度時計回り
+          ua = u0; va = v0 # 左上
+          ub = u1; vb = v0 # 右上
+          uc = u1; vc = v1 # 右下
+          ud = u0; vd = v1 # 左下
+        elsif rot == 1     # 90度時計回り
           ua = u0; va = v1
           ub = u0; vb = v0
           uc = u1; vc = v0
           ud = u1; vd = v1
-        elsif rot == 2 # 180度
+        elsif rot == 2     # 180度
           ua = u1; va = v1
           ub = u0; vb = v1
           uc = u0; vc = v0
           ud = u1; vd = v0
-        else           # 270度時計回り
+        else               # 270度時計回り
           ua = u1; va = v0
           ub = u1; vb = v1
           uc = u0; vc = v1
           ud = u0; vd = v0
         end
 
-        # 三角形1 (左上 a -> 左下 d -> 右上 b) & 三角形2 (右上 b -> 左下 d -> 右下 c)
+        # 1タイルを 2つの三角形 (6頂点) で構成
+        # 頂点フォーマット (POS2_UV2_COLOR4 / 8 floats):
+        # [x, y, u, v, r, g, b, a]
+        # 三角形1: a(左上) -> d(左下) -> b(右上)
+        # 三角形2: b(右上) -> d(左下) -> c(右下)
         verts.push(
           x0, y0, ua, va, 1.0, 1.0, 1.0, 1.0,
           x0, y1, ud, vd, 1.0, 1.0, 1.0, 1.0,
@@ -419,6 +525,11 @@ module Zenoo
         )
       end
 
+      # ------------------------------------------------------------------------
+      # 別テクスチャタイルの個別描画 (フォールバック)
+      # ------------------------------------------------------------------------
+      # 代表テクスチャと異なる Image が配置された場合のみ、
+      # その行と同じ Z値 (row_z) を指定して個別に Window.draw で描画します。
       def draw_row_extras(extras, draw_x, draw_y, sx, sy, tw, th, eff_color, eff_alpha, draw_camera, row_z)
         tiles = @tilemap.tiles
         i = 0
@@ -461,12 +572,57 @@ module Zenoo
     # ==========================================================================
     # Tilemap 本体: 複数レイヤー・タイル属性・衝突判定の統括
     # ==========================================================================
+
+    # 単一レイヤーのタイルマップを 2次元配列から即座に生成するファクトリメソッド
+    # @param data [Array<Array<Integer, nil>>] 2次元マップ配列
+    # @param tiles [Array<Image>] タイル画像の配列
+    def self.from_array(data, tiles,
+                        tile_width: nil,
+                        tile_height: nil,
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        y_sort: false,
+                        solid: false,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                        camera: true,
+                        alpha: 255,
+                        color: :white)
+      map = new(
+        tiles,
+        tile_width: tile_width,
+        tile_height: tile_height,
+        x: x,
+        y: y,
+        z: z,
+        scale_x: scale_x,
+        scale_y: scale_y,
+        camera: camera,
+        alpha: alpha,
+        color: color
+      )
+      map.add_layer(:default, data, z: 0.0, y_sort: y_sort, solid: solid)
+      map
+    end
+
     attr_accessor :x, :y, :z, :scale_x, :scale_y, :camera, :alpha, :color
     attr_reader   :tiles, :tile_width, :tile_height, :cols, :rows, :layers, :max_root_offset, :base_texture_image
 
-    # 使い方1 (単一レイヤー): Tilemap.new(map_data, tiles, x: 0, y: 0, ...)
-    # 使い方2 (複数レイヤー): Tilemap.new(tiles, tile_width: 32, tile_height: 32, ...)
-    def initialize(arg1, arg2 = nil,
+    # @param tiles [Array<Image>] タイル画像の配列 (Image.load_tiles または slice_tiles で生成)
+    # @param tile_width [Integer, nil] タイルの標準幅 (省略時は最初のタイル画像の幅を採用)
+    # @param tile_height [Integer, nil] タイルの標準高さ (省略時は最初のタイル画像の高さを採用)
+    # @param cols [Integer] マップ列数
+    # @param rows [Integer] マップ行数
+    # @param x [Float] マップ基準ワールドX座標
+    # @param y [Float] マップ基準ワールドY座標
+    # @param z [Float] マップ基準深度Z
+    # @param scale_x [Float] 水平拡大率
+    # @param scale_y [Float] 垂直拡大率
+    # @param camera [Boolean] カメラ変換の追従有無
+    # @param alpha [Integer] 不透明度 (0..255)
+    # @param color [Symbol, Array] 乗算カラー
+    def initialize(tiles,
                    tile_width: nil,
                    tile_height: nil,
                    cols: 0,
@@ -474,21 +630,12 @@ module Zenoo
                    x: 0.0,
                    y: 0.0,
                    z: 0.0,
-                   y_sort: false,
-                   solid: false,
                    scale_x: 1.0,
                    scale_y: 1.0,
                    camera: true,
                    alpha: 255,
                    color: :white)
-      if arg2.nil?
-        init_data = nil
-        @tiles = arg1 || []
-      else
-        init_data = arg1
-        @tiles = arg2 || []
-      end
-
+      @tiles = tiles || []
       @x = x.to_f
       @y = y.to_f
       @z = z.to_f
@@ -498,6 +645,7 @@ module Zenoo
       @alpha = alpha
       @color = color
 
+      # 最初の有効なタイル画像から標準サイズと代表テクスチャを取得
       first_tile = @tiles.is_a?(Array) ? @tiles.compact.first : nil
       @tile_width = (tile_width || (first_tile ? first_tile.width : 0)).to_i
       @tile_height = (tile_height || (first_tile ? first_tile.height : 0)).to_i
@@ -506,20 +654,17 @@ module Zenoo
       @cols = cols.to_i
       @rows = rows.to_i
 
-      @tile_root_offsets = []
-      @tile_solids = []
-      @max_root_offset = 0
+      @tile_root_offsets = [] # タイルIDごとの根元オフセットテーブル (@tile_root_offsets[tile_id] = 行数)
+      @tile_solids = []       # タイルIDごとの通行不可フラグテーブル (@tile_solids[tile_id] = true/false)
+      @max_root_offset = 0    # マップ全体で最大の根元オフセット
 
       @layers = []
       @layer_names = []
-      @temp_wall_rect = nil
-      @candidate_buffer = []
-
-      if init_data
-        add_layer(:default, init_data, z: 0.0, y_sort: y_sort, solid: solid)
-      end
+      @temp_wall_rect = nil   # 衝突判定用の一時 Rect (GC削減のため再利用)
+      @candidate_buffer = []  # 最寄り優先ソート用のフラットバッファ [c, r, d2, ...]
     end
 
+    # タイル画像配列の差し替え
     def tiles=(new_tiles)
       @tiles = new_tiles || []
       first_tile = @tiles.is_a?(Array) ? @tiles.compact.first : nil
@@ -532,6 +677,9 @@ module Zenoo
     end
 
     # タイル番号に対する属性 (根元オフセット・通行不可フラグ) を設定
+    # @param tile_id [Integer] タイルID
+    # @param root_offset [Integer, nil] このタイルが何行下のマスに帰属するか (根元までの行数)
+    # @param solid [Boolean, nil] 通行不可 (壁) かどうか
     def set_tile(tile_id, root_offset: nil, solid: nil)
       return self if tile_id.nil? || tile_id < 0
       tid = tile_id.to_i
@@ -548,9 +696,11 @@ module Zenoo
       self
     end
 
-    # 縦に並ぶ柱や木などのタイル番号配列 (上から下へ) を一括定義
+    # 縦に並ぶ柱や木などの立体物タイル番号配列 (上から下へ) を一括定義
     # - 1次元配列 [top_id, mid_id, bottom_id] または 2次元配列 [[top_l, top_r], [bot_l, bot_r]] に対応
-    # - 最下段 (根元) に solid フラグを設定し、上段には根元までの行数オフセットを自動設定します
+    # - 最下段 (根元) に solid: true を設定し、上段には根元までの行数オフセットを自動計算して設定します
+    # 例:
+    #   map.define_column([T_PILLAR_TOP, T_PILLAR_MID, T_PILLAR_BOT], solid: true)
     def define_column(tile_ids, solid: true)
       return self if !tile_ids.is_a?(Array) || tile_ids.empty?
       h = tile_ids.size
@@ -573,17 +723,24 @@ module Zenoo
       self
     end
 
+    # 指定したタイルIDの根元オフセットを取得
     def tile_root_offset(tile_id)
       return 0 if tile_id.nil? || tile_id < 0
       @tile_root_offsets[tile_id] || 0
     end
 
+    # 指定したタイルIDが通行不可 (solid) かどうか判定
     def tile_solid?(tile_id)
       return false if tile_id.nil? || tile_id < 0
       !!@tile_solids[tile_id]
     end
 
-    # レイヤーを追加して返す
+    # 新しいレイヤーを追加して返す
+    # @param name [Symbol, String] レイヤー名 (:ground, :walls, :roof など)
+    # @param data [Array<Array<Integer, nil>>, nil] 2次元マップ配列 (省略時は空レイヤー)
+    # @param z [Float] 基準深度 Z
+    # @param y_sort [Boolean] true の場合、各行の足元Y座標で自動 Yソート描画
+    # @param solid [Boolean] true の場合、このレイヤー全体を通行不可として扱う
     def add_layer(name, data = nil,
                   z: 0.0,
                   y_sort: false,
@@ -623,7 +780,7 @@ module Zenoo
       layer_obj
     end
 
-    # 名前またはインデックスでレイヤーを取得
+    # レイヤー名 (Symbol/String) またはインデックス番号で Layer を取得
     def layer(name_or_index)
       if name_or_index.is_a?(Integer)
         @layers[name_or_index]
@@ -633,12 +790,13 @@ module Zenoo
       end
     end
 
-    # 単一レイヤー互換: data の取得・設定・サイズ更新
+    # 単一レイヤー互換: 先頭レイヤーの 2次元マップ配列を取得
     def data
       first = @layers[0]
       first ? first.data : nil
     end
 
+    # 単一レイヤー互換: 先頭レイヤーの 2次元マップ配列を設定
     def data=(new_data)
       if @layers.empty?
         add_layer(:default, new_data)
@@ -648,6 +806,7 @@ module Zenoo
       end
     end
 
+    # 全レイヤーの最大行列サイズを再集計
     def refresh_size!
       max_r = 0
       max_c = 0
@@ -673,7 +832,7 @@ module Zenoo
       @rows * @tile_height * @scale_y
     end
 
-    # [col, row] で先頭レイヤーのタイルIDを取得、または [layer_name] で Layer を取得
+    # [layer_name] で Layer を取得、または [col, row] で先頭レイヤーのタイルIDを取得
     def [](arg1, row = nil)
       if row.nil?
         layer(arg1)
@@ -689,7 +848,7 @@ module Zenoo
       first[col, row] = tile_id if first
     end
 
-    # ピクセル座標 (px, py) から [col, row] を算出
+    # ピクセル座標 (px, py) からマスの列・行 [col, row] を算出
     def tile_coords(px, py)
       tw = @tile_width * @scale_x
       th = @tile_height * @scale_y
@@ -712,7 +871,7 @@ module Zenoo
     # 衝突判定 (Solid タイル判定 & 最寄り優先 MTV 壁ずり押し出し)
     # ==========================================================================
 
-    # 指定したマス (col, row) が通行不可かどうか判定
+    # 指定したマス (col, row) が通行不可 (壁) かどうか判定
     def solid_cell?(col, row)
       return false if col < 0 || col >= @cols || row < 0 || row >= @rows
       i = 0
@@ -730,7 +889,7 @@ module Zenoo
       false
     end
 
-    # ワールドピクセル座標 (px, py) が通行不可かどうか判定
+    # ワールドピクセル座標 (px, py) が通行不可 (壁) かどうか判定
     def solid_at?(px, py)
       coords = tile_coords(px, py)
       coords ? solid_cell?(coords[0], coords[1]) : false
@@ -750,6 +909,7 @@ module Zenoo
       cy = col_shape.center_y
       br = col_shape.bounding_radius
 
+      # コライダーの周囲のタイルインデックス範囲のみを抽出 (ブロードフェーズ)
       min_c = [((cx - br - @x) / tw).floor, 0].max
       max_c = [((cx + br - @x) / tw).floor, @cols - 1].min
       min_r = [((cy - br - @y) / th).floor, 0].max
@@ -774,7 +934,14 @@ module Zenoo
       false
     end
 
+    # --------------------------------------------------------------------------
     # スプライトを障害物タイルから滑らかに壁ずり押し出し (最寄りタイル優先 MTV)
+    # --------------------------------------------------------------------------
+    # 【なぜ最寄り優先でソートするのか？】
+    # グリッド順 (左から右、上から下) のままタイルごとに順次押し出すと、
+    # 走査順のバイアスによりブロックの角やタイルの継ぎ目にキャラが引っかかります。
+    # コライダー中心から最も近い壁タイルから順に MTV (最小移動ベクトル) を適用することで、
+    # 斜め移動時でも壁面に沿ってスムーズに滑る挙動になります。
     def resolve_collision(sprite, target_root: true)
       return false if sprite.nil? || (sprite.respond_to?(:vanished?) && sprite.vanished?)
       col_shape = sprite.collider
@@ -794,7 +961,8 @@ module Zenoo
       max_r = [((cy + br - @y) / th).floor, @rows - 1].min
       return false if min_c > max_c || min_r > max_r
 
-      # 候補タイルをフラット配列 [c, r, dist_sq, ...] に収集し、距離の昇順で挿入ソート
+      # 周囲の接触可能タイルをフラット配列 [c, r, dist_sq, ...] に収集し、
+      # 距離の昇順 (近い順) で挿入ソート
       buf = @candidate_buffer
       buf.clear
       r = min_r
@@ -806,7 +974,7 @@ module Zenoo
             dy = (@y + (r + 0.5) * th) - cy
             d2 = dx * dx + dy * dy
 
-            # 挿入位置を探索 (3要素単位)
+            # 3要素単位で距離の昇順に挿入
             pos = buf.size
             while pos >= 3 && buf[pos - 1] > d2
               pos -= 3
@@ -820,6 +988,7 @@ module Zenoo
 
       return false if buf.empty?
 
+      # 近いタイルから順に 2 パス押し出し (角へのめり込みも完全解消)
       wall = prepare_wall_rect(tw, th)
       resolved_any = false
       pass = 0
@@ -857,6 +1026,8 @@ module Zenoo
 
     private
 
+    # 最初のタイルからテクスチャ全体領域を指す Image を構築
+    # (slice_tiles 等で切り分けられた sub_image の親テクスチャ全体を代表画像として取得)
     def build_base_texture_image(first_tile)
       return nil unless first_tile
       if first_tile.sub_image?
@@ -866,6 +1037,7 @@ module Zenoo
       end
     end
 
+    # 全レイヤーの Mesh を Dirty にする
     def invalidate_all_layers!
       i = 0
       while i < @layers.size
@@ -874,6 +1046,7 @@ module Zenoo
       end
     end
 
+    # 衝突判定用の Rect を準備 (サイズ変更時のみ更新し、再アロケーションを防止)
     def prepare_wall_rect(tw, th)
       if @temp_wall_rect.nil?
         @temp_wall_rect = Collision::Rect.new(0.0, 0.0, tw, th, anchor: :top_left)

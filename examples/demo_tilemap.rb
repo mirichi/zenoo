@@ -76,7 +76,7 @@ map_data = [
 map_x = 40.0
 map_y = 50.0
 
-tilemap = Tilemap.new(map_data, tiles, x: map_x, y: map_y)
+tilemap = Tilemap.from_array(map_data, tiles, x: map_x, y: map_y)
 
 selected_tile_id = 1
 tile_names = ["Grass (0)", "Brick (1)", "Water (2)", "Pavement (3)"]
