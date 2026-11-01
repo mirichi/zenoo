@@ -56,6 +56,12 @@ T_CLIFF_CORNER_SW = 22 # 高台の南西角崖面 (flip_h: true で南東角に�
 Y_RATIO        = 0.8
 PLATEAU_HEIGHT = 18.0 # 高台の標高 (18px: 南側崖面の垂直レンガ壁の高さと一致)
 
+# 高台上面のスクリーン/ワールド矩形 [x, y, w, h] (Window.clip による高台上の影クリッピング用)
+PLATEAU_TOP_RECTS = [
+  [24 * TILE_SIZE + 3,  4 * TILE_SIZE + 3, 6 * TILE_SIZE - 6, 4 * TILE_SIZE + 6], # 北東の高台
+  [10 * TILE_SIZE + 3, 15 * TILE_SIZE + 3, 6 * TILE_SIZE - 6, 4 * TILE_SIZE + 6]  # 南西の高台
+].freeze
+
 SHADOW_COLOR_RGB = [10, 12, 18].freeze
 SHADOW_Z         = -10.0
 GROUND_Z         = -100.0
@@ -222,7 +228,7 @@ def create_dungeon_tileset
 
     # 19: 高台の南側崖面 (正面に見える垂直な石積みの段差壁 + 地面への落ち影)
     ox = 19 * 32
-    Zenoo::Window.draw_rect(ox, 0, 32, 32, color: [30, 36, 48, 255])
+    Zenoo::Window.draw_rect(ox, 0, 32, 28, color: [30, 36, 48, 255])
     # 上端の明るい縁石リップ (y: 0..8) + 境界線 (y: 9)
     Zenoo::Window.draw_rect(ox, 0, 32, 9, color: [130, 148, 180, 255])
     Zenoo::Window.draw_rect(ox, 0, 32, 2, color: [175, 195, 225, 255])
@@ -234,30 +240,30 @@ def create_dungeon_tileset
     Zenoo::Window.draw_rect(ox + 8, 10, 1, 9, color: [38, 44, 58, 255])
     Zenoo::Window.draw_rect(ox + 24, 10, 1, 9, color: [38, 44, 58, 255])
     Zenoo::Window.draw_rect(ox + 16, 20, 1, 8, color: [38, 44, 58, 255])
-    # 下端の接地シャドウ (y: 28..31)
-    Zenoo::Window.draw_rect(ox, 28, 32, 4, color: [12, 15, 22, 210])
+    # 下端の半透明接地シャドウ (y: 28..31、下の地面や地面側のキャラ影が透けて見える)
+    Zenoo::Window.draw_rect(ox, 28, 32, 4, color: [12, 15, 22, 165])
 
     # 20: 高台の北・東西フチ石 (上端に段差の縁石と影を持つタイル、rotate: 90/270 で東西に対応)
     ox = 20 * 32
-    Zenoo::Window.draw_rect(ox, 0, 32, 32, color: [72, 84, 108, 255])
+    Zenoo::Window.draw_rect(ox, 3, 32, 29, color: [72, 84, 108, 255])
     Zenoo::Window.draw_rect(ox + 1, 11, 14, 9, radius: 2, color: [90, 104, 132, 255])
     Zenoo::Window.draw_rect(ox + 17, 11, 14, 9, radius: 2, color: [86, 100, 128, 255])
     Zenoo::Window.draw_rect(ox + 1, 22, 30, 9, radius: 2, color: [92, 106, 134, 255])
-    # 外周側の落ち影 (y: 0..2)、縁石 (y: 3..8)、ハイライト (y: 3..4)、内側境界 (y: 9)
-    Zenoo::Window.draw_rect(ox, 0, 32, 3, color: [14, 18, 26, 200])
+    # 外周側の半透明落ち影 (y: 0..2)、縁石 (y: 3..8)、ハイライト (y: 3..4)、内側境界 (y: 9)
+    Zenoo::Window.draw_rect(ox, 0, 32, 3, color: [14, 18, 26, 165])
     Zenoo::Window.draw_rect(ox, 3, 32, 6, color: [130, 148, 180, 255])
     Zenoo::Window.draw_rect(ox, 3, 32, 2, color: [180, 200, 230, 255])
     Zenoo::Window.draw_rect(ox, 9, 32, 1, color: [52, 62, 82, 255])
 
     # 21: 高台の北西角フチ石 (上端と左端の縁石がL字に直交、flip_h: true で北東角に対応)
     ox = 21 * 32
-    Zenoo::Window.draw_rect(ox, 0, 32, 32, color: [72, 84, 108, 255])
+    Zenoo::Window.draw_rect(ox + 3, 3, 29, 29, color: [72, 84, 108, 255])
     Zenoo::Window.draw_rect(ox + 11, 11, 9, 9, radius: 2, color: [90, 104, 132, 255])
     Zenoo::Window.draw_rect(ox + 22, 11, 9, 9, radius: 2, color: [86, 100, 128, 255])
     Zenoo::Window.draw_rect(ox + 11, 22, 20, 9, radius: 2, color: [92, 106, 134, 255])
-    # 上端・左端のL字落ち影 (幅3px)
-    Zenoo::Window.draw_rect(ox, 0, 32, 3, color: [14, 18, 26, 200])
-    Zenoo::Window.draw_rect(ox, 0, 3, 32, color: [14, 18, 26, 200])
+    # 上端・左端のL字半透明落ち影 (幅3px)
+    Zenoo::Window.draw_rect(ox, 0, 32, 3, color: [14, 18, 26, 165])
+    Zenoo::Window.draw_rect(ox, 3, 3, 29, color: [14, 18, 26, 165])
     # 内側1px境界線 (x=9, y=9)
     Zenoo::Window.draw_rect(ox + 9, 9, 23, 1, color: [52, 62, 82, 255])
     Zenoo::Window.draw_rect(ox + 9, 9, 1, 23, color: [52, 62, 82, 255])
@@ -271,8 +277,8 @@ def create_dungeon_tileset
     # 22: 高台の南西角崖面 (左端の縁石と南側の垂直崖面がL字に接続、flip_h: true で南東角に対応)
     ox = 22 * 32
     # 左外周の落ち影 (x: 0..2) と下端の接地シャドウ (y: 28..31)
-    Zenoo::Window.draw_rect(ox, 0, 3, 28, color: [14, 18, 26, 200])
-    Zenoo::Window.draw_rect(ox + 3, 28, 29, 4, color: [12, 15, 22, 210])
+    Zenoo::Window.draw_rect(ox, 0, 3, 28, color: [14, 18, 26, 165])
+    Zenoo::Window.draw_rect(ox + 3, 28, 29, 4, color: [12, 15, 22, 165])
     # 垂直な崖側面レンガ (x: 3..31, y: 10..27) + 左端のエッジハイライト
     Zenoo::Window.draw_rect(ox + 3, 10, 29, 18, color: [56, 66, 86, 255])
     Zenoo::Window.draw_rect(ox + 3, 10, 2, 18, color: [78, 92, 118, 255])
@@ -342,9 +348,12 @@ def create_world_tilemap
   place_pond.call(10..14, 5..8)   # 北西の池 (5x4マス)
   place_pond.call(25..29, 15..18) # 南東の池 (5x4マス)
 
-  # 2. 段差 (高台フチ) レイヤー (40x24, solid: true)
-  # 地上歩行時は壁として機能し、プレイヤーがジャンプ中 (@jump_z >= 8.0) のみ飛び越えられる！
-  cliffs = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
+  # 2. 段差 (高台) レイヤー (40x24)
+  # - 北端行 (r == r0) のみ cliffs_north (y_sort: true) に置いて裏側に回り込んだキャラの足元を隠し、
+  # - 残りの行 (r > r0) は cliffs (z: 0.0, y_sort: false) に置くことで、
+  #   地面の影 (SHADOW_Z = -10.0) は高台の下に隠しつつ、東西横に並んだスライム等がタイル境目で欠けるのを防ぐ
+  cliffs       = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
+  cliffs_north = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
   cliff_north = T_CLIFF_EDGE
   cliff_east  = Zenoo::Tilemap.tile(T_CLIFF_EDGE, rotate: 90)
   cliff_west  = Zenoo::Tilemap.tile(T_CLIFF_EDGE, rotate: 270)
@@ -359,11 +368,14 @@ def create_world_tilemap
     r_range.each do |r|
       c_range.each do |c|
         if r == r0 && c == c0
-          # 北西角: L字縁石
-          cliffs[r][c] = cliff_nw
+          # 北西角: L字縁石 (北端レイヤー)
+          cliffs_north[r][c] = cliff_nw
         elsif r == r0 && c == c1
-          # 北東角: L字縁石 (左右反転)
-          cliffs[r][c] = cliff_ne
+          # 北東角: L字縁石・左右反転 (北端レイヤー)
+          cliffs_north[r][c] = cliff_ne
+        elsif r == r0
+          # 北端: 北向きの縁石 (北端レイヤー)
+          cliffs_north[r][c] = cliff_north
         elsif r == r1 && c == c0
           # 南西角: 西縁石 + 南崖面
           cliffs[r][c] = cliff_sw
@@ -373,9 +385,6 @@ def create_world_tilemap
         elsif r == r1
           # 南端: 垂直な段差の崖面
           cliffs[r][c] = T_CLIFF_SOUTH
-        elsif r == r0
-          # 北端: 北向きの縁石
-          cliffs[r][c] = cliff_north
         elsif c == c0
           # 西端: 西向きの縁石
           cliffs[r][c] = cliff_west
@@ -454,7 +463,7 @@ def create_world_tilemap
   place_bush_patch = lambda do |c_range, r_range|
     r_range.each do |r|
       c_range.each do |c|
-        if ground[r][c] == T_GRASS && cliffs[r][c].nil? && objects[r][c].nil?
+        if ground[r][c] == T_GRASS && cliffs[r][c].nil? && cliffs_north[r][c].nil? && objects[r][c].nil?
           objects[r][c] = T_BUSH
         end
       end
@@ -475,12 +484,10 @@ def create_world_tilemap
   place_bush_patch.call(35..37, 6..8)
   place_bush_patch.call(35..37, 14..16)
 
-  map.add_layer(:ground,  ground,  z: GROUND_Z)
-  # 高台レイヤーも行単位 Yソート (y_sort: true) を有効化
-  # 北端 (r=4, row_z=160) に地上から近づいた時は壁停止位置 (y=154) でも 154 < 160 で足元が奥に隠れ、
-  # 南端 (r=8, row_z=288) の手前 (y>=298) や高台の上 (z = y + 18) ではキャラが手前に出る
-  map.add_layer(:cliffs,  cliffs,  z: 0.0, y_sort: true)
-  map.add_layer(:objects, objects, z: 0.0, y_sort: true)
+  map.add_layer(:ground,       ground,       z: GROUND_Z)
+  map.add_layer(:cliffs,       cliffs,       z: 0.0)
+  map.add_layer(:cliffs_north, cliffs_north, z: 0.0, y_sort: true)
+  map.add_layer(:objects,      objects,      z: 0.0, y_sort: true)
   map
 end
 
@@ -701,8 +708,8 @@ class SlimeEnemy < Zenoo::Sprite
     @facing_x = 1.0
     self.z = y
 
-    # 足元の接地コライダー (楕円: anchor: :bottom_center で足元 y - 8px に配置)
-    set_collider(:circle, radius_x: 16.0, radius_y: 10.0, anchor: :bottom_center, offset_y: -8.0)
+    # 足元の接地コライダー (楕円: スライムの scale_x=0.85 が乗算されるため radius_x: 24.0 で実効幅約 20px)
+    set_collider(:circle, radius_x: 24.0, radius_y: 12.0, anchor: :bottom_center, offset_y: -8.0)
   end
 
   def dying?
@@ -925,23 +932,48 @@ class IsoPlayer < Zenoo::Sprite
     @ground_h = support_floor_height(self, @altitude, @tilemap)
     update_jump
 
-    self.z = y + @altitude
+    self.z = y + (@altitude >= PLATEAU_HEIGHT ? @altitude + 10.0 : @altitude)
   end
 
-  # ★ 影と本体をまとめて描画 (高台の上では Z値も標高分だけ持ち上げる)
+  # ★ 高台と地面の2階層へ影を分割描画 (Window.clip + Zオーダー遮蔽) & 本体描画
   def draw
     return if vanished? || !visible
-    # 影は「足元の床の高さ (@ground_h)」に落ち、床からの浮き距離 (air_h) に応じて縮む
-    air_h = (@altitude - @ground_h).clamp(0.0, 65.0)
-    z_ratio = (1.0 - air_h / 65.0).clamp(0.45, 1.0)
-    sw = 22.0 * z_ratio
-    sh = 9.0 * z_ratio
-    sa = (140 * z_ratio).to_i
-    shadow_z = @ground_h > 0.0 ? (y + @ground_h - 2.0) : SHADOW_Z
-    Zenoo::Window.draw_ellipse(x, y - @ground_h - 2.0, sw, sh, color: [*SHADOW_COLOR_RGB, sa], z: shadow_z)
 
-    # キャラ本体は絶対高度 (@altitude) 分だけ上に持ち上げ、Z値も y + @altitude にする
-    self.z = y + @altitude
+    # 1. 下の地面 (標高 0.0) に落ちる影 (z: SHADOW_Z)
+    #    高台 (:cliffs, z: 160..288) の下に入った部分は自動的に遮蔽され、
+    #    高台のフチから外へはみ出した部分だけが 18px 下の地面にそのまま描画される
+    air_h0 = @altitude.clamp(0.0, 65.0)
+    z_ratio0 = (1.0 - air_h0 / 65.0).clamp(0.45, 1.0)
+    sw0 = 22.0 * z_ratio0
+    sh0 = 9.0 * z_ratio0
+    sa0 = (140 * z_ratio0).to_i
+    Zenoo::Window.draw_ellipse(x, y - 2.0, sw0, sh0, color: [*SHADOW_COLOR_RGB, sa0], z: SHADOW_Z)
+
+    # 2. 高台の上面 (標高 PLATEAU_HEIGHT) に落ちる影 (Window.clip で高台上面領域内のみにクリップ)
+    #    キャラの高度が高台以上のとき、高台の上に乗っている部分だけが高台床面に描画され、
+    #    フチからはみ出した部分はクリップされて消える (1. の地面の影へ自然に繋がる)
+    if @altitude >= PLATEAU_HEIGHT
+      air_h1 = (@altitude - PLATEAU_HEIGHT).clamp(0.0, 65.0)
+      z_ratio1 = (1.0 - air_h1 / 65.0).clamp(0.45, 1.0)
+      sw1 = 22.0 * z_ratio1
+      sh1 = 9.0 * z_ratio1
+      sa1 = (140 * z_ratio1).to_i
+      top_sy = y - PLATEAU_HEIGHT - 2.0
+      # 影の下端 (top_sy + sh1 = y - 11) がまたがる1つ下のタイル行の row_z (最大 y + 21) より必ず手前にする
+      shadow_z = y + PLATEAU_HEIGHT + 8.0
+
+      PLATEAU_TOP_RECTS.each do |px, py, pw, ph|
+        if x + sw1 > px && x - sw1 < px + pw && top_sy + sh1 > py && top_sy - sh1 < py + ph
+          sx, sy = Zenoo::Window.to_screen(px, py)
+          Zenoo::Window.clip(sx, sy, pw, ph, z: shadow_z) do
+            Zenoo::Window.draw_ellipse(x, top_sy, sw1, sh1, color: [*SHADOW_COLOR_RGB, sa1], z: shadow_z)
+          end
+        end
+      end
+    end
+
+    # 3. キャラ本体は絶対高度 (@altitude) 分だけ上に持ち上げ、Z値も影 (y + 26) より手前にする
+    self.z = y + (@altitude >= PLATEAU_HEIGHT ? @altitude + 10.0 : @altitude)
     orig_y = y
     self.y = orig_y - @altitude
     super
