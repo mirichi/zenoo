@@ -343,6 +343,10 @@ module Zenoo
       dirty_children_geom! if @children
     end
 
+    def scale
+      @scale_x
+    end
+
     def scale=(v)
       s = v.to_f
       return if @scale_x == s && @scale_y == s

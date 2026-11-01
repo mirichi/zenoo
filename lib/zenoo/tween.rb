@@ -71,6 +71,7 @@ module Zenoo
       # 対象オブジェクトに関わる全ての Tween を破棄・中断
       def kill(target)
         return if target.nil?
+        target.kill_tweens if target.respond_to?(:kill_tweens)
         @active_tweens.each do |t|
           t.stop if t.involves_target?(target)
         end
@@ -93,6 +94,7 @@ module Zenoo
       # 対象オブジェクトの全 Tween を最終状態にスキップして完了
       def finish_all(target = nil)
         if target
+          target.finish_tweens if target.respond_to?(:finish_tweens)
           @active_tweens.each do |t|
             t.finish if t.involves_target?(target)
           end
@@ -553,6 +555,86 @@ module Zenoo
       else
         @completed = true
         @on_complete&.call(self)
+      end
+    end
+
+    alias update __update
+  end
+
+  # ====================================================================
+  # Zenoo::Tweenable - Sprite 等に Tween 機能を組み込むモジュール
+  # ====================================================================
+  # 各オブジェクト単位で Tween を保持・管理することで、
+  # オブジェクト破棄 (vanish) 時の自動停止や、ヒットストップ・ポーズとの
+  # 親和性を高めます。
+  # ====================================================================
+  module Tweenable
+    # 対象オブジェクトのアクティブな Tween 配列 (遅延初期化)
+    def tweens
+      @tweens ||= []
+    end
+
+    # 新しい Tween を作成し、このオブジェクトの管理下に登録して返す
+    # ※ グローバルマネージャ (Zenoo::Tween) には登録されず、このオブジェクトの更新に同期します
+    # 例: sprite.tween.to(0.5, x: 200, ease: :quad_out)
+    #     sprite.tween.delay(0.2).to(0.3, alpha: 0.0).call { sprite.vanish }
+    def tween
+      t = Tween.new(self)
+      tweens << t
+      t
+    end
+
+    # このオブジェクトに紐づく全ての Tween を即時停止・破棄
+    def kill_tweens
+      return self unless @tweens
+      @tweens.each(&:stop)
+      @tweens.clear
+      self
+    end
+
+    # このオブジェクトに紐づく全ての Tween を即時完了
+    def finish_tweens
+      return self unless @tweens
+      @tweens.each(&:finish)
+      @tweens.clear
+      self
+    end
+
+    # このオブジェクトに紐づく全ての Tween を一時停止
+    def pause_tweens
+      return self unless @tweens
+      @tweens.each(&:pause)
+      self
+    end
+
+    # このオブジェクトに紐づく全ての Tween を再開
+    def resume_tweens
+      return self unless @tweens
+      @tweens.each(&:resume)
+      self
+    end
+
+    # 現在アクティブな Tween 数
+    def tween_count
+      @tweens ? @tweens.size : 0
+    end
+
+    # Tween のフレーム更新処理 (Sprite#update から自動で呼ばれます)
+    # @param dt [Float, nil] 経過時間 (秒)。省略時は Window.delta_time を使用
+    def update_tweens(dt = nil)
+      return if @tweens.nil? || @tweens.empty?
+
+      dt ||= Window.delta_time
+
+      i = 0
+      while i < @tweens.size
+        t = @tweens[i]
+        t.__update(dt)
+        if t.completed?
+          @tweens.delete_at(i)
+        else
+          i += 1
+        end
       end
     end
   end
