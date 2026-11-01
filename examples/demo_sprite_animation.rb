@@ -46,6 +46,11 @@ T_BUSH       = 14 # 背の高い草・アニメコマ0 (代表タイルID, solid
 T_BUSH_1     = 15 # 背の高い草・アニメコマ1
 T_BUSH_2     = 16 # 背の高い草・アニメコマ2
 T_BUSH_3     = 17 # 背の高い草・アニメコマ3
+T_HIGH_FLOOR      = 18 # 高台の上面石床 (明るい石畳)
+T_CLIFF_SOUTH     = 19 # 高台の南側崖面 (正面の垂直段差壁・ジャンプで飛び越え可能)
+T_CLIFF_EDGE      = 20 # 高台の北/東西フチ石 (rotate: 90/270 で東西の縁に対応)
+T_CLIFF_CORNER_NW = 21 # 高台の北西角フチ石 (flip_h: true で北東角に対応)
+T_CLIFF_CORNER_SW = 22 # 高台の南西角崖面 (flip_h: true で南東角に対応)
 
 # クォータービューの奥行きパースに合わせて縦移動を 80% に補正
 Y_RATIO = 0.8
@@ -57,10 +62,10 @@ EFFECT_Z         = 2000.0
 HP_BAR_Z         = 2100.0
 
 # ==============================================================================
-# タイルセット生成 (32x32 × 18種類 = 576x32) & マップ構築
+# タイルセット生成 (32x32 × 23種類 = 736x32) & マップ構築
 # ==============================================================================
 def create_dungeon_tileset
-  tileset = Zenoo::Image.new(TILE_SIZE * 18, TILE_SIZE)
+  tileset = Zenoo::Image.new(TILE_SIZE * 23, TILE_SIZE)
   Zenoo::Image.render_to(tileset) do
     Zenoo::Window.clear([0, 0, 0, 0])
 
@@ -205,6 +210,80 @@ def create_dungeon_tileset
       # 葉先で揺れる小さな蛍光胞子ドット
       Zenoo::Window.draw_circle(ox + 12 + sw, 8 + dp, 1.5, color: [210, 255, 225, 240])
     end
+
+    # 18: 高台の上面石床 (平地の石畳より明るく、1段高いことを視覚的に示す)
+    ox = 18 * 32
+    Zenoo::Window.draw_rect(ox, 0, 32, 32, color: [72, 84, 108, 255])
+    Zenoo::Window.draw_rect(ox + 1, 1, 14, 14, radius: 2, color: [92, 106, 134, 255])
+    Zenoo::Window.draw_rect(ox + 17, 1, 14, 14, radius: 2, color: [86, 100, 128, 255])
+    Zenoo::Window.draw_rect(ox + 1, 17, 14, 14, radius: 2, color: [84, 98, 126, 255])
+    Zenoo::Window.draw_rect(ox + 17, 17, 14, 14, radius: 2, color: [96, 110, 138, 255])
+
+    # 19: 高台の南側崖面 (正面に見える垂直な石積みの段差壁 + 地面への落ち影)
+    ox = 19 * 32
+    Zenoo::Window.draw_rect(ox, 0, 32, 32, color: [30, 36, 48, 255])
+    # 上端の明るい縁石リップ (y: 0..8) + 境界線 (y: 9)
+    Zenoo::Window.draw_rect(ox, 0, 32, 9, color: [130, 148, 180, 255])
+    Zenoo::Window.draw_rect(ox, 0, 32, 2, color: [175, 195, 225, 255])
+    Zenoo::Window.draw_rect(ox + 15, 2, 2, 7, color: [90, 105, 132, 255])
+    Zenoo::Window.draw_rect(ox, 9, 32, 1, color: [36, 42, 56, 255])
+    # 中段の垂直な崖側面レンガ (y: 10..27)
+    Zenoo::Window.draw_rect(ox, 10, 32, 18, color: [56, 66, 86, 255])
+    Zenoo::Window.draw_rect(ox, 19, 32, 1, color: [38, 44, 58, 255])
+    Zenoo::Window.draw_rect(ox + 8, 10, 1, 9, color: [38, 44, 58, 255])
+    Zenoo::Window.draw_rect(ox + 24, 10, 1, 9, color: [38, 44, 58, 255])
+    Zenoo::Window.draw_rect(ox + 16, 20, 1, 8, color: [38, 44, 58, 255])
+    # 下端の接地シャドウ (y: 28..31)
+    Zenoo::Window.draw_rect(ox, 28, 32, 4, color: [12, 15, 22, 210])
+
+    # 20: 高台の北・東西フチ石 (上端に段差の縁石と影を持つタイル、rotate: 90/270 で東西に対応)
+    ox = 20 * 32
+    Zenoo::Window.draw_rect(ox, 0, 32, 32, color: [72, 84, 108, 255])
+    Zenoo::Window.draw_rect(ox + 1, 11, 14, 9, radius: 2, color: [90, 104, 132, 255])
+    Zenoo::Window.draw_rect(ox + 17, 11, 14, 9, radius: 2, color: [86, 100, 128, 255])
+    Zenoo::Window.draw_rect(ox + 1, 22, 30, 9, radius: 2, color: [92, 106, 134, 255])
+    # 外周側の落ち影 (y: 0..2)、縁石 (y: 3..8)、ハイライト (y: 3..4)、内側境界 (y: 9)
+    Zenoo::Window.draw_rect(ox, 0, 32, 3, color: [14, 18, 26, 200])
+    Zenoo::Window.draw_rect(ox, 3, 32, 6, color: [130, 148, 180, 255])
+    Zenoo::Window.draw_rect(ox, 3, 32, 2, color: [180, 200, 230, 255])
+    Zenoo::Window.draw_rect(ox, 9, 32, 1, color: [52, 62, 82, 255])
+
+    # 21: 高台の北西角フチ石 (上端と左端の縁石がL字に直交、flip_h: true で北東角に対応)
+    ox = 21 * 32
+    Zenoo::Window.draw_rect(ox, 0, 32, 32, color: [72, 84, 108, 255])
+    Zenoo::Window.draw_rect(ox + 11, 11, 9, 9, radius: 2, color: [90, 104, 132, 255])
+    Zenoo::Window.draw_rect(ox + 22, 11, 9, 9, radius: 2, color: [86, 100, 128, 255])
+    Zenoo::Window.draw_rect(ox + 11, 22, 20, 9, radius: 2, color: [92, 106, 134, 255])
+    # 上端・左端のL字落ち影 (幅3px)
+    Zenoo::Window.draw_rect(ox, 0, 32, 3, color: [14, 18, 26, 200])
+    Zenoo::Window.draw_rect(ox, 0, 3, 32, color: [14, 18, 26, 200])
+    # 内側1px境界線 (x=9, y=9)
+    Zenoo::Window.draw_rect(ox + 9, 9, 23, 1, color: [52, 62, 82, 255])
+    Zenoo::Window.draw_rect(ox + 9, 9, 1, 23, color: [52, 62, 82, 255])
+    # L字の縁石本体 (幅6px: 3..8)
+    Zenoo::Window.draw_rect(ox + 3, 3, 29, 6, color: [130, 148, 180, 255])
+    Zenoo::Window.draw_rect(ox + 3, 3, 6, 29, color: [130, 148, 180, 255])
+    # L字の外周ハイライト (幅2px: 3..4)
+    Zenoo::Window.draw_rect(ox + 3, 3, 29, 2, color: [180, 200, 230, 255])
+    Zenoo::Window.draw_rect(ox + 3, 3, 2, 29, color: [180, 200, 230, 255])
+
+    # 22: 高台の南西角崖面 (左端の縁石と南側の垂直崖面がL字に接続、flip_h: true で南東角に対応)
+    ox = 22 * 32
+    # 左外周の落ち影 (x: 0..2) と下端の接地シャドウ (y: 28..31)
+    Zenoo::Window.draw_rect(ox, 0, 3, 28, color: [14, 18, 26, 200])
+    Zenoo::Window.draw_rect(ox + 3, 28, 29, 4, color: [12, 15, 22, 210])
+    # 垂直な崖側面レンガ (x: 3..31, y: 10..27) + 左端のエッジハイライト
+    Zenoo::Window.draw_rect(ox + 3, 10, 29, 18, color: [56, 66, 86, 255])
+    Zenoo::Window.draw_rect(ox + 3, 10, 2, 18, color: [78, 92, 118, 255])
+    Zenoo::Window.draw_rect(ox + 3, 19, 29, 1, color: [38, 44, 58, 255])
+    Zenoo::Window.draw_rect(ox + 14, 10, 1, 9, color: [38, 44, 58, 255])
+    Zenoo::Window.draw_rect(ox + 22, 20, 1, 8, color: [38, 44, 58, 255])
+    # 上部のL字縁石リップ (x: 3..31, y: 0..8) と境界線 (y: 9)
+    Zenoo::Window.draw_rect(ox + 3, 0, 29, 9, color: [130, 148, 180, 255])
+    Zenoo::Window.draw_rect(ox + 3, 0, 2, 9, color: [180, 200, 230, 255])
+    Zenoo::Window.draw_rect(ox + 9, 0, 23, 2, color: [175, 195, 225, 255])
+    Zenoo::Window.draw_rect(ox + 9, 0, 1, 2, color: [52, 62, 82, 255])
+    Zenoo::Window.draw_rect(ox + 3, 9, 29, 1, color: [36, 42, 56, 255])
   end
   tileset.slice_tiles(tile_width: TILE_SIZE, tile_height: TILE_SIZE)
 end
@@ -256,7 +335,59 @@ def create_world_tilemap
   place_pond.call(10..14, 5..8)   # 北西の池 (5x4マス)
   place_pond.call(25..29, 15..18) # 南東の池 (5x4マス)
 
-  # 2. 立体オブジェクト・障害物レイヤー (40x24, 行単位 Yソート有効)
+  # 2. 段差 (高台フチ) レイヤー (40x24, solid: true)
+  # 地上歩行時は壁として機能し、プレイヤーがジャンプ中 (@jump_z >= 8.0) のみ飛び越えられる！
+  cliffs = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
+  cliff_north = T_CLIFF_EDGE
+  cliff_east  = Zenoo::Tilemap.tile(T_CLIFF_EDGE, rotate: 90)
+  cliff_west  = Zenoo::Tilemap.tile(T_CLIFF_EDGE, rotate: 270)
+  cliff_nw    = T_CLIFF_CORNER_NW
+  cliff_ne    = Zenoo::Tilemap.tile(T_CLIFF_CORNER_NW, flip_h: true)
+  cliff_sw    = T_CLIFF_CORNER_SW
+  cliff_se    = Zenoo::Tilemap.tile(T_CLIFF_CORNER_SW, flip_h: true)
+
+  place_plateau = lambda do |c_range, r_range|
+    c0, c1 = c_range.begin, c_range.end
+    r0, r1 = r_range.begin, r_range.end
+    r_range.each do |r|
+      c_range.each do |c|
+        if r == r0 && c == c0
+          # 北西角: L字縁石
+          cliffs[r][c] = cliff_nw
+        elsif r == r0 && c == c1
+          # 北東角: L字縁石 (左右反転)
+          cliffs[r][c] = cliff_ne
+        elsif r == r1 && c == c0
+          # 南西角: 西縁石 + 南崖面
+          cliffs[r][c] = cliff_sw
+        elsif r == r1 && c == c1
+          # 南東角: 東縁石 + 南崖面 (左右反転)
+          cliffs[r][c] = cliff_se
+        elsif r == r1
+          # 南端: 垂直な段差の崖面
+          cliffs[r][c] = T_CLIFF_SOUTH
+        elsif r == r0
+          # 北端: 北向きの縁石
+          cliffs[r][c] = cliff_north
+        elsif c == c0
+          # 西端: 西向きの縁石
+          cliffs[r][c] = cliff_west
+        elsif c == c1
+          # 東端: 東向きの縁石
+          cliffs[r][c] = cliff_east
+        else
+          # 高台の内側: 明るい高台床 (自由に歩き回れる)
+          ground[r][c] = (c == (c0 + c1) / 2 && r == (r0 + r1) / 2) ? T_ACCENT : T_HIGH_FLOOR
+        end
+      end
+    end
+  end
+
+  # 北東・南西の2箇所にジャンプで乗り降りできる高台 (6x5マス = 192x160px, 内側4x3マス) を配置
+  place_plateau.call(24..29, 4..8)   # 北東の高台
+  place_plateau.call(10..15, 15..19) # 南西の高台
+
+  # 3. 立体オブジェクト・障害物レイヤー (40x24, 行単位 Yソート有効)
   objects = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
 
   # 外周の石レンガ壁
@@ -302,15 +433,8 @@ def create_world_tilemap
   place_stele.call(19, 4)
   place_stele.call(20, 20)
 
-  # 迷路状の石壁ブロックと木箱 (壁ずり移動のテストにも最適)
+  # 西・東エリアの木箱群 (壁ずり移動のテスト用)
   [
-    # 北東エリアのL字壁と木箱
-    [26, 4, T_WALL], [27, 4, T_WALL], [28, 4, T_WALL], [26, 5, T_WALL],
-    [25, 5, T_CRATE],
-    # 南西エリアの遮蔽壁と木箱群
-    [11, 18, T_WALL], [12, 18, T_WALL], [13, 18, T_WALL],
-    [11, 19, T_CRATE], [12, 19, T_CRATE],
-    # 西・東エリアの木箱群
     [4, 11, T_CRATE], [4, 12, T_CRATE], [5, 12, T_CRATE],
     [35, 11, T_CRATE], [35, 12, T_CRATE], [34, 11, T_CRATE]
   ].each do |c, r, tid|
@@ -323,7 +447,7 @@ def create_world_tilemap
   place_bush_patch = lambda do |c_range, r_range|
     r_range.each do |r|
       c_range.each do |c|
-        if ground[r][c] == T_GRASS && objects[r][c].nil?
+        if ground[r][c] == T_GRASS && cliffs[r][c].nil? && objects[r][c].nil?
           objects[r][c] = T_BUSH
         end
       end
@@ -334,19 +458,18 @@ def create_world_tilemap
   place_bush_patch.call(10..13, 9..9)
   place_bush_patch.call(26..29, 14..14)
 
-  # 北東・南西の内庭の草むら (中に入って足元隠れ＆Yソートをすぐ試せる位置)
-  place_bush_patch.call(26..28, 7..8)
-  place_bush_patch.call(11..13, 15..16)
-
   # 西・東エリアの草原群生地
   place_bush_patch.call(7..8,   6..7)
   place_bush_patch.call(7..8,   16..17)
   place_bush_patch.call(31..32, 6..7)
   place_bush_patch.call(31..32, 16..17)
   place_bush_patch.call(2..4,   7..9)
+  place_bush_patch.call(2..4,   15..17)
+  place_bush_patch.call(35..37, 6..8)
   place_bush_patch.call(35..37, 14..16)
 
   map.add_layer(:ground,  ground,  z: GROUND_Z)
+  map.add_layer(:cliffs,  cliffs,  z: GROUND_Z + 1.0, solid: true)
   map.add_layer(:objects, objects, z: 0.0, y_sort: true)
   map
 end
@@ -370,7 +493,7 @@ class SlashEffect < Zenoo::Sprite
   end
 
   def initialize(player, angle, mesh)
-    super(player.x, player.y - CENTER_Y, mesh, anchor: :center, pivot: :center, blend: :add)
+    super(player.x, player.y - player.jump_z - CENTER_Y, mesh, anchor: :center, pivot: :center, blend: :add)
     @player = player
     self.angle = angle
     self.scale_y = player.facing_x # 左右反転時も振り下ろし方向・グラデーション向きを対称にする
@@ -379,9 +502,9 @@ class SlashEffect < Zenoo::Sprite
   end
 
   def update
-    # ★ 攻撃スライド中もプレイヤーの移動に完全追従！
+    # ★ 攻撃スライド・ジャンプ中もプレイヤーの移動と高さに完全追従！
     self.x = @player.x
-    self.y = @player.y - CENTER_Y
+    self.y = @player.y - @player.jump_z - CENTER_Y
 
     @timer -= 1
     t = @timer.to_f / LIFE
@@ -602,6 +725,9 @@ class IsoPlayer < Zenoo::Sprite
   ATTACK_DASH   = 6.5  # 踏み込み初速 (入力の強弱に関わらず常にフルパワー)
   DASH_FRICTION = 0.85
   HIT_FRAMES    = 12   # 攻撃判定の持続フレーム (斬撃エフェクトの寿命と同じ)
+  JUMP_SPEED    = 6.2  # ジャンプ初速
+  GRAVITY       = 0.48 # 重力加速度
+  JUMP_CLEAR_Z  = 8.0  # 段差のフチ (:cliffs レイヤー) を飛び越えられる最低高度
 
   # 斬撃判定: エフェクト半径(約75〜88px) + 敵の当たり半径(約25px)
   SLASH_REACH   = 115.0
@@ -619,7 +745,7 @@ class IsoPlayer < Zenoo::Sprite
 
   WALK_FRAME_NAMES = ["0 (左足)", "1 (直立)", "2 (右足)", "1 (直立)"].freeze
 
-  attr_reader   :facing_x, :attacking
+  attr_reader   :facing_x, :attacking, :jump_z
   attr_accessor :effects, :enemies, :tilemap
 
   def initialize(x, y)
@@ -632,6 +758,8 @@ class IsoPlayer < Zenoo::Sprite
     @attacking = false
     @vx = 0.0
     @vy = 0.0
+    @jump_z = 0.0
+    @vz = 0.0
     @effects = nil
     @enemies = nil
     @tilemap = nil
@@ -653,6 +781,12 @@ class IsoPlayer < Zenoo::Sprite
   end
 
   def update
+    # ジャンプ開始 & 空中高度の更新
+    if @jump_z <= 0.0 && Zenoo::Input.action_push?(:jump)
+      @vz = JUMP_SPEED
+    end
+    update_jump
+
     if @attacking
       update_attack
     elsif Zenoo::Input.action_push?(:attack) # 押下の瞬間のみトリガー
@@ -662,15 +796,39 @@ class IsoPlayer < Zenoo::Sprite
     end
 
     super # アニメーション更新 (update_animation)
-    @tilemap&.resolve_collision(self)
+
+    # ★ 方式1の核心: ジャンプ高度が JUMP_CLEAR_Z 以上の間だけ、段差フチ (:cliffs) の衝突を無効化！
+    # (通常の壁 T_WALL や石柱、水場 T_WATER とは空中でもそのまま衝突する)
+    if @tilemap
+      cliff_layer = @tilemap.layer(:cliffs)
+      if cliff_layer && @jump_z >= JUMP_CLEAR_Z
+        cliff_layer.solid = false
+        @tilemap.resolve_collision(self)
+        cliff_layer.solid = true
+      else
+        @tilemap.resolve_collision(self)
+      end
+    end
+
     self.z = y
   end
 
   # ★ 影 (SHADOW_Z) と本体 (z = y) をまとめて描画
   def draw
     return if vanished? || !visible
-    Zenoo::Window.draw_ellipse(x, y - 2.0, 22.0, 9.0, color: [*SHADOW_COLOR_RGB, 140], z: SHADOW_Z)
+    # ジャンプ中は地面 (y) に落ちる影が高さに応じて少し小さく・薄くなる
+    z_ratio = (1.0 - @jump_z / 65.0).clamp(0.45, 1.0)
+    sw = 22.0 * z_ratio
+    sh = 9.0 * z_ratio
+    sa = (140 * z_ratio).to_i
+    Zenoo::Window.draw_ellipse(x, y - 2.0, sw, sh, color: [*SHADOW_COLOR_RGB, sa], z: SHADOW_Z)
+
+    # キャラ本体は地面の Z値 (y) を保ったまま、画面上だけ @jump_z 分浮かせて描画
+    self.z = y
+    orig_y = y
+    self.y = orig_y - @jump_z
     super
+    self.y = orig_y
   end
 
   # 現在向いている斜め方向の名称
@@ -685,11 +843,23 @@ class IsoPlayer < Zenoo::Sprite
 
   # 現在のコマの説明 (モニター表示用)
   def frame_description
+    return "ジャンプ中 (高度: #{@jump_z.to_i}px)" if @jump_z > 0.0
     return "攻撃モーション (1コマ/30フレーム/0.5秒)" if @attacking
     WALK_FRAME_NAMES[current_frame_index] || current_frame_index.to_s
   end
 
   private
+
+  def update_jump
+    return if @jump_z <= 0.0 && @vz == 0.0
+
+    @jump_z += @vz
+    @vz -= GRAVITY
+    if @jump_z <= 0.0
+      @jump_z = 0.0
+      @vz = 0.0
+    end
+  end
 
   def update_move
     dx, dy = Zenoo::Input.vector
@@ -834,17 +1004,17 @@ PANEL_BORDER = [60, 80, 110, 200].freeze
 TITLE_COLOR  = [0, 220, 255, 255].freeze
 
 GUIDE_LINES = [
-  ["マップ : 1280x768 (40x24) / 行単位Mesh & Zソート & 水場IBOアニメ", [160, 220, 255, 255]],
-  ["立体柱 : 3段石柱・2段石碑は根元Zで統合 (裏へ回り込み＆手前重なり両立)", [255, 200, 80, 255]],
-  ["敵機   : Mesh.canvas による潰れスライム (壁・柱・池との衝突＆バウンド)", [100, 255, 180, 255]],
+  ["マップ : 1280x768 (40x24) / 行単位Mesh & Zソート & 水場・草IBOアニメ", [160, 220, 255, 255]],
+  ["段差   : 北東・南西の高台はジャンプ中のみフチ (:cliffs) を飛び越えて乗降", [255, 210, 90, 255]],
   ["移動   : [W][A][S][D] / 矢印キー / パッド (MTV 壁ずり移動)", [220, 225, 235, 255]],
-  ["攻撃   : [SPACE] / [J] / 左クリック / パッド [X][A] (踏み込み)", [255, 120, 100, 255]],
+  ["ジャンプ : [K] / [X] / [Shift] / 右クリック / パッド [B][LB]", [120, 255, 180, 255]],
+  ["攻撃   : [SPACE] / [J] / [Z] / 左クリック / パッド [X][A] (踏み込み)", [255, 120, 100, 255]],
   ["表示   : [H] キーで操作ガイド・モニターの表示切替", [200, 200, 220, 255]]
 ].freeze
 
 SPAWN_POINTS = [
-  [240.0,  220.0], [920.0,  220.0],
-  [360.0,  540.0], [1040.0, 540.0],
+  [240.0,  220.0], [1040.0, 220.0],
+  [240.0,  540.0], [1040.0, 540.0],
   [640.0,  210.0], [640.0,  560.0],
   [240.0,  380.0], [1040.0, 380.0]
 ].freeze
@@ -921,6 +1091,7 @@ if __FILE__ == $0
 
   # アクションマップ登録 (キーボード・マウス・ゲームパッド)
   Zenoo::Input.define_action(:attack, keys: [:space, :j, :z], mouse: :left, gamepad: [:x, :a, :rb])
+  Zenoo::Input.define_action(:jump,   keys: [:k, :x, :left_shift, :right_shift], mouse: :right, gamepad: [:b, :lb])
 
   # ★ 縦横半分サイズ (640x360) のオフスクリーン Image
   # nearest フィルタによりピクセルアートやベクターをドット絵調にくっきり 2 倍拡大！
