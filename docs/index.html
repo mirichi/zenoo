@@ -138,6 +138,9 @@
     .card.mesh_deform::before {
       background: linear-gradient(90deg, #38bdf8, #f59e0b);
     }
+    .card.sprite-animation::before {
+      background: linear-gradient(90deg, #00ffcc, #f43f5e);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -167,6 +170,7 @@
     .card.skinned_mesh .card-tag { color: #c084fc; }
     .card.canvas_mesh .card-tag { color: #00ffcc; }
     .card.mesh_deform .card-tag { color: #38bdf8; }
+    .card.sprite-animation .card-tag { color: #00ffcc; }
 
     .card h2 {
       font-size: 22px;
@@ -449,6 +453,26 @@
   </header>
 
   <main class="showcase-grid">
+    <!-- Sprite Animation & Tilemap Demo Card -->
+    <div class="card sprite-animation">
+      <div>
+        <div class="card-tag">Top-Down Action</div>
+        <h2>Diagonal Sprite &amp; Multi-Layer Tilemap</h2>
+        <p class="desc">
+          たった2アングル（右下・右上）＋ scale_x 反転で全方位をカバーする斜め4方向キャラと、行単位 Mesh・Zオーダー多層タイルマップ、標高対応 MTV 壁ずり衝突を体験できます。
+        </p>
+        <ul class="features">
+          <li>斜め4方向スプライトアニメーション &amp; 踏み込み斬撃アクション</li>
+          <li>多層 Yソート Tilemap (石柱・石碑・水場・草IBOアニメーション)</li>
+          <li>ジャンプで登り降りできる高台 (標高18px) &amp; スライムAIバトル</li>
+        </ul>
+      </div>
+      <div class="card-actions">
+        <a href="sprite_animation/" class="btn-launch">デモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_sprite_animation.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
+    </div>
+
     <!-- Game Demo Card -->
     <div class="card game">
       <div>

@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Zenoo Diagonal Animated Sprite &amp; Multi-Layer Tilemap (Spinel Wasm)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 10px;
+      background-color: #0d0f18;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      min-height: 100dvh;
+      height: 100dvh;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #header {
+      margin-bottom: 8px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    h1 {
+      margin: 0 0 4px 0;
+      font-size: 18px;
+      color: #00ffcc;
+      letter-spacing: 1px;
+    }
+    p {
+      margin: 0;
+      font-size: 11px;
+      color: #8892b0;
+    }
+    #canvas-container {
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #233554;
+      width: min(96vw, calc(72dvh * 16 / 9));
+      height: min(calc(96vw * 9 / 16), 72dvh);
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #000;
+      flex-shrink: 0;
+    }
+    canvas.emscripten {
+      display: block;
+      border: 0px none;
+      background-color: #000;
+      outline: none;
+      width: 100% !important;
+      height: 100% !important;
+      touch-action: none;
+    }
+    #controls-bar {
+      margin-top: 10px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .btn {
+      background: #1e293b;
+      border: 1px solid #38bdf8;
+      color: #38bdf8;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    .btn:active {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+    .btn-back {
+      border-color: #a855f7;
+      color: #c084fc;
+    }
+    .btn-back:active {
+      background: #c084fc;
+      color: #0f172a;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #64ffda;
+      flex-shrink: 0;
+    }
+    #portrait-hint {
+      display: none;
+    }
+    @media (orientation: portrait) and (max-width: 600px) {
+      #portrait-hint {
+        display: block;
+        margin-top: 6px;
+        font-size: 11px;
+        color: #facc15;
+        background: rgba(250, 204, 21, 0.1);
+        padding: 4px 10px;
+        border-radius: 4px;
+        border: 1px dashed rgba(250, 204, 21, 0.3);
+      }
+      #canvas-container {
+        width: 98vw;
+        height: calc(98vw * 9 / 16);
+      }
+    }
+    @media (orientation: landscape) and (max-height: 550px) {
+      body {
+        padding: 0;
+        justify-content: center;
+      }
+      #header, #portrait-hint, #status {
+        display: none !important;
+      }
+      #canvas-container {
+        width: min(100vw, calc(100dvh * 16 / 9));
+        height: min(100dvh, calc(100vw * 9 / 16));
+        max-width: 100vw;
+        max-height: 100dvh;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+      }
+      #controls-bar {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        left: 8px;
+        margin-top: 0;
+        justify-content: space-between;
+        pointer-events: none;
+        z-index: 9999;
+      }
+      #controls-bar > * {
+        pointer-events: auto;
+      }
+      .btn {
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        padding: 6px 12px;
+        font-size: 11px;
+        border-radius: 20px;
+        opacity: 0.75;
+        transition: opacity 0.2s;
+      }
+      .btn:hover, .btn:active {
+        opacity: 1.0;
+      }
+    }
+  
+    .btn-source {
+      border-color: #10b981;
+      color: #34d399;
+    }
+    .btn-source:hover, .btn-source:active {
+      background: #34d399;
+      color: #0f172a;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>ZENOO DIAGONAL SPRITE &amp; MULTI-LAYER TILEMAP</h1>
+    <p>斜め4方向キャラ・多層YソートTilemap・標高18px高台＆MTV壁ずり | Powered by Spinel AOT &amp; WebGL 2.0</p>
+  </div>
+  <div id="canvas-container">
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" width="1280" height="720"></canvas>
+  </div>
+  <div id="controls-bar">
+    <a href="../" class="btn btn-back">← ポータルに戻る</a>
+    <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_sprite_animation.rb" target="_blank" rel="noopener noreferrer" class="btn btn-source">📄 ソースコード</a>
+    <button class="btn" id="btn-fullscreen">全画面</button>
+  </div>
+  <div id="status">Loading WebAssembly module...</div>
+  <div id="portrait-hint">📱 スマホを横向きにすると画面いっぱいに遊べます</div>
+
+  <script type='text/javascript'>
+    var statusElement = document.getElementById('status');
+    var canvasElement = document.getElementById('canvas');
+
+    function formatStatus(text) {
+      if (!text) return '';
+      var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+      if (m) {
+        var prefix = m[1].trim();
+        var loaded = parseFloat(m[2]);
+        var total = parseInt(m[4], 10);
+        if (total > 1000 || loaded > 1000) {
+          if (total < loaded) total = loaded;
+          var fmt = function(b) {
+            if (b < 1024) return b + ' B';
+            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+            return (b / (1024 * 1024)).toFixed(1) + ' MB';
+          };
+          var pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+          return prefix + ' ' + fmt(loaded) + ' / ' + fmt(total) + ' (' + pct + '%)';
+        }
+      }
+      return text;
+    }
+
+    var Module = {
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
+      canvas: canvasElement,
+      setStatus: function(text) {
+        if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+        if (text === Module.setStatus.last.text) return;
+        Module.setStatus.last.text = text;
+        statusElement.innerText = text ? formatStatus(text) : "操作: [WASD/矢印] 移動 | [SPACE/J/Z/左クリック] 攻撃 | [K/X/Shift/右クリック] ジャンプ | [H] UI表示切替";
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads clear.');
+      }
+    };
+    Module.setStatus('Downloading...');
+    window.onerror = function() {
+      Module.setStatus('Exception thrown, see JavaScript console');
+    };
+
+    // ----------------------------------------------------
+    // タッチ操作サポート (2本指タップで右クリック/ジャンプ)
+    // ----------------------------------------------------
+    var isTwoFingerTouch = false;
+    var touchSuppressUntil = 0;
+    var lastTwoFingerPos = { x: 0, y: 0 };
+
+    function getTouchesCenter(touches) {
+      if (touches.length < 2) return { x: touches[0].clientX, y: touches[0].clientY };
+      return {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2
+      };
+    }
+
+    function dispatchMouseEvent(type, button, buttons, clientX, clientY) {
+      var evt = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        button: button,
+        buttons: buttons,
+        clientX: clientX,
+        clientY: clientY
+      });
+      canvasElement.dispatchEvent(evt);
+    }
+
+    function handleTouchStart(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (e.touches.length >= 2) {
+        dispatchMouseEvent('mouseup', 0, 0, e.touches[0].clientX, e.touches[0].clientY);
+        var center = getTouchesCenter(e.touches);
+        lastTwoFingerPos = center;
+        isTwoFingerTouch = true;
+        touchSuppressUntil = Date.now() + 200;
+        dispatchMouseEvent('mousedown', 2, 2, center.x, center.y);
+      }
+    }
+
+    function handleTouchMove(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (isTwoFingerTouch && e.touches.length >= 2) {
+        var center = getTouchesCenter(e.touches);
+        lastTwoFingerPos = center;
+        dispatchMouseEvent('mousemove', 2, 2, center.x, center.y);
+      }
+    }
+
+    function handleTouchEnd(e) {
+      if (e.target === canvasElement) {
+        e.preventDefault();
+      }
+      if (isTwoFingerTouch && e.touches.length < 2) {
+        isTwoFingerTouch = false;
+        dispatchMouseEvent('mouseup', 2, 0, lastTwoFingerPos.x, lastTwoFingerPos.y);
+        touchSuppressUntil = Date.now() + 250;
+      }
+    }
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    canvasElement.addEventListener('mousedown', function(e) {
+      if (e.button === 0 && Date.now() < touchSuppressUntil) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }
+    }, true);
+
+    function stopAllVibration() {
+      try {
+        if (navigator.getGamepads) {
+          var gamepads = navigator.getGamepads();
+          for (var i = 0; i < gamepads.length; i++) {
+            var gp = gamepads[i];
+            if (gp && gp.vibrationActuator) {
+              if (gp.vibrationActuator.reset) {
+                gp.vibrationActuator.reset().catch(function() {});
+              }
+              if (gp.vibrationActuator.playEffect) {
+                gp.vibrationActuator.playEffect("dual-rumble", {
+                  startDelay: 0,
+                  duration: 1,
+                  weakMagnitude: 0.0,
+                  strongMagnitude: 0.0
+                }).catch(function() {});
+              }
+            }
+          }
+        }
+        if (navigator.vibrate) {
+          navigator.vibrate(0);
+        }
+      } catch (e) {}
+    }
+
+    document.getElementById('btn-fullscreen').addEventListener('click', function(e) {
+      e.preventDefault();
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(function(err) {});
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    var backBtn = document.querySelector('.btn-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', function() {
+        stopAllVibration();
+      });
+    }
+
+    window.addEventListener('pagehide', stopAllVibration);
+    window.addEventListener('beforeunload', stopAllVibration);
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'hidden') {
+        stopAllVibration();
+      }
+    });
+  </script>
+  <script async type="text/javascript" src="index.js"></script>
+</body>
+</html>
