@@ -42,6 +42,7 @@ mkdir -p "${DOCS_DIR}/canvas_mesh"
 mkdir -p "${DOCS_DIR}/mesh_deform"
 mkdir -p "${DOCS_DIR}/scene"
 mkdir -p "${DOCS_DIR}/sound_generator"
+mkdir -p "${DOCS_DIR}/sprite_animation"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -209,6 +210,7 @@ build_canvas_mesh()  { build_item "Canvas to Mesh & Vector Sprites" "canvas_mesh
 build_mesh_deform()  { build_item "2D Mesh Deformation & 2-Stream Instancing" "mesh_deform" "examples/demo_mesh_deform.rb" "examples/web/shell_mesh_deform.html"; }
 build_scene()        { build_item "Scene & Transition Demo" "scene" "examples/demo_scene.rb" "examples/web/shell_scene.html"; }
 build_sound_generator() { build_item "Retro Sound Generator" "sound_generator" "tools/sound_generator.rb" "examples/web/shell_sound_generator.html"; }
+build_sprite_animation() { build_item "Diagonal Sprite & Multi-Layer Tilemap" "sprite_animation" "examples/demo_sprite_animation.rb" "examples/web/shell_sprite_animation.html"; }
 
 case "$TARGET" in
     game)         build_game ;;
@@ -232,6 +234,7 @@ case "$TARGET" in
     mesh_deform)  build_mesh_deform ;;
     scene)        build_scene ;;
     sound_generator) build_sound_generator ;;
+    sprite_animation) build_sprite_animation ;;
     all)
         build_game
         sleep 0.5
@@ -277,7 +280,7 @@ case "$TARGET" in
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|articulated|skinned_mesh|canvas_mesh|mesh_deform|scene|sound_generator|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|articulated|skinned_mesh|canvas_mesh|mesh_deform|scene|sound_generator|sprite_animation|all]"
         exit 1
         ;;
 esac
@@ -286,6 +289,7 @@ echo ""
 echo "=========================================================="
 echo " Showcase build complete! (target: $TARGET)"
 echo " Portal   : ${DOCS_DIR}/index.html"
+echo " TopDown  : ${DOCS_DIR}/sprite_animation/index.html"
 echo " Game     : ${DOCS_DIR}/game/index.html"
 echo " GUI      : ${DOCS_DIR}/gui/index.html"
 echo " Font     : ${DOCS_DIR}/font/index.html"

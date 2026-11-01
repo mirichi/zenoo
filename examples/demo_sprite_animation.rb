@@ -60,11 +60,13 @@ PLATEAU_RANGES = [
 ].freeze
 
 PLATEAU_TOP_RECTS = PLATEAU_RANGES.map do |cr, rr|
+  top_y = rr.begin * TILE_SIZE - PLATEAU_HEIGHT - 4.0
+  bottom_y = (rr.end) * TILE_SIZE + 6.0
   [
-    cr.begin * TILE_SIZE + 3,
-    rr.begin * TILE_SIZE + 3,
-    cr.size * TILE_SIZE - 6,
-    (rr.size - 1) * TILE_SIZE + 6
+    cr.begin * TILE_SIZE + 3.0,
+    top_y,
+    cr.size * TILE_SIZE - 6.0,
+    bottom_y - top_y
   ]
 end.freeze
 
@@ -427,9 +429,9 @@ module Airborne
   def with_lift(lift_y)
     orig_y = y
     self.y = orig_y - lift_y
-    yield
-  ensure
+    res = yield
     self.y = orig_y
+    res
   end
 end
 
@@ -716,7 +718,7 @@ class IsoPlayer < Zenoo::Sprite
   end
 
   def body_z
-    y + (@altitude >= PLATEAU_HEIGHT ? @altitude + 10.0 : @altitude)
+    @ground_h >= PLATEAU_HEIGHT ? (y + 32.0) : y
   end
 
   def trigger_jump
@@ -790,7 +792,7 @@ class IsoPlayer < Zenoo::Sprite
     if @altitude >= PLATEAU_HEIGHT
       sw1, sh1, sa1 = shadow_metrics(@altitude - PLATEAU_HEIGHT)
       top_sy = y - PLATEAU_HEIGHT - 2.0
-      shadow_z = y + PLATEAU_HEIGHT + 8.0
+      shadow_z = body_z - 0.5
 
       PLATEAU_TOP_RECTS.each do |px, py, pw, ph|
         if x + sw1 > px && x - sw1 < px + pw && top_sy + sh1 > py && top_sy - sh1 < py + ph
