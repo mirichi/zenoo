@@ -53,7 +53,8 @@ T_CLIFF_CORNER_NW = 21 # 高台の北西角フチ石 (flip_h: true で北東角�
 T_CLIFF_CORNER_SW = 22 # 高台の南西角崖面 (flip_h: true で南東角に対応)
 
 # クォータービューの奥行きパースに合わせて縦移動を 80% に補正
-Y_RATIO = 0.8
+Y_RATIO        = 0.8
+PLATEAU_HEIGHT = 18.0 # 高台の標高 (18px: 南側崖面の垂直レンガ壁の高さと一致)
 
 SHADOW_COLOR_RGB = [10, 12, 18].freeze
 SHADOW_Z         = -10.0
@@ -298,6 +299,12 @@ def create_world_tilemap
   map.set_tile(T_CRATE, solid: true)
   map.set_tile(T_WATER, solid: true)
 
+  # 高台上面タイルの高さ (標高) 設定
+  # ※ 南端の垂直な崖壁面 (T_CLIFF_SOUTH, T_CLIFF_CORNER_SW) は側面なので除外し、上面タイル (r0..r1-1) のみに高さを設定する
+  [T_HIGH_FLOOR, T_CLIFF_EDGE, T_CLIFF_CORNER_NW].each do |tid|
+    map.set_tile(tid, height: PLATEAU_HEIGHT)
+  end
+
   # ★ タイルアニメーション定義 (IBO インデックス書き換えによる高速4コマアニメ)
   map.define_animation(T_WATER, frames: [T_WATER, T_WATER_1, T_WATER_2, T_WATER_3], wait: 14)
   map.define_animation(T_BUSH,  frames: [T_BUSH,  T_BUSH_1,  T_BUSH_2,  T_BUSH_3],  wait: 12)
@@ -376,8 +383,8 @@ def create_world_tilemap
           # 東端: 東向きの縁石
           cliffs[r][c] = cliff_east
         else
-          # 高台の内側: 明るい高台床 (自由に歩き回れる)
-          ground[r][c] = (c == (c0 + c1) / 2 && r == (r0 + r1) / 2) ? T_ACCENT : T_HIGH_FLOOR
+          # 高台の内側: 明るい高台床 (T_HIGH_FLOOR に設定された height: PLATEAU_HEIGHT が適用される)
+          cliffs[r][c] = T_HIGH_FLOOR
         end
       end
     end
@@ -469,9 +476,118 @@ def create_world_tilemap
   place_bush_patch.call(35..37, 14..16)
 
   map.add_layer(:ground,  ground,  z: GROUND_Z)
-  map.add_layer(:cliffs,  cliffs,  z: GROUND_Z + 1.0, solid: true)
+  # 高台レイヤーも行単位 Yソート (y_sort: true) を有効化
+  # 北端 (r=4, row_z=160) に地上から近づいた時は壁停止位置 (y=154) でも 154 < 160 で足元が奥に隠れ、
+  # 南端 (r=8, row_z=288) の手前 (y>=298) や高台の上 (z = y + 18) ではキャラが手前に出る
+  map.add_layer(:cliffs,  cliffs,  z: 0.0, y_sort: true)
   map.add_layer(:objects, objects, z: 0.0, y_sort: true)
   map
+end
+
+# ==============================================================================
+# 標高 (height) を考慮した衝突解決 & 足元床標高の取得ヘルパー (方式2)
+# ==============================================================================
+TEMP_ELEV_WALL_RECT = Zenoo::Collision::Rect.new(0.0, 0.0, TILE_SIZE, TILE_SIZE, anchor: :top_left)
+ELEV_CANDIDATES_BUF = []
+
+# スプライトの現在の絶対高度 (altitude) より高いタイル、および solid タイルを壁として MTV 押し出し
+def resolve_elevation_collision(sprite, altitude, tilemap)
+  return false if sprite.nil? || tilemap.nil? || (sprite.respond_to?(:vanished?) && sprite.vanished?)
+  col_shape = sprite.collider
+  return false unless col_shape
+
+  tw = tilemap.tile_width * tilemap.scale_x
+  th = tilemap.tile_height * tilemap.scale_y
+  return false if tw <= 0.0 || th <= 0.0
+
+  cx = col_shape.center_x
+  cy = col_shape.center_y
+  br = col_shape.bounding_radius
+
+  # 高台タイルは高さ (PLATEAU_HEIGHT) の分だけ接地座標が +Y (下) にずれるため、探索範囲の上端を広げる
+  min_c = [((cx - br - tilemap.x) / tw).floor, 0].max
+  max_c = [((cx + br - tilemap.x) / tw).floor, tilemap.cols - 1].min
+  min_r = [((cy - PLATEAU_HEIGHT - br - tilemap.y) / th).floor, 0].max
+  max_r = [((cy + br - tilemap.y) / th).floor, tilemap.rows - 1].min
+  return false if min_c > max_c || min_r > max_r
+
+  buf = ELEV_CANDIDATES_BUF
+  buf.clear
+  r = min_r
+  while r <= max_r
+    c = min_c
+    while c <= max_c
+      is_solid = tilemap.solid_cell?(c, r)
+      th_elev  = tilemap.height_cell(c, r)
+      # 通常の通行不可タイル、または「現在の自分の高度より高い段差タイル」を壁とみなす
+      # 段差タイルの接地当たり判定は、見た目の上面描画位置から +th_elev (下) にずらす
+      if is_solid || th_elev > altitude + 2.0
+        wx = tilemap.x + c * tw
+        wy = tilemap.y + r * th + (is_solid ? 0.0 : th_elev)
+        dx = (wx + 0.5 * tw) - cx
+        dy = (wy + 0.5 * th) - cy
+        d2 = dx * dx + dy * dy
+        pos = buf.size
+        while pos >= 3 && buf[pos - 1] > d2
+          pos -= 3
+        end
+        buf.insert(pos, wx, wy, d2)
+      end
+      c += 1
+    end
+    r += 1
+  end
+
+  return false if buf.empty?
+
+  wall = TEMP_ELEV_WALL_RECT
+  wall.width = tw if wall.width != tw
+  wall.height = th if wall.height != th
+  resolved_any = false
+  pass = 0
+  while pass < 2
+    hit_in_pass = false
+    i = 0
+    len = buf.size
+    while i < len
+      wall.x = buf[i]
+      wall.y = buf[i + 1]
+      wall.update_cache
+      if sprite.push_out_of(wall)
+        hit_in_pass = true
+        resolved_any = true
+      end
+      i += 3
+    end
+    break unless hit_in_pass
+    pass += 1
+  end
+  resolved_any
+end
+
+# 足元コライダーが乗っている床の最大標高 (現在の高度以下の床) を取得
+# 高台の床タイルは高さ (PLATEAU_HEIGHT) の分だけ画面上で上 (-Y) に描画されているため、
+# Y座標を -PLATEAU_HEIGHT ずらして判定することで、高台の上での見た目の足元・影の位置と床の範囲が一致する
+def support_floor_height(sprite, altitude, tilemap)
+  return 0.0 if sprite.nil? || tilemap.nil?
+  col = sprite.collider
+  return tilemap.height_at(sprite.x, sprite.y - PLATEAU_HEIGHT) unless col
+
+  cx = col.center_x
+  cy = col.center_y
+  rx = 6.0
+  ry = 4.0
+  max_h = 0.0
+  # 足元中心と前後左右の接地5点で判定 (フチから完全に足が離れた瞬間に落下開始)
+  [
+    [cx, cy],
+    [cx - rx, cy], [cx + rx, cy],
+    [cx, cy - ry], [cx, cy + ry]
+  ].each do |px, py|
+    h = tilemap.height_at(px, py - PLATEAU_HEIGHT)
+    max_h = h if h <= altitude + 2.0 && h > max_h
+  end
+  max_h
 end
 
 # ==============================================================================
@@ -599,7 +715,8 @@ class SlimeEnemy < Zenoo::Sprite
 
     self.scale_x = @facing_x * BASE_SCALE * sx
     self.scale_y = BASE_SCALE * sy
-    tilemap&.resolve_collision(self)
+    # スライムは地上 (標高 0.0) を移動するため、高台 (標高 18.0) の壁とも衝突する
+    resolve_elevation_collision(self, 0.0, tilemap)
     self.z = y
   end
 
@@ -727,7 +844,6 @@ class IsoPlayer < Zenoo::Sprite
   HIT_FRAMES    = 12   # 攻撃判定の持続フレーム (斬撃エフェクトの寿命と同じ)
   JUMP_SPEED    = 6.2  # ジャンプ初速
   GRAVITY       = 0.48 # 重力加速度
-  JUMP_CLEAR_Z  = 8.0  # 段差のフチ (:cliffs レイヤー) を飛び越えられる最低高度
 
   # 斬撃判定: エフェクト半径(約75〜88px) + 敵の当たり半径(約25px)
   SLASH_REACH   = 115.0
@@ -745,8 +861,9 @@ class IsoPlayer < Zenoo::Sprite
 
   WALK_FRAME_NAMES = ["0 (左足)", "1 (直立)", "2 (右足)", "1 (直立)"].freeze
 
-  attr_reader   :facing_x, :attacking, :jump_z
+  attr_reader   :facing_x, :attacking, :altitude, :ground_h
   attr_accessor :effects, :enemies, :tilemap
+  alias jump_z altitude
 
   def initialize(x, y)
     # ★ 見下ろしアクションの鉄則: 足元・接地点基準 (bottom_center)
@@ -758,7 +875,8 @@ class IsoPlayer < Zenoo::Sprite
     @attacking = false
     @vx = 0.0
     @vy = 0.0
-    @jump_z = 0.0
+    @altitude = 0.0 # 絶対高度 (平地: 0.0, 高台の上: 18.0, ジャンプ中はさらに上昇)
+    @ground_h = 0.0 # 足元マスの床の標高 (Tilemap#height_at から毎フレーム取得)
     @vz = 0.0
     @effects = nil
     @enemies = nil
@@ -781,12 +899,12 @@ class IsoPlayer < Zenoo::Sprite
   end
 
   def update
-    # ジャンプ開始 & 空中高度の更新
-    if @jump_z <= 0.0 && Zenoo::Input.action_push?(:jump)
+    # 1. 現在の床上に接地している時のみジャンプ開始可能
+    if @altitude <= @ground_h && @vz <= 0.0 && Zenoo::Input.action_push?(:jump)
       @vz = JUMP_SPEED
     end
-    update_jump
 
+    # 2. 水平移動 / 攻撃スライド
     if @attacking
       update_attack
     elsif Zenoo::Input.action_push?(:attack) # 押下の瞬間のみトリガー
@@ -797,36 +915,35 @@ class IsoPlayer < Zenoo::Sprite
 
     super # アニメーション更新 (update_animation)
 
-    # ★ 方式1の核心: ジャンプ高度が JUMP_CLEAR_Z 以上の間だけ、段差フチ (:cliffs) の衝突を無効化！
-    # (通常の壁 T_WALL や石柱、水場 T_WATER とは空中でもそのまま衝突する)
-    if @tilemap
-      cliff_layer = @tilemap.layer(:cliffs)
-      if cliff_layer && @jump_z >= JUMP_CLEAR_Z
-        cliff_layer.solid = false
-        @tilemap.resolve_collision(self)
-        cliff_layer.solid = true
-      else
-        @tilemap.resolve_collision(self)
-      end
-    end
+    # 3. 方式2の衝突解決: 自分の現在の絶対高度 (@altitude) より高いタイル・壁のみと衝突
+    #    - 地上 (@altitude = 0) では高台 (height = 18) が壁になる
+    #    - ジャンプして @altitude >= 18 になると高台へ入れる
+    #    - 高台 (@altitude = 18) から平地 (height = 0) へは壁なしで歩いてそのまま飛び降りられる！
+    resolve_elevation_collision(self, @altitude, @tilemap)
 
-    self.z = y
+    # 4. 移動・衝突解決後の位置から「足元の床の標高 (@ground_h)」を取得し、重力・着地を更新
+    @ground_h = support_floor_height(self, @altitude, @tilemap)
+    update_jump
+
+    self.z = y + @altitude
   end
 
-  # ★ 影 (SHADOW_Z) と本体 (z = y) をまとめて描画
+  # ★ 影と本体をまとめて描画 (高台の上では Z値も標高分だけ持ち上げる)
   def draw
     return if vanished? || !visible
-    # ジャンプ中は地面 (y) に落ちる影が高さに応じて少し小さく・薄くなる
-    z_ratio = (1.0 - @jump_z / 65.0).clamp(0.45, 1.0)
+    # 影は「足元の床の高さ (@ground_h)」に落ち、床からの浮き距離 (air_h) に応じて縮む
+    air_h = (@altitude - @ground_h).clamp(0.0, 65.0)
+    z_ratio = (1.0 - air_h / 65.0).clamp(0.45, 1.0)
     sw = 22.0 * z_ratio
     sh = 9.0 * z_ratio
     sa = (140 * z_ratio).to_i
-    Zenoo::Window.draw_ellipse(x, y - 2.0, sw, sh, color: [*SHADOW_COLOR_RGB, sa], z: SHADOW_Z)
+    shadow_z = @ground_h > 0.0 ? (y + @ground_h - 2.0) : SHADOW_Z
+    Zenoo::Window.draw_ellipse(x, y - @ground_h - 2.0, sw, sh, color: [*SHADOW_COLOR_RGB, sa], z: shadow_z)
 
-    # キャラ本体は地面の Z値 (y) を保ったまま、画面上だけ @jump_z 分浮かせて描画
-    self.z = y
+    # キャラ本体は絶対高度 (@altitude) 分だけ上に持ち上げ、Z値も y + @altitude にする
+    self.z = y + @altitude
     orig_y = y
-    self.y = orig_y - @jump_z
+    self.y = orig_y - @altitude
     super
     self.y = orig_y
   end
@@ -843,7 +960,7 @@ class IsoPlayer < Zenoo::Sprite
 
   # 現在のコマの説明 (モニター表示用)
   def frame_description
-    return "ジャンプ中 (高度: #{@jump_z.to_i}px)" if @jump_z > 0.0
+    return "空中 (高度: #{@altitude.to_i}px / 床: #{@ground_h.to_i}px)" if @altitude > @ground_h
     return "攻撃モーション (1コマ/30フレーム/0.5秒)" if @attacking
     WALK_FRAME_NAMES[current_frame_index] || current_frame_index.to_s
   end
@@ -851,13 +968,13 @@ class IsoPlayer < Zenoo::Sprite
   private
 
   def update_jump
-    return if @jump_z <= 0.0 && @vz == 0.0
-
-    @jump_z += @vz
-    @vz -= GRAVITY
-    if @jump_z <= 0.0
-      @jump_z = 0.0
-      @vz = 0.0
+    if @altitude > @ground_h || @vz != 0.0
+      @altitude += @vz
+      @vz -= GRAVITY
+      if @altitude <= @ground_h
+        @altitude = @ground_h
+        @vz = 0.0
+      end
     end
   end
 
@@ -934,6 +1051,8 @@ class IsoPlayer < Zenoo::Sprite
 
     @enemies.each do |enemy|
       next if enemy.vanished? || enemy.dying? || @hit_targets[enemy.object_id]
+      # 高低差チェック: 高台の上 (18px) から平地 (0px) の敵は高さが違うため当たらない
+      next if (@altitude - enemy.jump_z).abs > 15.0
 
       dx = enemy.x - cx
       dy = (enemy.y - SlimeEnemy::BODY_CENTER_Y) - cy
@@ -1005,7 +1124,7 @@ TITLE_COLOR  = [0, 220, 255, 255].freeze
 
 GUIDE_LINES = [
   ["マップ : 1280x768 (40x24) / 行単位Mesh & Zソート & 水場・草IBOアニメ", [160, 220, 255, 255]],
-  ["段差   : 北東・南西の高台はジャンプ中のみフチ (:cliffs) を飛び越えて乗降", [255, 210, 90, 255]],
+  ["高台   : 標高18px (ジャンプで登り、上からは歩いてそのまま飛び降り可能)", [255, 210, 90, 255]],
   ["移動   : [W][A][S][D] / 矢印キー / パッド (MTV 壁ずり移動)", [220, 225, 235, 255]],
   ["ジャンプ : [K] / [X] / [Shift] / 右クリック / パッド [B][LB]", [120, 255, 180, 255]],
   ["攻撃   : [SPACE] / [J] / [Z] / 左クリック / パッド [X][A] (踏み込み)", [255, 120, 100, 255]],
@@ -1051,7 +1170,7 @@ def draw_ui(player, camera, enemies, show_ui)
   col_x = (player.x / TILE_SIZE).to_i
   row_y = (player.y / TILE_SIZE).to_i
   monitor = [
-    ["現在座標 : (#{player.x.to_i}, #{player.y.to_i}) [Tile: #{col_x}, #{row_y}] / Z: #{player.z.to_i}", :white],
+    ["現在座標 : (#{player.x.to_i}, #{player.y.to_i}) [Tile: #{col_x}, #{row_y}] / 高度: #{player.altitude.to_i}px (床:#{player.ground_h.to_i}px)", :white],
     ["カメラ   : (#{camera.x.to_i}, #{camera.y.to_i}) / 残りスライム: #{enemies.size}体", [100, 255, 180, 255]],
     ["向き・アニメ : #{player.direction_name} (#{player.animation})", [180, 200, 255, 255]],
     ["現在のコマ : #{player.current_frame_index} [#{player.frame_description}]", [255, 220, 100, 255]]
