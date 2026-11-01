@@ -89,6 +89,57 @@ module Zenoo
     end
 
     # ==========================================================================
+    # Animation: アニメーションタイルの定義と状態管理クラス (純粋なタイルID管理)
+    # ==========================================================================
+    class Animation
+      attr_reader   :id, :frames, :weights, :total_frames
+      attr_accessor :current_frame, :timer, :changed
+
+      def initialize(id, frames:, wait: 10)
+        @id = id.to_i
+        @frames = frames.map(&:to_i)
+        @total_frames = @frames.size
+        if wait.is_a?(Array)
+          @weights = wait.map { |w| [w.to_i, 1].max }
+          while @weights.size < @total_frames
+            @weights << (@weights.last || 10)
+          end
+        else
+          w = [wait.to_i, 1].max
+          @weights = Array.new(@total_frames, w)
+        end
+        @current_frame = 0
+        @timer = 0
+        @changed = false
+      end
+
+      # 現在表示すべきタイルID
+      def current_tile_id
+        @frames[@current_frame] || @id
+      end
+
+      # 1フレーム進める (コマが切り替わったら true を返す)
+      def step!
+        return false if @total_frames <= 1
+        @changed = false
+        @timer += 1
+        cur_wait = @weights[@current_frame] || 10
+        if @timer >= cur_wait
+          @timer = 0
+          @current_frame = (@current_frame + 1) % @total_frames
+          @changed = true
+        end
+        @changed
+      end
+
+      def reset!
+        @current_frame = 0
+        @timer = 0
+        @changed = false
+      end
+    end
+
+    # ==========================================================================
     # Layer: 行単位 Mesh を管理する単一タイルレイヤー
     # ==========================================================================
     # 1つのタイル層 (床、壁、装飾、屋根など) を保持・描画するクラスです。
@@ -132,6 +183,8 @@ module Zenoo
         @rows = 0
         @cols = 0
         @row_meshes = []      # 各行の Zenoo::Mesh (代表テクスチャの頂点バッファ)
+        @row_indices = []     # 各行の IBO インデックス配列キャッシュ
+        @row_anim_entries = []# 各行のアニメーション配置情報 [ [tid, ibo_idx, base_v], ... ]
         @row_extras = []      # 代表テクスチャ以外の別画像タイル群 [col, rel_row, raw, ...]
         @row_dirty = []       # 行ごとの再構築フラグ (true の行のみ rebuild_row! を実行)
         @all_dirty = true     # 全行再構築フラグ
@@ -161,6 +214,8 @@ module Zenoo
         while @row_dirty.size < @rows
           @row_dirty << true
           @row_meshes << nil
+          @row_indices << nil
+          @row_anim_entries << nil
           @row_extras << nil
         end
         @all_dirty = true
@@ -293,6 +348,51 @@ module Zenoo
         end
       end
 
+      # アニメーションコマが変化した行の IBO (インデックスバッファ) のみを高速更新
+      def update_animations
+        return if @row_anim_entries.empty?
+
+        r = 0
+        while r < @rows
+          # 再構築予定の行は次の描画で最新コマが反映されるためスキップ
+          if !@row_dirty[r]
+            entries = @row_anim_entries[r]
+            if entries && !entries.empty?
+              row_idxs = @row_indices[r]
+              mesh = @row_meshes[r]
+              if row_idxs && mesh && mesh.count > 0
+                row_dirty_ibo = false
+                i = 0
+                num_entries = entries.size
+                while i < num_entries
+                  entry = entries[i]
+                  anim_id = entry[0]
+                  anim = @tilemap.tile_animation(anim_id)
+                  if anim && anim.changed
+                    ibo_idx = entry[1]
+                    base_v = entry[2]
+                    v = base_v + anim.current_frame * 4
+                    row_idxs[ibo_idx]     = v
+                    row_idxs[ibo_idx + 1] = v + 1
+                    row_idxs[ibo_idx + 2] = v + 2
+                    row_idxs[ibo_idx + 3] = v + 2
+                    row_idxs[ibo_idx + 4] = v + 1
+                    row_idxs[ibo_idx + 5] = v + 3
+                    row_dirty_ibo = true
+                  end
+                  i += 1
+                end
+
+                if row_dirty_ibo
+                  mesh.update_indices(row_idxs.pack("I*"), count: row_idxs.size)
+                end
+              end
+            end
+          end
+          r += 1
+        end
+      end
+
       private
 
       # 指定したマスのセル値 (raw) が帰属する行 (row + root_offset) を Dirty にする
@@ -368,6 +468,7 @@ module Zenoo
         indices = @temp_indices
         indices.clear
         extras = nil
+        anim_entries = []
 
         max_off = @tilemap.max_root_offset
         max_off = @max_cell_offset if @max_cell_offset > max_off
@@ -386,7 +487,9 @@ module Zenoo
               raw = row_data[c]
               if raw && raw >= 0
                 tid = raw & ID_MASK
-                img = tiles[tid]
+                anim = @tilemap.tile_animation(tid)
+                eff_tid = anim ? anim.current_tile_id : tid
+                img = tiles[eff_tid]
                 if img
                   # マスごとの個別オフセット または タイル定義のオフセットを取得
                   cell_off = (raw >> OFFSET_SHIFT) & OFFSET_MASK
@@ -403,17 +506,30 @@ module Zenoo
                       @max_tall_rows = tall_rows if tall_rows > @max_tall_rows
                     end
 
+                    rel_r = r - target_row
+
                     # ----------------------------------------------------------
                     # テクスチャ一致判定:
                     # 代表テクスチャと同じ画像なら行Mesh頂点バッファへ格納。
                     # 別ファイル等から読み込んだ異なるテクスチャの場合は、
                     # 1つのMeshに混在できないため extras へ退避して個別描画に回す。
                     # ----------------------------------------------------------
-                    if img.texture_id == base_tex_id
-                      append_tile_vertices(verts, indices, img, c, r - target_row, tw, th, iw, ih, raw)
+                    if anim && anim.total_frames > 1
+                      all_same_tex = anim.frames.all? do |f_id|
+                        f_img = tiles[f_id]
+                        f_img && f_img.texture_id == base_tex_id
+                      end
+                      if all_same_tex
+                        append_animated_tile_vertices(verts, indices, anim_entries, anim, tiles, c, rel_r, tw, th, iw, ih, raw)
+                      else
+                        extras ||= []
+                        extras.push(c, rel_r, raw)
+                      end
+                    elsif img.texture_id == base_tex_id
+                      append_tile_vertices(verts, indices, img, c, rel_r, tw, th, iw, ih, raw)
                     else
                       extras ||= []
-                      extras.push(c, r - target_row, raw)
+                      extras.push(c, rel_r, raw)
                     end
                   end
                 end
@@ -425,6 +541,9 @@ module Zenoo
         end
 
         @row_extras[target_row] = extras
+        @row_anim_entries[target_row] = anim_entries.empty? ? nil : anim_entries
+        @row_indices[target_row] = indices.empty? ? nil : indices.dup
+
         v_count = verts.size / 8
         i_count = indices.size
         existing = @row_meshes[target_row]
@@ -456,32 +575,24 @@ module Zenoo
         end
       end
 
-      # ------------------------------------------------------------------------
-      # 1 タイル分の 4頂点と 6インデックス (2三角形) をバッファに追加
-      # ------------------------------------------------------------------------
-      # 以前の 6頂点生バッファ (192 bytes/tile) から、インデックスバッファ (IBO)
-      # を用いた 4頂点 + 6インデックス (152 bytes/tile) に最適化。
-      # メモリ転送量を約 21% 削減し、GPU 頂点シェーダーの処理負荷を 33% 軽減します。
-      # また、アニメーションタイルの切り替え時もインデックスの更新のみで対応可能になります。
-      # 左右反転・上下反転・90度回転は、シェーダーやアフィン行列を使わず
-      # 頂点ごとの UV 割り当てを入れ替えるだけでコストゼロで実現しています。
-      def append_tile_vertices(verts, indices, img, col, rel_row, tw, th, iw, ih, raw)
+      # タイルの画面配置矩形 (x0, y0, x1, y1) を計算
+      def calc_tile_bounds(col, rel_row, tw, th, iw, ih)
         if iw == tw && ih == th
-          # 標準サイズ (32x32 等) の場合
           x0 = col * tw
           y0 = rel_row * th
           x1 = x0 + tw
           y1 = y0 + th
         else
-          # 大判タイル (32x96 等) の場合:
-          # マスの足元下端・水平中央を基準にして、上方向へ突き出るように座標を計算
           x0 = col * tw + (tw - iw) * 0.5
           y1 = (rel_row + 1) * th
           y0 = y1 - ih
           x1 = x0 + iw
         end
+        [x0, y0, x1, y1]
+      end
 
-        # テクスチャ全体に対する正規化 UV (0.0..1.0)
+      # タイル画像とビットフラグ (FLIP_H / FLIP_V / ROT) から 4隅の UV を計算
+      def calc_tile_uvs(img, raw)
         tex_w = img.texture_width.to_f
         tex_h = img.texture_height.to_f
         u0 = tex_w > 0.0 ? (img.x.to_f / tex_w) : 0.0
@@ -522,9 +633,16 @@ module Zenoo
           ud = u0; vd = v0
         end
 
-        # 1タイルを 4頂点 (2三角形 / 6インデックス) で構成
-        # 頂点フォーマット (POS2_UV2_COLOR4 / 8 floats):
-        # 0: a(左上), 1: d(左下), 2: b(右上), 3: c(右下)
+        [ua, va, ub, vb, uc, vc, ud, vd]
+      end
+
+      # ------------------------------------------------------------------------
+      # 静的タイルの 4頂点 (VBO) と 6インデックス (IBO) をバッファに追加
+      # ------------------------------------------------------------------------
+      def append_tile_vertices(verts, indices, img, col, rel_row, tw, th, iw, ih, raw)
+        x0, y0, x1, y1 = calc_tile_bounds(col, rel_row, tw, th, iw, ih)
+        ua, va, ub, vb, uc, vc, ud, vd = calc_tile_uvs(img, raw)
+
         base_v = verts.size / 8
         verts.push(
           x0, y0, ua, va, 1.0, 1.0, 1.0, 1.0,
@@ -532,12 +650,45 @@ module Zenoo
           x1, y0, ub, vb, 1.0, 1.0, 1.0, 1.0,
           x1, y1, uc, vc, 1.0, 1.0, 1.0, 1.0
         )
-        # 三角形1: a(0) -> d(1) -> b(2)
-        # 三角形2: b(2) -> d(1) -> c(3)
         indices.push(
           base_v,     base_v + 1, base_v + 2,
           base_v + 2, base_v + 1, base_v + 3
         )
+      end
+
+      # ------------------------------------------------------------------------
+      # アニメーションタイルの全コマ頂点 (VBO) と初期インデックス (IBO) を追加
+      # ------------------------------------------------------------------------
+      # VBO には全コマ分の頂点 (Nコマ x 4頂点) をあらかじめ配置し、
+      # IBO には現在の再生コマを指す 6インデックスのみを追加します。
+      # コマ更新時は IBO のインデックス値のみを更新することで GPU 転送量を極小化します。
+      def append_animated_tile_vertices(verts, indices, anim_entries, anim, tiles, col, rel_row, tw, th, iw, ih, raw)
+        x0, y0, x1, y1 = calc_tile_bounds(col, rel_row, tw, th, iw, ih)
+        base_v = verts.size / 8
+        tid = anim.id
+
+        k = 0
+        n = anim.total_frames
+        while k < n
+          f_img = tiles[anim.frames[k]]
+          ua, va, ub, vb, uc, vc, ud, vd = calc_tile_uvs(f_img, raw)
+          verts.push(
+            x0, y0, ua, va, 1.0, 1.0, 1.0, 1.0,
+            x0, y1, ud, vd, 1.0, 1.0, 1.0, 1.0,
+            x1, y0, ub, vb, 1.0, 1.0, 1.0, 1.0,
+            x1, y1, uc, vc, 1.0, 1.0, 1.0, 1.0
+          )
+          k += 1
+        end
+
+        cur_v = base_v + anim.current_frame * 4
+        ibo_offset = indices.size
+        indices.push(
+          cur_v,     cur_v + 1, cur_v + 2,
+          cur_v + 2, cur_v + 1, cur_v + 3
+        )
+
+        anim_entries << [tid, ibo_offset, base_v]
       end
 
       # ------------------------------------------------------------------------
@@ -554,7 +705,9 @@ module Zenoo
           rel_r = extras[i + 1]
           raw = extras[i + 2]
           tid = raw & ID_MASK
-          img = tiles[tid]
+          anim = @tilemap.tile_animation(tid)
+          eff_tid = anim ? anim.current_tile_id : tid
+          img = tiles[eff_tid]
           if img
             iw = img.width * sx
             ih = img.height * sy
@@ -675,6 +828,7 @@ module Zenoo
 
       @layers = []
       @layer_names = []
+      @animations = {}        # アニメーション定義 (@animations[tile_id] = Animation)
       @temp_wall_rect = nil   # 衝突判定用の一時 Rect (GC削減のため再利用)
       @candidate_buffer = []  # 最寄り優先ソート用のフラットバッファ [c, r, d2, ...]
     end
@@ -1027,6 +1181,46 @@ module Zenoo
         pass += 1
       end
       resolved_any
+    end
+
+    # アニメーションタイルの定義
+    # @param tile_id [Integer] マップ上で配置する代表タイルID
+    # @param frames [Array<Integer>] コマとなるタイルIDの配列
+    # @param wait [Integer, Array<Integer>] コマごとの待機フレーム数 (単一数値または配列)
+    def define_animation(tile_id, frames:, wait: 10)
+      @animations[tile_id.to_i] = Animation.new(tile_id, frames: frames, wait: wait)
+      invalidate_all_layers!
+      self
+    end
+
+    # アニメーション定義を取得
+    def tile_animation(tile_id)
+      @animations[tile_id]
+    end
+
+    # 登録されている全アニメーション定義のハッシュ
+    def animations
+      @animations
+    end
+
+    # アニメーションタイルの更新 (毎フレームのゲームループ内で呼び出し)
+    def update
+      return self if @animations.empty?
+
+      any_changed = false
+      @animations.each_value do |anim|
+        any_changed = true if anim.step!
+      end
+
+      return self unless any_changed
+
+      i = 0
+      len = @layers.size
+      while i < len
+        @layers[i].update_animations
+        i += 1
+      end
+      self
     end
 
     # 全レイヤーを一括描画

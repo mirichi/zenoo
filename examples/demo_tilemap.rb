@@ -18,36 +18,46 @@ include Zenoo
 # 1. デモ用タイルセットテクスチャの生成 (32x32 x 4種類 = 64x64)
 # ----------------------------------------------------
 def create_tileset_image
-  tileset = Image.new(64, 64)
+  tileset = Image.new(96, 64)
   Image.render_to(tileset) do
     Window.clear([0, 0, 0, 0])
 
-    # タイル 0: 草原 (緑 + ドット柄)
+    # タイル 0: 草原 (緑 + ドット柄) (0, 0)
     Window.draw_rect(0, 0, 32, 32, color: Color.new(50, 160, 60))
     Window.draw_rect(6, 6, 4, 4, color: Color.new(70, 190, 80))
     Window.draw_rect(20, 18, 4, 4, color: Color.new(70, 190, 80))
 
-    # タイル 1: レンガ壁 (茶 + 目地)
+    # タイル 1: レンガ壁 (茶 + 目地) (32, 0)
     Window.draw_rect(32, 0, 32, 32, color: Color.new(160, 75, 45))
     Window.draw_rect(32, 15, 32, 2, color: Color.new(100, 40, 20))
     Window.draw_rect(48, 0, 2, 15, color: Color.new(100, 40, 20))
     Window.draw_rect(40, 17, 2, 15, color: Color.new(100, 40, 20))
 
-    # タイル 2: 水辺 (青 + 波紋)
-    Window.draw_rect(0, 32, 32, 32, color: Color.new(40, 110, 210))
-    Window.draw_rect(6, 40, 16, 2, color: Color.new(80, 160, 255))
-    Window.draw_rect(14, 52, 12, 2, color: Color.new(80, 160, 255))
+    # タイル 2: 水辺 コマ1 (波紋左上) (64, 0)
+    Window.draw_rect(64, 0, 32, 32, color: Color.new(40, 110, 210))
+    Window.draw_rect(70, 8, 16, 2, color: Color.new(80, 160, 255))
+    Window.draw_rect(78, 20, 12, 2, color: Color.new(80, 160, 255))
 
-    # タイル 3: 石畳の道 (灰 + パネル)
-    Window.draw_rect(32, 32, 32, 32, color: Color.new(130, 135, 145))
-    Window.draw_rect(34, 34, 28, 28, color: Color.new(110, 115, 125))
-    Window.draw_rect(36, 36, 24, 24, color: Color.new(145, 150, 160))
+    # タイル 3: 石畳の道 (灰 + パネル) (0, 32)
+    Window.draw_rect(0, 32, 32, 32, color: Color.new(130, 135, 145))
+    Window.draw_rect(2, 34, 28, 28, color: Color.new(110, 115, 125))
+    Window.draw_rect(4, 36, 24, 24, color: Color.new(145, 150, 160))
+
+    # タイル 4: 水辺 コマ2 (波紋右下へ移動) (32, 32)
+    Window.draw_rect(32, 32, 32, 32, color: Color.new(40, 110, 210))
+    Window.draw_rect(38, 44, 12, 2, color: Color.new(80, 160, 255))
+    Window.draw_rect(46, 54, 16, 2, color: Color.new(80, 160, 255))
+
+    # タイル 5: 水辺 コマ3 (波紋拡散) (64, 32)
+    Window.draw_rect(64, 32, 32, 32, color: Color.new(40, 110, 210))
+    Window.draw_rect(72, 46, 18, 2, color: Color.new(80, 160, 255))
+    Window.draw_rect(68, 56, 10, 2, color: Color.new(80, 160, 255))
   end
   tileset
 end
 
 # 32x32 ピクセル単位で Image 配列に分割
-# (外部ファイルから読み込む場合は Image.load_tiles("tileset.png", 2, 2) または tile_width: 32, tile_height: 32 も可能)
+# (外部ファイルから読み込む場合は Image.load_tiles("tileset.png", 3, 2) または tile_width: 32, tile_height: 32 も可能)
 tileset_img = create_tileset_image
 tiles = tileset_img.slice_tiles(tile_width: 32, tile_height: 32)
 
@@ -78,8 +88,12 @@ map_y = 50.0
 
 tilemap = Tilemap.from_array(map_data, tiles, x: map_x, y: map_y)
 
+# 水辺タイル (2) のアニメーションを定義 (コマ 2 -> 4 -> 5 を 16フレーム間隔でループ)
+tilemap.define_animation(2, frames: [2, 4, 5], wait: 16)
+
 selected_tile_id = 1
-tile_names = ["Grass (0)", "Brick (1)", "Water (2)", "Pavement (3)"]
+palette_tile_ids = [0, 1, 2, 3]
+tile_names = ["Grass (0)", "Brick (1)", "Water ~Anim~ (2)", "Pavement (3)"]
 
 # 自動テスト用
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
@@ -107,15 +121,16 @@ Window.loop(960, 540, "Zenoo - Tilemap & Image.load_tiles Demo") do
 
   # ホイールまたはキーで配置タイルを選択
   if Input.mouse_wheel_y != 0
-    selected_tile_id = (selected_tile_id + (Input.mouse_wheel_y > 0 ? 1 : -1)) % tiles.size
+    selected_tile_id = (selected_tile_id + (Input.mouse_wheel_y > 0 ? 1 : -1)) % palette_tile_ids.size
   end
   (0..3).each do |i|
     selected_tile_id = i if Input.key_push?(:"#{i}")
   end
 
   # ----------------------------------------------------
-  # タイルマップの描画
+  # タイルマップの更新と描画
   # ----------------------------------------------------
+  tilemap.update
   tilemap.draw
 
   # ホバー枠の表示
@@ -137,9 +152,10 @@ Window.loop(960, 540, "Zenoo - Tilemap & Image.load_tiles Demo") do
   Window.draw_rect(710, 50, 220, 440, color: Color.new(32, 38, 50), radius: 8.0)
   Window.draw_text(730, 65, "■ Tile Palette", size: 18, color: Color.new(100, 200, 255))
 
-  tiles.each_with_index do |t_img, idx|
+  palette_tile_ids.each_with_index do |idx, p_idx|
+    t_img = tiles[idx]
     px = 730
-    py = 110 + idx * 55
+    py = 110 + p_idx * 55
     is_sel = (idx == selected_tile_id)
 
     card_bg = is_sel ? Color.new(50, 70, 95) : Color.new(40, 46, 60)
@@ -148,7 +164,7 @@ Window.loop(960, 540, "Zenoo - Tilemap & Image.load_tiles Demo") do
 
     # タイルアイコン
     Window.draw(px + 8, py + 6, t_img)
-    Window.draw_text(px + 48, py + 14, tile_names[idx], size: 14, color: Color.new(240, 240, 240))
+    Window.draw_text(px + 48, py + 14, tile_names[p_idx], size: 14, color: Color.new(240, 240, 240))
 
     # パレットクリックで選択
     if Input.mouse_push?(:left) && mx >= px && mx <= px + 180 && my >= py && my <= py + 45
