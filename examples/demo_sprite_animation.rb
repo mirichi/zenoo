@@ -719,20 +719,53 @@ class IsoPlayer < Zenoo::Sprite
     y + (@altitude >= PLATEAU_HEIGHT ? @altitude + 10.0 : @altitude)
   end
 
-  def update
-    if @altitude <= @ground_h && @vz <= 0.0 && Zenoo::Input.action_push?(:jump)
+  def trigger_jump
+    if @altitude <= @ground_h && @vz <= 0.0
       @vz = JUMP_SPEED
     end
+  end
+
+  def start_attack(dir_x = nil, dir_y = nil)
+    @attacking = true
+    @attack_timer = 0
+    @hit_targets = {}
+
+    if dir_x && dir_y
+      remember_move_dir(dir_x, dir_y)
+    else
+      dx, dy = Zenoo::Input.vector
+      remember_move_dir(dx, dy) if dx != 0.0 || dy != 0.0
+    end
+    dir_x = @last_move_dx
+    dir_y = @last_move_dy
+    update_direction(dir_x, dir_y)
+
+    @vx = dir_x * ATTACK_DASH
+    @vy = dir_y * ATTACK_DASH * Y_RATIO
+
+    ay = dir_y * Y_RATIO
+    mag = Math.hypot(dir_x, ay)
+    mag = 1.0 if mag < 0.0001
+    @atk_nx = dir_x / mag
+    @atk_ny = ay / mag
+
+    @effects&.push(SlashEffect.new(self, Math.atan2(@atk_ny, @atk_nx) * 180.0 / Math::PI, @slash_mesh))
+    check_slash_hit
+    play(ATTACK_ANIMS[@dir_y])
+  end
+
+  def update(mouse_vec = nil)
+    trigger_jump if Zenoo::Input.action_push?(:jump)
 
     if @attacking
       update_attack
     elsif Zenoo::Input.action_push?(:attack)
       start_attack
     else
-      update_move
+      update_move(mouse_vec)
     end
 
-    super
+    super()
 
     # エンジン側の高度対応 MTV 衝突解決
     @tilemap&.resolve_collision(self, altitude: @altitude)
@@ -800,11 +833,15 @@ class IsoPlayer < Zenoo::Sprite
     end
   end
 
-  def update_move
+  def update_move(mouse_vec = nil)
     dx, dy = Zenoo::Input.vector
     if dx == 0.0 && dy == 0.0
-      play(IDLE_ANIMS[@dir_y])
-      return
+      if mouse_vec
+        dx, dy = mouse_vec
+      else
+        play(IDLE_ANIMS[@dir_y])
+        return
+      end
     end
 
     update_direction(dx, dy)
@@ -813,30 +850,6 @@ class IsoPlayer < Zenoo::Sprite
 
     self.x += dx * SPEED
     self.y += dy * SPEED * Y_RATIO
-  end
-
-  def start_attack
-    @attacking = true
-    @attack_timer = 0
-    @hit_targets = {}
-
-    dx, dy = Zenoo::Input.vector
-    remember_move_dir(dx, dy) if dx != 0.0 || dy != 0.0
-    dir_x = @last_move_dx
-    dir_y = @last_move_dy
-    update_direction(dir_x, dir_y)
-
-    @vx = dir_x * ATTACK_DASH
-    @vy = dir_y * ATTACK_DASH * Y_RATIO
-
-    ay = dir_y * Y_RATIO
-    mag = Math.hypot(dir_x, ay)
-    @atk_nx = dir_x / mag
-    @atk_ny = ay / mag
-
-    @effects&.push(SlashEffect.new(self, Math.atan2(@atk_ny, @atk_nx) * 180.0 / Math::PI, @slash_mesh))
-    check_slash_hit
-    play(ATTACK_ANIMS[@dir_y])
   end
 
   def update_attack
@@ -931,12 +944,12 @@ PANEL_BORDER = [60, 80, 110, 200].freeze
 TITLE_COLOR  = [0, 220, 255, 255].freeze
 
 GUIDE_LINES = [
-  ["マップ : 1280x768 (40x24) / 行単位Mesh & Zソート & 水場・草IBOアニメ", [160, 220, 255, 255]],
-  ["高台   : 標高18px (ジャンプで登り、上からは歩いてそのまま飛び降り可能)", [255, 210, 90, 255]],
-  ["移動   : [W][A][S][D] / 矢印キー / パッド (MTV 壁ずり移動)", [220, 225, 235, 255]],
-  ["ジャンプ : [K] / [X] / [Shift] / 右クリック / パッド [B][LB]", [120, 255, 180, 255]],
-  ["攻撃   : [SPACE] / [J] / [Z] / 左クリック / パッド [X][A] (踏み込み)", [255, 120, 100, 255]],
-  ["表示   : [H] キーで操作ガイド・モニターの表示切替", [200, 200, 220, 255]]
+  ["マップ   : 1280x768 (40x24) / 行単位Mesh & Zソート & 水場・草IBOアニメ", [160, 220, 255, 255]],
+  ["高台     : 標高18px (ジャンプで登り、上からは歩いてそのまま飛び降り可能)", [255, 210, 90, 255]],
+  ["移動     : [W][A][S][D] / 矢印 / パッド / マウス・タッチ長押し (MTV 壁ずり)", [220, 225, 235, 255]],
+  ["ジャンプ : [K] / [X] / [Shift] / 右クリック / 右下[JUMP]ボタン / 2本指タップ", [120, 255, 180, 255]],
+  ["攻撃     : [SPACE] / [J] / [Z] / マウス・タッチクリック (クリック方向へ踏み込み斬撃)", [255, 120, 100, 255]],
+  ["表示     : [H] キーで操作ガイド・モニターの表示切替", [200, 200, 220, 255]]
 ].freeze
 
 SPAWN_POINTS = [
@@ -945,6 +958,10 @@ SPAWN_POINTS = [
   [640.0,  210.0], [640.0,  560.0],
   [240.0,  380.0], [1040.0, 380.0]
 ].freeze
+
+JUMP_BTN_X = 1180.0
+JUMP_BTN_Y = 620.0
+JUMP_BTN_R = 48.0
 
 class DemoScene < Zenoo::Scene
   attr_reader :tilemap, :player, :enemies, :camera, :effects
@@ -986,9 +1003,41 @@ class DemoScene < Zenoo::Scene
 
     @show_ui = !@show_ui if Zenoo::Input.key_push?(:h)
 
+    # マウス・タッチ入力処理 (クリックで攻撃、長押しで移動、ボタンでジャンプ)
+    mx = Zenoo::Input.mouse_x
+    my = Zenoo::Input.mouse_y
+    is_over_jump = Math.hypot(mx - JUMP_BTN_X, my - JUMP_BTN_Y) <= JUMP_BTN_R
+
+    mouse_move_vec = nil
+
+    if Zenoo::Input.mouse_push?(:left)
+      if is_over_jump
+        @player.trigger_jump
+      else
+        wx, wy = @camera.screen_to_world(mx / 2.0, my / 2.0)
+        pdx = wx - @player.x
+        pdy = (wy - (@player.y - 16.0)) / Y_RATIO
+        pmag = Math.hypot(pdx, pdy)
+        if pmag > 0.001
+          @player.start_attack(pdx / pmag, pdy / pmag)
+        else
+          @player.start_attack
+        end
+      end
+    elsif Zenoo::Input.mouse_pressed?(:left) && !is_over_jump && !@player.attacking
+      wx, wy = @camera.screen_to_world(mx / 2.0, my / 2.0)
+      pdx = wx - @player.x
+      pdy = (wy - (@player.y - 8.0)) / Y_RATIO
+      dist = Math.hypot(pdx, pdy)
+      if dist > 14.0
+        spd_ratio = [1.0, dist / 28.0].min
+        mouse_move_vec = [(pdx / dist) * spd_ratio, (pdy / dist) * spd_ratio]
+      end
+    end
+
     # 1. 更新
     @tilemap.update
-    @player.update
+    @player.update(mouse_move_vec)
     @enemies.each { |e| e.update(@player.x, @player.y, @tilemap) }
     Zenoo::Sprite.clean(@enemies)
     Zenoo::Sprite.update(@effects)
@@ -1024,6 +1073,15 @@ class DemoScene < Zenoo::Scene
   end
 
   def draw_ui
+    # 右下: ジャンプバーチャルボタン (スマホ/マウス用・常時表示)
+    btn_pressed = Zenoo::Input.mouse_pressed?(:left) && Math.hypot(Zenoo::Input.mouse_x - JUMP_BTN_X, Zenoo::Input.mouse_y - JUMP_BTN_Y) <= JUMP_BTN_R
+    btn_bg = btn_pressed ? [0, 220, 180, 220] : [24, 32, 48, 160]
+    btn_border = btn_pressed ? [255, 255, 255, 240] : [80, 140, 200, 180]
+    text_color = btn_pressed ? [10, 20, 30, 255] : [160, 230, 255, 240]
+
+    Zenoo::Window.draw_circle(JUMP_BTN_X, JUMP_BTN_Y, JUMP_BTN_R, color: btn_bg, border_width: 2, border_color: btn_border)
+    Zenoo::Window.draw_text(JUMP_BTN_X - 22, JUMP_BTN_Y - 10, "JUMP", size: 16, color: text_color)
+
     unless @show_ui
       Zenoo::Window.draw_rect(24, 20, 280, 36, radius: 8, color: [18, 22, 32, 180], border_width: 1, border_color: [60, 80, 110, 160])
       Zenoo::Window.draw_text(36, 29, "[H] キーで操作ガイド・モニターを表示", size: 13, color: [180, 210, 240, 230])
@@ -1031,7 +1089,7 @@ class DemoScene < Zenoo::Scene
     end
 
     # 左上: 設計コンセプト & 操作ガイド
-    Zenoo::Window.draw_rect(24, 20, 540, 192, radius: 10, color: PANEL_COLOR, border_width: 1, border_color: PANEL_BORDER)
+    Zenoo::Window.draw_rect(24, 20, 560, 192, radius: 10, color: PANEL_COLOR, border_width: 1, border_color: PANEL_BORDER)
     Zenoo::Window.draw_text(40, 34, "【多層YソートTilemap & 斜め4方向アクション】", size: 18, color: TITLE_COLOR)
     GUIDE_LINES.each_with_index do |(text, color), i|
       Zenoo::Window.draw_text(40, 60 + i * 22, text, size: 13, color: color)
@@ -1058,7 +1116,7 @@ end
 # メインエントリーポイント
 # ==============================================================================
 if __FILE__ == $0
-  Zenoo::Input.define_action(:attack, keys: [:space, :j, :z], mouse: :left, gamepad: [:x, :a, :rb])
+  Zenoo::Input.define_action(:attack, keys: [:space, :j, :z], gamepad: [:x, :a, :rb])
   Zenoo::Input.define_action(:jump,   keys: [:k, :x, :left_shift, :right_shift], mouse: :right, gamepad: [:b, :lb])
 
   scene = DemoScene.new
