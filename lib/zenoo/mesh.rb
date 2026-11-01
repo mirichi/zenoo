@@ -406,8 +406,19 @@ module Zenoo
       @rows = nil
       @vertices = nil
       @base_vertices = nil
-      @indices = indices ? indices.map(&:to_i) : nil
-      @index_count = @indices ? @indices.length : 0
+      if indices.is_a?(String)
+        @indices = nil
+        @indices_bin = indices
+        @index_count = indices.bytesize / 4
+      elsif indices
+        @indices = indices.map(&:to_i)
+        @indices_bin = nil
+        @index_count = @indices.length
+      else
+        @indices = nil
+        @indices_bin = nil
+        @index_count = 0
+      end
       @managed = false
       @dirty = false
       @cursor = VertexCursor.new
@@ -747,6 +758,29 @@ module Zenoo
       self
     end
 
+    # 低レベル互換: パック済みバイナリまたは配列によるインデックスバッファ更新
+    def update_indices(indices_data, count: nil)
+      return self unless indices_data
+      if indices_data.is_a?(String)
+        bin = indices_data
+        cnt = count ? count.to_i : (bin.bytesize / 4)
+        @indices_bin = bin
+        @indices = nil
+      elsif indices_data.is_a?(Array)
+        cnt = count ? count.to_i : indices_data.length
+        bin = indices_data.pack("I*")
+        @indices = indices_data
+        @indices_bin = nil
+      else
+        return self
+      end
+      @index_count = cnt
+      if @native_mesh
+        @native_mesh.update_indices(bin, cnt)
+      end
+      self
+    end
+
     # 変形により Dirty になっている場合のみ VRAM の VBO を更新
     def sync_to_gpu_if_dirty!
       return unless @dirty && @managed && @vertices && @native_mesh
@@ -1013,7 +1047,7 @@ module Zenoo
     end
 
     def rebuild_raw_native_mesh
-      idx_bin = (@indices && !@indices.empty?) ? @indices.pack("I*") : ""
+      idx_bin = @indices_bin || ((@indices && !@indices.empty?) ? @indices.pack("I*") : "")
       topo = (@pipeline == Backend::Pipelines::SPRITE) ? Backend::Topology::TRIANGLES : @pipeline.topology
       lay  = (@pipeline == Backend::Pipelines::SPRITE) ? Backend::Layout::POS2_UV2_COLOR4 : @pipeline.layout
       @native_mesh = Native::Mesh.new(
