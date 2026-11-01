@@ -896,16 +896,28 @@ class IsoPlayer < Zenoo::Sprite
   end
 
   def load_animations
-    base_dir = File.join(__dir__, "../assets/sprites")
+    find_sprite = lambda do |file|
+      candidates = [
+        "assets/sprites/#{file}",
+        "/assets/sprites/#{file}",
+        "../assets/sprites/#{file}",
+        "../../assets/sprites/#{file}"
+      ]
+      candidates << File.expand_path("../assets/sprites/#{file}", __dir__) if defined?(__dir__) && __dir__
+      candidates.each do |p|
+        return p if File.exist?(p)
+      end
+      "assets/sprites/#{file}"
+    end
 
     { down: "player_walk_down_right_3frame_1x.png", up: "player_walk_up_right_3frame_1x.png" }.each do |dir, file|
-      t = Zenoo::Image.load_tiles(File.join(base_dir, file), 3, 1)
+      t = Zenoo::Image.load_tiles(find_sprite.call(file), 3, 1)
       add_animation(:"walk_#{dir}", [t[0], t[1], t[2], t[1]], wait: 6, loop: true)
       add_animation(:"idle_#{dir}", [t[1]], wait: 1, loop: false)
     end
 
     { down: "player_attack_down_right_1x.png", up: "player_attack_up_right_1x.png" }.each do |dir, file|
-      img = Zenoo::Image.load(File.join(base_dir, file))
+      img = Zenoo::Image.load(find_sprite.call(file))
       add_animation(:"attack_#{dir}", [img], wait: 30, loop: false, offset_x: 4, offset_y: 2)
     end
   end
