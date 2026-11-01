@@ -42,6 +42,10 @@ T_WATER      = 10 # 水場・アニメコマ0 (代表タイルID, solid: true)
 T_WATER_1    = 11 # 水場・アニメコマ1
 T_WATER_2    = 12 # 水場・アニメコマ2
 T_WATER_3    = 13 # 水場・アニメコマ3
+T_BUSH       = 14 # 背の高い草・アニメコマ0 (代表タイルID, solid: false, Yソート対象)
+T_BUSH_1     = 15 # 背の高い草・アニメコマ1
+T_BUSH_2     = 16 # 背の高い草・アニメコマ2
+T_BUSH_3     = 17 # 背の高い草・アニメコマ3
 
 # クォータービューの奥行きパースに合わせて縦移動を 80% に補正
 Y_RATIO = 0.8
@@ -53,10 +57,10 @@ EFFECT_Z         = 2000.0
 HP_BAR_Z         = 2100.0
 
 # ==============================================================================
-# タイルセット生成 (32x32 × 14種類 = 448x32) & マップ構築
+# タイルセット生成 (32x32 × 18種類 = 576x32) & マップ構築
 # ==============================================================================
 def create_dungeon_tileset
-  tileset = Zenoo::Image.new(TILE_SIZE * 14, TILE_SIZE)
+  tileset = Zenoo::Image.new(TILE_SIZE * 18, TILE_SIZE)
   Zenoo::Image.render_to(tileset) do
     Zenoo::Window.clear([0, 0, 0, 0])
 
@@ -168,6 +172,39 @@ def create_dungeon_tileset
       glint_y = f < 2 ? 11 + f * 8 : 23 - (f - 2) * 8
       Zenoo::Window.draw_circle(glint_x, glint_y, 1.8, color: [200, 248, 255, 240])
     end
+
+    # 14..17: 風に揺れる背の高い草タイル (4コマ: 根元は固定、葉先だけが左右にしなる背景透過タイル)
+    # Coma 0: 中央, Coma 1: 右へなびく, Coma 2: 中央戻り, Coma 3: 左へ少ししなる
+    sway_offsets = [0, 3, 1, -2]
+    dip_offsets  = [0, 1, 0, 1]
+    base_dark = [18, 52, 50, 255]
+    base_mid  = [28, 82, 74, 255]
+    tip_back  = [52, 145, 118, 255]
+    tip_front = [95, 220, 165, 255]
+    tip_glow  = [155, 250, 195, 255]
+
+    4.times do |f|
+      ox = (14 + f) * 32
+      sw = sway_offsets[f]
+      dp = dip_offsets[f]
+
+      # 根元の接地シャドウ (y = 29 付近に固定)
+      Zenoo::Window.draw_ellipse(ox + 16, 29, 12, 3, color: [10, 14, 18, 130])
+
+      # 奥側の葉 (3枚: 少し暗めのエメラルド、根元 y=29 から上へ伸びる)
+      Zenoo::Window.draw_triangle(ox + 7 + sw, 11 + dp, ox + 6,  29, ox + 12, 29, color: [tip_back, base_dark, base_dark])
+      Zenoo::Window.draw_triangle(ox + 16 + sw, 7 + dp, ox + 12, 29, ox + 19, 29, color: [tip_back, base_dark, base_dark])
+      Zenoo::Window.draw_triangle(ox + 25 + sw, 12 + dp, ox + 19, 29, ox + 26, 29, color: [tip_back, base_dark, base_dark])
+
+      # 手前側の鮮やかな葉 (4枚: 明るいミント〜ライムグラデーション、根元 y=30)
+      Zenoo::Window.draw_triangle(ox + 4 + (sw * 0.8).round, 15 + dp, ox + 5, 30, ox + 11, 30, color: [tip_front, base_mid, base_dark])
+      Zenoo::Window.draw_triangle(ox + 12 + sw, 8 + dp,  ox + 9,  30, ox + 16, 30, color: [tip_glow,  base_mid, base_dark])
+      Zenoo::Window.draw_triangle(ox + 20 + sw, 9 + dp,  ox + 15, 30, ox + 22, 30, color: [tip_front, base_mid, base_dark])
+      Zenoo::Window.draw_triangle(ox + 27 + (sw * 1.1).round, 14 + dp, ox + 20, 30, ox + 27, 30, color: [tip_glow,  base_mid, base_dark])
+
+      # 葉先で揺れる小さな蛍光胞子ドット
+      Zenoo::Window.draw_circle(ox + 12 + sw, 8 + dp, 1.5, color: [210, 255, 225, 240])
+    end
   end
   tileset.slice_tiles(tile_width: TILE_SIZE, tile_height: TILE_SIZE)
 end
@@ -177,12 +214,14 @@ def create_world_tilemap
   map = Zenoo::Tilemap.new(tiles)
 
   # 1マス障害物タイルの設定 (水場も solid: true で通行不可＆MTV壁ずり対応)
+  # ※ T_BUSH (背の高い草) は solid を設定しないため solid: false (すり抜け可能) になる
   map.set_tile(T_WALL,  solid: true)
   map.set_tile(T_CRATE, solid: true)
   map.set_tile(T_WATER, solid: true)
 
-  # ★ 水場タイルのアニメーション定義 (IBO インデックス書き換えによる高速4コマアニメ)
+  # ★ タイルアニメーション定義 (IBO インデックス書き換えによる高速4コマアニメ)
   map.define_animation(T_WATER, frames: [T_WATER, T_WATER_1, T_WATER_2, T_WATER_3], wait: 14)
+  map.define_animation(T_BUSH,  frames: [T_BUSH,  T_BUSH_1,  T_BUSH_2,  T_BUSH_3],  wait: 12)
 
   # ★ 縦連結オブジェクトの一括定義！
   # 上段パーツは自動的に根元(最下段)の行Meshへ帰属し、根元のみが solid: true になる
@@ -277,6 +316,35 @@ def create_world_tilemap
   ].each do |c, r, tid|
     objects[r][c] = tid
   end
+
+  # ★ 草原床の上に「風に揺れる背の高い草 (T_BUSH)」を群生配置
+  # objects レイヤー (y_sort: true) に置くことで、衝突判定なし (solid: false) のまま
+  # 「草の根元より奥に立つとキャラの足元が草に隠れ、手前に出ると草の前に出る」が自動成立！
+  place_bush_patch = lambda do |c_range, r_range|
+    r_range.each do |r|
+      c_range.each do |c|
+        if ground[r][c] == T_GRASS && objects[r][c].nil?
+          objects[r][c] = T_BUSH
+        end
+      end
+    end
+  end
+
+  # 池のほとりの水辺草むら (北西の池の南岸・南東の池の北岸)
+  place_bush_patch.call(10..13, 9..9)
+  place_bush_patch.call(26..29, 14..14)
+
+  # 北東・南西の内庭の草むら (中に入って足元隠れ＆Yソートをすぐ試せる位置)
+  place_bush_patch.call(26..28, 7..8)
+  place_bush_patch.call(11..13, 15..16)
+
+  # 西・東エリアの草原群生地
+  place_bush_patch.call(7..8,   6..7)
+  place_bush_patch.call(7..8,   16..17)
+  place_bush_patch.call(31..32, 6..7)
+  place_bush_patch.call(31..32, 16..17)
+  place_bush_patch.call(2..4,   7..9)
+  place_bush_patch.call(35..37, 14..16)
 
   map.add_layer(:ground,  ground,  z: GROUND_Z)
   map.add_layer(:objects, objects, z: 0.0, y_sort: true)
