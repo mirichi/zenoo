@@ -30,13 +30,13 @@ require_relative 'zenoo/canvas'
 require_relative 'zenoo/gui'
 require_relative 'zenoo/sound'
 require_relative 'zenoo/sound_effect'
+require_relative 'zenoo/easing'
+require_relative 'zenoo/tween'
 require_relative 'zenoo/collision'
 require_relative 'zenoo/sprite'
 require_relative 'zenoo/tilemap'
 require_relative 'zenoo/physics'
 require_relative 'zenoo/camera'
-require_relative 'zenoo/easing'
-require_relative 'zenoo/tween'
 require_relative 'zenoo/mesh'
 require_relative 'zenoo/skinned_mesh'
 require_relative 'zenoo/profiler'
@@ -63,6 +63,7 @@ Physics       = Zenoo::Physics
 Camera        = Zenoo::Camera
 Easing        = Zenoo::Easing
 Tween         = Zenoo::Tween
+Tweenable     = Zenoo::Tweenable
 Sprite        = Zenoo::Sprite
 Tilemap       = Zenoo::Tilemap
 PhysicsSprite = Zenoo::PhysicsSprite

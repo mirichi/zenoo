@@ -3,16 +3,19 @@
 require_relative '../lib/zenoo'
 
 # ==============================================================================
-# Zenoo Tween & Easing Animation デモ
+# Zenoo Tween & Tweenable Animation デモ
 # ==============================================================================
-# 1. 豊富なイージング関数 (Bounce, Elastic, Back, Quad, Linear 等)
-# 2. メソッドチェーン (.to, .delay, .call, .repeat, .yoyo)
-# 3. .call { ... } による時間軸イベント発火 (画像切替・SE・ステータス更新)
-# 4. インタラクティブなクリック追従 Tween & 一括制御 (stop/finish)
+# 1. Zenoo::Tweenable モジュールによる Sprite / カスタムクラス単位での Tween 管理
+# 2. オブジェクトの #update に同期したライフサイクル安全なアニメーション
+# 3. 豊富なイージング関数 (Bounce, Elastic, Back, Quad, Linear 等)
+# 4. メソッドチェーン (.to, .delay, .call, .repeat, .yoyo)
+# 5. インタラクティブなクリック追従 Tween & 個別制御 (kill_tweens / pause / resume)
 # ==============================================================================
 
-# アニメーション対象のボックス
+# 1. カスタムクラスに Tweenable を組み込んだボックス
 class AnimatedBox
+  include Tweenable
+
   attr_reader :x, :y, :box_size, :color, :alpha, :label
 
   def initialize(x, y, label, color)
@@ -30,9 +33,13 @@ class AnimatedBox
   def color=(v); @color = v; end
   def alpha=(v); @alpha = v.to_f; end
   def label=(v); @label = v.to_s; end
+
+  def update
+    update_tweens
+  end
 end
 
-# 1. イージング比較データ
+# イージング比較データ
 EASINGS = [
   [:linear,        "Linear",      [100, 200, 255, 255]],
   [:quad_out,      "Quad Out",    [120, 240, 150, 255]],
@@ -43,31 +50,6 @@ EASINGS = [
   [[:step, 5],     "Step (5)",    [0, 220, 220, 255]]
 ]
 
-# 2. チェーン＆.call の実演キャラクター
-class Hero
-  attr_reader :x, :y, :scale, :angle, :color, :status_text
-
-  def initialize
-    @x = 880.0
-    @y = 260.0
-    @scale = 1.0
-    @angle = 0.0
-    @color = [255, 215, 0, 255]
-    @status_text = "Idle"
-  end
-
-  def x=(v); @x = v.to_f; end
-  def y=(v); @y = v.to_f; end
-  def scale=(v); @scale = v.to_f; end
-  def angle=(v); @angle = v.to_f; end
-  def color=(v); @color = v; end
-  def status_text=(v); @status_text = v.to_s; end
-end
-
-# 状態変数
-boxes = []
-hero = Hero.new
-
 # ----------------------------------------------------
 # 初期化 (Window.loop 前にテクスチャ・サウンドを生成)
 # ----------------------------------------------------
@@ -76,7 +58,7 @@ sfx_jump = SoundEffect.sweep(300, 800, 0.15, type: :square, volume: 0.15)
 sfx_land = SoundEffect.tone(150, 0.1, type: :triangle, volume: 0.2)
 sfx_spin = SoundEffect.sweep(600, 1200, 0.2, type: :sine, volume: 0.15)
 
-# 回転確認用スプライトの生成 (FBOベイク: 上向きポインタ付きで回転が一目でわかるデザイン)
+# 回転確認用スプライト画像の生成 (FBOベイク: 上向きポインタ付き)
 hero_img = Zenoo::Image.new(64, 64)
 Zenoo::Image.render_to(hero_img) do
   Zenoo::Window.clear([0, 0, 0, 0])
@@ -89,39 +71,63 @@ Zenoo::Image.render_to(hero_img) do
   Zenoo::Window.draw_triangle(32.0, 0.0, 22.0, 12.0, 42.0, 12.0, color: [255, 60, 80, 255])
 end
 
-# イージング比較ボックスの生成と Tween 開始
+# 2. Sprite を継承し、Tweenable を明示的に include したキャラクター
+class Hero < Zenoo::Sprite
+  include Tweenable
+
+  attr_accessor :status_text
+
+  def initialize(img)
+    super(880.0, 260.0, img)
+    self.anchor = :center
+    self.pivot = :center
+    @status_text = "Idle"
+  end
+
+  def update
+    super
+    update_tweens
+  end
+end
+
+# 状態変数
+boxes = []
+hero = Hero.new(hero_img)
+
+# イージング比較ボックスの生成と Tween 開始 (各オブジェクトの .tween で登録)
 EASINGS.each_with_index do |item, idx|
   ease = item[0]
   label = item[1]
   col = item[2]
   b = AnimatedBox.new(220.0, 140.0 + idx * 60.0, label, col)
-  Tween.to(b, 1.5, x: 600.0, ease: ease).yoyo
+  b.tween.to(1.5, x: 600.0, ease: ease).yoyo
   boxes << b
 end
 
-# クリック追従ターゲット
+# クリック追従ターゲット (AnimatedBox)
 click_target = AnimatedBox.new(880.0, 530.0, "Target", [255, 80, 120, 255])
 click_target.box_size = 32.0
 
-# ヒーローコンボ関数
+# ヒーローコンボ関数 (hero.tween を使ったチェーン呼び出し)
 start_hero_combo = proc do
-  Tween.kill(hero)
+  hero.kill_tweens
   hero.x = 880.0
   hero.y = 260.0
   hero.scale = 1.0
   hero.angle = 0.0
   hero.status_text = "Ready"
 
-  Tween.to(hero, 0.4, y: 160.0, ease: :quad_out)
-       .call { sfx_jump.play }
-       .call { |t| hero.status_text = "Jumping!" }
-       .to(0.3, y: 260.0, ease: :bounce_out)
-       .call { sfx_land.play; hero.status_text = "Landed!"; hero.scale = 1.35 }
-       .to(0.2, scale: 1.0, ease: :quad_out)
-       .delay(0.2)
-       .call { sfx_spin.play; hero.status_text = "Spin Attack!" }
-       .to(0.6, angle: 720.0, ease: :cubic_in_out)
-       .call { hero.angle = 0.0; hero.status_text = "Done! Click button to replay" }
+  hero.tween
+      .to(0.4, y: 160.0, ease: :quad_out)
+      .call { sfx_jump.play }
+      .call { |t| hero.status_text = "Jumping!" }
+      .to(0.3, y: 260.0, ease: :bounce_out)
+      .call { sfx_land.play; hero.status_text = "Landed!"; hero.scale = 1.35 }
+      .to(0.2, scale: 1.0, ease: :quad_out)
+      .delay(0.2)
+      .call { sfx_spin.play; hero.status_text = "Spin Attack!" }
+      .to(0.6, angle: 720.0, ease: :cubic_in_out)
+      .call { hero.angle = 0.0; hero.status_text = "Done! Click button to replay" }
 end
 
 # 初回コンボ開始
@@ -130,24 +136,32 @@ start_hero_combo.call
 # ------------------------------------------------------------------------------
 # メインループ
 # ------------------------------------------------------------------------------
-Window.loop(1280, 720, "Zenoo - Tween & Easing Animation Demo") do
+Window.loop(1280, 720, "Zenoo - Tween & Tweenable Animation Demo") do
 
   t = Window.time
   mx, my = Input.mouse_pos
+
+  # 各オブジェクトの更新 (Sprite#update / AnimatedBox#update 内で update_tweens が呼ばれます)
+  boxes.each(&:update)
+  hero.update
+  click_target.update
 
   # 画面クリア
   Window.clear([18, 22, 32, 255])
 
   # ヘッダー情報
-  Window.draw_text(40, 25, "Zenoo Tween & Easing Engine", size: 26, color: :white)
-  Window.draw_text(40, 58, "Fluid method chaining: .to(...).delay(...).call { ... }.yoyo", size: 15, color: [160, 175, 200, 255])
-  Window.draw_text(1000, 25, "Active Tweens: #{Tween.count}", size: 16, color: :cyan)
+  local_count = hero.tween_count + click_target.tween_count
+  boxes.each { |b| local_count += b.tween_count }
+
+  Window.draw_text(40, 25, "Zenoo Tween & Tweenable Engine", size: 26, color: :white)
+  Window.draw_text(40, 58, "Sprite-scoped tweens: sprite.tween.to(...).delay(...).call { ... }.yoyo", size: 15, color: [160, 175, 200, 255])
+  Window.draw_text(920, 25, "Local Tweens: #{local_count} (Global: #{Tween.count})", size: 16, color: :cyan)
 
   # ----------------------------------------------------
   # 左カラム: 各種イージング比較 (yoyo ループ)
   # ----------------------------------------------------
   Window.draw_rect(30, 95, 660, 580, radius: 12, color: [26, 32, 48, 200], border_width: 1, border_color: [60, 75, 110, 255])
-  Window.draw_text(50, 110, "Easing Comparison (.yoyo loop)", size: 18, color: [220, 230, 255, 255])
+  Window.draw_text(50, 110, "Easing Comparison (.yoyo loop on AnimatedBox)", size: 18, color: [220, 230, 255, 255])
 
   boxes.each do |b|
     # ガイドライン
@@ -162,11 +176,11 @@ Window.loop(1280, 720, "Zenoo - Tween & Easing Animation Demo") do
   # 右上カラム: シーケンスチェーンと .call の実演
   # ----------------------------------------------------
   Window.draw_rect(710, 95, 540, 310, radius: 12, color: [26, 32, 48, 200], border_width: 1, border_color: [60, 75, 110, 255])
-  Window.draw_text(730, 110, "Sequence Chaining with .call { ... }", size: 18, color: [220, 230, 255, 255])
+  Window.draw_text(730, 110, "Sprite Chaining with .call { ... }", size: 18, color: [220, 230, 255, 255])
   Window.draw_text(730, 138, "Status: #{hero.status_text}", size: 16, color: :yellow)
 
-  # キャラクターの描画 (GPU Instanced 回転・拡縮スプライト)
-  Window.draw(hero.x, hero.y, hero_img, angle: hero.angle, scale: hero.scale, anchor: :center, pivot: :center) if hero_img
+  # キャラクターの描画 (Sprite#draw による描画)
+  hero.draw
 
   # アクション再開ボタン
   btn_x = 730
@@ -187,17 +201,17 @@ Window.loop(1280, 720, "Zenoo - Tween & Easing Animation Demo") do
   # 右下カラム: クリック追従 Tween (スムーズ補間)
   # ----------------------------------------------------
   Window.draw_rect(710, 425, 540, 250, radius: 12, color: [26, 32, 48, 200], border_width: 1, border_color: [60, 75, 110, 255])
-  Window.draw_text(730, 440, "Interactive Click to Tween", size: 18, color: [220, 230, 255, 255])
+  Window.draw_text(730, 440, "Interactive Click to Tween (click_target.tween)", size: 18, color: [220, 230, 255, 255])
   Window.draw_text(730, 468, "Click inside this panel to move target with :back_out", size: 14, color: [160, 175, 200, 255])
 
   # マウス入力チェック
   if Input.mouse_pressed?(:left) && click_target
     if mx >= 720 && mx <= 1240 && my >= 490 && my <= 660
       # 前のTweenを上書きして目標地点へスムーズに移動 (x, y を同時に Tween)
-      Tween.kill(click_target)
+      click_target.kill_tweens
       target_x = mx - click_target.box_size / 2.0
       target_y = my - click_target.box_size / 2.0
-      Tween.to(click_target, 0.6, x: target_x, y: target_y, ease: :back_out)
+      click_target.tween.to(0.6, x: target_x, y: target_y, ease: :back_out)
     end
   end
 
