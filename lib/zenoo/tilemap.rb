@@ -1103,6 +1103,44 @@ module Zenoo
       coords ? height_cell(coords[0], coords[1]) : 0.0
     end
 
+    # スプライトの足元が乗っている床面の最高標高を取得
+    # スプライトの現在高度以下の床面の中で最大の標高を返します (浮遊中・段差から外れた瞬間の落下開始判定)
+    #
+    # @param sprite [Sprite] 判定対象のスプライト
+    # @param altitude [Float] スプライトの現在の絶対高度 (デフォルト 0.0)
+    # @param offset_y [Float] 見た目の描画段差オフセット (例: -PLATEAU_HEIGHT で足元と床描画範囲を一致させる)
+    # @param probe_rx [Float] 左右の接地判定半径 (px)
+    # @param probe_ry [Float] 上下の接地判定半径 (px)
+    # @param step_tolerance [Float] 乗り越え許容高度差 (デフォルト 2.0px)
+    # @return [Float] 支持されている床面の標高
+    def support_height(sprite, altitude: 0.0, offset_y: 0.0, probe_rx: 6.0, probe_ry: 4.0, step_tolerance: 2.0)
+      return 0.0 if sprite.nil?
+      col = sprite.respond_to?(:collider) ? sprite.collider : nil
+      return height_at(sprite.x, sprite.y + offset_y) unless col
+
+      cx = col.center_x
+      cy = col.center_y + offset_y
+      max_limit = altitude.to_f + step_tolerance.to_f
+      max_h = 0.0
+
+      # 中心と四方の 5 点接地判定
+      points = [
+        [cx, cy],
+        [cx - probe_rx, cy],
+        [cx + probe_rx, cy],
+        [cx, cy - probe_ry],
+        [cx, cy + probe_ry]
+      ]
+      i = 0
+      while i < 5
+        pt = points[i]
+        h = height_at(pt[0], pt[1])
+        max_h = h if h <= max_limit && h > max_h
+        i += 1
+      end
+      max_h
+    end
+
     # Sprite または Collision::Shape がマップの障害物タイルと接触しているか判定
     def collide?(target)
       return false unless target
@@ -1150,7 +1188,12 @@ module Zenoo
     # 走査順のバイアスによりブロックの角やタイルの継ぎ目にキャラが引っかかります。
     # コライダー中心から最も近い壁タイルから順に MTV (最小移動ベクトル) を適用することで、
     # 斜め移動時でも壁面に沿ってスムーズに滑る挙動になります。
-    def resolve_collision(sprite, target_root: true)
+    #
+    # @param sprite [Sprite] 押し出し対象のスプライト
+    # @param target_root [Boolean] true の場合、ルートスプライトの位置を補正
+    # @param altitude [Float, nil] スプライトの絶対高度。指定時、自分の高度より高い段差タイルも壁として衝突
+    # @param step_tolerance [Float] 乗り越え許容高度差 (デフォルト 2.0px)
+    def resolve_collision(sprite, target_root: true, altitude: nil, step_tolerance: 2.0)
       return false if sprite.nil? || (sprite.respond_to?(:vanished?) && sprite.vanished?)
       col_shape = sprite.collider
       return false unless col_shape
@@ -1163,13 +1206,19 @@ module Zenoo
       cy = col_shape.center_y
       br = col_shape.bounding_radius
 
+      # 高度判定有効時は、段差タイルが描画上 -Y に持ち上がっている分 (+max_h) だけ探索範囲を広げる
+      check_elevation = !altitude.nil?
+      cur_alt = altitude.to_f
+      step_tol = step_tolerance.to_f
+      elev_expand = check_elevation ? 32.0 : 0.0
+
       min_c = [((cx - br - @x) / tw).floor, 0].max
       max_c = [((cx + br - @x) / tw).floor, @cols - 1].min
-      min_r = [((cy - br - @y) / th).floor, 0].max
+      min_r = [((cy - elev_expand - br - @y) / th).floor, 0].max
       max_r = [((cy + br - @y) / th).floor, @rows - 1].min
       return false if min_c > max_c || min_r > max_r
 
-      # 周囲の接触可能タイルをフラット配列 [c, r, dist_sq, ...] に収集し、
+      # 周囲の接触可能タイルをフラット配列 [wx, wy, dist_sq, ...] に収集し、
       # 距離の昇順 (近い順) で挿入ソート
       buf = @candidate_buffer
       buf.clear
@@ -1177,9 +1226,16 @@ module Zenoo
       while r <= max_r
         c = min_c
         while c <= max_c
-          if solid_cell?(c, r)
-            dx = (@x + (c + 0.5) * tw) - cx
-            dy = (@y + (r + 0.5) * th) - cy
+          is_solid = solid_cell?(c, r)
+          th_elev  = check_elevation ? height_cell(c, r) : 0.0
+          is_elev_wall = check_elevation && th_elev > (cur_alt + step_tol)
+
+          if is_solid || is_elev_wall
+            # 段差タイルの接地当たり判定は、見た目の上面描画位置から +th_elev (下) にずらす
+            wx = @x + c * tw
+            wy = @y + r * th + (is_solid ? 0.0 : th_elev)
+            dx = (wx + 0.5 * tw) - cx
+            dy = (wy + 0.5 * th) - cy
             d2 = dx * dx + dy * dy
 
             # 3要素単位で距離の昇順に挿入
@@ -1187,7 +1243,7 @@ module Zenoo
             while pos >= 3 && buf[pos - 1] > d2
               pos -= 3
             end
-            buf.insert(pos, c, r, d2)
+            buf.insert(pos, wx, wy, d2)
           end
           c += 1
         end
@@ -1205,10 +1261,8 @@ module Zenoo
         i = 0
         len = buf.size
         while i < len
-          c = buf[i]
-          r = buf[i + 1]
-          wall.x = @x + c * tw
-          wall.y = @y + r * th
+          wall.x = buf[i]
+          wall.y = buf[i + 1]
           wall.update_cache
           if sprite.push_out_of(wall, target_root: target_root)
             hit_in_pass = true

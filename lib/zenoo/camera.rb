@@ -13,8 +13,10 @@ module Zenoo
     attr_reader :offset_x, :offset_y
     attr_accessor :smooth_speed
     attr_reader :shake_x, :shake_y, :shake_intensity
+    attr_reader :bounds
+    attr_accessor :target_offset_x, :target_offset_y
 
-    def initialize(x: 0.0, y: 0.0, zoom: 1.0, offset_x: nil, offset_y: nil, target: nil, smooth_speed: 0.0)
+    def initialize(x: 0.0, y: 0.0, zoom: 1.0, offset_x: nil, offset_y: nil, target: nil, smooth_speed: 0.0, bounds: nil, target_offset_x: 0.0, target_offset_y: 0.0)
       @x = x.to_f
       @y = y.to_f
       @zoom = zoom.to_f
@@ -22,6 +24,9 @@ module Zenoo
       @offset_y = offset_y ? offset_y.to_f : nil
       @target = target
       @smooth_speed = smooth_speed.to_f # 0.0 で即時追従、>0 で補間追従 (Lerp)
+      @bounds = bounds ? bounds.map(&:to_f) : nil # [min_x, min_y, max_x, max_y]
+      @target_offset_x = target_offset_x.to_f
+      @target_offset_y = target_offset_y.to_f
 
       # 画面シェイク
       @shake_intensity = 0.0
@@ -61,6 +66,12 @@ module Zenoo
       @view = nil
     end
 
+    def bounds=(b)
+      @bounds = b ? b.map(&:to_f) : nil
+      clamp_to_bounds!
+      @view = nil
+    end
+
     # 注視対象 (x, y メソッドを持つオブジェクト、または [x, y] 配列)
     def target
       @target
@@ -96,14 +107,17 @@ module Zenoo
         if @smooth_speed > 0.0
           # 滑らかな補間 (Lerp)
           rate = [dt * @smooth_speed * 10.0, 1.0].min
-          @x += (tx - @x) * rate
-          @y += (ty - @y) * rate
+          @x += (tx + @target_offset_x - @x) * rate
+          @y += (ty + @target_offset_y - @y) * rate
         else
           # 即時追従
-          @x = tx
-          @y = ty
+          @x = tx + @target_offset_x
+          @y = ty + @target_offset_y
         end
+        clamp_to_bounds!
         @view = nil
+      elsif @bounds
+        clamp_to_bounds!
       end
 
       # 2. 画面シェイクの計算
@@ -172,15 +186,6 @@ module Zenoo
       ]
     end
 
-    # 描画用トータルオフセット
-    def calc_offset_x
-      view[1]
-    end
-
-    def calc_offset_y
-      view[2]
-    end
-
     # 画面座標 -> ワールド座標への逆変換 (マウス入力やクリック判定用)
     def screen_to_world(sx, sy)
       z, ox, oy = view
@@ -204,6 +209,22 @@ module Zenoo
       x1, x2 = x2, x1 if x1 > x2
       y1, y2 = y2, y1 if y1 > y2
       [x1, y1, x2, y2]
+    end
+
+    private
+
+    def clamp_to_bounds!
+      return unless @bounds
+      min_x, min_y, max_x, max_y = @bounds
+      z = @zoom > 0.0 ? @zoom : 1.0
+      half_w = screen_center_x / z
+      half_h = screen_center_y / z
+      low_x  = min_x + half_w
+      high_x = max_x - half_w
+      low_y  = min_y + half_h
+      high_y = max_y - half_h
+      @x = low_x <= high_x ? @x.clamp(low_x, high_x) : (min_x + max_x) * 0.5
+      @y = low_y <= high_y ? @y.clamp(low_y, high_y) : (min_y + max_y) * 0.5
     end
   end
 end
