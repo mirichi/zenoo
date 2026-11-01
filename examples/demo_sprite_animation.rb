@@ -36,8 +36,12 @@ T_CRATE      = 4 # 木箱 (1マス障害物)
 T_PILLAR_TOP = 5 # 3段石柱・上段 (root_offset: 2)
 T_PILLAR_MID = 6 # 3段石柱・中段 (root_offset: 1)
 T_PILLAR_BOT = 7 # 3段石柱・下段 (root_offset: 0, solid: true)
-T_STELE_TOP  = 8 # 2段蒼石碑・上段 (root_offset: 1)
-T_STELE_BOT  = 9 # 2段蒼石碑・下段 (root_offset: 0, solid: true)
+T_STELE_TOP  = 8  # 2段蒼石碑・上段 (root_offset: 1)
+T_STELE_BOT  = 9  # 2段蒼石碑・下段 (root_offset: 0, solid: true)
+T_WATER      = 10 # 水場・アニメコマ0 (代表タイルID, solid: true)
+T_WATER_1    = 11 # 水場・アニメコマ1
+T_WATER_2    = 12 # 水場・アニメコマ2
+T_WATER_3    = 13 # 水場・アニメコマ3
 
 # クォータービューの奥行きパースに合わせて縦移動を 80% に補正
 Y_RATIO = 0.8
@@ -49,10 +53,10 @@ EFFECT_Z         = 2000.0
 HP_BAR_Z         = 2100.0
 
 # ==============================================================================
-# タイルセット生成 (32x32 × 10種類 = 320x32) & マップ構築
+# タイルセット生成 (32x32 × 14種類 = 448x32) & マップ構築
 # ==============================================================================
 def create_dungeon_tileset
-  tileset = Zenoo::Image.new(TILE_SIZE * 10, TILE_SIZE)
+  tileset = Zenoo::Image.new(TILE_SIZE * 14, TILE_SIZE)
   Zenoo::Image.render_to(tileset) do
     Zenoo::Window.clear([0, 0, 0, 0])
 
@@ -135,6 +139,35 @@ def create_dungeon_tileset
     Zenoo::Window.draw_rect(ox + 5, 0, 22, 18, color: [40, 95, 145, 255])
     Zenoo::Window.draw_line(ox + 16, 0, ox + 16, 16, width: 2, color: [160, 235, 255, 200])
     Zenoo::Window.draw_rect(ox + 2, 16, 28, 12, radius: 3, color: [78, 88, 110, 255], border_width: 1, border_color: [115, 128, 155, 255])
+
+    # 10..13: 水場アニメーションタイル (4コマ: 波紋の揺らぎと水面ハイライトの推移)
+    4.times do |f|
+      ox = (10 + f) * 32
+      phase = f * (Math::PI / 2.0)
+      shift_x = (Math.sin(phase) * 3.0).round
+      shift_y = (Math.cos(phase) * 1.5).round
+
+      # 深い水底ベースと微かな陰影枠
+      Zenoo::Window.draw_rect(ox, 0, 32, 32, color: [18, 52, 86, 255])
+      Zenoo::Window.draw_rect(ox + 1, 1, 30, 30, radius: 3, color: [24, 68, 110, 255])
+
+      # 水中を漂う柔らかい明暗の楕円
+      Zenoo::Window.draw_ellipse(ox + 11 + shift_x, 10 + shift_y, 8, 4, color: [34, 92, 145, 190])
+      Zenoo::Window.draw_ellipse(ox + 21 - shift_x, 22 - shift_y, 9, 4, color: [30, 82, 132, 190])
+
+      # 3本の波紋ライン (コマごとに左右・上下へ滑らかに位相シフト)
+      w1_x = ox + 5 + ((f * 4) % 10)
+      w2_x = ox + 13 - ((f * 3) % 8)
+      w3_x = ox + 7 + (((f + 2) * 4) % 10)
+      Zenoo::Window.draw_line(w1_x, 7 + shift_y, w1_x + 11, 7 + shift_y, width: 2.0, cap: :round, color: [75, 175, 235, 220])
+      Zenoo::Window.draw_line(w2_x, 16 - shift_y, w2_x + 12, 16 - shift_y, width: 2.0, cap: :round, color: [95, 195, 250, 230])
+      Zenoo::Window.draw_line(w3_x, 25 + shift_y, w3_x + 10, 25 + shift_y, width: 2.0, cap: :round, color: [65, 160, 225, 210])
+
+      # 水面のきらめき (白〜シアンのハイライト粒)
+      glint_x = ox + (f.even? ? 10 + f * 3 : 22 - f * 2)
+      glint_y = f < 2 ? 11 + f * 8 : 23 - (f - 2) * 8
+      Zenoo::Window.draw_circle(glint_x, glint_y, 1.8, color: [200, 248, 255, 240])
+    end
   end
   tileset.slice_tiles(tile_width: TILE_SIZE, tile_height: TILE_SIZE)
 end
@@ -143,9 +176,13 @@ def create_world_tilemap
   tiles = create_dungeon_tileset
   map = Zenoo::Tilemap.new(tiles)
 
-  # 1マス障害物タイルの設定
+  # 1マス障害物タイルの設定 (水場も solid: true で通行不可＆MTV壁ずり対応)
   map.set_tile(T_WALL,  solid: true)
   map.set_tile(T_CRATE, solid: true)
+  map.set_tile(T_WATER, solid: true)
+
+  # ★ 水場タイルのアニメーション定義 (IBO インデックス書き換えによる高速4コマアニメ)
+  map.define_animation(T_WATER, frames: [T_WATER, T_WATER_1, T_WATER_2, T_WATER_3], wait: 14)
 
   # ★ 縦連結オブジェクトの一括定義！
   # 上段パーツは自動的に根元(最下段)の行Meshへ帰属し、根元のみが solid: true になる
@@ -166,6 +203,19 @@ def create_world_tilemap
       end
     end
   end
+
+  # 北西・南東の2箇所に大きめの水場 (5x4マス = 160x128px の池) を配置
+  water_flipped = Zenoo::Tilemap.tile(T_WATER, flip_h: true)
+  place_pond = lambda do |c_range, r_range|
+    r_range.each do |r|
+      c_range.each do |c|
+        ground[r][c] = (r + c).odd? ? water_flipped : T_WATER
+      end
+    end
+  end
+
+  place_pond.call(10..14, 5..8)   # 北西の池 (5x4マス)
+  place_pond.call(25..29, 15..18) # 南東の池 (5x4マス)
 
   # 2. 立体オブジェクト・障害物レイヤー (40x24, 行単位 Yソート有効)
   objects = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
@@ -215,19 +265,14 @@ def create_world_tilemap
 
   # 迷路状の石壁ブロックと木箱 (壁ずり移動のテストにも最適)
   [
-    # 北西エリアのL字壁
-    [11, 4, T_WALL], [12, 4, T_WALL], [13, 4, T_WALL], [13, 5, T_WALL],
-    [14, 5, T_CRATE],
-    # 北東エリアのL字壁
+    # 北東エリアのL字壁と木箱
     [26, 4, T_WALL], [27, 4, T_WALL], [28, 4, T_WALL], [26, 5, T_WALL],
     [25, 5, T_CRATE],
     # 南西エリアの遮蔽壁と木箱群
     [11, 18, T_WALL], [12, 18, T_WALL], [13, 18, T_WALL],
     [11, 19, T_CRATE], [12, 19, T_CRATE],
+    # 西・東エリアの木箱群
     [4, 11, T_CRATE], [4, 12, T_CRATE], [5, 12, T_CRATE],
-    # 南東エリアの遮蔽壁と木箱群
-    [26, 18, T_WALL], [27, 18, T_WALL], [28, 18, T_WALL],
-    [27, 19, T_CRATE], [28, 19, T_CRATE],
     [35, 11, T_CRATE], [35, 12, T_CRATE], [34, 11, T_CRATE]
   ].each do |c, r, tid|
     objects[r][c] = tid
@@ -721,17 +766,17 @@ PANEL_BORDER = [60, 80, 110, 200].freeze
 TITLE_COLOR  = [0, 220, 255, 255].freeze
 
 GUIDE_LINES = [
-  ["マップ : 1280x768 (40x24タイル・2画面分) / 行単位Mesh & Zソート", [160, 220, 255, 255]],
+  ["マップ : 1280x768 (40x24) / 行単位Mesh & Zソート & 水場IBOアニメ", [160, 220, 255, 255]],
   ["立体柱 : 3段石柱・2段石碑は根元Zで統合 (裏へ回り込み＆手前重なり両立)", [255, 200, 80, 255]],
-  ["敵機   : Mesh.canvas による潰れスライム (壁・柱との衝突＆バウンド)", [100, 255, 180, 255]],
+  ["敵機   : Mesh.canvas による潰れスライム (壁・柱・池との衝突＆バウンド)", [100, 255, 180, 255]],
   ["移動   : [W][A][S][D] / 矢印キー / パッド (MTV 壁ずり移動)", [220, 225, 235, 255]],
   ["攻撃   : [SPACE] / [J] / 左クリック / パッド [X][A] (踏み込み)", [255, 120, 100, 255]],
   ["表示   : [H] キーで操作ガイド・モニターの表示切替", [200, 200, 220, 255]]
 ].freeze
 
 SPAWN_POINTS = [
-  [360.0,  220.0], [920.0,  220.0],
-  [360.0,  540.0], [920.0,  540.0],
+  [240.0,  220.0], [920.0,  220.0],
+  [360.0,  540.0], [1040.0, 540.0],
   [640.0,  210.0], [640.0,  560.0],
   [240.0,  380.0], [1040.0, 380.0]
 ].freeze
@@ -825,6 +870,7 @@ if __FILE__ == $0
     show_ui = !show_ui if Zenoo::Input.key_push?(:h)
 
     # 更新
+    tilemap.update
     player.update
     enemies.each { |e| e.update(player.x, player.y, tilemap) }
     Zenoo::Sprite.clean(enemies)
