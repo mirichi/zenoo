@@ -726,6 +726,8 @@ class IsoPlayer < Zenoo::Sprite
   end
 
   def start_attack(dir_x = nil, dir_y = nil)
+    return if @attacking
+
     @attacking = true
     @attack_timer = 0
     @hit_targets = {}
@@ -1013,7 +1015,7 @@ class DemoScene < Zenoo::Scene
     if Zenoo::Input.mouse_push?(:left)
       if is_over_jump
         @player.trigger_jump
-      else
+      elsif !@player.attacking
         wx, wy = @camera.screen_to_world(mx / 2.0, my / 2.0)
         pdx = wx - @player.x
         pdy = (wy - (@player.y - 16.0)) / Y_RATIO
