@@ -146,7 +146,7 @@ module Zenoo
     # 通常は Tilemap#add_layer または Tilemap.from_array 経由で生成されます。
     class Layer
       attr_reader   :name, :tilemap, :rows, :cols
-      attr_accessor :z, :y_sort, :z_offset, :solid, :visible, :alpha, :color, :blend
+      attr_accessor :z, :y_sort, :z_offset, :solid, :height, :visible, :alpha, :color, :blend
 
       # @param tilemap [Tilemap] 親の Tilemap インスタンス
       # @param name [Symbol] レイヤー名 (:ground, :walls など)
@@ -155,6 +155,7 @@ module Zenoo
       # @param y_sort [Boolean] true の場合、各行の足元Y座標を自動的に Z値として描画
       # @param z_offset [Float] Yソート時の微調整オフセット (キャラより少し手前/奥にする場合など)
       # @param solid [Boolean] true の場合、このレイヤーの全タイルを通行不可 (壁) として扱う
+      # @param height [Float, nil] このレイヤーの基準高さ
       # @param visible [Boolean] 表示 / 非表示
       # @param alpha [Integer] 不透明度 (0..255)
       # @param color [Symbol, Array] 乗算カラー
@@ -164,6 +165,7 @@ module Zenoo
                      y_sort: false,
                      z_offset: 0.0,
                      solid: false,
+                     height: nil,
                      visible: true,
                      alpha: 255,
                      color: :white,
@@ -175,6 +177,7 @@ module Zenoo
         @y_sort = !!y_sort
         @z_offset = z_offset.to_f
         @solid = !!solid
+        @height = height ? height.to_f : nil
         @visible = visible.nil? ? true : !!visible
         @alpha = alpha
         @color = color
@@ -592,13 +595,14 @@ module Zenoo
       end
 
       # タイル画像とビットフラグ (FLIP_H / FLIP_V / ROT) から 4隅の UV を計算
+      # (32bit float 化やスクロール時の端数補間で隣接タイルのピクセルを拾うのを防ぐため微小量内側へオフセット)
       def calc_tile_uvs(img, raw)
         tex_w = img.texture_width.to_f
         tex_h = img.texture_height.to_f
-        u0 = tex_w > 0.0 ? (img.x.to_f / tex_w) : 0.0
-        v0 = tex_h > 0.0 ? (img.y.to_f / tex_h) : 0.0
-        u1 = tex_w > 0.0 ? ((img.x + img.width).to_f / tex_w) : 1.0
-        v1 = tex_h > 0.0 ? ((img.y + img.height).to_f / tex_h) : 1.0
+        u0 = tex_w > 0.0 ? ((img.x.to_f + 0.01) / tex_w) : 0.0
+        v0 = tex_h > 0.0 ? ((img.y.to_f + 0.01) / tex_h) : 0.0
+        u1 = tex_w > 0.0 ? (((img.x + img.width).to_f - 0.01) / tex_w) : 1.0
+        v1 = tex_h > 0.0 ? (((img.y + img.height).to_f - 0.01) / tex_h) : 1.0
 
         # 水平反転 (U 座標を左右逆転)
         if (raw & FLIP_H) != 0
@@ -824,6 +828,7 @@ module Zenoo
 
       @tile_root_offsets = [] # タイルIDごとの根元オフセットテーブル (@tile_root_offsets[tile_id] = 行数)
       @tile_solids = []       # タイルIDごとの通行不可フラグテーブル (@tile_solids[tile_id] = true/false)
+      @tile_heights = []      # タイルIDごとの高さ(標高)テーブル (@tile_heights[tile_id] = Float)
       @max_root_offset = 0    # マップ全体で最大の根元オフセット
 
       @layers = []
@@ -845,11 +850,12 @@ module Zenoo
       invalidate_all_layers!
     end
 
-    # タイル番号に対する属性 (根元オフセット・通行不可フラグ) を設定
+    # タイル番号に対する属性 (根元オフセット・通行不可フラグ・高さ) を設定
     # @param tile_id [Integer] タイルID
     # @param root_offset [Integer, nil] このタイルが何行下のマスに帰属するか (根元までの行数)
     # @param solid [Boolean, nil] 通行不可 (壁) かどうか
-    def set_tile(tile_id, root_offset: nil, solid: nil)
+    # @param height [Float, nil] このタイルの高さ
+    def set_tile(tile_id, root_offset: nil, solid: nil, height: nil)
       return self if tile_id.nil? || tile_id < 0
       tid = tile_id.to_i
       if root_offset
@@ -861,6 +867,9 @@ module Zenoo
       end
       unless solid.nil?
         @tile_solids[tid] = !!solid
+      end
+      unless height.nil?
+        @tile_heights[tid] = height.to_f
       end
       self
     end
@@ -910,11 +919,13 @@ module Zenoo
     # @param z [Float] 基準深度 Z
     # @param y_sort [Boolean] true の場合、各行の足元Y座標で自動 Yソート描画
     # @param solid [Boolean] true の場合、このレイヤー全体を通行不可として扱う
+    # @param height [Float, nil] このレイヤーの基準高さ
     def add_layer(name, data = nil,
                   z: 0.0,
                   y_sort: false,
                   z_offset: 0.0,
                   solid: false,
+                  height: nil,
                   visible: true,
                   alpha: 255,
                   color: :white,
@@ -932,7 +943,8 @@ module Zenoo
       layer_obj = Layer.new(
         self, sym, grid,
         z: z, y_sort: y_sort, z_offset: z_offset,
-        solid: solid, visible: visible,
+        solid: solid, height: height,
+        visible: visible,
         alpha: alpha, color: color, blend: blend
       )
 
@@ -1062,6 +1074,33 @@ module Zenoo
     def solid_at?(px, py)
       coords = tile_coords(px, py)
       coords ? solid_cell?(coords[0], coords[1]) : false
+    end
+
+    # 指定したマス (col, row) の高さを取得 (複数レイヤーにある場合は最大値)
+    def height_cell(col, row)
+      return 0.0 if col < 0 || col >= @cols || row < 0 || row >= @rows
+      max_h = 0.0
+      i = 0
+      len = @layers.size
+      while i < len
+        ly = @layers[i]
+        raw = ly.raw_at(col, row)
+        if raw && raw >= 0
+          lh = ly.height
+          max_h = lh if lh && lh > max_h
+          tid = raw & ID_MASK
+          th = @tile_heights[tid]
+          max_h = th if th && th > max_h
+        end
+        i += 1
+      end
+      max_h
+    end
+
+    # ワールドピクセル座標 (px, py) の高さを取得
+    def height_at(px, py)
+      coords = tile_coords(px, py)
+      coords ? height_cell(coords[0], coords[1]) : 0.0
     end
 
     # Sprite または Collision::Shape がマップの障害物タイルと接触しているか判定
