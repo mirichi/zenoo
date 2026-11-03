@@ -25,6 +25,7 @@ require_relative 'zenoo/shaders/sdf_font_shader'
 require_relative 'zenoo/shader'
 require_relative 'zenoo/image'
 require_relative 'zenoo/input'
+require_relative 'zenoo/virtual_pad'
 require_relative 'zenoo/window'
 require_relative 'zenoo/canvas'
 require_relative 'zenoo/gui'
@@ -46,6 +47,7 @@ require_relative 'zenoo/scene'
 Window        = Zenoo::Window
 Canvas        = Zenoo::Canvas
 Input         = Zenoo::Input
+VirtualPad    = Zenoo::VirtualPad
 Image         = Zenoo::Image
 Mesh          = Zenoo::Mesh
 InstanceBuffer = Zenoo::InstanceBuffer
