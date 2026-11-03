@@ -83,7 +83,7 @@ emcc ${OPT_LEVEL} \
     -s INITIAL_MEMORY=67108864 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s WASM=1 \
-    -s EXPORTED_FUNCTIONS="['_main','_zen_push_char']" \
+    -s EXPORTED_FUNCTIONS="['_main','_zen_push_char','_zen_push_touch']" \
     --preload-file assets@/assets \
     -fmacro-prefix-map="${PWD}"=. \
     -fdebug-prefix-map="${PWD}"=. \

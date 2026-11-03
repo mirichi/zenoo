@@ -997,6 +997,44 @@ static VALUE input_set_ime_position(VALUE self, VALUE rb_x, VALUE rb_y) {
     return Qnil;
 }
 
+static VALUE input_touch_event_count(VALUE self) {
+    (void)self;
+    return INT2NUM(zen_get_touch_count());
+}
+
+static VALUE input_touch_event_id(VALUE self, VALUE rb_idx) {
+    (void)self;
+    return INT2NUM(zen_get_touch_event_id(NUM2INT(rb_idx)));
+}
+
+static VALUE input_touch_event_type(VALUE self, VALUE rb_idx) {
+    (void)self;
+    return INT2NUM(zen_get_touch_event_type(NUM2INT(rb_idx)));
+}
+
+static VALUE input_touch_event_x(VALUE self, VALUE rb_idx) {
+    (void)self;
+    return DBL2NUM(zen_get_touch_event_x(NUM2INT(rb_idx)));
+}
+
+static VALUE input_touch_event_y(VALUE self, VALUE rb_idx) {
+    (void)self;
+    return DBL2NUM(zen_get_touch_event_y(NUM2INT(rb_idx)));
+}
+
+static VALUE input_touch_clear_events(VALUE self) {
+    (void)self;
+    zen_clear_touch_events();
+    return Qnil;
+}
+
+static VALUE input_push_touch(VALUE self, VALUE rb_id, VALUE rb_type, VALUE rb_x, VALUE rb_y) {
+    (void)self;
+    zen_push_touch(NUM2INT(rb_id), NUM2INT(rb_type), (float)NUM2DBL(rb_x), (float)NUM2DBL(rb_y));
+    return Qnil;
+}
+
+
 // ==========================================
 // Zenoo::Native::Mesh (TypedData)
 // ==========================================
@@ -1618,6 +1656,13 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mInput, "vibrate", input_vibrate, 1);
     rb_define_singleton_method(mInput, "input_chars", input_input_chars, 0);
     rb_define_singleton_method(mInput, "set_ime_position", input_set_ime_position, 2);
+    rb_define_singleton_method(mInput, "touch_event_count", input_touch_event_count, 0);
+    rb_define_singleton_method(mInput, "touch_event_id", input_touch_event_id, 1);
+    rb_define_singleton_method(mInput, "touch_event_type", input_touch_event_type, 1);
+    rb_define_singleton_method(mInput, "touch_event_x", input_touch_event_x, 1);
+    rb_define_singleton_method(mInput, "touch_event_y", input_touch_event_y, 1);
+    rb_define_singleton_method(mInput, "touch_clear_events", input_touch_clear_events, 0);
+    rb_define_singleton_method(mInput, "push_touch", input_push_touch, 4);
 
     // 3. Image (Zenoo::Image)
     rb_cNativeImage = rb_define_class_under(rb_mZenoo, "Image", rb_cObject);

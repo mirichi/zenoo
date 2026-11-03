@@ -423,3 +423,86 @@ void zen_set_ime_position(int x, int y) {
     (void)x; (void)y;
 }
 #endif
+
+// ------------------------------------------
+// タッチ入力キュー
+// ------------------------------------------
+typedef struct {
+    int id;
+    int type; // 0: DOWN, 1: MOVE, 2: UP, 3: CANCEL
+    float x;
+    float y;
+} ZenRawTouchEvent;
+
+static ZenRawTouchEvent s_touch_queue[ZEN_TOUCH_QUEUE_MAX];
+static int s_touch_queue_count = 0;
+
+static void zen__screen_to_virtual(float win_x, float win_y, float* out_vx, float* out_vy) {
+    GLFWwindow* win = zen__window();
+    if (!win) {
+        if (out_vx) *out_vx = win_x;
+        if (out_vy) *out_vy = win_y;
+        return;
+    }
+    int win_w = 1, win_h = 1;
+    glfwGetWindowSize(win, &win_w, &win_h);
+    if (win_w <= 0) win_w = 1;
+    if (win_h <= 0) win_h = 1;
+
+    const ZenViewport* vp = zen__viewport();
+    if (!vp || vp->scale <= 0.0001f) {
+        if (out_vx) *out_vx = win_x;
+        if (out_vy) *out_vy = win_y;
+        return;
+    }
+
+    float fb_x = win_x * ((float)vp->fb_w / (float)win_w);
+    float fb_y = win_y * ((float)vp->fb_h / (float)win_h);
+
+    if (out_vx) *out_vx = (fb_x - (float)vp->x) / vp->scale;
+    if (out_vy) *out_vy = (fb_y - (float)vp->y) / vp->scale;
+}
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+void zen_push_touch(int id, int type, float win_x, float win_y) {
+    if (s_touch_queue_count < ZEN_TOUCH_QUEUE_MAX) {
+        float vx = 0.0f, vy = 0.0f;
+        zen__screen_to_virtual(win_x, win_y, &vx, &vy);
+        s_touch_queue[s_touch_queue_count].id = id;
+        s_touch_queue[s_touch_queue_count].type = type;
+        s_touch_queue[s_touch_queue_count].x = vx;
+        s_touch_queue[s_touch_queue_count].y = vy;
+        s_touch_queue_count++;
+    }
+}
+
+int zen_get_touch_count(void) {
+    return s_touch_queue_count;
+}
+
+int zen_get_touch_event_id(int idx) {
+    if (idx >= 0 && idx < s_touch_queue_count) return s_touch_queue[idx].id;
+    return -1;
+}
+
+int zen_get_touch_event_type(int idx) {
+    if (idx >= 0 && idx < s_touch_queue_count) return s_touch_queue[idx].type;
+    return -1;
+}
+
+float zen_get_touch_event_x(int idx) {
+    if (idx >= 0 && idx < s_touch_queue_count) return s_touch_queue[idx].x;
+    return 0.0f;
+}
+
+float zen_get_touch_event_y(int idx) {
+    if (idx >= 0 && idx < s_touch_queue_count) return s_touch_queue[idx].y;
+    return 0.0f;
+}
+
+void zen_clear_touch_events(void) {
+    s_touch_queue_count = 0;
+}
+

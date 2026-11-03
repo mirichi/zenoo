@@ -126,6 +126,12 @@ void    sp_zen_input_vibrate_gamepad(sp_int id, double strong, double weak, doub
 void    sp_zen_input_vibrate(double duration);
 sp_int  sp_zen_input_get_char(void);
 void    sp_zen_input_set_ime_position(sp_int x, sp_int y);
+sp_int  sp_zen_input_touch_count(void);
+sp_int  sp_zen_input_touch_event_id(sp_int idx);
+sp_int  sp_zen_input_touch_event_type(sp_int idx);
+double  sp_zen_input_touch_event_x(sp_int idx);
+double  sp_zen_input_touch_event_y(sp_int idx);
+void    sp_zen_input_touch_clear_events(void);
 
 
 

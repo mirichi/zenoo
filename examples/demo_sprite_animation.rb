@@ -382,8 +382,8 @@ def create_world_tilemap
   MAP_COLS.times { |c| objects[0][c] = objects[MAP_ROWS - 1][c] = T_WALL }
   MAP_ROWS.times { |r| objects[r][0] = objects[r][MAP_COLS - 1] = T_WALL }
 
-  # 石柱・蒼石碑の配置
-  [[16, 9], [23, 9], [16, 15], [23, 15], [9, 8], [9, 15], [30, 8], [30, 15]].each do |c, r|
+  # 石柱・蒼石碑の配置 (高台の降下経路・フチを塞がないよう1マス余裕を確保)
+  [[16, 9], [23, 9], [17, 15], [23, 15], [8, 8], [8, 15], [31, 8], [31, 15]].each do |c, r|
     place_column_at(objects, c, r, PILLAR_PARTS)
   end
   [[5, 5], [34, 5], [5, 19], [34, 19], [19, 4], [20, 20]].each do |c, r|
@@ -721,9 +721,27 @@ class IsoPlayer < Zenoo::Sprite
     @ground_h >= PLATEAU_HEIGHT ? (y + 32.0) : y
   end
 
-  def trigger_jump
+  def trigger_jump(dir_x = nil, dir_y = nil)
     if @altitude <= @ground_h && @vz <= 0.0
       @vz = JUMP_SPEED
+      if dir_x && dir_y
+        mag = Math.hypot(dir_x, dir_y)
+        if mag > 0.001
+          dir_x /= mag
+          dir_y /= mag
+          update_direction(dir_x, dir_y)
+          remember_move_dir(dir_x, dir_y)
+          @jump_dx = dir_x
+          @jump_dy = dir_y
+        else
+          @jump_dx = @last_move_dx
+          @jump_dy = @last_move_dy
+        end
+      else
+        # 進行方向への慣性ジャンプ (空中でも前進を維持)
+        @jump_dx = @last_move_dx
+        @jump_dy = @last_move_dy
+      end
     end
   end
 
@@ -833,6 +851,8 @@ class IsoPlayer < Zenoo::Sprite
       if @altitude <= @ground_h
         @altitude = @ground_h
         @vz = 0.0
+        @jump_dx = nil
+        @jump_dy = nil
       end
     end
   end
@@ -840,7 +860,9 @@ class IsoPlayer < Zenoo::Sprite
   def update_move(mouse_vec = nil)
     dx, dy = Zenoo::Input.vector
     if dx == 0.0 && dy == 0.0
-      if mouse_vec
+      if @altitude > @ground_h && @jump_dx
+        dx, dy = @jump_dx, @jump_dy
+      elsif mouse_vec
         dx, dy = mouse_vec
       else
         play(IDLE_ANIMS[@dir_y])
@@ -905,11 +927,11 @@ class IsoPlayer < Zenoo::Sprite
   end
 
   def update_direction(dx, dy)
-    if dx != 0.0
+    if dx.abs > 0.05
       @facing_x = dx > 0.0 ? 1.0 : -1.0
       self.scale_x = @facing_x
     end
-    @dir_y = dy > 0.0 ? DIR_DOWN : DIR_UP if dy != 0.0
+    @dir_y = dy > 0.0 ? DIR_DOWN : DIR_UP if dy.abs > 0.05
   end
 
   def load_animations
@@ -963,9 +985,19 @@ SPAWN_POINTS = [
   [240.0,  380.0], [1040.0, 380.0]
 ].freeze
 
-JUMP_BTN_X = 1180.0
-JUMP_BTN_Y = 620.0
-JUMP_BTN_R = 48.0
+# UI・バーチャルコントロール定数 (1280x720 画面座標系)
+BTN_ATK_X  = 1080.0
+BTN_ATK_Y  = 540.0
+BTN_ATK_R  = 64.0
+
+BTN_JUMP_X = 880.0
+BTN_JUMP_Y = 600.0
+BTN_JUMP_R = 56.0
+
+BTN_MENU_X = 1120.0
+BTN_MENU_Y = 24.0
+BTN_MENU_W = 136.0
+BTN_MENU_H = 34.0
 
 class DemoScene < Zenoo::Scene
   attr_reader :tilemap, :player, :enemies, :camera, :effects
@@ -999,47 +1031,108 @@ class DemoScene < Zenoo::Scene
     @show_ui = true
     @frame_count = 0
     @test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
+
+    # 操作モード管理 (:dual_zone, :split_gesture, :direct_pointer)
+    @control_mode = :dual_zone
+    @menu_open = false
+    @menu_cooldown = 0
+    @using_touch = false
+
+    # フローティングスティック状態 (左画面用)
+    @stick_touch = nil
+    @stick_ox = 0.0
+    @stick_oy = 0.0
+    @stick_cx = 0.0
+    @stick_cy = 0.0
+
+    # ジェスチャー / ダイレクト操作状態
+    @gesture_flicked = {}
+    @direct_flicked = false
+    @direct_moving = false
+
+    # ボタン押下状態
+    @atk_btn_pressed = false
+    @jump_btn_pressed = false
+    @atk_btn_prev = false
+    @jump_btn_prev = false
   end
 
   def call
     @frame_count += 1
     exit(0) if @test_max > 0 && @frame_count >= @test_max
 
+    @menu_cooldown -= 1 if @menu_cooldown > 0
     @show_ui = !@show_ui if Zenoo::Input.key_push?(:h)
 
-    # マウス・タッチ入力処理 (クリックで攻撃、長押しで移動、ボタンでジャンプ)
+    # タッチ入力が検知されたらタッチ操作モードに移行 (以降マウスエミュレーションを無視)
+    @using_touch = true if Zenoo::Input.touches.any?
+
+    # モードに応じた更新 (排他制御)
+    if @menu_open
+      update_menu
+    else
+      update_gameplay
+    end
+
+    # 2. 仮想解像度バッファへワールドを描画
+    Zenoo::Image.render_to(@screen) { draw_world }
+
+    # 3. 画面へ 2 倍拡大描画 & UI 重ね掛け
+    Zenoo::Window.clear([0, 0, 0, 255])
+    Zenoo::Window.draw(0, 0, @screen, scale_x: 2.0, scale_y: 2.0, anchor: :top_left, pivot: :top_left)
+    draw_ui
+    draw_menu if @menu_open
+  end
+
+  private
+
+  def open_menu
+    @menu_open = true
+    @menu_cooldown = 15 # 開いた直後の誤爆防止クールダウン (約0.25秒)
+    Zenoo::Input.cancel_touches
+  end
+
+  def close_menu
+    @menu_open = false
+    @menu_cooldown = 10
+    Zenoo::Input.cancel_touches
+  end
+
+  def update_gameplay
+    touches = Zenoo::Input.touches
     mx = Zenoo::Input.mouse_x
     my = Zenoo::Input.mouse_y
-    is_over_jump = Math.hypot(mx - JUMP_BTN_X, my - JUMP_BTN_Y) <= JUMP_BTN_R
 
     mouse_move_vec = nil
 
-    if Zenoo::Input.mouse_push?(:left)
-      if is_over_jump
-        @player.trigger_jump
-      elsif !@player.attacking
-        wx, wy = @camera.screen_to_world(mx / 2.0, my / 2.0)
-        pdx = wx - @player.x
-        pdy = (wy - (@player.y - 16.0)) / Y_RATIO
-        pmag = Math.hypot(pdx, pdy)
-        if pmag > 0.001
-          @player.start_attack(pdx / pmag, pdy / pmag)
-        else
-          @player.start_attack
-        end
-      end
-    elsif Zenoo::Input.mouse_pressed?(:left) && !is_over_jump && !@player.attacking
-      wx, wy = @camera.screen_to_world(mx / 2.0, my / 2.0)
-      pdx = wx - @player.x
-      pdy = (wy - (@player.y - 8.0)) / Y_RATIO
-      dist = Math.hypot(pdx, pdy)
-      if dist > 14.0
-        spd_ratio = [1.0, dist / 28.0].min
-        mouse_move_vec = [(pdx / dist) * spd_ratio, (pdy / dist) * spd_ratio]
-      end
+    # 1. [M] キーでメニューを開く
+    if Zenoo::Input.key_push?(:m)
+      open_menu
+      return
     end
 
-    # 1. 更新
+    # 2. 右上の MENU ボタンでメニューを開く
+    menu_touch = touches.find { |t| t.duration <= 4 && t.x >= BTN_MENU_X && t.x <= BTN_MENU_X + BTN_MENU_W && t.y >= BTN_MENU_Y && t.y <= BTN_MENU_Y + BTN_MENU_H }
+    mouse_click = !@using_touch && Zenoo::Input.mouse_push?(:left) && mx >= BTN_MENU_X && mx <= BTN_MENU_X + BTN_MENU_W && my >= BTN_MENU_Y && my <= BTN_MENU_Y + BTN_MENU_H
+    if menu_touch || mouse_click
+      open_menu
+      return
+    end
+
+    # 3. 2本指タップでメニューを開く
+    if touches.size >= 2 && touches[0].duration <= 6 && touches[1].duration <= 6
+      open_menu
+      return
+    end
+
+    # 4. 各操作モードに応じたタッチ・マウス処理
+    mouse_move_vec = case @control_mode
+                     when :dual_zone     then update_dual_zone_input(touches, mx, my)
+                     when :split_gesture then update_split_gesture_input(touches, mx, my)
+                     when :direct_pointer then update_direct_pointer_input(touches, mx, my)
+                     end
+
+    # ゲーム世界の更新 (メニュー非表示中のみ動作)
     @tilemap.update
     @player.update(mouse_move_vec)
     @enemies.each { |e| e.update(@player.x, @player.y, @tilemap) }
@@ -1054,17 +1147,281 @@ class DemoScene < Zenoo::Scene
         @enemies << SlimeEnemy.new(sx, sy, @slime_mesh)
       end
     end
-
-    # 2. 仮想解像度バッファへワールドを描画
-    Zenoo::Image.render_to(@screen) { draw_world }
-
-    # 3. 画面へ 2 倍拡大描画 & UI 重ね掛け
-    Zenoo::Window.clear([0, 0, 0, 255])
-    Zenoo::Window.draw(0, 0, @screen, scale_x: 2.0, scale_y: 2.0, anchor: :top_left, pivot: :top_left)
-    draw_ui
   end
 
-  private
+  # 左画面: フローティングスティック共通入力 (範囲外への追従機能付き)
+  def update_stick_input(touches)
+    move_vec = nil
+    @stick_touch = nil if @stick_touch&.released? || @stick_touch&.cancelled?
+    if @stick_touch.nil?
+      @stick_touch = touches.find { |t| t.active? && t.x < 640.0 }
+      if @stick_touch
+        @stick_ox = @stick_cx = @stick_touch.x
+        @stick_oy = @stick_cy = @stick_touch.y
+      end
+    end
+
+    if @stick_touch && @stick_touch.active?
+      tdx = @stick_touch.x - @stick_ox
+      tdy = @stick_touch.y - @stick_oy
+      dist = Math.hypot(tdx, tdy)
+      max_r = 54.0
+      if dist > max_r
+        # 指がスティック許容範囲外へ出た場合、外枠の中心 (@stick_ox, @stick_oy) を指に自動追従させる
+        dir_x = tdx / dist
+        dir_y = tdy / dist
+        @stick_ox = @stick_touch.x - dir_x * max_r
+        @stick_oy = @stick_touch.y - dir_y * max_r
+        @stick_cx = @stick_touch.x
+        @stick_cy = @stick_touch.y
+        tdx_c = dir_x * max_r
+        tdy_c = dir_y * max_r
+      else
+        @stick_cx = @stick_ox + tdx
+        @stick_cy = @stick_oy + tdy
+        tdx_c = tdx
+        tdy_c = tdy
+      end
+      move_vec = [(tdx_c / max_r), (tdy_c / max_r)] if dist > 8.0
+    end
+    move_vec
+  end
+
+  # モード1: デュアルゾーン (左: フローティングスティック / 右: ボタン)
+  def update_dual_zone_input(touches, mx, my)
+    move_vec = update_stick_input(touches)
+
+    # 右画面: ATK / JUMP ボタン (ワイド判定 & 最寄り吸着)
+    @atk_btn_pressed = false
+    @jump_btn_pressed = false
+    hit_radius = 140.0 # ボタン間隔208pxに対して十分な広さで右下全体をカバー
+
+    touches.each do |t|
+      next unless t.active?
+      next if t == @stick_touch
+      dist_atk  = Math.hypot(t.x - BTN_ATK_X, t.y - BTN_ATK_Y)
+      dist_jump = Math.hypot(t.x - BTN_JUMP_X, t.y - BTN_JUMP_Y)
+
+      if dist_atk <= hit_radius || dist_jump <= hit_radius
+        if dist_atk < dist_jump
+          @atk_btn_pressed = true
+        else
+          @jump_btn_pressed = true
+        end
+      end
+    end
+
+    # PCマウスフォールバック
+    if !@using_touch && Zenoo::Input.mouse_pressed?(:left)
+      dist_atk  = Math.hypot(mx - BTN_ATK_X, my - BTN_ATK_Y)
+      dist_jump = Math.hypot(mx - BTN_JUMP_X, my - BTN_JUMP_Y)
+      if dist_atk <= hit_radius || dist_jump <= hit_radius
+        if dist_atk < dist_jump
+          @atk_btn_pressed = true
+        else
+          @jump_btn_pressed = true
+        end
+      end
+    end
+
+    if @atk_btn_pressed && !@atk_btn_prev
+      @player.start_attack
+    end
+    @atk_btn_prev = @atk_btn_pressed
+
+    if @jump_btn_pressed && !@jump_btn_prev
+      @player.trigger_jump
+    end
+    @jump_btn_prev = @jump_btn_pressed
+
+    move_vec
+  end
+
+  # モード2: スプリット・ジェスチャー (左: スティック / 右: 離した瞬間にタップ攻撃・フリックジャンプ)
+  def update_split_gesture_input(touches, mx, my)
+    move_vec = update_stick_input(touches)
+
+    touches.each do |t|
+      next unless t.x >= 640.0
+      next if t == @stick_touch
+      next unless t.released? # 指を離した瞬間のみ判定！長押し誤爆を完全防止
+
+      spd = Math.hypot(t.dx, t.dy)
+      # 総移動距離 24px 以上、または終端速度 6px 以上ならフリックジャンプ
+      if t.distance >= 24.0 || spd >= 6.0
+        if move_vec
+          @player.trigger_jump # 移動中: スティック移動方向へジャンプ！
+        else
+          @player.trigger_jump(t.total_dx, t.total_dy) # 静止中: フリックした方向へジャンプ！
+        end
+      else
+        # 移動量が少なければタップ攻撃！ (エアポケット・不感帯なし)
+        @player.start_attack
+      end
+    end
+
+    move_vec
+  end
+
+  # モード3: ワンハンド・ダイレクト (長押し移動 / タップ攻撃 / リリース時フリックジャンプ)
+  def update_direct_pointer_input(touches, mx, my)
+    move_vec = nil
+    t = touches.first
+
+    if t
+      if t.released?
+        @direct_moving = false
+        spd = Math.hypot(t.dx, t.dy)
+        # フリック判定: 終端速度 6.0px 以上、または短時間での変位 (duration <= 12 かつ distance >= 24.0)
+        is_flick = spd >= 6.0 || (t.duration <= 12 && t.distance >= 24.0)
+
+        if is_flick
+          if @player.altitude <= @player.ground_h
+            if t.duration > 10
+              # 長押し移動からのフリック離し: 進行方向へスムーズにジャンプ！
+              @player.trigger_jump
+            else
+              # 静止時などのクイックフリック: フリック方向へステップジャンプ！
+              @player.trigger_jump(t.total_dx, t.total_dy)
+            end
+          end
+        elsif t.distance < 24.0 && t.duration <= 16
+          # 短いタップ: タップ位置へ向けて攻撃！
+          wx, wy = @camera.screen_to_world(t.x / 2.0, t.y / 2.0)
+          pdx = wx - @player.x
+          pdy = (wy - (@player.y - 16.0)) / Y_RATIO
+          mag = Math.hypot(pdx, pdy)
+          mag > 0.001 ? @player.start_attack(pdx / mag, pdy / mag) : @player.start_attack
+        end
+        # duration > 16 かつフリック速度なしの長押し終了は何も発火せず単に停止
+      elsif t.active? && t.duration > 4
+        # 接触中は一切ジャンプ誤爆せず、長押し移動のみ
+        wx, wy = @camera.screen_to_world(t.x / 2.0, t.y / 2.0)
+        pdx = wx - @player.x
+        pdy = (wy - (@player.y - 8.0)) / Y_RATIO
+        dist = Math.hypot(pdx, pdy)
+        thresh = @direct_moving ? 8.0 : 16.0
+        if dist > thresh
+          @direct_moving = true
+          spd_ratio = [1.0, dist / 28.0].min
+          move_vec = [(pdx / dist) * spd_ratio, (pdy / dist) * spd_ratio]
+        else
+          @direct_moving = false
+        end
+      end
+    elsif !@using_touch && Zenoo::Input.mouse_pressed?(:left) && !@player.attacking
+      wx, wy = @camera.screen_to_world(mx / 2.0, my / 2.0)
+      pdx = wx - @player.x
+      pdy = (wy - (@player.y - 8.0)) / Y_RATIO
+      dist = Math.hypot(pdx, pdy)
+      thresh = @direct_moving ? 8.0 : 16.0
+      if dist > thresh
+        @direct_moving = true
+        spd_ratio = [1.0, dist / 28.0].min
+        move_vec = [(pdx / dist) * spd_ratio, (pdy / dist) * spd_ratio]
+      else
+        @direct_moving = false
+      end
+    else
+      @direct_moving = false
+    end
+
+    move_vec
+  end
+
+  def update_menu
+    touches = Zenoo::Input.touches
+    mx = Zenoo::Input.mouse_x
+    my = Zenoo::Input.mouse_y
+
+    # 1. [M] または [ESC] キーで閉じる
+    if Zenoo::Input.key_push?(:m) || Zenoo::Input.key_push?(:escape)
+      close_menu
+      return
+    end
+
+    # 2. モード選択ボタン判定 (カード幅一杯 220 <= x <= 1060 を安全にカバー)
+    # タッチの DOWN (触れた瞬間) または UP (離した瞬間) のいずれでも確実に即座に反応
+    btn_hit_mode = nil
+
+    # (a) タッチ入力でのボタン判定
+    touches.each do |t|
+      if t.x >= 220 && t.x <= 1060
+        if t.y >= 215 && t.y < 305
+          btn_hit_mode = :dual_zone
+        elsif t.y >= 305 && t.y < 390
+          btn_hit_mode = :split_gesture
+        elsif t.y >= 390 && t.y <= 480
+          btn_hit_mode = :direct_pointer
+        end
+        break if btn_hit_mode
+      end
+    end
+
+    # (b) マウス入力でのボタン判定 (PC環境)
+    if !btn_hit_mode && !@using_touch && Zenoo::Input.mouse_push?(:left)
+      if mx >= 220 && mx <= 1060
+        if my >= 215 && my < 305
+          btn_hit_mode = :dual_zone
+        elsif my >= 305 && my < 390
+          btn_hit_mode = :split_gesture
+        elsif my >= 390 && my <= 480
+          btn_hit_mode = :direct_pointer
+        end
+      end
+    end
+
+    # モード切り替えがヒットした場合は即座に反映して終了 (絶対にメニューは閉じない！)
+    if btn_hit_mode
+      @control_mode = btn_hit_mode
+      @menu_cooldown = 6 # 即座の連打誤爆を防止
+      return
+    end
+
+    # 3. クールダウン中はメニュー終了判定を行わない (メニュー開閉直後の誤爆を100%防止)
+    return if @menu_cooldown > 0
+
+    # 4. 右上の MENU ボタンを押して閉じる
+    menu_btn_hit = false
+    touches.each do |t|
+      if t.released? && t.x >= BTN_MENU_X && t.x <= BTN_MENU_X + BTN_MENU_W && t.y >= BTN_MENU_Y && t.y <= BTN_MENU_Y + BTN_MENU_H
+        menu_btn_hit = true
+        break
+      end
+    end
+    if !@using_touch && Zenoo::Input.mouse_push?(:left) && mx >= BTN_MENU_X && mx <= BTN_MENU_X + BTN_MENU_W && my >= BTN_MENU_Y && my <= BTN_MENU_Y + BTN_MENU_H
+      menu_btn_hit = true
+    end
+    if menu_btn_hit
+      close_menu
+      return
+    end
+
+    # 5. 外枠タップ (カードの外側の暗転エリア) で閉じる
+    # カード領域 (180 <= x <= 1100 && 105 <= y <= 585) 内は完全な安全ゾーンとして誤クローズを完全防止
+    outside_tap = false
+    touches.each do |t|
+      if t.released?
+        start_outside = (t.start_x < 180 || t.start_x > 1100 || t.start_y < 105 || t.start_y > 585)
+        end_outside   = (t.x < 180 || t.x > 1100 || t.y < 105 || t.y > 585)
+        if start_outside && end_outside
+          outside_tap = true
+          break
+        end
+      end
+    end
+
+    if !@using_touch && Zenoo::Input.mouse_push?(:left)
+      if mx < 180 || mx > 1100 || my < 105 || my > 585
+        outside_tap = true
+      end
+    end
+
+    if outside_tap
+      close_menu
+      return
+    end
+  end
 
   def draw_world
     Zenoo::Window.camera = @camera
@@ -1077,14 +1434,45 @@ class DemoScene < Zenoo::Scene
   end
 
   def draw_ui
-    # 右下: ジャンプバーチャルボタン (スマホ/マウス用・常時表示)
-    btn_pressed = Zenoo::Input.mouse_pressed?(:left) && Math.hypot(Zenoo::Input.mouse_x - JUMP_BTN_X, Zenoo::Input.mouse_y - JUMP_BTN_Y) <= JUMP_BTN_R
-    btn_bg = btn_pressed ? [0, 220, 180, 220] : [24, 32, 48, 160]
-    btn_border = btn_pressed ? [255, 255, 255, 240] : [80, 140, 200, 180]
-    text_color = btn_pressed ? [10, 20, 30, 255] : [160, 230, 255, 240]
+    # 右上: MENUボタン (常時表示)
+    btn_hover = Math.hypot(Zenoo::Input.mouse_x - (BTN_MENU_X + 68), Zenoo::Input.mouse_y - (BTN_MENU_Y + 17)) <= 40
+    menu_col = btn_hover ? [40, 56, 80, 240] : [24, 32, 48, 190]
+    Zenoo::Window.draw_rect(BTN_MENU_X, BTN_MENU_Y, BTN_MENU_W, BTN_MENU_H, radius: 8, color: menu_col, border_width: 1, border_color: [80, 160, 240, 200])
+    Zenoo::Window.draw_text(BTN_MENU_X + 10, BTN_MENU_Y + 8, "⚙️ MENU [2本指]", size: 14, color: [220, 240, 255, 255])
 
-    Zenoo::Window.draw_circle(JUMP_BTN_X, JUMP_BTN_Y, JUMP_BTN_R, color: btn_bg, border_width: 2, border_color: btn_border)
-    Zenoo::Window.draw_text(JUMP_BTN_X - 22, JUMP_BTN_Y - 10, "JUMP", size: 16, color: text_color)
+    # 操作モード別のUI表示
+    case @control_mode
+    when :dual_zone
+      # スティック (左画面)
+      if @stick_touch && @stick_touch.active?
+        Zenoo::Window.draw_circle(@stick_ox, @stick_oy, 54, color: [0, 0, 0, 70], border_width: 2, border_color: [100, 200, 255, 160])
+        Zenoo::Window.draw_circle(@stick_cx, @stick_cy, 24, color: [0, 220, 255, 180])
+      end
+
+      # [ATK] [JUMP] ボタン (右画面) - 大型化 & 半透明化
+      atk_col = @atk_btn_pressed ? [255, 70, 70, 200] : [220, 50, 50, 95]
+      atk_border = @atk_btn_pressed ? [255, 255, 255, 255] : [255, 255, 255, 140]
+      Zenoo::Window.draw_circle(BTN_ATK_X, BTN_ATK_Y, BTN_ATK_R, color: atk_col, border_width: 2, border_color: atk_border)
+      Zenoo::Window.draw_text(BTN_ATK_X - 22, BTN_ATK_Y - 12, "ATK", size: 22, color: :white)
+
+      jump_col = @jump_btn_pressed ? [0, 255, 190, 200] : [0, 180, 140, 95]
+      jump_border = @jump_btn_pressed ? [255, 255, 255, 255] : [255, 255, 255, 140]
+      Zenoo::Window.draw_circle(BTN_JUMP_X, BTN_JUMP_Y, BTN_JUMP_R, color: jump_col, border_width: 2, border_color: jump_border)
+      Zenoo::Window.draw_text(BTN_JUMP_X - 26, BTN_JUMP_Y - 10, "JUMP", size: 18, color: :white)
+
+    when :split_gesture
+      # スティック (左画面)
+      if @stick_touch && @stick_touch.active?
+        Zenoo::Window.draw_circle(@stick_ox, @stick_oy, 54, color: [0, 0, 0, 70], border_width: 2, border_color: [100, 200, 255, 160])
+        Zenoo::Window.draw_circle(@stick_cx, @stick_cy, 24, color: [0, 220, 255, 180])
+      end
+      # ガイド (右下)
+      Zenoo::Window.draw_text(940, 670, "右画面: タップ攻撃 / フリックジャンプ", size: 13, color: [140, 200, 255, 180])
+
+    when :direct_pointer
+      # ガイド (中央下)
+      Zenoo::Window.draw_text(440, 680, "画面操作: 長押し移動 / タップ攻撃 / フリックジャンプ", size: 13, color: [140, 220, 200, 190])
+    end
 
     unless @show_ui
       Zenoo::Window.draw_rect(24, 20, 280, 36, radius: 8, color: [18, 22, 32, 180], border_width: 1, border_color: [60, 80, 110, 160])
@@ -1102,17 +1490,53 @@ class DemoScene < Zenoo::Scene
     # 右上: 状態リアルタイムモニター
     col_x = (@player.x / TILE_SIZE).to_i
     row_y = (@player.y / TILE_SIZE).to_i
+    mode_name = case @control_mode
+                when :dual_zone then "A: デュアルゾーン (スティック+ボタン)"
+                when :split_gesture then "B: スプリット・ジェスチャー (フリック)"
+                when :direct_pointer then "C: ワンハンド・ダイレクト (フリック)"
+                end
     monitor = [
+      ["操作モード : #{mode_name}", [255, 220, 80, 255]],
       ["現在座標 : (#{@player.x.to_i}, #{@player.y.to_i}) [Tile: #{col_x}, #{row_y}] / 高度: #{@player.altitude.to_i}px (床:#{@player.ground_h.to_i}px)", :white],
       ["カメラ   : (#{@camera.x.to_i}, #{@camera.y.to_i}) / 残りスライム: #{@enemies.size}体", [100, 255, 180, 255]],
       ["向き・アニメ : #{@player.direction_name} (#{@player.animation})", [180, 200, 255, 255]],
       ["現在のコマ : #{@player.current_frame_index} [#{@player.frame_description}]", [255, 220, 100, 255]]
     ]
-    Zenoo::Window.draw_rect(810, 20, 446, 160, radius: 10, color: PANEL_COLOR, border_width: 1, border_color: PANEL_BORDER)
-    Zenoo::Window.draw_text(826, 34, "【リアルタイム状態モニター】", size: 18, color: TITLE_COLOR)
+    Zenoo::Window.draw_rect(760, 20, 340, 184, radius: 10, color: PANEL_COLOR, border_width: 1, border_color: PANEL_BORDER)
+    Zenoo::Window.draw_text(776, 34, "【リアルタイム状態モニター】", size: 18, color: TITLE_COLOR)
     monitor.each_with_index do |(text, color), i|
-      Zenoo::Window.draw_text(826, 64 + i * 24, text, size: 14, color: color)
+      Zenoo::Window.draw_text(776, 62 + i * 23, text, size: 13, color: color)
     end
+  end
+
+  def draw_menu
+    # 暗転オーバーレイ
+    Zenoo::Window.draw_rect(0, 0, 1280, 720, color: [0, 0, 0, 180])
+
+    # メニューカード (画面中央・縦横バランス最適化: 幅840, 高さ420)
+    Zenoo::Window.draw_rect(220, 135, 840, 420, radius: 16, color: [16, 22, 34, 250], border_width: 2, border_color: [0, 220, 255, 220])
+    Zenoo::Window.draw_text(390, 155, "🎮 操作モード設定 (Control Mode)", size: 26, color: [0, 255, 200, 255])
+    Zenoo::Window.draw_text(360, 193, "画面を2本指タップ、または [M] キーでいつでも開閉できます", size: 15, color: [160, 200, 230, 240])
+
+    # 各モードボタンの描画 (幅760, 高さ74)
+    draw_menu_item(260, 228, "モード A: デュアルゾーン (おすすめ)", "左: 移動スティック / 右: [ATK][JUMP] ボタン", @control_mode == :dual_zone)
+    draw_menu_item(260, 312, "モード B: スプリット・ジェスチャー (モダン)", "左: 移動スティック / 右: タップ攻撃・フリックジャンプ", @control_mode == :split_gesture)
+    draw_menu_item(260, 396, "モード C: ワンハンド・ダイレクト (片手操作)", "長押し移動 / タップ攻撃 / 素早くフリックでジャンプ", @control_mode == :direct_pointer)
+
+    # 枠外タップ案内 (程よい余白で配置)
+    Zenoo::Window.draw_text(485, 494, "※ 枠外（暗転エリア）をタップして閉じる", size: 15, color: [140, 180, 220, 220])
+  end
+
+  def draw_menu_item(x, y, title, desc, active)
+    bg = active ? [14, 48, 72, 240] : [22, 30, 46, 220]
+    border = active ? [0, 255, 220, 255] : [60, 80, 110, 180]
+    badge_text = active ? "● 選択中" : "○ 選択"
+    badge_col = active ? [0, 255, 200, 255] : [140, 160, 190, 200]
+
+    Zenoo::Window.draw_rect(x, y, 760, 74, radius: 10, color: bg, border_width: active ? 2 : 1, border_color: border)
+    Zenoo::Window.draw_text(x + 24, y + 12, title, size: 21, color: active ? :white : [210, 220, 235, 255])
+    Zenoo::Window.draw_text(x + 24, y + 42, desc, size: 15, color: active ? [160, 230, 255, 240] : [130, 155, 185, 220])
+    Zenoo::Window.draw_text(x + 630, y + 25, badge_text, size: 18, color: badge_col)
   end
 end
 

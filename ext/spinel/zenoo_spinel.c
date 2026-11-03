@@ -539,6 +539,31 @@ void sp_zen_input_set_ime_position(sp_int x, sp_int y) {
     zen_set_ime_position((int)x, (int)y);
 }
 
+sp_int sp_zen_input_touch_count(void) {
+    return (sp_int)zen_get_touch_count();
+}
+
+sp_int sp_zen_input_touch_event_id(sp_int idx) {
+    return (sp_int)zen_get_touch_event_id((int)idx);
+}
+
+sp_int sp_zen_input_touch_event_type(sp_int idx) {
+    return (sp_int)zen_get_touch_event_type((int)idx);
+}
+
+double sp_zen_input_touch_event_x(sp_int idx) {
+    return (double)zen_get_touch_event_x((int)idx);
+}
+
+double sp_zen_input_touch_event_y(sp_int idx) {
+    return (double)zen_get_touch_event_y((int)idx);
+}
+
+void sp_zen_input_touch_clear_events(void) {
+    zen_clear_touch_events();
+}
+
+
 static ZenImage* unpack_image(sp_RbVal val) {
     if (val.tag == SP_TAG_OBJ && val.v.p) {
         sp_ZenImage* img = (sp_ZenImage*)val.v.p;

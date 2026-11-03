@@ -51,6 +51,8 @@ echo "=== [1/5] Setting up GitHub Pages structure ==="
 touch "${DOCS_DIR}/.nojekyll"
 # ポータルページを配置
 cp examples/web/portal.html "${DOCS_DIR}/index.html"
+# シェルHTMLを一括生成・最新同期 (アスペクト比フリー & 共通全画面制御)
+python3 tools/generate_shells.py
 
 # ビルドモード判定 (サイズより速度優先)
 #   BUILD_MODE=dev  (または fast) : -O1 (Clang最適化を軽量化し、ビルド時間を短縮)
@@ -118,7 +120,7 @@ COMMON_EMCC_FLAGS=(
     -s NO_EXIT_RUNTIME=1
     -s WASM=1
     -s MINIFY_HTML=0
-    -s EXPORTED_FUNCTIONS="['_main','_zen_push_char']"
+    -s EXPORTED_FUNCTIONS="['_main','_zen_push_char','_zen_push_touch']"
     --preload-file assets@/assets
     -fmacro-prefix-map="${PWD}"=.
     -fdebug-prefix-map="${PWD}"=.
