@@ -120,11 +120,11 @@ module Zenoo
       # フレーム開始・終了処理 (Window.loop で毎フレーム自動呼び出し)
       # --------------------------------------------------
       def begin_frame
-        @mouse_x    = Input.pointer_x.to_f
-        @mouse_y    = Input.pointer_y.to_f
-        @mouse_down = Input.pointer_pressed?
-        @mouse_push = Input.pointer_push?
-        @mouse_rel  = Input.pointer_release?
+        @mouse_x    = Input.mouse_x.to_f
+        @mouse_y    = Input.mouse_y.to_f
+        @mouse_down = Input.mouse_pressed?(:left)
+        @mouse_push = Input.mouse_push?(:left)
+        @mouse_rel  = Input.mouse_release?(:left)
         @prev_captured = !@hot_id.nil? || !@active_id.nil? || !@focus_id.nil? || !@win_mgr.hovered_window_id.nil?
         @hot_id     = nil
         @evaluated  = false
@@ -132,7 +132,7 @@ module Zenoo
         @requested_cursor = :arrow
 
         @win_mgr.begin_frame(@mouse_x, @mouse_y, @mouse_down, @mouse_push)
-        Input.consume_pointer! unless @win_mgr.hovered_window_id.nil?
+        Input.consume_mouse! unless @win_mgr.hovered_window_id.nil?
         @layout.reset
       end
 
@@ -407,7 +407,7 @@ module Zenoo
         clicked = false
 
         if @active_id == widget_id
-          Input.consume_pointer!
+          Input.consume_mouse!
           if @mouse_rel || !@mouse_down
             clicked = true if hover
             @active_id = nil
@@ -415,7 +415,7 @@ module Zenoo
         elsif @active_id.nil? && hover
           @hot_id = widget_id
           if @mouse_push
-            Input.consume_pointer!
+            Input.consume_mouse!
             if @mouse_rel
               clicked = true
             else
@@ -459,7 +459,7 @@ module Zenoo
         hover = can_interact? && @renderer.hit_test_slider(rx, ry, rw, rh, gui_mouse_x, gui_mouse_y, @theme)
 
         if @active_id == widget_id
-          Input.consume_pointer!
+          Input.consume_mouse!
           if @mouse_rel || !@mouse_down
             @active_id = nil
           else
@@ -468,7 +468,7 @@ module Zenoo
         elsif @active_id.nil? && hover
           @hot_id = widget_id
           if @mouse_push
-            Input.consume_pointer!
+            Input.consume_mouse!
             v_val = calc_slider_value(rx, rw, v_min, v_max, step)
             @active_id = widget_id unless @mouse_rel
           end
@@ -523,7 +523,7 @@ module Zenoo
 
         if @mouse_push
           if hover
-            Input.consume_pointer!
+            Input.consume_mouse!
             @focus_id = widget_id
             @blink_time = 0.0
             click_x = gui_mouse_x - (rx + 10.0)

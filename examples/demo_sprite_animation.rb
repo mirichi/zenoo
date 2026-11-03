@@ -1107,8 +1107,8 @@ class DemoScene < Zenoo::Scene
 
   def update_gameplay
     touches = Zenoo::Input.touches
-    px = Zenoo::Input.pointer_x
-    py = Zenoo::Input.pointer_y
+    mx = Zenoo::Input.mouse_x
+    my = Zenoo::Input.mouse_y
 
     # 1. [M] キーでメニューを開く
     if Zenoo::Input.key_push?(:m)
@@ -1117,8 +1117,8 @@ class DemoScene < Zenoo::Scene
     end
 
     # 2. 右上の MENU ボタンでメニューを開く
-    if Zenoo::Input.pointer_push? && px >= BTN_MENU_X && px <= BTN_MENU_X + BTN_MENU_W && py >= BTN_MENU_Y && py <= BTN_MENU_Y + BTN_MENU_H
-      Zenoo::Input.consume_pointer!
+    if Zenoo::Input.mouse_push?(:left) && mx >= BTN_MENU_X && mx <= BTN_MENU_X + BTN_MENU_W && my >= BTN_MENU_Y && my <= BTN_MENU_Y + BTN_MENU_H
+      Zenoo::Input.consume_mouse!
       open_menu
       return
     end
@@ -1150,9 +1150,9 @@ class DemoScene < Zenoo::Scene
   end
 
   def update_menu
-    px = Zenoo::Input.pointer_x
-    py = Zenoo::Input.pointer_y
-    clicked = Zenoo::Input.pointer_push?
+    mx = Zenoo::Input.mouse_x
+    my = Zenoo::Input.mouse_y
+    clicked = Zenoo::Input.mouse_push?(:left)
 
     # 1. [M] または [ESC] キーで閉じる
     if Zenoo::Input.key_push?(:m) || Zenoo::Input.key_push?(:escape)
@@ -1161,12 +1161,12 @@ class DemoScene < Zenoo::Scene
     end
 
     # 2. モード選択ボタン判定 (カード幅一杯 220 <= x <= 1060 を安全にカバー)
-    if clicked && px >= 220 && px <= 1060
-      new_pad = if py >= 215 && py < 305
+    if clicked && mx >= 220 && mx <= 1060
+      new_pad = if my >= 215 && my < 305
                   Zenoo::VirtualPad.gamepad
-                elsif py >= 305 && py < 390
+                elsif my >= 305 && my < 390
                   Zenoo::VirtualPad.split_gesture
-                elsif py >= 390 && py <= 480
+                elsif my >= 390 && my <= 480
                   Zenoo::VirtualPad.one_hand
                 end
       if new_pad
@@ -1182,8 +1182,8 @@ class DemoScene < Zenoo::Scene
 
     # 4. 右上の MENU ボタンまたは外枠タップ (カードの外側の暗転エリア) で閉じる
     if clicked
-      in_menu_btn = px >= BTN_MENU_X && px <= BTN_MENU_X + BTN_MENU_W && py >= BTN_MENU_Y && py <= BTN_MENU_Y + BTN_MENU_H
-      outside_card = px < 180 || px > 1100 || py < 105 || py > 585
+      in_menu_btn = mx >= BTN_MENU_X && mx <= BTN_MENU_X + BTN_MENU_W && my >= BTN_MENU_Y && my <= BTN_MENU_Y + BTN_MENU_H
+      outside_card = mx < 180 || mx > 1100 || my < 105 || my > 585
       if in_menu_btn || outside_card
         close_menu
         return

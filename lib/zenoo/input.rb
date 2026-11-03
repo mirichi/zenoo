@@ -288,22 +288,57 @@ module Zenoo
       Native::Input.set_ime_position(x.to_i, y.to_i)
     end
 
-    # マウス座標
+    # マウス座標 (タッチ操作時は未消費のアクティブタッチ座標を透過的に反映)
     def self.mouse_x
-      Native::Input.mouse_x
+      if @using_touch
+        t = __mouse_emulation_touch
+        t ? t.x : (@last_emulated_mx || Native::Input.mouse_x)
+      else
+        Native::Input.mouse_x
+      end
     end
 
     def self.mouse_y
-      Native::Input.mouse_y
+      if @using_touch
+        t = __mouse_emulation_touch
+        t ? t.y : (@last_emulated_my || Native::Input.mouse_y)
+      else
+        Native::Input.mouse_y
+      end
     end
 
     def self.mouse_pos
-      [Native::Input.mouse_x, Native::Input.mouse_y]
+      [mouse_x, mouse_y]
+    end
+
+    # タッチ操作をマウス左ボタンとしてエミュレートする対象の Touch を取得
+    # (バーチャルパッド等で消費されていない最初のタッチ、または直近のタッチ)
+    def self.__mouse_emulation_touch
+      return nil unless @using_touch
+      i = 0
+      len = @touches.length
+      while i < len
+        t = @touches[i]
+        if t && !t.consumed?
+          return t
+        end
+        i += 1
+      end
+      nil
     end
 
     def self.mouse_pressed?(button = :left)
-      return false if @using_touch
-      Native::Input.mouse_pressed?(resolve_mouse(button))
+      b = resolve_mouse(button)
+      if @using_touch
+        if b == 0 # 左クリックのみタッチでエミュレート
+          t = __mouse_emulation_touch
+          t ? t.active? : false
+        else
+          false
+        end
+      else
+        Native::Input.mouse_pressed?(b)
+      end
     end
 
     def self.mouse_down?(button = :left)
@@ -311,64 +346,37 @@ module Zenoo
     end
 
     def self.mouse_push?(button = :left)
-      return false if @using_touch
-      Native::Input.mouse_push?(resolve_mouse(button))
+      b = resolve_mouse(button)
+      if @using_touch
+        if b == 0
+          t = __mouse_emulation_touch
+          t ? (t.duration == 0 && !t.cancelled?) : false
+        else
+          false
+        end
+      else
+        Native::Input.mouse_push?(b)
+      end
     end
 
     def self.mouse_release?(button = :left)
-      return false if @using_touch
-      Native::Input.mouse_release?(resolve_mouse(button))
-    end
-
-    # 統合ポインタ API (マウス操作とタッチ操作を単一インターフェースで透過処理)
-    def self.pointer_x
+      b = resolve_mouse(button)
       if @using_touch
-        t = @touches[0]
-        t ? t.x : -99999.0
+        if b == 0
+          t = __mouse_emulation_touch
+          t ? t.released? : false
+        else
+          false
+        end
       else
-        Native::Input.mouse_x
+        Native::Input.mouse_release?(b)
       end
     end
 
-    def self.pointer_y
+    # 現在のマウス操作（またはタッチ）を消費し、以降のUIやゲーム側のクリック反応を抑止
+    def self.consume_mouse!
       if @using_touch
-        t = @touches[0]
-        t ? t.y : -99999.0
-      else
-        Native::Input.mouse_y
-      end
-    end
-
-    def self.pointer_pressed?
-      if @using_touch
-        t = @touches[0]
-        t ? t.active? : false
-      else
-        Native::Input.mouse_pressed?(0)
-      end
-    end
-
-    def self.pointer_push?
-      if @using_touch
-        t = @touches[0]
-        t ? (t.duration == 0 && !t.cancelled?) : false
-      else
-        Native::Input.mouse_push?(0)
-      end
-    end
-
-    def self.pointer_release?
-      if @using_touch
-        t = @touches[0]
-        t ? t.released? : false
-      else
-        Native::Input.mouse_release?(0)
-      end
-    end
-
-    def self.consume_pointer!
-      if @using_touch
-        t = @touches[0]
+        t = __mouse_emulation_touch
         t.consume! if t
       else
         @virtual_pad.consume_mouse_touch! if @virtual_pad
@@ -647,11 +655,9 @@ module Zenoo
         return 1.0 if Native::Input.gamepad_button_pressed?(id.to_i, b)
       end
 
-      # 3. マウスボタン (タッチ操作中はブラウザのマウスエミュレーション誤爆を防ぐため無視)
-      unless @using_touch
-        act[:mouse].each do |m|
-          return 1.0 if Native::Input.mouse_pressed?(m)
-        end
+      # 3. マウスボタン (タッチ時はエミュレーション経由で判定)
+      act[:mouse].each do |m|
+        return 1.0 if mouse_pressed?(m)
       end
 
       # 4. アナログ軸 (トリガーやスティック)
@@ -696,11 +702,9 @@ module Zenoo
         return true if Native::Input.gamepad_button_pressed?(id.to_i, b)
       end
 
-      # マウスボタン
-      unless @using_touch
-        act[:mouse].each do |m|
-          return true if Native::Input.mouse_pressed?(m)
-        end
+      # マウスボタン (タッチ時はエミュレーション経由で判定)
+      act[:mouse].each do |m|
+        return true if mouse_pressed?(m)
       end
 
       # アナログ軸
@@ -745,11 +749,9 @@ module Zenoo
         return true if Native::Input.gamepad_button_push?(id.to_i, b)
       end
 
-      # マウスボタン
-      unless @using_touch
-        act[:mouse].each do |m|
-          return true if Native::Input.mouse_push?(m)
-        end
+      # マウスボタン (タッチ時はエミュレーション経由で判定)
+      act[:mouse].each do |m|
+        return true if mouse_push?(m)
       end
 
       # アナログ軸の閾値クロス判定 (今フレームで閾値を超え、前フレームでは未超過)
@@ -788,10 +790,9 @@ module Zenoo
         return true if Native::Input.gamepad_button_release?(id.to_i, b)
       end
 
-      unless @using_touch
-        act[:mouse].each do |m|
-          return true if Native::Input.mouse_release?(m)
-        end
+      # マウスボタン (タッチ時はエミュレーション経由で判定)
+      act[:mouse].each do |m|
+        return true if mouse_release?(m)
       end
 
       # アナログ軸のリリース判定
@@ -935,12 +936,19 @@ module Zenoo
       if !@touches.empty?
         @using_touch = true
         @touch_guard_frames = 10
+        t = __mouse_emulation_touch
+        if t
+          @last_emulated_mx = t.x
+          @last_emulated_my = t.y
+        end
       elsif @touch_guard_frames > 0
         @touch_guard_frames -= 1
       elsif @using_touch
         if (raw_mx - @last_raw_mx).abs > 0.5 || (raw_my - @last_raw_my).abs > 0.5 ||
            Native::Input.mouse_wheel_y != 0.0 || Native::Input.mouse_wheel_x != 0.0
           @using_touch = false
+          @last_emulated_mx = nil
+          @last_emulated_my = nil
         end
       end
       @last_raw_mx = raw_mx

@@ -319,7 +319,7 @@ class Ball
     end
   end
 
-  def draw(shader = nil, atlas = nil)
+  def render(shader = nil, atlas = nil)
     # 移動時のシャドウ
     Window.draw_circle(@x + 3, @y + 4, @radius, color: [0, 0, 0, 75])
 
@@ -787,7 +787,7 @@ class BilliardsPlayground
     draw_aim_guide
 
     # 4. ボール (3D球体シェーダーでリアル回転描画)
-    @balls.each { |b| b.draw(@ball_shader, @ball_atlas) }
+    @balls.each { |b| b.render(@ball_shader, @ball_atlas) }
 
     # 5. スパーク
     @sparks.each(&:draw)
