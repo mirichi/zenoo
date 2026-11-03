@@ -178,6 +178,12 @@ module Zenoo
       native_func :vibrate, [:float], :nil, "sp_zen_input_vibrate"
       native_func :get_char, [], :int, "sp_zen_input_get_char"
       native_func :set_ime_position, [:int, :int], :nil, "sp_zen_input_set_ime_position"
+      native_func :touch_event_count, [], :int, "sp_zen_input_touch_count"
+      native_func :touch_event_id, [:int], :int, "sp_zen_input_touch_event_id"
+      native_func :touch_event_type, [:int], :int, "sp_zen_input_touch_event_type"
+      native_func :touch_event_x, [:int], :float, "sp_zen_input_touch_event_x"
+      native_func :touch_event_y, [:int], :float, "sp_zen_input_touch_event_y"
+      native_func :touch_clear_events, [], :nil, "sp_zen_input_touch_clear_events"
 
       def self.input_chars
         chars = []

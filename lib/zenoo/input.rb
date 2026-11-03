@@ -1,4 +1,93 @@
 module Zenoo
+  # ==============================================================================
+  # Zenoo::Touch
+  # 画面に指が触れてから離れるまでの 1 回のタッチセッションを具現化するクラス。
+  # 指が離された後は値がフリーズし、以後は情報が更新されません。
+  # ==============================================================================
+  class Touch
+    attr_reader :id, :start_x, :start_y, :x, :y, :prev_x, :prev_y, :duration
+
+    def initialize(id, x, y)
+      @id = id
+      @start_x = x
+      @start_y = y
+      @x = x
+      @y = y
+      @prev_x = x
+      @prev_y = y
+      @active = true
+      @released = false
+      @cancelled = false
+      @duration = 0
+    end
+
+    def active?
+      @active
+    end
+
+    def released?
+      @released
+    end
+
+    def cancelled?
+      @cancelled
+    end
+
+    # 前フレームからの移動量 (Delta)
+    def dx
+      @x - @prev_x
+    end
+
+    def dy
+      @y - @prev_y
+    end
+
+    # 触れた起点からの総移動量
+    def total_dx
+      @x - @start_x
+    end
+
+    def total_dy
+      @y - @start_y
+    end
+
+    # 触れた起点からの直線距離
+    def distance
+      Math.hypot(@x - @start_x, @y - @start_y)
+    end
+
+    # 内部更新用: 指が動いた時 (アクティブ時のみ)
+    # ※ @prev_x / @prev_y はフレーム開始時 (__step) のみ更新するため、ここでは @x / @y のみ更新
+    def __update(new_x, new_y)
+      return unless @active
+      @x = new_x
+      @y = new_y
+    end
+
+    # 内部更新用: 指が離された/キャンセルされた時 (値フリーズ)
+    # ※ @prev_x / @prev_y はフレーム開始時 (__step) のみ更新するため、ここでは @x / @y のみ更新
+    def __finish(released, final_x = nil, final_y = nil)
+      return unless @active
+      if final_x && final_y
+        @x = final_x
+        @y = final_y
+      end
+      @active = false
+      if released
+        @released = true
+      else
+        @cancelled = true
+      end
+    end
+
+    # 内部更新用: フレーム進行
+    def __step
+      @duration += 1 if @active
+      @prev_x = @x
+      @prev_y = @y
+    end
+  end
+
   module Input
     # キーシンボルからGLFWキーコードへのマッピング
     KEY_MAP = {
@@ -609,6 +698,87 @@ module Zenoo
         dy /= len
       end
       [dx, dy]
+    end
+
+    # ==========================================================================
+    # マルチタッチ API (Touch Session Lifecycle)
+    # ==========================================================================
+    @active_touches = {}
+    @touches = []
+
+    # 現在アクティブ、またはこのフレームで離された Touch オブジェクトの配列
+    def self.touches
+      @touches
+    end
+
+    # タッチIDから該当する Touch オブジェクトを取得 (無効/終了時は nil)
+    def self.touch(id)
+      @active_touches[id]
+    end
+
+    # タッチ入力が利用可能・発生しているか
+    def self.touch_available?
+      !@active_touches.empty? || !@touches.empty?
+    end
+
+    # 現在追跡中の全タッチセッションを強制キャンセルします (シーン・モーダル遷移時の誤タッチ防止)
+    def self.cancel_touches
+      i = 0
+      len = @touches.length
+      while i < len
+        t = @touches[i]
+        t.__finish(false) if t
+        i += 1
+      end
+      @active_touches.clear
+      @touches.clear
+      Native::Input.touch_clear_events
+    end
+
+    # フレーム開始時: 終了済みTouchの除去 & Cカーネルからの生イベント反映
+    def self.__begin_frame
+      # 1. 前フレームで終了（離脱/キャンセル）していた Touch を一覧から除外
+      i = 0
+      while i < @touches.length
+        t = @touches[i]
+        if t.released? || t.cancelled?
+          @touches.delete_at(i)
+        else
+          t.__step
+          i += 1
+        end
+      end
+
+      # 2. Cカーネルのキューから生イベントを読み出す
+      count = Native::Input.touch_event_count
+      if count > 0
+        idx = 0
+        while idx < count
+          tid  = Native::Input.touch_event_id(idx)
+          type = Native::Input.touch_event_type(idx)
+          tx   = Native::Input.touch_event_x(idx)
+          ty   = Native::Input.touch_event_y(idx)
+
+          case type
+          when 0 # DOWN
+            t = Touch.new(tid, tx, ty)
+            @active_touches[tid] = t
+            @touches << t
+          when 1 # MOVE
+            t = @active_touches[tid]
+            t.__update(tx, ty) if t
+          when 2 # UP
+            t = @active_touches.delete(tid)
+            t.__finish(true, tx, ty) if t
+          when 3 # CANCEL
+            t = @active_touches.delete(tid)
+            t.__finish(false, tx, ty) if t
+          end
+
+          idx += 1
+        end
+        Native::Input.touch_clear_events
+      end
     end
 
     # 毎フレーム末尾で軸状態を更新 (Window.__update_step から自動呼出し)

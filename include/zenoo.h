@@ -235,6 +235,16 @@ int    zen_get_char(void);
 void   zen_push_char(unsigned int codepoint);
 void   zen_set_ime_position(int x, int y);
 
+// タッチ入力 (生イベントキュー)
+#define ZEN_TOUCH_QUEUE_MAX 128
+void   zen_push_touch(int id, int type, float win_x, float win_y);
+int    zen_get_touch_count(void);
+int    zen_get_touch_event_id(int idx);
+int    zen_get_touch_event_type(int idx);
+float  zen_get_touch_event_x(int idx);
+float  zen_get_touch_event_y(int idx);
+void   zen_clear_touch_events(void);
+
 // ゲームパッド (GLFW標準ゲームパッドマッピング準拠)
 enum ZenGamepadButton {
     ZEN_GAMEPAD_BUTTON_A            = 0,

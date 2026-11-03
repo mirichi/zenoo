@@ -49,6 +49,7 @@ module Zenoo
       __advance_time
       Audio.update(delta_time)
       Tween.__update_step(delta_time)
+      Input.__begin_frame
       GUI.begin_frame
       @main_loop_block.call if @main_loop_block
       GUI.end_frame
