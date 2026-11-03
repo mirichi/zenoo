@@ -51,7 +51,9 @@ module Zenoo
       Tween.__update_step(delta_time)
       Input.__begin_frame
       GUI.begin_frame
+      Input.__update_virtual_pad
       @main_loop_block.call if @main_loop_block
+      Input.__draw_virtual_pad
       GUI.end_frame
       Input.__update_step
     end

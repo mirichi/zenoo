@@ -18,6 +18,7 @@ module Zenoo
       @active = true
       @released = false
       @cancelled = false
+      @consumed = false
       @duration = 0
     end
 
@@ -31,6 +32,15 @@ module Zenoo
 
     def cancelled?
       @cancelled
+    end
+
+    # UI・GUI等で処理済みとしてマークされているか (バーチャルパッド等への貫通防止)
+    def consumed?
+      @consumed
+    end
+
+    def consume!
+      @consumed = true
     end
 
     # 前フレームからの移動量 (Delta)
@@ -292,6 +302,7 @@ module Zenoo
     end
 
     def self.mouse_pressed?(button = :left)
+      return false if @using_touch
       Native::Input.mouse_pressed?(resolve_mouse(button))
     end
 
@@ -300,11 +311,68 @@ module Zenoo
     end
 
     def self.mouse_push?(button = :left)
+      return false if @using_touch
       Native::Input.mouse_push?(resolve_mouse(button))
     end
 
     def self.mouse_release?(button = :left)
+      return false if @using_touch
       Native::Input.mouse_release?(resolve_mouse(button))
+    end
+
+    # 統合ポインタ API (マウス操作とタッチ操作を単一インターフェースで透過処理)
+    def self.pointer_x
+      if @using_touch
+        t = @touches[0]
+        t ? t.x : -99999.0
+      else
+        Native::Input.mouse_x
+      end
+    end
+
+    def self.pointer_y
+      if @using_touch
+        t = @touches[0]
+        t ? t.y : -99999.0
+      else
+        Native::Input.mouse_y
+      end
+    end
+
+    def self.pointer_pressed?
+      if @using_touch
+        t = @touches[0]
+        t ? t.active? : false
+      else
+        Native::Input.mouse_pressed?(0)
+      end
+    end
+
+    def self.pointer_push?
+      if @using_touch
+        t = @touches[0]
+        t ? (t.duration == 0 && !t.cancelled?) : false
+      else
+        Native::Input.mouse_push?(0)
+      end
+    end
+
+    def self.pointer_release?
+      if @using_touch
+        t = @touches[0]
+        t ? t.released? : false
+      else
+        Native::Input.mouse_release?(0)
+      end
+    end
+
+    def self.consume_pointer!
+      if @using_touch
+        t = @touches[0]
+        t.consume! if t
+      else
+        @virtual_pad.consume_mouse_touch! if @virtual_pad
+      end
     end
 
     # マウスホイール (スクロール量)
@@ -460,9 +528,52 @@ module Zenoo
     # ==========================================
     @actions = {}
     @axis_state_prev = {} # { [axis, id, dir] => boolean }
+    @virtual_pad = nil
+    @vpad_actions_cur = {}
+    @vpad_actions_prev = {}
 
     def self.actions
       @actions
+    end
+
+    def self.virtual_pad
+      @virtual_pad
+    end
+
+    def self.virtual_pad=(pad)
+      @virtual_pad.reset if @virtual_pad
+      @virtual_pad = pad
+      @vpad_actions_cur.clear
+      @vpad_actions_prev.clear
+    end
+
+    # 仮想アクション注入 (VirtualPad 等から今フレームのアクション強度を注入)
+    def self.inject_action(name, strength = 1.0)
+      sym = name.to_sym
+      val = strength.to_f.clamp(0.0, 1.0)
+      cur = @vpad_actions_cur[sym] || 0.0
+      @vpad_actions_cur[sym] = val if val > cur
+    end
+
+    # 仮想2次元ベクトル注入 (VirtualPad のスティックやフリック方向を移動アクションへ注入)
+    def self.inject_vector(dx, dy)
+      vx = dx.to_f
+      vy = dy.to_f
+      len = Math.hypot(vx, vy)
+      if len > 1.0
+        vx /= len
+        vy /= len
+      end
+      if vx < 0.0
+        inject_action(:left, -vx)
+      elsif vx > 0.0
+        inject_action(:right, vx)
+      end
+      if vy < 0.0
+        inject_action(:up, -vy)
+      elsif vy > 0.0
+        inject_action(:down, vy)
+      end
     end
 
     # アクションの定義・追加登録
@@ -519,10 +630,12 @@ module Zenoo
 
     # アクションの強度 (0.0 .. 1.0)
     def self.action_strength(name, id = 0)
-      act = @actions[name.to_sym]
-      return 0.0 unless act
+      sym = name.to_sym
+      vpad_val = @vpad_actions_cur[sym] || 0.0
+      act = @actions[sym]
+      return vpad_val unless act
 
-      max_val = 0.0
+      max_val = vpad_val
 
       # 1. キーボード
       act[:keys].each do |k|
@@ -534,9 +647,11 @@ module Zenoo
         return 1.0 if Native::Input.gamepad_button_pressed?(id.to_i, b)
       end
 
-      # 3. マウスボタン
-      act[:mouse].each do |m|
-        return 1.0 if Native::Input.mouse_pressed?(m)
+      # 3. マウスボタン (タッチ操作中はブラウザのマウスエミュレーション誤爆を防ぐため無視)
+      unless @using_touch
+        act[:mouse].each do |m|
+          return 1.0 if Native::Input.mouse_pressed?(m)
+        end
       end
 
       # 4. アナログ軸 (トリガーやスティック)
@@ -564,7 +679,11 @@ module Zenoo
 
     # アクションが押されているか (持続)
     def self.action_pressed?(name, id = 0)
-      act = @actions[name.to_sym]
+      sym = name.to_sym
+      vpad_val = @vpad_actions_cur[sym] || 0.0
+      return true if vpad_val >= 0.5
+
+      act = @actions[sym]
       return false unless act
 
       # キーボード
@@ -578,8 +697,10 @@ module Zenoo
       end
 
       # マウスボタン
-      act[:mouse].each do |m|
-        return true if Native::Input.mouse_pressed?(m)
+      unless @using_touch
+        act[:mouse].each do |m|
+          return true if Native::Input.mouse_pressed?(m)
+        end
       end
 
       # アナログ軸
@@ -606,7 +727,12 @@ module Zenoo
 
     # アクションが押された瞬間か (トリガー)
     def self.action_push?(name, id = 0)
-      act = @actions[name.to_sym]
+      sym = name.to_sym
+      cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
+      prev_vpad = @vpad_actions_prev[sym] || false
+      return true if cur_vpad && !prev_vpad
+
+      act = @actions[sym]
       return false unless act
 
       # キーボード
@@ -620,8 +746,10 @@ module Zenoo
       end
 
       # マウスボタン
-      act[:mouse].each do |m|
-        return true if Native::Input.mouse_push?(m)
+      unless @using_touch
+        act[:mouse].each do |m|
+          return true if Native::Input.mouse_push?(m)
+        end
       end
 
       # アナログ軸の閾値クロス判定 (今フレームで閾値を超え、前フレームでは未超過)
@@ -644,7 +772,12 @@ module Zenoo
 
     # アクションが離された瞬間か (リリース)
     def self.action_release?(name, id = 0)
-      act = @actions[name.to_sym]
+      sym = name.to_sym
+      cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
+      prev_vpad = @vpad_actions_prev[sym] || false
+      return true if !cur_vpad && prev_vpad
+
+      act = @actions[sym]
       return false unless act
 
       act[:keys].each do |k|
@@ -655,8 +788,10 @@ module Zenoo
         return true if Native::Input.gamepad_button_release?(id.to_i, b)
       end
 
-      act[:mouse].each do |m|
-        return true if Native::Input.mouse_release?(m)
+      unless @using_touch
+        act[:mouse].each do |m|
+          return true if Native::Input.mouse_release?(m)
+        end
       end
 
       # アナログ軸のリリース判定
@@ -705,6 +840,15 @@ module Zenoo
     # ==========================================================================
     @active_touches = {}
     @touches = []
+    @using_touch = false
+    @touch_guard_frames = 0
+    @last_raw_mx = 0.0
+    @last_raw_my = 0.0
+
+    # 現在タッチ操作モード中か (ブラウザのタッチ由来マウスエミュレーションを自動排除し、物理マウス移動時にfalseへ復帰)
+    def self.using_touch?
+      @using_touch
+    end
 
     # 現在アクティブ、またはこのフレームで離された Touch オブジェクトの配列
     def self.touches
@@ -732,11 +876,16 @@ module Zenoo
       end
       @active_touches.clear
       @touches.clear
+      @vpad_actions_cur.clear
+      @vpad_actions_prev.clear
+      @virtual_pad.reset if @virtual_pad
       Native::Input.touch_clear_events
     end
 
     # フレーム開始時: 終了済みTouchの除去 & Cカーネルからの生イベント反映
     def self.__begin_frame
+      @vpad_actions_cur.clear
+
       # 1. 前フレームで終了（離脱/キャンセル）していた Touch を一覧から除外
       i = 0
       while i < @touches.length
@@ -779,6 +928,33 @@ module Zenoo
         end
         Native::Input.touch_clear_events
       end
+
+      # 3. タッチ操作モードと物理マウス復帰の自動判定
+      raw_mx = Native::Input.mouse_x
+      raw_my = Native::Input.mouse_y
+      if !@touches.empty?
+        @using_touch = true
+        @touch_guard_frames = 10
+      elsif @touch_guard_frames > 0
+        @touch_guard_frames -= 1
+      elsif @using_touch
+        if (raw_mx - @last_raw_mx).abs > 0.5 || (raw_my - @last_raw_my).abs > 0.5 ||
+           Native::Input.mouse_wheel_y != 0.0 || Native::Input.mouse_wheel_x != 0.0
+          @using_touch = false
+        end
+      end
+      @last_raw_mx = raw_mx
+      @last_raw_my = raw_my
+    end
+
+    # GUI.begin_frame の直後に呼ばれ、VirtualPad の状態を今フレームの Input へ反映
+    def self.__update_virtual_pad
+      @virtual_pad.update if @virtual_pad && @virtual_pad.enabled
+    end
+
+    # メインループブロック終了後に呼ばれ、VirtualPad を自動描画
+    def self.__draw_virtual_pad
+      @virtual_pad.draw if @virtual_pad && @virtual_pad.enabled && @virtual_pad.visible && @virtual_pad.auto_draw
     end
 
     # 毎フレーム末尾で軸状態を更新 (Window.__update_step から自動呼出し)
@@ -795,6 +971,11 @@ module Zenoo
                        end
           @axis_state_prev[[axis_name, 0, dir]] = cur_active
         end
+      end
+
+      @vpad_actions_prev.clear
+      @vpad_actions_cur.each do |sym, val|
+        @vpad_actions_prev[sym] = (val >= 0.5)
       end
     end
 

@@ -377,12 +377,15 @@ module Zenoo
         Window.__advance_time if @current_frame_ran_game
         Audio.update(delta_time)
         Tween.__update_step(delta_time) if @current_frame_ran_game
+        Input.__begin_frame
         GUI.begin_frame
+        Input.__update_virtual_pad if @current_frame_ran_game
         if @main_loop_block
           begin
             if @current_frame_ran_game
               Zenoo::Dev.game_block_active = true
               @main_loop_block.call
+              Input.__draw_virtual_pad
             end
           rescue ScriptError, StandardError => e
             if Zenoo::Dev.enabled
