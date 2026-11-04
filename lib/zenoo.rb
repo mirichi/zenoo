@@ -26,6 +26,7 @@ require_relative 'zenoo/shader'
 require_relative 'zenoo/image'
 require_relative 'zenoo/input'
 require_relative 'zenoo/virtual_pad'
+require_relative 'zenoo/browser'
 require_relative 'zenoo/window'
 require_relative 'zenoo/canvas'
 require_relative 'zenoo/gui'
@@ -45,6 +46,7 @@ require_relative 'zenoo/scene'
 
 # トップレベルへの便利エイリアス (DXRubyスタイル)
 Window        = Zenoo::Window
+Browser       = Zenoo::Browser
 Canvas        = Zenoo::Canvas
 Input         = Zenoo::Input
 VirtualPad    = Zenoo::VirtualPad

@@ -15,6 +15,83 @@ module Zenoo
     @fps = 60.0
     @fps_frames = 0
     @fps_accum = 0.0
+    @auto_pause = true
+    @paused = false
+    @pause_handlers = []
+    @resume_handlers = []
+
+    class << self
+      def auto_pause=(val)
+        @auto_pause = !!val
+        if Native::Window.wasm?
+          Browser.eval(@auto_pause ? "window.__zen_auto_pause = true;" : "window.__zen_auto_pause = false;")
+        end
+      end
+
+      def auto_pause
+        @auto_pause
+      end
+
+      def paused?
+        @paused || false
+      end
+
+      # バックグラウンド移行（タブ非表示）時ハンドラー登録
+      def on_pause(&block)
+        @pause_handlers << block if block
+      end
+
+      # フォアグラウンド復帰時ハンドラー登録
+      def on_resume(&block)
+        @resume_handlers << block if block
+      end
+
+      # セーフエリアインセット [left, top, right, bottom] (仮想解像度px)
+      def safe_area
+        Browser.safe_area
+      end
+
+      # 安全表示領域の矩形 [x, y, w, h] (仮想解像度px)
+      def safe_area_rect
+        Browser.safe_area_rect
+      end
+
+      # ブラウザ可視性変更イベントの登録 (Wasm実行時、RubyからBrowserモジュール経由で登録)
+      def __setup_wasm_visibility_listener
+        Browser.eval(
+          "if (!window.__zen_visibility_installed) {" \
+          "  window.__zen_visibility_installed = true;" \
+          "  window.__zen_auto_pause = true;" \
+          "  var updateAudio = function(hidden) {" \
+          "    if (window.__zen_auto_pause && window.miniaudio && window.miniaudio.devices) {" \
+          "      for (var i = 0; i < window.miniaudio.devices.length; i++) {" \
+          "        var dev = window.miniaudio.devices[i];" \
+          "        if (!dev || !dev.webaudio) continue;" \
+          "        if (hidden) {" \
+          "          if (dev.webaudio.state === 'running') {" \
+          "            dev.webaudio.suspend();" \
+          "            dev.__zen_suspended = true;" \
+          "          }" \
+          "        } else {" \
+          "          if (dev.__zen_suspended) {" \
+          "            dev.webaudio.resume();" \
+          "            dev.__zen_suspended = false;" \
+          "          }" \
+          "        }" \
+          "      }" \
+          "    }" \
+          "  };" \
+          "  document.addEventListener('visibilitychange', function() {" \
+          "    var hidden = (document.visibilityState === 'hidden') || document.hidden;" \
+          "    updateAudio(hidden);" \
+          "  });" \
+          "  window.addEventListener('pagehide', function() {" \
+          "    updateAudio(true);" \
+          "  });" \
+          "}"
+        )
+      end
+    end
 
     # DXRuby風メインループ (scale: nil の場合はモニターのDPIスケールを自動検出)
     def self.loop(width = 1280, height = 720, title = "Zenoo", scale: nil, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, msaa: nil, fps: 60, &block)
@@ -31,6 +108,7 @@ module Zenoo
       @main_loop_block = block
 
       if Native::Window.wasm?
+        __setup_wasm_visibility_listener
         @step_proc = proc { __step_frame }
         Native::Window.start_wasm_loop(@step_proc)
       else
@@ -46,6 +124,31 @@ module Zenoo
     end
 
     def self.__update_step
+      # ブラウザの可視状態チェック (タブ非表示時の自動ポーズ＆BGM停止)
+      if @auto_pause && Native::Window.wasm?
+        is_visible = Browser.visible?
+        if !is_visible && !@paused
+          @paused = true
+          Audio.pause_all
+          i = 0
+          while i < @pause_handlers.length
+            @pause_handlers[i].call
+            i += 1
+          end
+          return
+        elsif is_visible && @paused
+          @paused = false
+          Audio.resume_all
+          i = 0
+          while i < @resume_handlers.length
+            @resume_handlers[i].call
+            i += 1
+          end
+        elsif !is_visible
+          return # ポーズ中はゲーム内ロジックを進行させない
+        end
+      end
+
       __advance_time
       Audio.update(delta_time)
       Tween.__update_step(delta_time)

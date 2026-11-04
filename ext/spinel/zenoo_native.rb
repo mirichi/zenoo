@@ -292,6 +292,20 @@ module Zenoo
       native_func :master_volume=, [:float], :nil, "sp_zen_audio_set_master_volume"
       native_func :master_volume, [], :float, "sp_zen_audio_get_master_volume"
     end
+
+    # ==========================================
+    # 10. Native::Browser
+    # ==========================================
+    module Browser
+      native_func :raw_eval, [:string], :nil, "sp_zen_browser_eval"
+      native_func :raw_eval_num, [:string], :float, "sp_zen_browser_eval_num"
+      native_func :raw_eval_str, [:string], :string, "sp_zen_browser_eval_str"
+      native_func :visible?, [], :bool, "sp_zen_browser_is_visible"
+      native_func :raw_safe_area_left, [], :float, "sp_zen_browser_safe_area_left"
+      native_func :raw_safe_area_top, [], :float, "sp_zen_browser_safe_area_top"
+      native_func :raw_safe_area_right, [], :float, "sp_zen_browser_safe_area_right"
+      native_func :raw_safe_area_bottom, [], :float, "sp_zen_browser_safe_area_bottom"
+    end
   end
 
   # ==========================================

@@ -1583,6 +1583,60 @@ static VALUE zenoo_s_version(VALUE klass) {
 }
 
 // ==========================================
+// Native::Browser C-Ruby バインディング
+// ==========================================
+static VALUE browser_s_eval(VALUE klass, VALUE code) {
+    (void)klass;
+    zen_js_eval(StringValueCStr(code));
+    return Qnil;
+}
+
+static VALUE browser_s_eval_num(VALUE klass, VALUE code) {
+    (void)klass;
+    double val = zen_js_eval_num(StringValueCStr(code));
+    return DBL2NUM(val);
+}
+
+static VALUE browser_s_eval_str(VALUE klass, VALUE code) {
+    (void)klass;
+    const char* str = zen_js_eval_str(StringValueCStr(code));
+    return rb_str_new_cstr(str ? str : "");
+}
+
+static VALUE browser_s_is_visible(VALUE klass) {
+    (void)klass;
+    return zen_js_is_page_visible() ? Qtrue : Qfalse;
+}
+
+static VALUE browser_s_safe_area_left(VALUE klass) {
+    (void)klass;
+    float l = 0, t = 0, r = 0, b = 0;
+    zen_js_get_safe_area(&l, &t, &r, &b);
+    return DBL2NUM((double)l);
+}
+
+static VALUE browser_s_safe_area_top(VALUE klass) {
+    (void)klass;
+    float l = 0, t = 0, r = 0, b = 0;
+    zen_js_get_safe_area(&l, &t, &r, &b);
+    return DBL2NUM((double)t);
+}
+
+static VALUE browser_s_safe_area_right(VALUE klass) {
+    (void)klass;
+    float l = 0, t = 0, r = 0, b = 0;
+    zen_js_get_safe_area(&l, &t, &r, &b);
+    return DBL2NUM((double)r);
+}
+
+static VALUE browser_s_safe_area_bottom(VALUE klass) {
+    (void)klass;
+    float l = 0, t = 0, r = 0, b = 0;
+    zen_js_get_safe_area(&l, &t, &r, &b);
+    return DBL2NUM((double)b);
+}
+
+// ==========================================
 // C拡張初期化エントリポイント
 // ==========================================
 void Init_zenoo(void) {
@@ -1789,4 +1843,15 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mAudio, "shutdown", audio_s_shutdown, 0);
     rb_define_singleton_method(mAudio, "master_volume=", audio_s_set_master_volume, 1);
     rb_define_singleton_method(mAudio, "master_volume", audio_s_get_master_volume, 0);
+
+    // 9. Browser (Zenoo::Native::Browser)
+    VALUE mBrowser = rb_define_module_under(rb_mNative, "Browser");
+    rb_define_singleton_method(mBrowser, "raw_eval", browser_s_eval, 1);
+    rb_define_singleton_method(mBrowser, "raw_eval_num", browser_s_eval_num, 1);
+    rb_define_singleton_method(mBrowser, "raw_eval_str", browser_s_eval_str, 1);
+    rb_define_singleton_method(mBrowser, "visible?", browser_s_is_visible, 0);
+    rb_define_singleton_method(mBrowser, "raw_safe_area_left", browser_s_safe_area_left, 0);
+    rb_define_singleton_method(mBrowser, "raw_safe_area_top", browser_s_safe_area_top, 0);
+    rb_define_singleton_method(mBrowser, "raw_safe_area_right", browser_s_safe_area_right, 0);
+    rb_define_singleton_method(mBrowser, "raw_safe_area_bottom", browser_s_safe_area_bottom, 0);
 }

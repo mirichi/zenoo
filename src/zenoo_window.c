@@ -1014,3 +1014,129 @@ void zen_window_set_clipboard_string(const char* text) {
     if (!s_window || !text) return;
     glfwSetClipboardString(s_window, text);
 }
+
+// ------------------------------------------
+// ブラウザ / Web 連携ブリッジ
+// ------------------------------------------
+#ifdef __EMSCRIPTEN__
+static char s_js_eval_str_buf[1024] = {0};
+
+void zen_js_eval(const char* code) {
+    if (!code || !code[0]) return;
+    emscripten_run_script(code);
+}
+
+double zen_js_eval_num(const char* code) {
+    if (!code || !code[0]) return 0.0;
+    return emscripten_run_script_int(code);
+}
+
+const char* zen_js_eval_str(const char* code) {
+    if (!code || !code[0]) return "";
+    char* res = emscripten_run_script_string(code);
+    if (!res) return "";
+    strncpy(s_js_eval_str_buf, res, sizeof(s_js_eval_str_buf) - 1);
+    s_js_eval_str_buf[sizeof(s_js_eval_str_buf) - 1] = '\0';
+    return s_js_eval_str_buf;
+}
+
+int zen_js_is_page_visible(void) {
+    return EM_ASM_INT({
+        return (document.visibilityState === "visible") ? 1 : 0;
+    });
+}
+
+void zen_js_get_safe_area(float* left, float* top, float* right, float* bottom) {
+    if (!left || !top || !right || !bottom) return;
+    *left = 0.0f; *top = 0.0f; *right = 0.0f; *bottom = 0.0f;
+
+    // Canvas のクライアント矩形と safe-area-inset を取得し、Zenoo の仮想座標系へ逆算
+    double l = EM_ASM_DOUBLE({
+        var d = document.getElementById("zenoo-safe-area-probe");
+        if (!d) {
+            d = document.createElement("div");
+            d.id = "zenoo-safe-area-probe";
+            d.style.position = "fixed";
+            d.style.top = "0";
+            d.style.left = "0";
+            d.style.width = "0";
+            d.style.height = "0";
+            d.style.visibility = "hidden";
+            d.style.pointerEvents = "none";
+            d.style.paddingLeft = "env(safe-area-inset-left, 0px)";
+            d.style.paddingTop = "env(safe-area-inset-top, 0px)";
+            d.style.paddingRight = "env(safe-area-inset-right, 0px)";
+            d.style.paddingBottom = "env(safe-area-inset-bottom, 0px)";
+            document.body.appendChild(d);
+        }
+        var cs = window.getComputedStyle(d);
+        var pl = parseFloat(cs.paddingLeft) || 0;
+        var pt = parseFloat(cs.paddingTop) || 0;
+        var pr = parseFloat(cs.paddingRight) || 0;
+        var pb = parseFloat(cs.paddingBottom) || 0;
+
+        var cv = document.getElementById("canvas") || document.querySelector("canvas");
+        if (!cv) return 0;
+        var rect = cv.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return 0;
+
+        // Canvas要素自体の画面端からの距離 (マージン)
+        var cvLeft = rect.left;
+        var cvTop = rect.top;
+        var cvRight = window.innerWidth - rect.right;
+        var cvBottom = window.innerHeight - rect.bottom;
+
+        // ノッチやバーがCanvas内に侵入しているピクセル量 (CSS px)
+        var inLeft = Math.max(0, pl - cvLeft);
+        var inTop = Math.max(0, pt - cvTop);
+        var inRight = Math.max(0, pr - cvRight);
+        var inBottom = Math.max(0, pb - cvBottom);
+
+        // Zenoo の仮想解像度へのスケール比率
+        var scaleX = cv.width / rect.width;
+        var scaleY = cv.height / rect.height;
+
+        // 4値をパックして共有バッファに書き込み
+        if (!window.__zen_safe_area) window.__zen_safe_area = new Array(4);
+        window.__zen_safe_area[0] = inLeft * scaleX;
+        window.__zen_safe_area[1] = inTop * scaleY;
+        window.__zen_safe_area[2] = inRight * scaleX;
+        window.__zen_safe_area[3] = inBottom * scaleY;
+        return window.__zen_safe_area[0];
+    });
+
+    double t = EM_ASM_DOUBLE({ return window.__zen_safe_area ? window.__zen_safe_area[1] : 0; });
+    double r = EM_ASM_DOUBLE({ return window.__zen_safe_area ? window.__zen_safe_area[2] : 0; });
+    double b = EM_ASM_DOUBLE({ return window.__zen_safe_area ? window.__zen_safe_area[3] : 0; });
+
+    *left   = (float)l;
+    *top    = (float)t;
+    *right  = (float)r;
+    *bottom = (float)b;
+}
+#else
+void zen_js_eval(const char* code) {
+    (void)code;
+}
+
+double zen_js_eval_num(const char* code) {
+    (void)code;
+    return 0.0;
+}
+
+const char* zen_js_eval_str(const char* code) {
+    (void)code;
+    return "";
+}
+
+int zen_js_is_page_visible(void) {
+    return zen_is_window_focused();
+}
+
+void zen_js_get_safe_area(float* left, float* top, float* right, float* bottom) {
+    if (left) *left = 0.0f;
+    if (top) *top = 0.0f;
+    if (right) *right = 0.0f;
+    if (bottom) *bottom = 0.0f;
+}
+#endif
