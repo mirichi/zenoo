@@ -737,7 +737,7 @@ class IsoPlayer < Zenoo::Sprite
 
   WALK_FRAME_NAMES = ["0 (左足)", "1 (直立)", "2 (右足)", "1 (直立)"].freeze
 
-  attr_reader   :facing_x, :attacking, :altitude, :ground_h
+  attr_reader   :facing_x, :attacking, :altitude, :ground_h, :vz, :jumping, :jump_start_h
   attr_accessor :effects, :enemies, :tilemap
   alias jump_z altitude
   alias current_frame_index animation_frame_index
@@ -753,6 +753,8 @@ class IsoPlayer < Zenoo::Sprite
     @altitude = 0.0
     @ground_h = 0.0
     @vz = 0.0
+    @jumping = false
+    @jump_start_h = 0.0
     @effects = nil
     @enemies = nil
     @tilemap = nil
@@ -778,6 +780,8 @@ class IsoPlayer < Zenoo::Sprite
 
   def trigger_jump
     if @altitude <= @ground_h && @vz <= 0.0
+      @jumping = true
+      @jump_start_h = @ground_h
       @vz = JUMP_SPEED
       dx, dy = Zenoo::Input.vector
       if dx != 0.0 || dy != 0.0
@@ -885,7 +889,12 @@ class IsoPlayer < Zenoo::Sprite
         @vz = 0.0
         @jump_dx = nil
         @jump_dy = nil
+        @jumping = false
+        @jump_start_h = @ground_h
       end
+    else
+      @jumping = false
+      @jump_start_h = @ground_h
     end
   end
 
@@ -1043,7 +1052,7 @@ class DemoScene < Zenoo::Scene
       offset_y: VIRTUAL_HEIGHT / 2.0,
       target: @player,
       target_offset_y: -20.0,
-      smooth_speed: 1.1,
+      smooth_speed: 0.9,
       bounds: [0, 0, WORLD_WIDTH, WORLD_HEIGHT]
     )
 
@@ -1186,6 +1195,20 @@ class DemoScene < Zenoo::Scene
     Zenoo::Sprite.update(@effects)
     Zenoo::Sprite.clean(@effects)
 
+    # カメラの注視高度:
+    # - 通常時 (接地中): 床の標高 (ground_h)
+    # - ジャンプ中 (開始時の床高さ以上): ジャンプ前の標高 (jump_start_h) をキープし、画面のガタつきを完全防止
+    # - 飛び降り時 (ジャンプ前/足場の高さを下回って落下中): キャラの実際の落下高度 (altitude) にリアルタイム同期して自然に下降
+    cam_h = if @player.altitude > @player.ground_h
+              if @player.jumping && @player.altitude >= @player.jump_start_h
+                @player.jump_start_h
+              else
+                @player.altitude
+              end
+            else
+              @player.ground_h
+            end
+    @camera.target_offset_y = -20.0 - cam_h
     @camera.update
 
     if @enemies.empty?
