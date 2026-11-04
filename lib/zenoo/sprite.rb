@@ -2,6 +2,8 @@
 
 module Zenoo
   class Sprite
+    include Tweenable
+
     # ワールド変換キャッシュ構造体 (親子関係がある場合のみ遅延生成)
     WorldTransform = Struct.new(
       :dirty,
@@ -25,23 +27,19 @@ module Zenoo
         @finished = false
       end
 
-      def add(name, images, wait: 4, loop: true, offset_x: 0.0, offset_y: 0.0, offset: nil)
+      def add(name, images, wait: 4, loop: true, offset_x: 0.0, offset_y: 0.0)
         imgs = images.is_a?(Array) ? images : [images]
 
         # offset_x / offset_y に統一 (数値または配列)
         # 後方互換のため offset: [x, y] が指定された場合はフォールバックとして採用
         ox = if offset_x && offset_x != 0.0 && offset_x != 0
           offset_x
-        elsif offset && offset.is_a?(Array)
-          offset.first.is_a?(Array) ? offset.map { |o| o ? o[0] : 0.0 } : offset[0]
         else
           offset_x || 0.0
         end
 
         oy = if offset_y && offset_y != 0.0 && offset_y != 0
           offset_y
-        elsif offset && offset.is_a?(Array)
-          offset.first.is_a?(Array) ? offset.map { |o| o ? o[1] : 0.0 } : offset[1]
         else
           offset_y || 0.0
         end
@@ -199,15 +197,17 @@ module Zenoo
     # ライフサイクル管理 (消滅)
     def vanish
       @vanished = true
+      kill_tweens
     end
 
     def vanished?
       @vanished
     end
 
-    # フレーム更新 (継承先でオーバーライド。super でアニメーションが自動更新されます)
+    # フレーム更新 (継承先でオーバーライド。super でアニメーション・Tweenが自動更新されます)
     def update
       update_animation
+      update_tweens
     end
 
     # ====================================================
@@ -221,9 +221,8 @@ module Zenoo
     # @param loop [Boolean] ループ再生するかどうか (デフォルト: true)
     # @param offset_x [Numeric, Array<Numeric>] 描画位置オフセット X (コマごと配列指定可、足りない場合は最後の値を使用)
     # @param offset_y [Numeric, Array<Numeric>] 描画位置オフセット Y (コマごと配列指定可、足りない場合は最後の値を使用)
-    # @param offset [Array<Numeric>] 後方互換用 [x, y]
-    def add_animation(name, images, wait: 4, loop: true, offset_x: 0.0, offset_y: 0.0, offset: nil)
-      animator.add(name, images, wait: wait, loop: loop, offset_x: offset_x, offset_y: offset_y, offset: offset)
+    def add_animation(name, images, wait: 4, loop: true, offset_x: 0.0, offset_y: 0.0)
+      animator.add(name, images, wait: wait, loop: loop, offset_x: offset_x, offset_y: offset_y)
       self
     end
 
@@ -278,7 +277,6 @@ module Zenoo
     def animation_frame_index
       @animator ? @animator.frame_index : 0
     end
-    alias current_frame_index animation_frame_index
 
     # 1フレーム分のアニメーション更新処理
     # (update 内から自動で呼ばれますが、手動呼び出しも可能)
@@ -770,10 +768,8 @@ module Zenoo
 
     def collider=(shape)
       @collider_shape = shape
-      if shape.respond_to?(:parent=)
-        shape.parent = self
-        shape.dirty_pos! if shape.respond_to?(:dirty_pos!)
-      end
+      shape.parent = self
+      shape.dirty_pos! if shape.respond_to?(:dirty_pos!)
     end
 
     def collider_anchor

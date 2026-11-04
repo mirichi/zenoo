@@ -1249,11 +1249,11 @@ module Zenoo
 
     # Sweep and Prune 用ヘルパー: アイテムから Shape と AABB (min_x, max_x) を抽出
     def self.__extract_sap_entry(item, group_id = nil)
-      return nil if item.vanished?
-      shape = item.is_a?(Shape) ? item : (item.respond_to?(:collider) ? item.collider : nil)
+      return nil if item.respond_to?(:vanished?) && item.vanished?
+      shape = item.respond_to?(:collider) ? item.collider : item
       return nil unless shape
 
-      shape.update_cache if shape.respond_to?(:dirty?) && shape.dirty?
+      shape.update_cache if shape.dirty?
       r = shape.bounding_radius.to_f
       cx = shape.center_x.to_f
       min_x = cx - r
@@ -1274,18 +1274,18 @@ module Zenoo
       i = 0
       while i < len_a
         item_a = arr_a[i]
-        if item_a && !item_a.vanished?
-          shape_a = item_a.is_a?(Shape) ? item_a : (item_a.respond_to?(:collider) ? item_a.collider : nil)
+        if item_a && !(item_a.respond_to?(:vanished?) && item_a.vanished?)
+          shape_a = item_a.respond_to?(:collider) ? item_a.collider : item_a
           if shape_a
             j = same_group ? (i + 1) : 0
             while j < len_b
               item_b = arr_b[j]
-              if item_b && !item_b.vanished?
-                shape_b = item_b.is_a?(Shape) ? item_b : (item_b.respond_to?(:collider) ? item_b.collider : nil)
+              if item_b && !(item_b.respond_to?(:vanished?) && item_b.vanished?)
+                shape_b = item_b.respond_to?(:collider) ? item_b.collider : item_b
                 if shape_b && check(shape_a, shape_b)
                   if block_given?
                     yield(item_a, item_b)
-                    break if item_a.vanished?
+                    break if item_a.respond_to?(:vanished?) && item_a.vanished?
                   else
                     hits << [item_a, item_b]
                   end
@@ -1445,8 +1445,8 @@ module Zenoo
       return nil unless shape_a && shape_b
       return nil if shape_a.is_a?(Array) || shape_b.is_a?(Array)
 
-      shape_a.update_cache if shape_a.respond_to?(:dirty?) && shape_a.dirty?
-      shape_b.update_cache if shape_b.respond_to?(:dirty?) && shape_b.dirty?
+      shape_a.update_cache if shape_a.dirty?
+      shape_b.update_cache if shape_b.dirty?
 
       dx = shape_b.center_x - shape_a.center_x
       dy = shape_b.center_y - shape_a.center_y
@@ -1500,12 +1500,12 @@ module Zenoo
       i = 0
       while i < len_a
         item_a = arr_a[i]
-        shape_a = item_a.is_a?(Shape) ? item_a : (item_a.respond_to?(:collider) ? item_a.collider : nil)
+        shape_a = item_a.respond_to?(:collider) ? item_a.collider : item_a
         if shape_a
           j = same_group ? (i + 1) : 0
           while j < len_b
             item_b = arr_b[j]
-            shape_b = item_b.is_a?(Shape) ? item_b : (item_b.respond_to?(:collider) ? item_b.collider : nil)
+            shape_b = item_b.respond_to?(:collider) ? item_b.collider : item_b
             if shape_b
               hit = penetration(shape_a, shape_b)
               if hit
@@ -1915,7 +1915,7 @@ module Zenoo
     def self.project_shape(axis_x, axis_y, shape)
       if shape.shape_type == TYPE_CIRCLE && shape.is_true_circle
         project_circle(axis_x, axis_y, shape)
-      elsif shape.respond_to?(:world_vertices) && shape.world_vertices
+      elsif (shape.shape_type == TYPE_RECT || shape.shape_type == TYPE_POLYGON) && shape.world_vertices
         project_polygon(axis_x, axis_y, shape.world_vertices)
       else
         # 楕円などの一般的な凸形状 (サポート写像による厳密射影)
@@ -1931,8 +1931,8 @@ module Zenoo
 
     def self.collect_sat_axes(shape_a, shape_b)
       axes = []
-      verts_a = shape_a.respond_to?(:world_vertices) ? shape_a.world_vertices : nil
-      verts_b = shape_b.respond_to?(:world_vertices) ? shape_b.world_vertices : nil
+      verts_a = (shape_a.shape_type == TYPE_RECT || shape_a.shape_type == TYPE_POLYGON) ? shape_a.world_vertices : nil
+      verts_b = (shape_b.shape_type == TYPE_RECT || shape_b.shape_type == TYPE_POLYGON) ? shape_b.world_vertices : nil
 
       # エッジ法線
       if verts_a
@@ -2247,8 +2247,8 @@ module Zenoo
       def each_collision
         hits = block_given? ? nil : []
         each_pair do |e1, e2|
-          s1 = e1.is_a?(Shape) ? e1 : (e1.respond_to?(:collider) ? e1.collider : nil)
-          s2 = e2.is_a?(Shape) ? e2 : (e2.respond_to?(:collider) ? e2.collider : nil)
+          s1 = e1.respond_to?(:collider) ? e1.collider : e1
+          s2 = e2.respond_to?(:collider) ? e2.collider : e2
           if s1 && s2 && Collision.check(s1, s2)
             if block_given?
               yield(e1, e2)
