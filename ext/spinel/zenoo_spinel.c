@@ -988,4 +988,47 @@ double sp_zen_audio_get_master_volume(void) {
     return (double)zen_audio_get_master_volume();
 }
 
+// ==========================================
+// Native::Browser
+// ==========================================
+void sp_zen_browser_eval(const char* code) {
+    zen_js_eval(code);
+}
+
+double sp_zen_browser_eval_num(const char* code) {
+    return zen_js_eval_num(code);
+}
+
+const char* sp_zen_browser_eval_str(const char* code) {
+    return zen_js_eval_str(code);
+}
+
+sp_bool sp_zen_browser_is_visible(void) {
+    return zen_js_is_page_visible() ? true : false;
+}
+
+double sp_zen_browser_safe_area_left(void) {
+    float l = 0, t = 0, r = 0, b = 0;
+    zen_js_get_safe_area(&l, &t, &r, &b);
+    return (double)l;
+}
+
+double sp_zen_browser_safe_area_top(void) {
+    float l = 0, t = 0, r = 0, b = 0;
+    zen_js_get_safe_area(&l, &t, &r, &b);
+    return (double)t;
+}
+
+double sp_zen_browser_safe_area_right(void) {
+    float l = 0, t = 0, r = 0, b = 0;
+    zen_js_get_safe_area(&l, &t, &r, &b);
+    return (double)r;
+}
+
+double sp_zen_browser_safe_area_bottom(void) {
+    float l = 0, t = 0, r = 0, b = 0;
+    zen_js_get_safe_area(&l, &t, &r, &b);
+    return (double)b;
+}
+
 

@@ -520,6 +520,15 @@ void     zen_sound_get_loop_points_seconds(const ZenSound* sound, float* out_sta
 int      zen_sound_has_loop_points(const ZenSound* sound);
 void     zen_sound_clear_loop_points(ZenSound* sound);
 
+// ------------------------------------------
+// ブラウザ / Web 連携ブリッジ
+// ------------------------------------------
+void        zen_js_eval(const char* code);
+double      zen_js_eval_num(const char* code);
+const char* zen_js_eval_str(const char* code);
+int         zen_js_is_page_visible(void);
+void        zen_js_get_safe_area(float* left, float* top, float* right, float* bottom);
+
 #ifdef __cplusplus
 }
 #endif

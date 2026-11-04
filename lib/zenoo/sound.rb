@@ -108,6 +108,28 @@ module Zenoo
         sound
       end
 
+      # 再生中の全サウンドを一時停止
+      def pause_all
+        i = 0
+        len = @active_sounds.length
+        while i < len
+          s = @active_sounds[i]
+          s.pause if s && s.playing?
+          i += 1
+        end
+      end
+
+      # 一時停止中のサウンドを再開
+      def resume_all
+        i = 0
+        len = @active_sounds.length
+        while i < len
+          s = @active_sounds[i]
+          s.play if s && !s.playing?
+          i += 1
+        end
+      end
+
       def init
         Native::Audio.init
       end

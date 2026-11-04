@@ -258,4 +258,14 @@ void sp_zen_audio_shutdown(void);
 void sp_zen_audio_set_master_volume(double vol);
 double sp_zen_audio_get_master_volume(void);
 
+// Browser モジュール用
+void sp_zen_browser_eval(const char* code);
+double sp_zen_browser_eval_num(const char* code);
+const char* sp_zen_browser_eval_str(const char* code);
+sp_bool sp_zen_browser_is_visible(void);
+double sp_zen_browser_safe_area_left(void);
+double sp_zen_browser_safe_area_top(void);
+double sp_zen_browser_safe_area_right(void);
+double sp_zen_browser_safe_area_bottom(void);
+
 #endif // ZENOO_SPINEL_H
