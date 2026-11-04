@@ -174,7 +174,12 @@ module Zenoo
         @name = name
         @data = data || []
         @z = z.to_f
-        @y_sort = !!y_sort
+        @y_sort_mode = case y_sort
+                       when :floor, :top then :floor
+                       when true, :bottom then :bottom
+                       else nil
+                       end
+        @y_sort = !@y_sort_mode.nil?
         @z_offset = z_offset.to_f
         @solid = !!solid
         @height = height ? height.to_f : nil
@@ -278,6 +283,10 @@ module Zenoo
         base_z = (z || (@tilemap.z + @z)).to_f
         draw_camera = camera.nil? ? @tilemap.camera : camera
 
+        # レイヤーに標高 (height) が設定されている場合、2.5Dプロジェクションとして画面上方 (-Y) にオフセット
+        elev_offset = (@height || 0.0).to_f * sy
+        eff_draw_y = draw_y - elev_offset
+
         eff_alpha = (@alpha * @tilemap.alpha) / 255
         eff_color = (@color == :white || @color.nil?) ? @tilemap.color : @color
 
@@ -301,8 +310,8 @@ module Zenoo
         max_off = @max_cell_offset if @max_cell_offset > max_off
         tall_margin = [max_off, @max_tall_rows].max + 1
 
-        min_row = [((top - draw_y) / th).floor - 1, 0].max
-        max_row = [((bottom - draw_y) / th).floor + tall_margin, @rows - 1].min
+        min_row = [((top - eff_draw_y) / th).floor - 1, 0].max
+        max_row = [((bottom - eff_draw_y) / th).floor + tall_margin, @rows - 1].min
         return if min_row > max_row
 
         rebuild_all_dirty! if @all_dirty
@@ -314,9 +323,12 @@ module Zenoo
         while r <= max_row
           rebuild_row!(r) if @row_dirty[r]
 
-          # Yソートが有効な場合、その行の下端 Y 座標を Z値として渡す
-          # (これによりキャラの sprite.z = sprite.y と完全に連動して前後関係が成立)
-          row_z = if @y_sort
+          # Yソートが有効な場合、その行の境界 Y 座標を Z値として渡す (純粋なワールドY基準)
+          # :floor/:top の場合は行の上端 + 微小オフセット (裏通路のキャラ y <= r*th より手前、高台上のキャラ y + ground_h より奥)
+          # :bottom/true の場合は行の下端 (立体物の足元・壁) を基準にする
+          row_z = if @y_sort_mode == :floor
+                    base_z + draw_y + (r * th) + 0.1 + (@z_offset * sy)
+                  elsif @y_sort_mode == :bottom
                     base_z + draw_y + ((r + 1) * th) + (@z_offset * sy)
                   else
                     base_z
@@ -327,7 +339,7 @@ module Zenoo
           if mesh && mesh.count > 0
             Window.draw(
               draw_x,
-              draw_y + r * th,
+              eff_draw_y + r * th,
               mesh,
               anchor: :top_left,
               pivot: :top_left,
@@ -344,7 +356,7 @@ module Zenoo
           # 別テクスチャ画像が混ざっていた場合のフォールバック個別描画
           extras = @row_extras[r]
           if extras
-            draw_row_extras(extras, draw_x, draw_y, sx, sy, tw, th, eff_color, eff_alpha, draw_camera, row_z)
+            draw_row_extras(extras, draw_x, eff_draw_y, sx, sy, tw, th, eff_color, eff_alpha, draw_camera, row_z)
           end
 
           r += 1
@@ -1206,15 +1218,13 @@ module Zenoo
       cy = col_shape.center_y
       br = col_shape.bounding_radius
 
-      # 高度判定有効時は、段差タイルが描画上 -Y に持ち上がっている分 (+max_h) だけ探索範囲を広げる
       check_elevation = !altitude.nil?
       cur_alt = altitude.to_f
       step_tol = step_tolerance.to_f
-      elev_expand = check_elevation ? 32.0 : 0.0
 
       min_c = [((cx - br - @x) / tw).floor, 0].max
       max_c = [((cx + br - @x) / tw).floor, @cols - 1].min
-      min_r = [((cy - elev_expand - br - @y) / th).floor, 0].max
+      min_r = [((cy - br - @y) / th).floor, 0].max
       max_r = [((cy + br - @y) / th).floor, @rows - 1].min
       return false if min_c > max_c || min_r > max_r
 
@@ -1231,9 +1241,8 @@ module Zenoo
           is_elev_wall = check_elevation && th_elev > (cur_alt + step_tol)
 
           if is_solid || is_elev_wall
-            # 段差タイルの接地当たり判定は、見た目の上面描画位置から +th_elev (下) にずらす
             wx = @x + c * tw
-            wy = @y + r * th + (is_solid ? 0.0 : th_elev)
+            wy = @y + r * th
             dx = (wx + 0.5 * tw) - cx
             dy = (wy + 0.5 * th) - cy
             d2 = dx * dx + dy * dy

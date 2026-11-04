@@ -50,25 +50,10 @@ PILLAR_PARTS = [T_PILLAR_TOP, T_PILLAR_MID, T_PILLAR_BOT].freeze
 STELE_PARTS  = [T_STELE_TOP,  T_STELE_BOT].freeze
 
 # クォータービューの奥行きパースに合わせて縦移動を 80% に補正
-Y_RATIO        = 0.8
-PLATEAU_HEIGHT = 18.0 # 高台の標高 (18px)
-
-# 高台範囲 [c_range, r_range] と、Window.clip による上面影クリッピング用矩形 [x, y, w, h]
-PLATEAU_RANGES = [
-  [24..29, 4..8],  # 北東の高台
-  [10..15, 15..19] # 南西の高台
-].freeze
-
-PLATEAU_TOP_RECTS = PLATEAU_RANGES.map do |cr, rr|
-  top_y = rr.begin * TILE_SIZE - PLATEAU_HEIGHT - 4.0
-  bottom_y = (rr.end) * TILE_SIZE + 6.0
-  [
-    cr.begin * TILE_SIZE + 3.0,
-    top_y,
-    cr.size * TILE_SIZE - 6.0,
-    bottom_y - top_y
-  ]
-end.freeze
+Y_RATIO         = 0.8
+PLATEAU_HEIGHT  = 32.0 # 高台1段目の標高 (32px = 1タイル)
+PLATEAU_HEIGHT2 = 64.0 # 高台2段目の標高 (64px = 2タイル)
+PLATEAU_HEIGHT3 = 96.0 # 高台3段目の標高 (96px = 3タイル)
 
 SHADOW_COLOR_RGB = [10, 12, 18].freeze
 SHADOW_Z         = -10.0
@@ -230,19 +215,20 @@ def create_dungeon_tileset
     # 18: 高台の上面石床
     draw_paver_blocks(18 * 32, [72, 84, 108, 255], [92, 106, 134, 255], [86, 100, 128, 255], [84, 98, 126, 255], [96, 110, 138, 255])
 
-    # 19: 高台の南側崖面
+    # 19: 高台の南側崖面 (32px 高さ全面対応)
     ox = 19 * 32
-    Zenoo::Window.draw_rect(ox, 0, 32, 28, color: [30, 36, 48, 255])
-    Zenoo::Window.draw_rect(ox, 0, 32, 9,  color: PAL[:curb])
-    Zenoo::Window.draw_rect(ox, 0, 32, 2,  color: PAL[:curb_rim])
-    Zenoo::Window.draw_rect(ox + 15, 2, 2, 7, color: [90, 105, 132, 255])
-    Zenoo::Window.draw_rect(ox, 9, 32, 1, color: [36, 42, 56, 255])
-    Zenoo::Window.draw_rect(ox, 10, 32, 18, color: PAL[:brick_base])
-    Zenoo::Window.draw_rect(ox, 19, 32, 1,  color: PAL[:brick_line])
-    Zenoo::Window.draw_rect(ox + 8,  10, 1, 9, color: PAL[:brick_line])
-    Zenoo::Window.draw_rect(ox + 24, 10, 1, 9, color: PAL[:brick_line])
-    Zenoo::Window.draw_rect(ox + 16, 20, 1, 8, color: PAL[:brick_line])
-    Zenoo::Window.draw_rect(ox, 28, 32, 4, color: PAL[:ground_shade])
+    Zenoo::Window.draw_rect(ox, 0, 32, 32, color: PAL[:brick_base])
+    Zenoo::Window.draw_rect(ox, 0, 32, 4, color: PAL[:curb])
+    Zenoo::Window.draw_rect(ox, 0, 32, 1, color: PAL[:curb_rim])
+    Zenoo::Window.draw_rect(ox, 4, 32, 1, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox, 13, 32, 1, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox, 22, 32, 1, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 8,  4,  1, 9, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 24, 4,  1, 9, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 16, 13, 1, 9, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 8,  22, 1, 9, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 24, 22, 1, 9, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox, 30, 32, 2, color: PAL[:ground_shade])
 
     # 20: 高台の北・東西フチ石
     ox = 20 * 32
@@ -270,20 +256,20 @@ def create_dungeon_tileset
     Zenoo::Window.draw_rect(ox + 3, 3, 29, 2,  color: PAL[:curb_hi])
     Zenoo::Window.draw_rect(ox + 3, 3, 2,  29, color: PAL[:curb_hi])
 
-    # 22: 高台の南西角崖面
+    # 22: 高台の南西角崖面 (32px 高さ全面対応)
     ox = 22 * 32
-    Zenoo::Window.draw_rect(ox, 0, 3, 28,  color: PAL[:curb_shadow])
-    Zenoo::Window.draw_rect(ox + 3, 28, 29, 4, color: PAL[:ground_shade])
-    Zenoo::Window.draw_rect(ox + 3, 10, 29, 18, color: PAL[:brick_base])
-    Zenoo::Window.draw_rect(ox + 3, 10, 2,  18, color: [78, 92, 118, 255])
-    Zenoo::Window.draw_rect(ox + 3, 19, 29, 1,  color: PAL[:brick_line])
-    Zenoo::Window.draw_rect(ox + 14, 10, 1, 9,  color: PAL[:brick_line])
-    Zenoo::Window.draw_rect(ox + 22, 20, 1, 8,  color: PAL[:brick_line])
-    Zenoo::Window.draw_rect(ox + 3, 0, 29, 9,  color: PAL[:curb])
-    Zenoo::Window.draw_rect(ox + 3, 0, 2,  9,  color: PAL[:curb_hi])
-    Zenoo::Window.draw_rect(ox + 9, 0, 23, 2,  color: PAL[:curb_rim])
-    Zenoo::Window.draw_rect(ox + 9, 0, 1,  2,  color: PAL[:curb_dark])
-    Zenoo::Window.draw_rect(ox + 3, 9, 29, 1,  color: [36, 42, 56, 255])
+    Zenoo::Window.draw_rect(ox, 0, 3, 32, color: PAL[:curb_shadow])
+    Zenoo::Window.draw_rect(ox + 3, 0, 29, 32, color: PAL[:brick_base])
+    Zenoo::Window.draw_rect(ox + 3, 0, 2, 32, color: [78, 92, 118, 255])
+    Zenoo::Window.draw_rect(ox + 3, 0, 29, 4, color: PAL[:curb])
+    Zenoo::Window.draw_rect(ox + 3, 0, 29, 1, color: PAL[:curb_rim])
+    Zenoo::Window.draw_rect(ox + 3, 4, 29, 1, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 3, 13, 29, 1, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 3, 22, 29, 1, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 14, 4,  1, 9, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 22, 13, 1, 9, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 14, 22, 1, 9, color: PAL[:brick_line])
+    Zenoo::Window.draw_rect(ox + 3, 30, 29, 2, color: PAL[:ground_shade])
   end
   tileset.slice_tiles(tile_width: TILE_SIZE, tile_height: TILE_SIZE)
 end
@@ -304,11 +290,6 @@ def create_world_tilemap
   map.set_tile(T_WALL,  solid: true)
   map.set_tile(T_CRATE, solid: true)
   map.set_tile(T_WATER, solid: true)
-
-  # 高台上面タイルの高さ (標高) 設定
-  [T_HIGH_FLOOR, T_CLIFF_EDGE, T_CLIFF_CORNER_NW].each do |tid|
-    map.set_tile(tid, height: PLATEAU_HEIGHT)
-  end
 
   # タイルアニメーション定義 (4コマ)
   map.define_animation(T_WATER, frames: (T_WATER...T_WATER + 4).to_a, wait: 14)
@@ -339,8 +320,15 @@ def create_world_tilemap
   end
 
   # 2. 段差 (高台) レイヤー (40x24)
-  cliffs       = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
-  cliffs_north = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
+  # - cliffs: 1段目高台の上面床と崖面 (y_sort: :floor, height: 32.0)
+  # - cliffs_lv2: 2段目高台の上面床と崖面 (y_sort: :floor, height: 64.0)
+  # - cliffs_lv3: 3段目高台の上面床と崖面 (y_sort: :floor, height: 96.0)
+  # - objects: 外周壁、石柱、木箱など地上立体障害物 (y_sort: true)
+  cliffs     = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
+  cliffs_lv2 = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
+  cliffs_lv3 = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
+  objects    = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
+
   cliff_north = T_CLIFF_EDGE
   cliff_east  = Zenoo::Tilemap.tile(T_CLIFF_EDGE, rotate: 90)
   cliff_west  = Zenoo::Tilemap.tile(T_CLIFF_EDGE, rotate: 270)
@@ -349,41 +337,106 @@ def create_world_tilemap
   cliff_sw    = T_CLIFF_CORNER_SW
   cliff_se    = Zenoo::Tilemap.tile(T_CLIFF_CORNER_SW, flip_h: true)
 
-  PLATEAU_RANGES.each do |c_range, r_range|
+  # 高台 (上面床と南壁) のタイル配置
+  # has_north_edge: false の場合、上の段の崖面からそのまま床が続く (階段の接続テラス用)
+  build_plateau = lambda do |target_grid, c_range, r_range, has_north_edge: true|
     c0, c1 = c_range.begin, c_range.end
     r0, r1 = r_range.begin, r_range.end
     each_cell(c_range, r_range) do |c, r|
-      if r == r0 && c == c0
-        cliffs_north[r][c] = cliff_nw
-      elsif r == r0 && c == c1
-        cliffs_north[r][c] = cliff_ne
-      elsif r == r0
-        cliffs_north[r][c] = cliff_north
-      elsif r == r1 && c == c0
-        cliffs[r][c] = cliff_sw
-      elsif r == r1 && c == c1
-        cliffs[r][c] = cliff_se
+      if r == r0 && has_north_edge
+        if c == c0
+          target_grid[r][c] = cliff_nw
+        elsif c == c1
+          target_grid[r][c] = cliff_ne
+        else
+          target_grid[r][c] = cliff_north
+        end
       elsif r == r1
-        cliffs[r][c] = T_CLIFF_SOUTH
+        if c == c0
+          target_grid[r][c] = cliff_sw
+        elsif c == c1
+          target_grid[r][c] = cliff_se
+        else
+          target_grid[r][c] = T_CLIFF_SOUTH
+        end
       elsif c == c0
-        cliffs[r][c] = cliff_west
+        target_grid[r][c] = cliff_west
       elsif c == c1
-        cliffs[r][c] = cliff_east
+        target_grid[r][c] = cliff_east
       else
-        cliffs[r][c] = T_HIGH_FLOOR
+        target_grid[r][c] = T_HIGH_FLOOR
       end
     end
   end
 
-  # 3. 立体オブジェクト・障害物レイヤー (40x24, 行単位 Yソート有効)
-  objects = Array.new(MAP_ROWS) { Array.new(MAP_COLS, nil) }
+  # 北東の高台 (1段・32px, 24..29, 4..7)
+  # 行4..7が32px上面床、行7に地上南壁タイル (画面上 224..256px で床下端に直結！)
+  c0, c1 = 24, 29
+  (24..29).each do |c|
+    cliffs[4][c] = (c == c0) ? cliff_nw : ((c == c1) ? cliff_ne : cliff_north)
+  end
+  (5..7).each do |r|
+    (24..29).each do |c|
+      cliffs[r][c] = (c == c0) ? cliff_west : ((c == c1) ? cliff_east : T_HIGH_FLOOR)
+    end
+  end
+  (24..29).each do |c|
+    objects[7][c] = (c == c0) ? cliff_sw : ((c == c1) ? cliff_se : T_CLIFF_SOUTH)
+  end
+
+  # 南西の高台: 3段ピラミッドテラス (32px / 64px / 96px 完全シームレス接続)
+  # - 3段目 (標高96px, 右半分: 列13..15, 行14..16): 画面上 352..448px
+  # - 2段目 (標高64px, 左半分: 列10..12, 行14..16): 画面上 384..480px
+  # - 1段目 (標高32px, 全幅: 列10..15, 行17..18): 画面上 512..576px
+
+  # 3段目上面床 (標高96px, 右半分: 13..15, 行14..16)
+  (13..15).each do |c|
+    cliffs_lv3[14][c] = (c == 13) ? cliff_nw : ((c == 15) ? cliff_ne : cliff_north)
+  end
+  (15..16).each do |r|
+    (13..15).each do |c|
+      cliffs_lv3[r][c] = (c == 13) ? cliff_west : ((c == 15) ? cliff_east : T_HIGH_FLOOR)
+    end
+  end
+
+  # 2段目上面床 (標高64px, 左半分: 10..12, 行14..16)
+  (10..12).each do |c|
+    cliffs_lv2[14][c] = (c == 10) ? cliff_nw : cliff_north
+  end
+  (15..16).each do |r|
+    (10..12).each do |c|
+      cliffs_lv2[r][c] = (c == 10) ? cliff_west : T_HIGH_FLOOR
+    end
+  end
+
+  # 3段目南壁 (cliffs_lv2, 標高64px -> 画面上 448..480px, 3段目床に直結して64px崖面の上段を形成)
+  (13..15).each do |c|
+    cliffs_lv2[16][c] = (c == 13) ? cliff_sw : ((c == 15) ? cliff_se : T_CLIFF_SOUTH)
+  end
+
+  # 2段目南壁 (cliffs, 標高32px -> 画面上 480..512px, 2段目床/3段目南壁下端に直結して1段目テラスに着地)
+  (10..15).each do |c|
+    cliffs[16][c] = (c == 10) ? cliff_sw : ((c == 15) ? cliff_se : T_CLIFF_SOUTH)
+  end
+
+  # 1段目テラス上面石床 (cliffs, 標高32px -> 画面上 512..576px)
+  (17..18).each do |r|
+    (10..15).each do |c|
+      cliffs[r][c] = (c == 10) ? cliff_west : ((c == 15) ? cliff_east : T_HIGH_FLOOR)
+    end
+  end
+
+  # 1段目南壁タイル (objects, 標高0px -> 画面上 576..608px でテラス床下端に直結して地面に着地)
+  (10..15).each do |c|
+    objects[18][c] = (c == 10) ? cliff_sw : ((c == 15) ? cliff_se : T_CLIFF_SOUTH)
+  end
 
   # 外周の石レンガ壁
   MAP_COLS.times { |c| objects[0][c] = objects[MAP_ROWS - 1][c] = T_WALL }
   MAP_ROWS.times { |r| objects[r][0] = objects[r][MAP_COLS - 1] = T_WALL }
 
   # 石柱・蒼石碑の配置 (高台の降下経路・フチを塞がないよう1マス余裕を確保)
-  [[16, 9], [23, 9], [17, 15], [23, 15], [8, 8], [8, 15], [31, 8], [31, 15]].each do |c, r|
+  [[16, 9], [23, 9], [17, 13], [23, 15], [8, 8], [8, 15], [31, 8], [31, 15]].each do |c, r|
     place_column_at(objects, c, r, PILLAR_PARTS)
   end
   [[5, 5], [34, 5], [5, 19], [34, 19], [19, 4], [20, 20]].each do |c, r|
@@ -404,16 +457,17 @@ def create_world_tilemap
     [35..37, 6..8],   [35..37, 14..16]
   ].each do |cr, rr|
     each_cell(cr, rr) do |c, r|
-      if ground[r][c] == T_GRASS && cliffs[r][c].nil? && cliffs_north[r][c].nil? && objects[r][c].nil?
+      if ground[r][c] == T_GRASS && cliffs[r][c].nil? && cliffs_lv2[r][c].nil? && cliffs_lv3[r][c].nil? && objects[r][c].nil?
         objects[r][c] = T_BUSH
       end
     end
   end
 
-  map.add_layer(:ground,       ground,       z: GROUND_Z)
-  map.add_layer(:cliffs,       cliffs,       z: 0.0)
-  map.add_layer(:cliffs_north, cliffs_north, z: 0.0, y_sort: true)
-  map.add_layer(:objects,      objects,      z: 0.0, y_sort: true)
+  map.add_layer(:ground,     ground,     z: GROUND_Z)
+  map.add_layer(:cliffs,     cliffs,     z: 0.0, y_sort: :floor, height: PLATEAU_HEIGHT)
+  map.add_layer(:cliffs_lv2, cliffs_lv2, z: 0.0, y_sort: :floor, height: PLATEAU_HEIGHT2)
+  map.add_layer(:cliffs_lv3, cliffs_lv3, z: 0.0, y_sort: :floor, height: PLATEAU_HEIGHT3)
+  map.add_layer(:objects,    objects,    z: 0.0, y_sort: true)
   map
 end
 
@@ -666,7 +720,7 @@ class IsoPlayer < Zenoo::Sprite
   ATTACK_DASH   = 6.5
   DASH_FRICTION = 0.85
   HIT_FRAMES    = 12
-  JUMP_SPEED    = 6.2
+  JUMP_SPEED    = 6.6
   GRAVITY       = 0.48
 
   SLASH_REACH   = 115.0
@@ -686,6 +740,7 @@ class IsoPlayer < Zenoo::Sprite
   attr_reader   :facing_x, :attacking, :altitude, :ground_h
   attr_accessor :effects, :enemies, :tilemap
   alias jump_z altitude
+  alias current_frame_index animation_frame_index
 
   def initialize(x, y)
     super(x, y, anchor: :bottom_center, pivot: :bottom_center)
@@ -718,7 +773,7 @@ class IsoPlayer < Zenoo::Sprite
   end
 
   def body_z
-    @ground_h >= PLATEAU_HEIGHT ? (y + 32.0) : y
+    y + @ground_h
   end
 
   def trigger_jump
@@ -778,8 +833,8 @@ class IsoPlayer < Zenoo::Sprite
     # エンジン側の高度対応 MTV 衝突解決
     @tilemap&.resolve_collision(self, altitude: @altitude)
 
-    # 足元の床の最高標高を取得
-    @ground_h = @tilemap ? @tilemap.support_height(self, altitude: @altitude, offset_y: -PLATEAU_HEIGHT) : 0.0
+    # 足元の床の最高標高を取得 (Tilemap側で自然に解決するため offset_y 不要)
+    @ground_h = @tilemap ? @tilemap.support_height(self, altitude: @altitude) : 0.0
     update_jump
 
     self.z = body_z
@@ -792,20 +847,11 @@ class IsoPlayer < Zenoo::Sprite
     sw0, sh0, sa0 = shadow_metrics(@altitude)
     Zenoo::Window.draw_ellipse(x, y - 2.0, sw0, sh0, color: [*SHADOW_COLOR_RGB, sa0], z: SHADOW_Z)
 
-    # 2. 高台の上面に落ちる影 (クリッピング付き)
-    if @altitude >= PLATEAU_HEIGHT
-      sw1, sh1, sa1 = shadow_metrics(@altitude - PLATEAU_HEIGHT)
-      top_sy = y - PLATEAU_HEIGHT - 2.0
-      shadow_z = body_z - 0.5
-
-      PLATEAU_TOP_RECTS.each do |px, py, pw, ph|
-        if x + sw1 > px && x - sw1 < px + pw && top_sy + sh1 > py && top_sy - sh1 < py + ph
-          sx, sy = Zenoo::Window.to_screen(px, py)
-          Zenoo::Window.clip(sx, sy, pw, ph, z: shadow_z) do
-            Zenoo::Window.draw_ellipse(x, top_sy, sw1, sh1, color: [*SHADOW_COLOR_RGB, sa1], z: shadow_z)
-          end
-        end
-      end
+    # 2. 足元の床面に落ちる影 (高台・段差に乗っている場合)
+    if @ground_h > 0.0 && @altitude >= @ground_h
+      sw1, sh1, sa1 = shadow_metrics(@altitude - @ground_h)
+      top_sy = y - @ground_h - 2.0
+      Zenoo::Window.draw_ellipse(x, top_sy, sw1, sh1, color: [*SHADOW_COLOR_RGB, sa1], z: body_z - 0.5)
     end
 
     # 3. キャラ本体
