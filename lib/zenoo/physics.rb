@@ -218,13 +218,13 @@ module Zenoo
       b_cos = 1.0
       b_sin = 0.0
 
-      if col_static && col_static.respond_to?(:center_x) && col_static.respond_to?(:half_w)
+      if col_static.is_a?(Collision::Rect)
         bcx = col_static.center_x
         bcy = col_static.center_y
-        b_cos = col_static.respond_to?(:cos) ? col_static.cos : 1.0
-        b_sin = col_static.respond_to?(:sin) ? col_static.sin : 0.0
-        b_hw = col_static.respond_to?(:half_w) ? col_static.half_w : col_static.bounding_radius
-        b_hh = col_static.respond_to?(:half_h) ? col_static.half_h : col_static.bounding_radius
+        b_cos = col_static.cos
+        b_sin = col_static.sin
+        b_hw = col_static.half_w
+        b_hh = col_static.half_h
 
         dx = x.to_f - bcx
         dy = y.to_f - bcy
@@ -235,7 +235,7 @@ module Zenoo
         is_overhang = local_x.abs > (b_hw + 0.5)
       end
 
-      if col_shape && col_shape.respond_to?(:world_vertices) && col_shape.world_vertices
+      if (col_shape.is_a?(Collision::Rect) || col_shape.is_a?(Collision::Polygon)) && col_shape.world_vertices
         verts_a = col_shape.world_vertices
         dir_x = -nx
         dir_y = -ny

@@ -1115,8 +1115,8 @@ module Zenoo
     # @return [Float] 支持されている床面の標高
     def support_height(sprite, altitude: 0.0, offset_y: 0.0, probe_rx: 6.0, probe_ry: 4.0, step_tolerance: 2.0)
       return 0.0 if sprite.nil?
-      col = sprite.respond_to?(:collider) ? sprite.collider : nil
-      return height_at(sprite.x, sprite.y + offset_y) unless col
+      col = sprite.respond_to?(:collider) ? sprite.collider : sprite
+      return height_at(sprite.x, sprite.y + offset_y) unless col && col.respond_to?(:center_x)
 
       cx = col.center_x
       cy = col.center_y + offset_y
@@ -1144,8 +1144,8 @@ module Zenoo
     # Sprite または Collision::Shape がマップの障害物タイルと接触しているか判定
     def collide?(target)
       return false unless target
-      col_shape = target.is_a?(Collision::Shape) ? target : (target.respond_to?(:collider) ? target.collider : nil)
-      return false unless col_shape
+      col_shape = target.respond_to?(:collider) ? target.collider : target
+      return false unless col_shape && col_shape.respond_to?(:center_x)
 
       tw = @tile_width * @scale_x
       th = @tile_height * @scale_y
@@ -1195,8 +1195,8 @@ module Zenoo
     # @param step_tolerance [Float] 乗り越え許容高度差 (デフォルト 2.0px)
     def resolve_collision(sprite, target_root: true, altitude: nil, step_tolerance: 2.0)
       return false if sprite.nil? || (sprite.respond_to?(:vanished?) && sprite.vanished?)
-      col_shape = sprite.collider
-      return false unless col_shape
+      col_shape = sprite.respond_to?(:collider) ? sprite.collider : sprite
+      return false unless col_shape && col_shape.respond_to?(:center_x)
 
       tw = @tile_width * @scale_x
       th = @tile_height * @scale_y

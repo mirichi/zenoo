@@ -71,10 +71,8 @@ Zenoo::Image.render_to(hero_img) do
   Zenoo::Window.draw_triangle(32.0, 0.0, 22.0, 12.0, 42.0, 12.0, color: [255, 60, 80, 255])
 end
 
-# 2. Sprite を継承し、Tweenable を明示的に include したキャラクター
+# 2. Sprite を継承したキャラクター (Sprite に Tweenable が標準統合済み)
 class Hero < Zenoo::Sprite
-  include Tweenable
-
   attr_accessor :status_text
 
   def initialize(img)
@@ -86,7 +84,6 @@ class Hero < Zenoo::Sprite
 
   def update
     super
-    update_tweens
   end
 end
 
