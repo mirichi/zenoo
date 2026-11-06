@@ -108,14 +108,8 @@ show_debug = false
 is_slashing = false
 slash_trail = [] # 剣の軌跡ポイント
 
-# 地形起伏プリセット (キー [T] で切替)
-TERRAIN_PRESETS = [
-  { name: "凸凹の丘 (Rolling Hills)", roughness: 1.0 },
-  { name: "険しい不整地 (Rugged Uneven)", roughness: 1.8 },
-  { name: "平坦な直線 (Flat Ground)", roughness: 0.0 },
-  { name: "軽微な起伏 (Gentle Uneven)", roughness: 0.5 }
-]
-current_terrain_idx = 0
+# 地形起伏設定
+roughness = 1.0
 
 # 地形追従サスペンション状態変数
 terrain_hip_offset = 0.0
@@ -179,12 +173,6 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
   target_speed = 280.0 if Input.key_push?(:num2) || Input.key_push?(:k2)
   target_speed = 520.0 if Input.key_push?(:num3) || Input.key_push?(:k3)
 
-  # 地形起伏プリセットの切り替え ([T] キー)
-  if Input.key_push?(:t)
-    current_terrain_idx = (current_terrain_idx + 1) % TERRAIN_PRESETS.length
-  end
-  roughness = TERRAIN_PRESETS[current_terrain_idx][:roughness]
-
   # 腰の高さ調整（スクワット・姿勢変更）
   if Input.key_down?(:w) || Input.key_down?(:up)
     base_hip_y -= 80.0 * dt
@@ -195,7 +183,9 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
   base_hip_y = base_hip_y.clamp(280.0, 410.0)
 
   # 剣の振り下ろしトリガー（肩中心の Expo In 居合一閃 Tween）
-  if (Input.key_push?(:space) || Input.mouse_push?(:left)) && !is_slashing
+  # マウスクリック時はGUI操作中(スライダー等)の誤爆を防止
+  mouse_attack = Input.mouse_push?(:left) && !GUI.mouse_captured?
+  if (Input.key_push?(:space) || mouse_attack) && !is_slashing
     is_slashing = true
     slash_trail.clear
 
@@ -502,13 +492,29 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
               else                        "FULL SPRINT (DASH)"
               end
 
-  cur_terrain = TERRAIN_PRESETS[current_terrain_idx]
   Window.draw_text(28, 56,  "Speed: #{speed.round(1)} px/s  [#{spd_label}]", size: 13, color: :white)
   Window.draw_text(28, 74,  "Pelvis Bounce (2θ) : #{pelvis_bounce.round(1)} px", size: 13, color: [200, 220, 255])
   Window.draw_text(28, 92,  "Terrain Slope Lean : #{terrain_slope_angle.round(1)} deg", size: 13, color: [200, 220, 255])
-  Window.draw_text(28, 110, "Terrain ([T])      : #{cur_terrain[:name]}", size: 13, color: [120, 240, 180])
-  Window.draw_text(28, 128, "Slash Ease         : Expo In (居合超加速)", size: 13, color: [255, 220, 100])
-  Window.draw_text(28, 146, "Sword Angle        : #{sword_pivot.angle.round(1)} deg  (#{is_slashing ? 'SLASHING!' : 'Ready'})", size: 13, color: is_slashing ? [255, 100, 100] : [100, 255, 150])
-  Window.draw_text(28, 172, "[SPACE/Click] Slash | [T] Terrain | [TAB] Debug", size: 12, color: [140, 170, 210])
+  Window.draw_text(28, 110, "Terrain Roughness   : #{roughness.round(2)}", size: 13, color: [120, 240, 180])
+  Window.draw_text(28, 172, "[SPACE/Click] Slash | [TAB] Debug", size: 12, color: [140, 170, 210])
   Window.draw_text(28, 192, "[A][D] Speed | [0..3] Preset | [W][S] Pelvis Height", size: 12, color: [110, 140, 180])
+
+  # --------------------------------------------------
+  # 8. 画面右上コントロールスライダー (GUI)
+  # --------------------------------------------------
+  GUI.panel("パラメータ調整 (Mouse Controls)", x: SCREEN_WIDTH - 280, y: 16, w: 264, h: 222, spacing_y: 6) do
+    # 1. 移動速度
+    new_spd = GUI.slider("速度 (Speed)", target_speed, -180.0, 550.0, unit: " px/s", format: "%.0f")
+    target_speed = new_spd if (new_spd - target_speed).abs > 0.01
+
+    # 2. 腰の高さ (280..410)
+    new_hip_y = GUI.slider("腰の高さ (Hip Y)", base_hip_y, 280.0, 410.0, unit: " px", format: "%.0f")
+    base_hip_y = new_hip_y if (new_hip_y - base_hip_y).abs > 0.01
+
+    # 3. 地面の起伏 (0.0..2.5)
+    new_rough = GUI.slider("地面起伏 (Roughness)", roughness, 0.0, 2.5, format: "%.2f")
+    if (new_rough - roughness).abs > 0.001
+      roughness = new_rough
+    end
+  end
 end
