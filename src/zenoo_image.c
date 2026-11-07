@@ -183,6 +183,10 @@ ZenImage* zen_image_create_msaa(int width, int height, int samples) {
     if (width <= 0 || height <= 0) return NULL;
     zen_ensure_context();
 
+    if (zen__is_wsl_d3d12()) {
+        return zen_image_create_format(width, height, ZEN_IMAGE_FORMAT_RGBA);
+    }
+
     static GLint s_max_samples = 0;
     if (s_max_samples <= 0) {
         glGetIntegerv(GL_MAX_SAMPLES, &s_max_samples);

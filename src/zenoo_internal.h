@@ -40,6 +40,7 @@ typedef struct {
 
 GLFWwindow*        zen__window(void);    // 未初期化なら NULL
 const ZenViewport* zen__viewport(void);
+int                zen__is_wsl_d3d12(void); // WSLg (Mesa D3D12) 環境判定 (MSAA 回避用)
 
 // ------------------------------------------
 // input (zenoo_input.c)
