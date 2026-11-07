@@ -337,38 +337,6 @@ def create_world_tilemap
   cliff_sw    = T_CLIFF_CORNER_SW
   cliff_se    = Zenoo::Tilemap.tile(T_CLIFF_CORNER_SW, flip_h: true)
 
-  # 高台 (上面床と南壁) のタイル配置
-  # has_north_edge: false の場合、上の段の崖面からそのまま床が続く (階段の接続テラス用)
-  build_plateau = lambda do |target_grid, c_range, r_range, has_north_edge: true|
-    c0, c1 = c_range.begin, c_range.end
-    r0, r1 = r_range.begin, r_range.end
-    each_cell(c_range, r_range) do |c, r|
-      if r == r0 && has_north_edge
-        if c == c0
-          target_grid[r][c] = cliff_nw
-        elsif c == c1
-          target_grid[r][c] = cliff_ne
-        else
-          target_grid[r][c] = cliff_north
-        end
-      elsif r == r1
-        if c == c0
-          target_grid[r][c] = cliff_sw
-        elsif c == c1
-          target_grid[r][c] = cliff_se
-        else
-          target_grid[r][c] = T_CLIFF_SOUTH
-        end
-      elsif c == c0
-        target_grid[r][c] = cliff_west
-      elsif c == c1
-        target_grid[r][c] = cliff_east
-      else
-        target_grid[r][c] = T_HIGH_FLOOR
-      end
-    end
-  end
-
   # 北東の高台 (1段・32px, 24..29, 4..7)
   # 行4..7が32px上面床、行7に地上南壁タイル (画面上 224..256px で床下端に直結！)
   c0, c1 = 24, 29
@@ -778,19 +746,41 @@ class IsoPlayer < Zenoo::Sprite
     y + @ground_h
   end
 
-  def trigger_jump
-    if @altitude <= @ground_h && @vz <= 0.0
-      @jumping = true
-      @jump_start_h = @ground_h
-      @vz = JUMP_SPEED
+  def trigger_jump(dir_x = nil, dir_y = nil)
+    return unless @altitude <= @ground_h && @vz <= 0.0
+
+    @jumping = true
+    @jump_start_h = @ground_h
+    @vz = JUMP_SPEED
+
+    if dir_x && dir_y
+      # マウス右クリック等の明示的な方向指定ジャンプ
+      @jump_dx = dir_x
+      @jump_dy = dir_y
+      update_direction(dir_x, dir_y)
+      remember_move_dir(dir_x, dir_y)
+    elsif Zenoo::Input.using_touch?
+      # タッチ操作 (フリックジャンプ等): フリック方向へ前進ジャンプ
+      dx, dy = Zenoo::Input.vector
+      if dx != 0.0 || dy != 0.0
+        @jump_dx = dx
+        @jump_dy = dy
+        update_direction(dx, dy)
+        remember_move_dir(dx, dy)
+      else
+        @jump_dx = nil
+        @jump_dy = nil
+      end
+    else
+      # キーボード・ゲームパッド操作:
+      # 直前移動方向の強制慣性は持たせず、入力ベクトルに自然追従 (静止時は垂直ジャンプ)
+      @jump_dx = nil
+      @jump_dy = nil
       dx, dy = Zenoo::Input.vector
       if dx != 0.0 || dy != 0.0
         update_direction(dx, dy)
         remember_move_dir(dx, dy)
       end
-      # 進行方向への慣性ジャンプ (空中でも前進を維持)
-      @jump_dx = @last_move_dx
-      @jump_dy = @last_move_dy
     end
   end
 
@@ -837,8 +827,10 @@ class IsoPlayer < Zenoo::Sprite
     # エンジン側の高度対応 MTV 衝突解決
     @tilemap&.resolve_collision(self, altitude: @altitude)
 
-    # 足元の床の最高標高を取得 (Tilemap側で自然に解決するため offset_y 不要)
-    @ground_h = @tilemap ? @tilemap.support_height(self, altitude: @altitude) : 0.0
+    # 足元の床の最高標高を取得
+    # コライダー中心 (y - 8) ではなく実際の足底 (y - 3) を基準に上下 ±2px で接地判定し、
+    # 南端 (手前の崖フチ) で靴が崖の外へ宙に浮く前に自然な位置で降りるようにする
+    @ground_h = @tilemap ? @tilemap.support_height(self, altitude: @altitude, offset_y: 5.0, probe_ry: 2.0) : 0.0
     update_jump
 
     self.z = body_z
@@ -847,18 +839,10 @@ class IsoPlayer < Zenoo::Sprite
   def draw
     return if vanished? || !visible
 
-    # 1. 地面に落ちる影
-    sw0, sh0, sa0 = shadow_metrics(@altitude)
-    Zenoo::Window.draw_ellipse(x, y - 2.0, sw0, sh0, color: [*SHADOW_COLOR_RGB, sa0], z: SHADOW_Z)
+    # 1. 段差・高台対応の分割ドロップシャドウ
+    draw_shadow
 
-    # 2. 足元の床面に落ちる影 (高台・段差に乗っている場合)
-    if @ground_h > 0.0 && @altitude >= @ground_h
-      sw1, sh1, sa1 = shadow_metrics(@altitude - @ground_h)
-      top_sy = y - @ground_h - 2.0
-      Zenoo::Window.draw_ellipse(x, top_sy, sw1, sh1, color: [*SHADOW_COLOR_RGB, sa1], z: body_z - 0.5)
-    end
-
-    # 3. キャラ本体
+    # 2. キャラ本体
     self.z = body_z
     with_lift(@altitude) { super }
   end
@@ -879,6 +863,120 @@ class IsoPlayer < Zenoo::Sprite
   end
 
   private
+
+  # 高台・段差のフチに応じた分割ドロップシャドウ描画
+  # 足元の高台上面に残る影は Window.clip (glScissor) で高台タイルの内側へ正確にクリップし、
+  # フチからはみ出た部分の影は直下の段差（または地面）の高さへクリップして落として描画します。
+  def draw_shadow
+    sy = y - 2.0
+
+    # 地上 (または高台から外れた落下中) は通常の楕円影
+    if @ground_h <= 0.0 || @altitude < @ground_h || @tilemap.nil?
+      rx0, ry0, sa0 = shadow_metrics(@altitude)
+      Zenoo::Window.draw_ellipse(x, sy, rx0, ry0, color: [*SHADOW_COLOR_RGB, sa0], z: SHADOW_Z)
+      return
+    end
+
+    rx, ry, sa = shadow_metrics(@altitude - @ground_h)
+    gh = @ground_h
+
+    # 足元の支持タイル (標高 >= gh のセル) の列・行を特定
+    col_y = y - 3.0
+    col = (x / TILE_SIZE).floor
+    row = (col_y / TILE_SIZE).floor
+    if @tilemap.height_cell(col, row) < gh
+      if @tilemap.height_cell(col - 1, row) >= gh
+        col -= 1
+      elsif @tilemap.height_cell(col + 1, row) >= gh
+        col += 1
+      elsif @tilemap.height_cell(col, row - 1) >= gh
+        row -= 1
+      elsif @tilemap.height_cell(col, row + 1) >= gh
+        row += 1
+      elsif @tilemap.height_cell(col - 1, row - 1) >= gh
+        col -= 1; row -= 1
+      elsif @tilemap.height_cell(col + 1, row - 1) >= gh
+        col += 1; row -= 1
+      elsif @tilemap.height_cell(col - 1, row + 1) >= gh
+        col -= 1; row += 1
+      elsif @tilemap.height_cell(col + 1, row + 1) >= gh
+        col += 1; row += 1
+      end
+    end
+
+    left_x   = x - rx
+    right_x  = x + rx
+    top_y    = sy - ry
+    bottom_y = sy + ry
+
+    # 左右方向 (東西の崖フチ) のクリップ境界と下の段への落ち影
+    if @tilemap.height_at(left_x, row * TILE_SIZE + 16.0) < gh
+      edge_x = col * TILE_SIZE + 3.0
+      if left_x < edge_x
+        draw_clipped_drop_shadow(left_x, [right_x, edge_x].min, top_y, bottom_y, @tilemap.height_at(left_x, sy))
+        left_x = edge_x
+      end
+    end
+    if @tilemap.height_at(right_x, row * TILE_SIZE + 16.0) < gh
+      edge_x = (col + 1) * TILE_SIZE - 3.0
+      if right_x > edge_x
+        draw_clipped_drop_shadow([left_x, edge_x].max, right_x, top_y, bottom_y, @tilemap.height_at(right_x, sy))
+        right_x = edge_x
+      end
+    end
+
+    # 上方向 (北の崖フチ) のクリップ境界と下の段への落ち影
+    if @tilemap.height_at(col * TILE_SIZE + 16.0, top_y) < gh
+      edge_y = row * TILE_SIZE + 3.0
+      if top_y < edge_y
+        draw_clipped_drop_shadow(left_x, right_x, top_y, [bottom_y, edge_y].min, @tilemap.height_at(x, top_y))
+        top_y = edge_y
+      end
+    end
+    # 下方向 (南の崖フチ) は直下が垂直な南壁面となるため、
+    # 南壁上端の縁石 (T_CLIFF_SOUTH の上4px) の内側で上面の影だけをクリップし、
+    # 下の地面には不自然に離れた半円影を落とさない
+    if @tilemap.height_at(col * TILE_SIZE + 16.0, bottom_y) < gh
+      edge_y = (row + 1) * TILE_SIZE
+      bottom_y = edge_y if bottom_y > edge_y
+    end
+
+    # 高台の上面に残っている部分の影を矩形クリップして描画 (楕円を潰さず断面でスパッと切る)
+    if right_x > left_x && bottom_y > top_y
+      draw_world_clipped_ellipse(
+        left_x, top_y - gh, right_x - left_x, bottom_y - top_y,
+        x, sy - gh, rx, ry,
+        [*SHADOW_COLOR_RGB, sa], body_z - 0.5
+      )
+    end
+  end
+
+  # 高台のフチからはみ出た領域 (x0..x1, y0..y1) の影を、下の段 (lower_h) の床面へクリップ描画
+  def draw_clipped_drop_shadow(x0, x1, y0, y1, lower_h)
+    return if lower_h >= @ground_h || x1 <= x0 || y1 <= y0
+
+    rx_low, ry_low, sa_low = shadow_metrics(@altitude - lower_h)
+    sy = y - 2.0
+    pz = lower_h > 0.0 ? (y + lower_h - 0.5) : SHADOW_Z
+    draw_world_clipped_ellipse(
+      x0, y0 - lower_h, x1 - x0, y1 - y0,
+      x, sy - lower_h, rx_low, ry_low,
+      [*SHADOW_COLOR_RGB, sa_low], pz
+    )
+  end
+
+  # ワールド座標の矩形 (wx, wy, ww, wh) を画面座標へ変換し、Window.clip で楕円を切り抜いて描画
+  def draw_world_clipped_ellipse(wx, wy, ww, wh, cx, cy, rx, ry, col, z_val)
+    sx0, sy0 = Zenoo::Window.to_screen(wx, wy)
+    sx1, sy1 = Zenoo::Window.to_screen(wx + ww, wy + wh)
+    cw = sx1 - sx0
+    ch = sy1 - sy0
+    return if cw <= 0.5 || ch <= 0.5
+
+    prev_ox, prev_oy = Zenoo::Window.push_clip_scope(sx0, sy0, cw, ch, z: z_val)
+    Zenoo::Window.draw_ellipse(cx, cy, rx, ry, color: col, z: z_val)
+    Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
+  end
 
   def update_jump
     if @altitude > @ground_h || @vz != 0.0
@@ -1088,7 +1186,7 @@ class DemoScene < Zenoo::Scene
     # 2. 仮想解像度バッファへワールドを描画
     Zenoo::Image.render_to(@screen) { draw_world }
 
-    # 3. 画面へ 2 倍拡大描画 & UI 重ね掛け
+    # 2. 画面へ 2 倍拡大描画 & UI 重ね掛け
     Zenoo::Window.clear([0, 0, 0, 255])
     Zenoo::Window.draw(0, 0, @screen, scale_x: 2.0, scale_y: 2.0, anchor: :top_left, pivot: :top_left)
     draw_ui
@@ -1115,12 +1213,27 @@ class DemoScene < Zenoo::Scene
     Zenoo::Input.cancel_touches
   end
 
-  # PCマウス専用ダイレクト操作 (左長押し: カーソル方向へ移動 / 左クリック: カーソル方向へ攻撃 / 右クリック: ジャンプ)
+  # PCマウス専用ダイレクト操作 (左長押し: カーソル方向へ移動 / 左クリック: カーソル方向へ攻撃 / 右クリック: カーソル方向へジャンプ)
   def update_mouse_control
     return if Zenoo::Input.using_touch?
 
     mx = Zenoo::Input.mouse_x
     my = Zenoo::Input.mouse_y
+
+    # 右クリック: カーソル方向への指向性ジャンプ
+    if Zenoo::Input.mouse_push?(:right) && !@player.attacking
+      wx, wy = @camera.screen_to_world(mx / 2.0, my / 2.0)
+      foot_y = @player.y - @player.altitude
+      pdx = wx - @player.x
+      pdy = (wy - (foot_y - 8.0)) / Y_RATIO
+      mag = Math.hypot(pdx, pdy)
+      if mag > 6.0
+        @player.trigger_jump(pdx / mag, pdy / mag)
+      else
+        @player.trigger_jump
+      end
+      return
+    end
 
     if @mouse_hold_frames < 0
       @mouse_hold_frames = 0 unless Zenoo::Input.mouse_pressed?(:left)
@@ -1131,8 +1244,11 @@ class DemoScene < Zenoo::Scene
       @mouse_hold_frames += 1
       if @mouse_hold_frames > 5 && !@player.attacking
         wx, wy = @camera.screen_to_world(mx / 2.0, my / 2.0)
+        # キャラが立っている標高・ジャンプ高度 (@player.altitude) 分だけ
+        # 画面上での描画位置が上(-y)に浮いているため、クリック位置も同じ高度分補正する
+        foot_y = @player.y - @player.altitude
         pdx = wx - @player.x
-        pdy = (wy - (@player.y - 8.0)) / Y_RATIO
+        pdy = (wy - (foot_y - 8.0)) / Y_RATIO
         dist = Math.hypot(pdx, pdy)
         thresh = @mouse_moving ? 8.0 : 16.0
         if dist > thresh
@@ -1146,8 +1262,9 @@ class DemoScene < Zenoo::Scene
     elsif Zenoo::Input.mouse_release?(:left)
       if @mouse_hold_frames > 0 && @mouse_hold_frames <= 20
         wx, wy = @camera.screen_to_world(mx / 2.0, my / 2.0)
+        foot_y = @player.y - @player.altitude
         pdx = wx - @player.x
-        pdy = (wy - (@player.y - 16.0)) / Y_RATIO
+        pdy = (wy - (foot_y - 16.0)) / Y_RATIO
         mag = Math.hypot(pdx, pdy)
         Zenoo::Input.inject_vector(pdx / mag, pdy / mag) if mag > 0.001
         Zenoo::Input.inject_action(:attack, 1.0)
@@ -1352,7 +1469,7 @@ end
 # ==============================================================================
 if __FILE__ == $0
   Zenoo::Input.define_action(:attack, keys: [:space, :j, :z], gamepad: [:x, :a, :rb])
-  Zenoo::Input.define_action(:jump,   keys: [:k, :x, :left_shift, :right_shift], mouse: :right, gamepad: [:b, :lb])
+  Zenoo::Input.define_action(:jump,   keys: [:k, :x, :left_shift, :right_shift], gamepad: [:b, :lb])
 
   scene = DemoScene.new
   Zenoo::Scene.change(scene)
