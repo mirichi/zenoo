@@ -39,7 +39,7 @@ module Zenoo
       attr_accessor :fixed_x, :fixed_y, :color, :border_color, :knob_color
       attr_reader   :touch, :ox, :oy, :cx, :cy, :vx, :vy, :last_ox, :last_oy
 
-      def initialize(zone: :left_half, radius: 54.0, knob_radius: 24.0, deadzone: 8.0,
+      def initialize(zone: :left_half, radius: 90.0, knob_radius: 40.0, deadzone: 12.0,
                      follow: true, fixed_x: nil, fixed_y: nil,
                      color: [0, 0, 0, 70], border_color: [100, 200, 255, 160], knob_color: [0, 220, 255, 180])
         @zone         = zone
@@ -147,11 +147,11 @@ module Zenoo
 
       def draw(z)
         if @fixed_x && @fixed_y
-          Window.draw_circle(@ox, @oy, @radius, color: @color, border_width: 2, border_color: @border_color, z: z)
-          Window.draw_circle(@cx, @cy, @knob_radius, color: @knob_color, z: z)
+          Window.draw_circle(@ox, @oy, @radius, color: @color, border_width: 3, border_color: @border_color, z: z)
+          Window.draw_circle(@cx, @cy, @knob_radius, color: @knob_color, border_width: 2, border_color: [255, 255, 255, 220], z: z)
         elsif active? && (@moved || @touch.duration > 4)
-          Window.draw_circle(@ox, @oy, @radius, color: @color, border_width: 2, border_color: @border_color, z: z)
-          Window.draw_circle(@cx, @cy, @knob_radius, color: @knob_color, z: z)
+          Window.draw_circle(@ox, @oy, @radius, color: @color, border_width: 3, border_color: @border_color, z: z)
+          Window.draw_circle(@cx, @cy, @knob_radius, color: @knob_color, border_width: 2, border_color: [255, 255, 255, 220], z: z)
         end
       end
     end
@@ -341,7 +341,7 @@ module Zenoo
     # プリセット1: 王道ゲームパッド型 (左: フローティングスティック / 右: 2ボタン)
     def self.gamepad(primary: :attack, secondary: :jump, primary_label: "ATK", secondary_label: "JUMP")
       pad = new(preset_name: :gamepad)
-      pad.add_stick(zone: :left_half, radius: 54.0, knob_radius: 24.0, follow: true)
+      pad.add_stick(zone: :left_half, radius: 90.0, knob_radius: 40.0, follow: true)
       pad.add_button(
         primary,
         x: -200.0, y: -180.0, radius: 64.0, hit_radius: 140.0,
@@ -360,7 +360,7 @@ module Zenoo
     # プリセット2: 画面分割ジェスチャー型 (左: フローティングスティック / 右: タップ＆フリック)
     def self.split_gesture(tap: :attack, flick: :jump, flick_direction: true, show_guide: true)
       pad = new(preset_name: :split_gesture)
-      pad.add_stick(zone: :left_half, radius: 54.0, knob_radius: 24.0, follow: true)
+      pad.add_stick(zone: :left_half, radius: 90.0, knob_radius: 40.0, follow: true)
       pad.add_gesture(
         zone: :right_half,
         tap_action: tap,
@@ -378,7 +378,7 @@ module Zenoo
     # プリセット3: 指1本・ワンハンド型 (全画面: スライドでスティック移動 / タップ＆フリック)
     def self.one_hand(tap: :attack, flick: :jump, flick_direction: true, show_guide: true)
       pad = new(preset_name: :one_hand)
-      pad.add_stick(zone: :full, radius: 54.0, knob_radius: 24.0, follow: true)
+      pad.add_stick(zone: :full, radius: 90.0, knob_radius: 40.0, follow: true)
       pad.add_gesture(
         zone: :full,
         tap_action: tap,
