@@ -48,10 +48,10 @@ module Zenoo
           @theme = Theme.new(preset, **overrides)
         elsif preset.is_a?(Theme)
           @theme = preset
-          @theme.update(**overrides) unless overrides.empty?
+          @theme.configure(**overrides) unless overrides.empty?
           @theme
         else
-          @theme.update(**overrides)
+          @theme.configure(**overrides)
         end
       end
 
@@ -67,7 +67,7 @@ module Zenoo
                  elsif target_theme.is_a?(Theme)
                    target_theme
                  else
-                   @theme.dup.update(**overrides)
+                   @theme.dup.configure(**overrides)
                  end
         yield
         @theme = old_theme

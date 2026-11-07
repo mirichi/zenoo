@@ -28,11 +28,11 @@ module Zenoo
 
       def initialize(preset = :tool_dark, **overrides)
         apply_preset(preset)
-        update(**overrides) unless overrides.empty?
+        configure(**overrides) unless overrides.empty?
       end
 
       # プロパティの一括更新 (配列形式の色指定 [r, g, b, a] にも対応)
-      def update(
+      def configure(
         bg_normal: nil, bg_hover: nil, bg_active: nil,
         border_normal: nil, border_hover: nil, border_active: nil,
         shadow_normal: nil, shadow_hover: nil, shadow_active: nil,
@@ -73,7 +73,7 @@ module Zenoo
         custom = Theme.custom_presets[sym]
         if !custom.nil?
           apply_preset(custom[:base])
-          update(**custom[:attrs])
+          configure(**custom[:attrs])
         elsif sym == :cyber
           apply_cyber
         else

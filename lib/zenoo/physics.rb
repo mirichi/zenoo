@@ -419,7 +419,6 @@ module Zenoo
       anga = a.angle.to_f
       ma = a.mass.to_f
       shape_a = a.collider
-      ia = a.inertia
 
       xb = b.x.to_f
       yb = b.y.to_f
@@ -429,7 +428,6 @@ module Zenoo
       angb = b.angle.to_f
       mb = b.mass.to_f
       shape_b = b.collider
-      ib = b.inertia
 
       restitution = restitution ? restitution.to_f : [a.restitution.to_f, b.restitution.to_f].max
       friction = friction ? friction.to_f : Math.sqrt(a.friction.to_f * b.friction.to_f)
@@ -832,7 +830,6 @@ module Zenoo
       anga = a.angle.to_f
       ma = a.mass.to_f
       shape_a = a.collider
-      ia = a.inertia
 
       xb = b.x.to_f
       yb = b.y.to_f
@@ -842,7 +839,6 @@ module Zenoo
       angb = b.angle.to_f
       mb = b.mass.to_f
       shape_b = b.collider
-      ib = b.inertia
 
       ma_f = a.mass.to_f
       mb_f = b.mass.to_f
