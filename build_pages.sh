@@ -43,6 +43,7 @@ mkdir -p "${DOCS_DIR}/mesh_deform"
 mkdir -p "${DOCS_DIR}/scene"
 mkdir -p "${DOCS_DIR}/sound_generator"
 mkdir -p "${DOCS_DIR}/sprite_animation"
+mkdir -p "${DOCS_DIR}/procedural_runner"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
@@ -51,8 +52,12 @@ echo "=== [1/5] Setting up GitHub Pages structure ==="
 touch "${DOCS_DIR}/.nojekyll"
 # ポータルページを配置
 cp examples/web/portal.html "${DOCS_DIR}/index.html"
-# シェルHTMLを一括生成・最新同期 (アスペクト比フリー & 共通全画面制御)
-python3 tools/generate_shells.py
+# シェルHTMLを同期 (ターゲット指定時はそのデモのみ、未指定/all時は全体)
+if [ -n "$TARGET" ] && [ "$TARGET" != "all" ]; then
+    python3 tools/generate_shells.py "$TARGET"
+else
+    python3 tools/generate_shells.py
+fi
 
 # ビルドモード判定 (サイズより速度優先)
 #   BUILD_MODE=dev  (または fast) : -O1 (Clang最適化を軽量化し、ビルド時間を短縮)
@@ -213,6 +218,7 @@ build_mesh_deform()  { build_item "2D Mesh Deformation & 2-Stream Instancing" "m
 build_scene()        { build_item "Scene & Transition Demo" "scene" "examples/demo_scene.rb" "examples/web/shell_scene.html"; }
 build_sound_generator() { build_item "Retro Sound Generator" "sound_generator" "tools/sound_generator.rb" "examples/web/shell_sound_generator.html"; }
 build_sprite_animation() { build_item "Diagonal Sprite & Multi-Layer Tilemap" "sprite_animation" "examples/demo_sprite_animation.rb" "examples/web/shell_sprite_animation.html"; }
+build_procedural_runner() { build_item "Procedural Runner & Sword IK Demo" "procedural_runner" "examples/demo_procedural_runner.rb" "examples/web/shell_procedural_runner.html"; }
 
 case "$TARGET" in
     game)         build_game ;;
@@ -237,6 +243,7 @@ case "$TARGET" in
     scene)        build_scene ;;
     sound_generator) build_sound_generator ;;
     sprite_animation) build_sprite_animation ;;
+    procedural_runner) build_procedural_runner ;;
     all)
         build_game
         sleep 0.5
