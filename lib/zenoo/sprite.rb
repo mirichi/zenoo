@@ -975,7 +975,7 @@ module Zenoo
     end
 
     # 単一または配列スプライトの一括描画 (DXRuby互換)
-    def self.draw(sprites)
+    def self.draw(sprites = nil)
       return unless sprites
       if sprites.is_a?(Array)
         i = 0
@@ -995,7 +995,7 @@ module Zenoo
     end
 
     # 単一または配列スプライトの一括フレーム更新 (DXRuby互換)
-    def self.update(sprites)
+    def self.update(sprites = nil)
       return unless sprites
       if sprites.is_a?(Array)
         i = 0
@@ -1015,7 +1015,7 @@ module Zenoo
     end
 
     # 配列から消滅済み (vanished?) スプライトを一括除去 (インプレース・ゼロアロケーション)
-    def self.clean(sprites)
+    def self.clean(sprites = nil)
       return sprites unless sprites.is_a?(Array)
 
       write_idx = 0
