@@ -250,8 +250,8 @@ void zen_set_render_target(ZenImage* target) {
             target->msaa_fbo = 0;
         }
 
-        // 2. MSAA が有効な場合
-        if (target->msaa_samples > 0) {
+        // 2. MSAA が有効な場合 (WSLg / Mesa D3D12 環境ではドライバ不具合回避のため通常FBOを使用)
+        if (target->msaa_samples > 0 && !zen__is_wsl_d3d12()) {
             int tw = target->texture->width;
             int th = target->texture->height;
             if (target->msaa_fbo == 0) {

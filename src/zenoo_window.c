@@ -864,7 +864,33 @@ void zen_set_vsync(int vsync) {
     }
 }
 
+int zen__is_wsl_d3d12(void) {
+#if defined(__linux__) && !defined(__EMSCRIPTEN__)
+    static int s_checked = 0;
+    static int s_is_d3d12 = 0;
+    if (!s_checked) {
+        if (getenv("WSL_DISTRO_NAME") != NULL || getenv("WSL_INTEROP") != NULL) {
+            s_is_d3d12 = 1;
+            s_checked = 1;
+        } else if (s_window != NULL) {
+            const char* r = (const char*)glGetString(GL_RENDERER);
+            if (r && strstr(r, "D3D12") != NULL) {
+                s_is_d3d12 = 1;
+            }
+            s_checked = 1;
+        }
+    }
+    return s_is_d3d12;
+#else
+    return 0;
+#endif
+}
+
 void zen_window_set_msaa_samples(int samples) {
+    if (zen__is_wsl_d3d12()) {
+        s_window_msaa_samples = 0;
+        return;
+    }
     s_window_msaa_samples = (samples < 0) ? 0 : samples;
 }
 
