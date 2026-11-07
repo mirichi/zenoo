@@ -47,6 +47,9 @@ static int s_is_fullscreen = 0;
 static int s_saved_win_x = 100, s_saved_win_y = 100;
 static int s_saved_win_w = 960, s_saved_win_h = 540;
 static GLFWcursor* s_cursors[10] = { NULL };
+#ifdef __EMSCRIPTEN__
+static char* s_clipboard_buf = NULL;
+#endif
 
 #ifndef GLFW_RESIZE_NWSE_CURSOR
 #define GLFW_RESIZE_NWSE_CURSOR 0x00036007
@@ -639,6 +642,12 @@ void zen_shutdown(void) {
     s_created_msaa_samples = 0;
     s_current_monitor = NULL;
     s_in_auto_resize = 0;
+#ifdef __EMSCRIPTEN__
+    if (s_clipboard_buf) {
+        free(s_clipboard_buf);
+        s_clipboard_buf = NULL;
+    }
+#endif
 #ifdef _WIN32
     timeEndPeriod(1);
 #endif
@@ -1031,14 +1040,56 @@ void zen_window_set_cursor(int shape) {
 }
 
 const char* zen_window_get_clipboard_string(void) {
+#ifdef __EMSCRIPTEN__
+    return s_clipboard_buf ? s_clipboard_buf : "";
+#else
     if (!s_window) return "";
     const char* str = glfwGetClipboardString(s_window);
     return str ? str : "";
+#endif
 }
 
 void zen_window_set_clipboard_string(const char* text) {
-    if (!s_window || !text) return;
+    if (!text) return;
+#ifdef __EMSCRIPTEN__
+    if (s_clipboard_buf) {
+        free(s_clipboard_buf);
+        s_clipboard_buf = NULL;
+    }
+    s_clipboard_buf = strdup(text);
+
+    EM_ASM({
+        var str = UTF8ToString($0);
+        function fallbackCopy(val) {
+            try {
+                var ta = document.createElement("textarea");
+                ta.value = val;
+                ta.style.position = "fixed";
+                ta.style.left = "-9999px";
+                ta.style.top = "0";
+                ta.setAttribute("readonly", "");
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+            } catch (e) {
+                console.warn("[Zenoo] Clipboard fallback copy failed:", e);
+            }
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(str).catch(function(err) {
+                fallbackCopy(str);
+            });
+        } else {
+            fallbackCopy(str);
+        }
+    }, text);
+#else
+    if (!s_window) return;
     glfwSetClipboardString(s_window, text);
+#endif
 }
 
 // ------------------------------------------
