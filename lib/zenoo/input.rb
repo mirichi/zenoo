@@ -521,12 +521,14 @@ module Zenoo
 
     # 右スティック水平方向 (-1.0 .. 1.0)
     def self.rx(id = 0)
+      return @vpad_rx if @vpad_rx && @vpad_rx != 0.0
       stick = right_stick(id, 0.2)
       stick[0].to_f
     end
 
     # 右スティック垂直方向 (-1.0 .. 1.0)
     def self.ry(id = 0)
+      return @vpad_ry if @vpad_ry && @vpad_ry != 0.0
       stick = right_stick(id, 0.2)
       stick[1].to_f
     end
@@ -539,6 +541,8 @@ module Zenoo
     @virtual_pad = nil
     @vpad_actions_cur = {}
     @vpad_actions_prev = {}
+    @vpad_rx = 0.0
+    @vpad_ry = 0.0
 
     def self.actions
       @actions
@@ -553,6 +557,8 @@ module Zenoo
       @virtual_pad = pad
       @vpad_actions_cur.clear
       @vpad_actions_prev.clear
+      @vpad_rx = 0.0
+      @vpad_ry = 0.0
     end
 
     # 仮想アクション注入 (VirtualPad 等から今フレームのアクション強度を注入)
@@ -582,6 +588,19 @@ module Zenoo
       elsif vy > 0.0
         inject_action(:down, vy)
       end
+    end
+
+    # 仮想右スティックベクトル注入 (VirtualPad の照準スティック等を Input.rx / Input.ry へ注入)
+    def self.inject_right_vector(dx, dy)
+      rx = dx.to_f
+      ry = dy.to_f
+      len = Math.hypot(rx, ry)
+      if len > 1.0
+        rx /= len
+        ry /= len
+      end
+      @vpad_rx = rx
+      @vpad_ry = ry
     end
 
     # アクションの定義・追加登録
@@ -879,6 +898,10 @@ module Zenoo
       @touches.clear
       @vpad_actions_cur.clear
       @vpad_actions_prev.clear
+      @vpad_rx = 0.0
+      @vpad_ry = 0.0
+      @vpad_rx = 0.0
+      @vpad_ry = 0.0
       @virtual_pad.reset if @virtual_pad
       Native::Input.touch_clear_events
     end
@@ -886,6 +909,8 @@ module Zenoo
     # フレーム開始時: 終了済みTouchの除去 & Cカーネルからの生イベント反映
     def self.__begin_frame
       @vpad_actions_cur.clear
+      @vpad_rx = 0.0
+      @vpad_ry = 0.0
 
       # 1. 前フレームで終了（離脱/キャンセル）していた Touch を一覧から除外
       i = 0

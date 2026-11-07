@@ -730,9 +730,9 @@ class Player < Sprite
     @invincible -= 1 if @invincible > 0
 
     # 移動
-    dx, dy = Input.vector
-    self.x += dx * @speed
-    self.y += dy * @speed
+    move_x, move_y = Input.vector
+    self.x += move_x * @speed
+    self.y += move_y * @speed
 
     if camera
       mx, my = camera.screen_to_world(Input.mouse_x, Input.mouse_y)
@@ -743,8 +743,8 @@ class Player < Sprite
       my = Input.mouse_y + cy
     end
 
-    # マウス追従
-    if Input.mouse_pressed?(:left)
+    # マウス追従 (PC環境でマウスクリック押しっぱなし移動。タッチ操作時はツインスティックを優先)
+    if Input.mouse_pressed?(:left) && !Input.using_touch?
       dx = mx - self.x
       dy = my - self.y
       dist = Math.sqrt(dx * dx + dy * dy)
@@ -767,6 +767,31 @@ class Player < Sprite
     ry = Input.ry
     if rx != 0.0 || ry != 0.0
       @rotation = Math.atan2(ry, rx)
+    elsif Input.using_touch?
+      # タッチ操作時 (指1本時): 周囲に敵がいれば最寄りの敵へ自動照準、いなければ移動方向を向く
+      nearest_enemy = nil
+      min_dist_sq = 800.0 * 800.0
+      i = 0
+      len = enemies.length
+      while i < len
+        e = enemies[i]
+        if e && !e.vanished?
+          edx = e.x - self.x
+          edy = e.y - self.y
+          d2 = edx * edx + edy * edy
+          if d2 < min_dist_sq
+            min_dist_sq = d2
+            nearest_enemy = e
+          end
+        end
+        i += 1
+      end
+
+      if nearest_enemy
+        @rotation = Math.atan2(nearest_enemy.y - self.y, nearest_enemy.x - self.x)
+      elsif move_x != 0.0 || move_y != 0.0
+        @rotation = Math.atan2(move_y, move_x)
+      end
     else
       @rotation = Math.atan2(my - self.y, mx - self.x)
     end
@@ -902,6 +927,7 @@ class Game
   def initialize
     # ゲーム固有のアクションマッピング (ポーズ操作)
     Input.define_action(:pause, keys: [:escape, :p], gamepad: [:start, :back], mouse: [:right])
+    Input.virtual_pad = VirtualPad.twin_stick
 
     @sfx = Sfx.new
     @best_score = 0
