@@ -141,6 +141,9 @@
     .card.sprite-animation::before {
       background: linear-gradient(90deg, #00ffcc, #f43f5e);
     }
+    .card.procedural-runner::before {
+      background: linear-gradient(90deg, #00ffcc, #38bdf8);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: #334155;
@@ -171,6 +174,7 @@
     .card.canvas_mesh .card-tag { color: #00ffcc; }
     .card.mesh_deform .card-tag { color: #38bdf8; }
     .card.sprite-animation .card-tag { color: #00ffcc; }
+    .card.procedural-runner .card-tag { color: #00ffcc; }
 
     .card h2 {
       font-size: 22px;
@@ -370,6 +374,14 @@
     .card.mesh_deform .btn-launch:hover {
       background: #38bdf8;
       color: #0b0d14;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    }
+    .card.procedural-runner .btn-launch {
+      background: #00ffcc;
+      color: #0b0d14;
+    }
+    .card.procedural-runner .btn-launch:hover {
+      background: #38bdf8;
       box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
     }
     footer {
@@ -802,6 +814,28 @@
       <div class="card-actions">
         <a href="articulated/" class="btn-launch">多関節デモを起動 (Launch Demo) →</a>
         <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_articulated_sprite.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
+    </div>
+
+    <!-- Procedural Runner & Sword IK Demo Card -->
+    <div class="card procedural-runner">
+      <div>
+        <div class="card-tag">Inverse Kinematics &amp; Motion</div>
+        <h2>Procedural Runner &amp; Sword IK</h2>
+        <p class="desc">
+          完全滑りゼロの2足歩行接地IK（Bone.step_offset）、凸凹地面追従サスペンション、倍周期バウンド・前傾ピッチを備えた骨盤制御、そして居合超加速（Expo In）による肩子Sprite腕IK剣撃アクションを体験できます。
+        </p>
+        <ul class="features">
+          <li>余弦定理 2ボーンIK (Bone.solve_two_bone) &amp; 両腕/両脚直列ボーン階層 (Bone.chain)</li>
+          <li>フットスライド完全ゼロ化接地軌道 &amp; 膝の伸びきり防止腰引き下げ調停</li>
+          <li>SDF 丸端カプセル・テーパーチェーン描画 (Bone.draw_chain / draw_capsule)</li>
+          <li>右上 Immediate-Mode GUI パネルで移動速度・腰の高さ・地面起伏をリアルタイム調整</li>
+          <li>[SPACE / クリック] 剣振り下ろし、[TAB] ボーン骨格可視化</li>
+        </ul>
+      </div>
+      <div class="card-actions">
+        <a href="procedural_runner/" class="btn-launch">ランナーデモを起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_procedural_runner.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
       </div>
     </div>
 
