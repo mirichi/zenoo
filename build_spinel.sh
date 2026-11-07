@@ -21,7 +21,18 @@ gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c ext/spinel/zenoo_sp
 ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_window.o build/zenoo_input.o build/zenoo_vibration.o build/zenoo_image.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_audio.o build/zenoo_spinel.o
 echo "  -> build/libzenoo_spinel.a created successfully."
 
-TARGET_RB="${1:-examples/demo_gui.rb}"
+ARG="${1:-examples/demo_gui_widgets.rb}"
+if [ -f "$ARG" ]; then
+    TARGET_RB="$ARG"
+elif [ -f "examples/demo_${ARG}.rb" ]; then
+    TARGET_RB="examples/demo_${ARG}.rb"
+elif [ -f "examples/${ARG}.rb" ]; then
+    TARGET_RB="examples/${ARG}.rb"
+elif [ -f "examples/game_${ARG}.rb" ]; then
+    TARGET_RB="examples/game_${ARG}.rb"
+else
+    TARGET_RB="$ARG"
+fi
 OUT_BIN="build/$(basename "${TARGET_RB}" .rb)"
 
 echo "=== [2/2] AOT Compiling Ruby app: ${TARGET_RB} ==="
