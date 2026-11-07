@@ -219,7 +219,22 @@ class Sfx
   def play(id, cooldown = 2)
     return if @cooldowns[id] > 0
     @cooldowns[id] = cooldown
-    @sounds[id].play
+    snd = @sounds[id]
+    case id
+    when SHOT
+      # ショット音のピッチをわずかにランダム変化 (0.90 〜 1.10)
+      snd.pitch = 1.0 + (rand(21) - 10).to_f * 0.01
+    when KILL
+      # 敵撃破音のピッチをわずかにランダム変化 (0.88 〜 1.12)
+      snd.pitch = 1.0 + (rand(25) - 12).to_f * 0.01
+    when EXPLODE
+      # 爆発・エリート撃破音のピッチをわずかにランダム変化 (0.90 〜 1.10)
+      snd.pitch = 1.0 + (rand(21) - 10).to_f * 0.01
+    when GEM
+      # スコア・ジェム取得音のピッチをわずかにランダム変化 (0.92 〜 1.12)
+      snd.pitch = 1.0 + (rand(21) - 8).to_f * 0.01
+    end
+    snd.play
   end
 end
 
