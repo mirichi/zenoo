@@ -312,14 +312,40 @@ module Zenoo
     end
 
     # タッチ操作をマウス左ボタンとしてエミュレートする対象の Touch を取得
-    # (バーチャルパッド等で消費されていない最初のタッチ、または直近のタッチ)
+    # (同一タッチのドラッグ中は consume! されていても継続して追跡)
     def self.__mouse_emulation_touch
       return nil unless @using_touch
+
+      # 1. 既にマウス操作として追跡中のタッチがあれば、消費済みであっても離されるまで継続追跡
+      if @mouse_touch_id
+        t = @active_touches[@mouse_touch_id]
+        if t.nil?
+          i = 0
+          len = @touches.length
+          while i < len
+            cand = @touches[i]
+            if cand && cand.id == @mouse_touch_id
+              t = cand
+              break
+            end
+            i += 1
+          end
+        end
+
+        if t && (t.active? || t.released?)
+          return t
+        else
+          @mouse_touch_id = nil
+        end
+      end
+
+      # 2. 追跡対象がなければ、未消費のアクティブタッチから新たに選定
       i = 0
       len = @touches.length
       while i < len
         t = @touches[i]
-        if t && !t.consumed?
+        if t && !t.consumed? && t.active?
+          @mouse_touch_id = t.id
           return t
         end
         i += 1
@@ -861,6 +887,7 @@ module Zenoo
     @active_touches = {}
     @touches = []
     @using_touch = false
+    @mouse_touch_id = nil
     @touch_guard_frames = 0
     @last_raw_mx = 0.0
     @last_raw_my = 0.0
@@ -896,10 +923,9 @@ module Zenoo
       end
       @active_touches.clear
       @touches.clear
+      @mouse_touch_id = nil
       @vpad_actions_cur.clear
       @vpad_actions_prev.clear
-      @vpad_rx = 0.0
-      @vpad_ry = 0.0
       @vpad_rx = 0.0
       @vpad_ry = 0.0
       @virtual_pad.reset if @virtual_pad
