@@ -42,6 +42,7 @@ require_relative 'zenoo/camera'
 require_relative 'zenoo/mesh'
 require_relative 'zenoo/bone'
 require_relative 'zenoo/skinned_mesh'
+require_relative 'zenoo/particle'
 require_relative 'zenoo/profiler'
 require_relative 'zenoo/scene'
 
@@ -56,6 +57,8 @@ Mesh          = Zenoo::Mesh
 InstanceBuffer = Zenoo::InstanceBuffer
 Bone          = Zenoo::Bone
 SkinnedMesh   = Zenoo::SkinnedMesh
+ParticleEmitter = Zenoo::ParticleEmitter
+ParticleSystem  = Zenoo::ParticleSystem
 Shader        = Zenoo::Shader
 Color         = Zenoo::Color
 Font          = Zenoo::Font

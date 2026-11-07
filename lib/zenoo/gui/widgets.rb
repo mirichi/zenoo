@@ -26,7 +26,7 @@ module Zenoo
         text_w = f_font.text_width(label.to_s, f_size)
 
         box_size = 20.0
-        rw = w ? w.to_f : (box_size + 10.0 + text_w + 8.0)
+        rw = @layout.resolve_width(w, box_size + 10.0 + text_w + 8.0)
         box_y = ry + (rh - box_size) * 0.5
 
         hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ry, rw, rh)
@@ -59,7 +59,7 @@ module Zenoo
       # ----------------------------------------------------
       # 2. ラジオボタン (Radio Button)
       # ----------------------------------------------------
-      # クリックされた場合に true を返却 (選択状態の維持・更新)
+      # クリックされた瞬間に true を返却
       def radio(label, active, x: nil, y: nil, w: nil, h: 28.0, id: "")
         widget_id = id.to_s.empty? ? label.to_s : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -71,32 +71,32 @@ module Zenoo
 
         circle_r = 9.0
         circle_d = circle_r * 2.0
-        rw = w ? w.to_f : (circle_d + 10.0 + text_w + 8.0)
-        cx = rx + circle_r + 2.0
-        cy = ry + rh * 0.5
+        rw = @layout.resolve_width(w, circle_d + 10.0 + text_w + 8.0)
 
         hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ry, rw, rh)
         set_mouse_cursor(:hand) if hover || @active_id == widget_id
-        new_active = !!active
+        clicked = false
 
         if @active_id == widget_id
+          Input.consume_mouse!
           if @mouse_rel || !@mouse_down
-            new_active = true if hover
+            clicked = true if hover
             @active_id = nil
           end
         elsif @active_id.nil? && hover
           @hot_id = widget_id
           if @mouse_push
-            new_active = true
+            Input.consume_mouse!
+            clicked = true
             @active_id = widget_id unless @mouse_rel
           end
         end
 
-        # 描画
-        @renderer.draw_radio(rx, ry, rw, rh, label, new_active, hover, @theme)
+        # 描画 (現在選択中、または今クリックされたなら選択状態で描画)
+        @renderer.draw_radio(rx, ry, rw, rh, label, !!active || clicked, hover, @theme)
 
         @layout.advance(rw, rh) if x.nil? && y.nil?
-        new_active
+        clicked
       end
       alias radio_button radio
 

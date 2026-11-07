@@ -1,649 +1,421 @@
 # frozen_string_literal: true
 
 # ==============================================================================
-# Zenoo: 2D Particle Effect Designer & Editor
+# Zenoo: 2D GPU Particle Effect Designer & Multi-Layer Editor
 # ==============================================================================
-# 炎、煙、爆発、魔法、雪などの2Dパーティクルエフェクトを
-# GUIスライダーでリアルタイムにパラメータ調整しながらプレビュー・編集できるツールです。
+# Zenoo::ParticleSystem / ParticleEmitter (InstanceBuffer + GPU解析シェーダー) を用い、
+# 数千〜数万個のパーティクルをリアルタイムに編集・合成・コード出力できるツールです。
+# - スライダーを動かすと Uniform 経由で「今飛んでいる粒子」にも即座に物理・色が反映されます。
+# - マルチレイヤー対応（例: 黒煙 + 炎コア + 火花 + 衝撃波リング の重ね合わせ）。
 # ==============================================================================
 
 require_relative '../lib/zenoo'
 
-# ------------------------------------------------------------------------------
-# 1. 高速パーティクルデータ構造 (オブジェクト再利用プール方式)
-# ------------------------------------------------------------------------------
-class Particle
-  attr_accessor :active, :x, :y, :vx, :vy, :life, :max_life,
-                :start_size, :end_size, :size,
-                :sr, :sg, :sb, :sa, :er, :eg, :eb, :ea,
-                :r, :g, :b, :a,
-                :angle, :spin, :wobble_freq, :wobble_amp, :wobble_phase
+WIDTH  = 1280
+HEIGHT = 720
+CANVAS_W = 810.0
 
-  def initialize
-    @active = false
-    @x = 0.0
-    @y = 0.0
-    @vx = 0.0
-    @vy = 0.0
-    @life = 0.0
-    @max_life = 1.0
-    @start_size = 10.0
-    @end_size = 0.0
-    @size = 10.0
-    @sr = 255.0; @sg = 255.0; @sb = 255.0; @sa = 255.0
-    @er = 255.0; @eg = 255.0; @eb = 255.0; @ea = 0.0
-    @r = 255.0;  @g = 255.0;  @b = 255.0;  @a = 255.0
-    @angle = 0.0
-    @spin = 0.0
-    @wobble_freq = 0.0
-    @wobble_amp = 0.0
-    @wobble_phase = 0.0
-  end
-end
-
-# ------------------------------------------------------------------------------
-# 2. パーティクルシステムエンジン
-# ------------------------------------------------------------------------------
-class ParticleSystem
-  DEG_TO_RAD = Math::PI / 180.0
-  POOL_SIZE = 3000
-
-  attr_accessor :emitter_x, :emitter_y
-  attr_accessor :emitting, :emission_rate, :burst_count
-  attr_accessor :lifetime, :lifetime_var
-  attr_accessor :speed, :speed_var
-  attr_accessor :angle_deg, :spread_deg
-  attr_accessor :gravity_x, :gravity_y
-  attr_accessor :friction
-  attr_accessor :wobble_amp, :wobble_freq
-  attr_accessor :spin_speed
-  attr_accessor :start_size, :end_size
-  attr_accessor :start_r, :start_g, :start_b, :start_a
-  attr_accessor :end_r,   :end_g,   :end_b,   :end_a
-  attr_accessor :blend_mode   # :add or :alpha
-  attr_accessor :shape_type   # 0: Circle(Glow), 1: Box, 2: Spark(Line), 3: Ring
-
-  attr_reader :alive_count
-
-  def initialize(x = 640.0, y = 360.0)
-    @emitter_x = x.to_f
-    @emitter_y = y.to_f
-    @pool = Array.new(POOL_SIZE) { Particle.new }
-    @emit_accumulator = 0.0
-    @alive_count = 0
-    @rng = Random.new
-
-    reset_defaults
-    preset_fire
-  end
-
-  def reset_defaults
-    @emitting       = true
-    @emission_rate  = 120.0 # 個 / 秒
-    @burst_count    = 60
-    @lifetime       = 0.7
-    @lifetime_var   = 0.2
-    @speed          = 150.0
-    @speed_var      = 40.0
-    @angle_deg      = 270.0 # 上向き
-    @spread_deg     = 40.0
-    @gravity_x      = 0.0
-    @gravity_y      = -30.0 # 軽い上昇浮力
-    @friction       = 0.98
-    @wobble_amp     = 15.0
-    @wobble_freq    = 8.0
-    @spin_speed     = 0.0
-    @start_size     = 22.0
-    @end_size       = 4.0
-    @start_r = 255.0; @start_g = 210.0; @start_b = 60.0;  @start_a = 240.0
-    @end_r   = 240.0; @end_g   = 40.0;  @end_b   = 10.0;  @end_a   = 0.0
-    @blend_mode     = :add
-    @shape_type     = 0 # Circle
-  end
-
-  # --- プリセット群 ---
-
-  def preset_fire
-    reset_defaults
-    @emission_rate = 150.0
-    @lifetime = 0.65
-    @lifetime_var = 0.2
-    @speed = 140.0
-    @speed_var = 50.0
-    @angle_deg = 270.0 # 上
-    @spread_deg = 35.0
-    @gravity_y = -40.0
-    @friction = 0.985
-    @wobble_amp = 20.0
-    @wobble_freq = 6.0
-    @start_size = 24.0
-    @end_size = 2.0
-    @start_r = 255.0; @start_g = 220.0; @start_b = 60.0;  @start_a = 255.0
-    @end_r   = 220.0; @end_g   = 30.0;  @end_b   = 10.0;  @end_a   = 0.0
-    @blend_mode = :add
-    @shape_type = 0
-  end
-
-  def preset_explosion
-    reset_defaults
-    @emitting = false
-    @burst_count = 180
-    @lifetime = 0.8
-    @lifetime_var = 0.3
-    @speed = 360.0
-    @speed_var = 160.0
-    @angle_deg = 0.0
-    @spread_deg = 360.0 # 全方位
-    @gravity_y = 60.0
-    @friction = 0.92 # 急速ブレーキ
-    @start_size = 30.0
-    @end_size = 2.0
-    @start_r = 255.0; @start_g = 240.0; @start_b = 180.0; @start_a = 255.0
-    @end_r   = 210.0; @end_g   = 50.0;  @end_b   = 15.0;  @end_a   = 0.0
-    @blend_mode = :add
-    @shape_type = 0
-    burst(@burst_count)
-  end
-
-  def preset_sparks
-    reset_defaults
-    @emission_rate = 80.0
-    @burst_count = 100
-    @lifetime = 0.9
-    @lifetime_var = 0.3
-    @speed = 320.0
-    @speed_var = 120.0
-    @angle_deg = 270.0
-    @spread_deg = 140.0
-    @gravity_y = 450.0 # 強い落下重力
-    @friction = 0.975
-    @start_size = 6.0
-    @end_size = 1.5
-    @start_r = 255.0; @start_g = 230.0; @start_b = 100.0; @start_a = 255.0
-    @end_r   = 255.0; @end_g   = 70.0;  @end_b   = 20.0;  @end_a   = 0.0
-    @blend_mode = :add
-    @shape_type = 2 # Spark (Lines)
-  end
-
-  def preset_smoke
-    reset_defaults
-    @emission_rate = 45.0
-    @lifetime = 1.6
-    @lifetime_var = 0.4
-    @speed = 50.0
-    @speed_var = 25.0
-    @angle_deg = 270.0
-    @spread_deg = 45.0
-    @gravity_y = -15.0 # ゆっくり上昇
-    @friction = 0.99
-    @wobble_amp = 30.0
-    @wobble_freq = 3.0
-    @start_size = 10.0
-    @end_size = 56.0 # 広がる
-    @start_r = 160.0; @start_g = 160.0; @start_b = 175.0; @start_a = 180.0
-    @end_r   = 70.0;  @end_g   = 70.0;  @end_b   = 80.0;   @end_a   = 0.0
-    @blend_mode = :alpha
-    @shape_type = 0
-  end
-
-  def preset_magic
-    reset_defaults
-    @emission_rate = 140.0
-    @lifetime = 1.0
-    @lifetime_var = 0.3
-    @speed = 90.0
-    @speed_var = 40.0
-    @angle_deg = 0.0
-    @spread_deg = 360.0
-    @gravity_y = -10.0
-    @friction = 0.97
-    @wobble_amp = 25.0
-    @wobble_freq = 7.0
-    @start_size = 18.0
-    @end_size = 3.0
-    @start_r = 60.0;  @start_g = 230.0; @start_b = 255.0; @start_a = 240.0
-    @end_r   = 210.0; @end_g   = 60.0;  @end_b   = 255.0; @end_a   = 0.0
-    @blend_mode = :add
-    @shape_type = 3 # Ring
-  end
-
-  def preset_snow
-    reset_defaults
-    @emission_rate = 60.0
-    @lifetime = 3.5
-    @lifetime_var = 1.0
-    @speed = 60.0
-    @speed_var = 20.0
-    @angle_deg = 90.0 # 下向き
-    @spread_deg = 30.0
-    @gravity_y = 15.0
-    @friction = 0.995
-    @wobble_amp = 40.0
-    @wobble_freq = 2.0
-    @start_size = 5.0
-    @end_size = 4.0
-    @start_r = 230.0; @start_g = 245.0; @start_b = 255.0; @start_a = 220.0
-    @end_r   = 180.0; @end_g   = 210.0; @end_b   = 240.0; @end_a   = 60.0
-    @blend_mode = :alpha
-    @shape_type = 1 # Box
-  end
-
-  def preset_stars
-    reset_defaults
-    @emission_rate = 40.0
-    @burst_count = 60
-    @lifetime = 1.4
-    @lifetime_var = 0.4
-    @speed = 340.0
-    @speed_var = 100.0
-    @angle_deg = 270.0
-    @spread_deg = 70.0
-    @gravity_y = 520.0 # 放物線
-    @friction = 0.99
-    @spin_speed = 360.0 # 高速スピン
-    @start_size = 14.0
-    @end_size = 8.0
-    @start_r = 255.0; @start_g = 220.0; @start_b = 40.0;  @start_a = 255.0
-    @end_r   = 255.0; @end_g   = 160.0; @end_b   = 20.0;  @end_a   = 0.0
-    @blend_mode = :alpha
-    @shape_type = 1 # Box
-  end
-
-  # 一斉放出 (Burst)
-  def burst(count = @burst_count)
-    c = 0
-    while c < count
-      spawn_particle
-      c += 1
-    end
-  end
-
-  # 全消去
-  def clear
-    i = 0
-    len = @pool.length
-    while i < len
-      @pool[i].active = false
-      i += 1
-    end
-    @alive_count = 0
-  end
-
-  # 1フレーム更新
-  def update(dt)
-    # 1. 放出処理
-    if @emitting && @emission_rate > 0.0
-      @emit_accumulator += @emission_rate * dt
-      while @emit_accumulator >= 1.0
-        spawn_particle
-        @emit_accumulator -= 1.0
-      end
-    end
-
-    # 2. パーティクル更新
-    alive = 0
-    i = 0
-    len = @pool.length
-    while i < len
-      p = @pool[i]
-      if p.active
-        p.life -= dt
-        if p.life <= 0.0
-          p.active = false
-        else
-          progress = 1.0 - (p.life / p.max_life)
-
-          # 速度更新
-          p.vx += @gravity_x * dt
-          p.vy += @gravity_y * dt
-          p.vx *= @friction
-          p.vy *= @friction
-
-          # 位置更新
-          p.x += p.vx * dt
-          p.y += p.vy * dt
-
-          # 乱流・ゆらぎ
-          if p.wobble_amp > 0.0
-            w_offset = Math.sin(p.wobble_phase + progress * p.wobble_freq * Math::PI * 2.0) * p.wobble_amp * dt
-            p.x += w_offset
-          end
-
-          # 回転
-          p.angle += p.spin * dt if p.spin != 0.0
-
-          # サイズ補間
-          p.size = p.start_size + (p.end_size - p.start_size) * progress
-
-          # カラー補間
-          p.r = p.sr + (p.er - p.sr) * progress
-          p.g = p.sg + (p.eg - p.sg) * progress
-          p.b = p.sb + (p.eb - p.sb) * progress
-          p.a = p.sa + (p.ea - p.sa) * progress
-
-          alive += 1
-        end
-      end
-      i += 1
-    end
-    @alive_count = alive
-  end
-
-  # 描画
-  def draw
-    i = 0
-    len = @pool.length
-    while i < len
-      p = @pool[i]
-      if p.active && p.size > 0.1 && p.a > 1.0
-        col = Color.new(p.r.to_i, p.g.to_i, p.b.to_i, p.a.to_i)
-        case @shape_type
-        when 0 # Circle (SDF Glow)
-          r = p.size * 0.5
-          Window.draw_circle(p.x, p.y, r, color: col, blend: @blend_mode)
-        when 1 # Box (Rotation support)
-          hs = p.size * 0.5
-          Window.draw_rect(p.x - hs, p.y - hs, p.size, p.size, angle: p.angle, color: col, blend: @blend_mode)
-        when 2 # Spark (Lines based on velocity)
-          tail_x = p.x - p.vx * 0.035
-          tail_y = p.y - p.vy * 0.035
-          lw = [p.size * 0.35, 1.0].max
-          Window.draw_line(p.x, p.y, tail_x, tail_y, color: col, width: lw, blend: @blend_mode)
-        when 3 # Ring (Shockwave)
-          r = p.size * 0.5
-          bw = [p.size * 0.12, 1.0].max
-          Window.draw_circle(p.x, p.y, r, color: nil, border_color: col, border_width: bw, blend: @blend_mode)
-        end
-      end
-      i += 1
-    end
-  end
-
-  private
-
-  def spawn_particle
-    # 空きパーティクルを探す
-    p = nil
-    i = 0
-    len = @pool.length
-    while i < len
-      unless @pool[i].active
-        p = @pool[i]
-        break
-      end
-      i += 1
-    end
-    return unless p # プール上限到達時はスキップ
-
-    # 寿命
-    l_var = (@rng.rand * 2.0 - 1.0) * @lifetime_var
-    p.max_life = [@lifetime + l_var, 0.05].max
-    p.life = p.max_life
-
-    # 位置
-    p.x = @emitter_x
-    p.y = @emitter_y
-
-    # 角度と初速
-    spr = (@rng.rand * 2.0 - 1.0) * (@spread_deg * 0.5)
-    rad = (@angle_deg + spr) * DEG_TO_RAD
-    s_var = (@rng.rand * 2.0 - 1.0) * @speed_var
-    cur_spd = [@speed + s_var, 0.0].max
-
-    p.vx = Math.cos(rad) * cur_spd
-    p.vy = Math.sin(rad) * cur_spd
-
-    # サイズ
-    p.start_size = @start_size
-    p.end_size   = @end_size
-    p.size       = @start_size
-
-    # カラー
-    p.sr = @start_r; p.sg = @start_g; p.sb = @start_b; p.sa = @start_a
-    p.er = @end_r;   p.eg = @end_g;   p.eb = @end_b;   p.ea = @end_a
-    p.r  = @start_r; p.g  = @start_g; p.b  = @start_b; p.a  = @start_a
-
-    # 回転 & ゆらぎ
-    p.angle = @rng.rand * 360.0
-    p.spin  = (@rng.rand * 2.0 - 1.0) * @spin_speed
-    p.wobble_amp   = @wobble_amp
-    p.wobble_freq  = @wobble_freq
-    p.wobble_phase = @rng.rand * Math::PI * 2.0
-
-    p.active = true
-  end
-end
-
-# ------------------------------------------------------------------------------
-# 3. エディタ GUI アプリケーション
-# ------------------------------------------------------------------------------
-system = ParticleSystem.new(500.0, 360.0)
-
+system = ParticleSystem.preset(:fire, CANVAS_W * 0.5, HEIGHT * 0.55)
+selected_layer = 0
 tab_index = 0
-bg_mode = 0 # 0: Dark Navy, 1: Pitch Black, 2: Gray Grid
-is_dragging_emitter = false
+bg_mode = 0 # 0: Dark Navy, 1: Pitch Black, 2: Slate Grid
+show_gizmo = true
 
-shape_names = ["Circle (Glow)", "Box (Rotate)", "Spark (Line)", "Ring (Shock)"]
-blend_names = ["Add (加算合成)", "Alpha (通常合成)"]
+SHAPE_LIST       = [:circle, :box, :spark, :ring, :star, :diamond, :soft].freeze
+SHAPE_LABELS     = ["Circle (Glow)", "Box (Square)", "Spark (Line)", "Ring (Wave)", "Star (Kirakira)", "Diamond", "Soft Smoke"].freeze
+SPAWN_SHAPE_LIST = [:point, :circle, :ring, :box, :line].freeze
+SPAWN_LABELS     = ["Point (点)", "Circle (円内)", "Ring (円周)", "Box (矩形)", "Line (線分)"].freeze
+CURVE_LIST       = [:linear, :sine, :ease_out, :ease_in].freeze
+CURVE_LABELS     = ["Linear (線形)", "Sine (山なり)", "EaseOut (急→緩)", "EaseIn (緩→急)"].freeze
+BLEND_LIST       = [:add, :alpha, :multiply].freeze
+BLEND_LABELS     = ["Add (加算発光)", "Alpha (通常半透明)", "Multiply (乗算)"].freeze
+
+# 放出範囲ギズモの描画ヘルパー
+def draw_emitter_gizmo(em)
+  ex = em.x
+  ey = em.y
+  col_border = Color.new(100, 220, 255, 110)
+  case em.spawn_shape
+  when :circle
+    Window.draw_circle(ex, ey, em.spawn_radius, color: nil, border_color: col_border, border_width: 1.5)
+    if em.spawn_inner_radius > 1.0
+      Window.draw_circle(ex, ey, em.spawn_inner_radius, color: nil, border_color: Color.new(255, 180, 80, 90), border_width: 1.0)
+    end
+  when :ring
+    Window.draw_circle(ex, ey, em.spawn_radius, color: nil, border_color: col_border, border_width: 1.5)
+  when :box
+    w = em.spawn_width
+    h = em.spawn_height
+    Window.draw_rect(ex - w * 0.5, ey - h * 0.5, w, h, color: nil, border_color: col_border, border_width: 1.5)
+  when :line
+    rad = (em.angle - 90.0) * (Math::PI / 180.0)
+    hw = em.spawn_width * 0.5
+    dx = Math.cos(rad) * hw
+    dy = Math.sin(rad) * hw
+    Window.draw_line(ex - dx, ey - dy, ex + dx, ey + dy, color: col_border, width: 2.0)
+  end
+
+  # 中心十字マーカー
+  Window.draw_circle(ex, ey, 5.0, color: nil, border_color: Color.new(255, 255, 255, 180), border_width: 1.5)
+  Window.draw_line(ex - 9.0, ey, ex + 9.0, ey, color: Color.new(255, 255, 255, 130))
+  Window.draw_line(ex, ey - 9.0, ex, ey + 9.0, color: Color.new(255, 255, 255, 130))
+end
+
+# Ruby コード文字列の生成ヘルパー
+def generate_ruby_code(system)
+  lines = []
+  lines << "# Zenoo GPU ParticleSystem (Multi-Layer)"
+  lines << "ps = Zenoo::ParticleSystem.new(x, y)"
+  system.emitters.each_with_index do |em, idx|
+    h = em.to_h
+    lines << ""
+    lines << "# --- Layer #{idx + 1} (#{h[:shape]}, #{h[:blend]}) ---"
+    lines << "ps.add_emitter("
+    lines << "  max_particles: #{em.max_particles},"
+    lines << "  shape: :#{h[:shape]}, blend: :#{h[:blend]}, local_space: #{h[:local_space]},"
+    lines << "  emitting: #{h[:emitting]}, emission_rate: #{h[:emission_rate]}, burst_count: #{h[:burst_count]},"
+    lines << "  spawn_shape: :#{h[:spawn_shape]}, spawn_radius: #{h[:spawn_radius]}, spawn_inner_radius: #{h[:spawn_inner_radius]},"
+    lines << "  spawn_width: #{h[:spawn_width]}, spawn_height: #{h[:spawn_height]}, radial_direction: #{h[:radial_direction]},"
+    lines << "  lifetime: #{h[:lifetime]}, lifetime_var: #{h[:lifetime_var]},"
+    lines << "  speed: #{h[:speed]}, speed_var: #{h[:speed_var]}, angle: #{h[:angle]}, spread: #{h[:spread]},"
+    lines << "  gravity_x: #{h[:gravity_x]}, gravity_y: #{h[:gravity_y]}, drag: #{h[:drag]},"
+    lines << "  radial_accel: #{h[:radial_accel]}, tangential_accel: #{h[:tangential_accel]},"
+    lines << "  wobble_amp: #{h[:wobble_amp]}, wobble_freq: #{h[:wobble_freq]}, spin: #{h[:spin]}, spin_var: #{h[:spin_var]},"
+    lines << "  align_to_velocity: #{h[:align_to_velocity]}, stretch: #{h[:stretch]},"
+    lines << "  start_size: #{h[:start_size]}, end_size: #{h[:end_size]}, size_var: #{h[:size_var]}, size_curve: :#{h[:size_curve]},"
+    lines << "  start_color: #{h[:start_color].inspect},"
+    lines << "  mid_color:   #{h[:mid_color].inspect},"
+    lines << "  end_color:   #{h[:end_color].inspect},"
+    lines << "  color_mid_pos: #{h[:color_mid_pos]}, color_var: #{h[:color_var]}, fade_in: #{h[:fade_in]}, fade_out: #{h[:fade_out]}"
+    lines << ")"
+  end
+  lines.join("\n")
+end
 
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
+copy_feedback_timer = 0.0
 
-Window.loop(1280, 720, "Zenoo - 2D Particle Effect Designer & Editor", msaa: 4) do
+Window.loop(WIDTH, HEIGHT, "Zenoo - 2D GPU Particle Designer & Editor") do
   dt = Window.delta_time
+  copy_feedback_timer -= dt if copy_feedback_timer > 0.0
   mx = Input.mouse_x.to_f
   my = Input.mouse_y.to_f
 
   # -------------------------------------------------------------------
-  # 背景描画
+  # 1. 背景とグリッドの描画
   # -------------------------------------------------------------------
   case bg_mode
-  when 0 # Dark Navy
-    Window.clear(Color.new(18, 20, 28))
-    grid_col = Color.new(28, 30, 40)
-  when 1 # Pitch Black
+  when 0
+    Window.clear(Color.new(14, 16, 24))
+    grid_col = Color.new(26, 30, 42)
+  when 1
     Window.clear(Color.new(4, 4, 6))
-    grid_col = Color.new(16, 16, 20)
-  when 2 # Gray
-    Window.clear(Color.new(40, 42, 48))
-    grid_col = Color.new(55, 58, 66)
+    grid_col = Color.new(15, 15, 20)
+  when 2
+    Window.clear(Color.new(38, 42, 50))
+    grid_col = Color.new(54, 58, 68)
   end
 
-  # グリッド
   gx = 0.0
-  while gx < 820.0
-    Window.draw_line(gx, 0, gx, 720, color: grid_col)
+  while gx < CANVAS_W
+    Window.draw_line(gx, 0.0, gx, HEIGHT, color: grid_col)
     gx += 40.0
   end
   gy = 0.0
-  while gy < 720.0
-    Window.draw_line(0, gy, 820, gy, color: grid_col)
+  while gy < HEIGHT
+    Window.draw_line(0.0, gy, CANVAS_W, gy, color: grid_col)
     gy += 40.0
   end
 
   # -------------------------------------------------------------------
-  # マウス操作 (キャンバス領域: X < 820)
+  # 2. キャンバス操作 (マウス左ドラッグで移動、右クリック/SpaceでBurst)
   # -------------------------------------------------------------------
-  if mx < 820.0
-    # 左クリックドラッグでエミッター移動
-    if Input.mouse_down?(:left)
-      system.emitter_x = mx
-      system.emitter_y = my
+  if mx < CANVAS_W && !GUI.mouse_captured?
+    if Input.mouse_pressed?(:left)
+      system.move_to(mx, my)
     end
-    # 右クリックでワンショットバースト
     if Input.mouse_push?(:right)
-      system.burst
+      system.burst(nil, x: mx, y: my)
     end
   end
-
-  # スペースキーでバースト
   system.burst if Input.key_push?(:space)
 
-  # パーティクル更新 & 描画
+  # -------------------------------------------------------------------
+  # 3. GPU パーティクル更新 & 描画
+  # -------------------------------------------------------------------
   system.update(dt)
   system.draw
 
-  # エミッター中心マーカー描画
-  ex = system.emitter_x
-  ey = system.emitter_y
-  Window.draw_circle(ex, ey, 6.0, color: nil, border_color: Color.new(255, 255, 255, 180), border_width: 1.5)
-  Window.draw_line(ex - 10, ey, ex + 10, ey, color: Color.new(255, 255, 255, 120))
-  Window.draw_line(ex, ey - 10, ex, ey + 10, color: Color.new(255, 255, 255, 120))
+  selected_layer = [[selected_layer, 0].max, system.emitters.length - 1].min
+  active_em = system.emitters[selected_layer]
 
-  # ヘッダーガイドテキスト
-  Window.draw_text(25.0, 16.0, "Zenoo 2D Particle Designer", size: 22, color: Color::WHITE)
-  Window.draw_text(25.0, 44.0, "Left Drag: Move Emitter | Right Click / Space: Burst | Active: #{system.alive_count} / #{ParticleSystem::POOL_SIZE}", size: 13, color: Color.new(160, 200, 240))
+  draw_emitter_gizmo(active_em) if show_gizmo && active_em
 
   # -------------------------------------------------------------------
-  # 右側GUIコントロールパネル (X: 830, 幅: 430)
+  # 4. キャンバス上部ステータスオーバーレイ
   # -------------------------------------------------------------------
-  GUI.window("Particle Properties", x: 830, y: 15, w: 435, h: 690, resizable: false) do
-    tab_index = GUI.tabs(["Presets", "Emitter", "Motion", "Visuals", "Code"], tab_index)
-    GUI.spacer(6)
+  Window.draw_rect(16.0, 12.0, 780.0, 58.0, radius: 8.0, color: Color.new(12, 16, 26, 210), border_width: 1.0, border_color: Color.new(60, 90, 140, 150), z: 50.0)
+  Window.draw_text(28.0, 18.0, "Zenoo GPU Particle Studio (InstanceBuffer Stateless Engine)", size: 19, color: Color::WHITE, z: 51.0)
+  info_str = "FPS: #{Window.fps.round(1)}  |  Layers (DrawCalls): #{system.emitters.length}  |  Active Particles: #{system.alive_count} / #{system.max_particles}  |  [Drag] Move  [RightClick / Space] Burst"
+  Window.draw_text(28.0, 44.0, info_str, size: 13, color: Color.new(130, 220, 255), z: 51.0)
 
-    case tab_index
-    when 0 # Presets
-      GUI.label("=== Quick Effect Presets ===", size: 15, color: Color.new(255, 200, 80))
-      GUI.spacer(4)
-
-      GUI.row(cols: 2, spacing: 6) do
-        system.preset_fire if GUI.button("🔥 Fire (炎)")
-        system.preset_explosion if GUI.button("💥 Explosion (爆発)")
+  # -------------------------------------------------------------------
+  # 5. 右側 GUI コントロールパネル
+  # -------------------------------------------------------------------
+  GUI.window("GPU Particle Inspector", x: 820, y: 10, w: 450, h: 700, resizable: false, collapsible: false) do
+    # --- レイヤー管理バー ---
+    GUI.row(cols: 4, spacing: 4) do
+      system.emitters.each_with_index do |em, idx|
+        if GUI.button("L#{idx + 1}:#{em.shape}", h: 28.0, active: (selected_layer == idx), id: "layer_sel_#{idx}")
+          selected_layer = idx
+        end
       end
-      GUI.spacer(4)
-      GUI.row(cols: 2, spacing: 6) do
-        system.preset_sparks if GUI.button("✨ Sparks (火花)")
-        system.preset_smoke if GUI.button("💨 Smoke (煙)")
+    end
+    GUI.spacer(2)
+    GUI.row(cols: 3, spacing: 6) do
+      if GUI.button("+ Add Layer", h: 28.0) && system.emitters.length < 4
+        new_em = system.add_emitter(max_particles: 2000)
+        new_em.configure(**active_em.to_h) if active_em
+        selected_layer = system.emitters.length - 1
       end
-      GUI.spacer(4)
-      GUI.row(cols: 2, spacing: 6) do
-        system.preset_magic if GUI.button("🌀 Magic (魔法)")
-        system.preset_snow if GUI.button("❄️ Snow (雪)")
+      if GUI.button("Duplicate", h: 28.0) && system.emitters.length < 4 && active_em
+        new_em = system.add_emitter(max_particles: active_em.max_particles)
+        new_em.configure(**active_em.to_h)
+        selected_layer = system.emitters.length - 1
       end
-      GUI.spacer(4)
-      GUI.row(cols: 2, spacing: 6) do
-        system.preset_stars if GUI.button("🌟 Stars (コイン星)")
-        system.reset_defaults if GUI.button("Default Reset")
+      if GUI.button("- Remove", h: 28.0) && system.emitters.length > 1
+        system.remove_emitter(selected_layer)
+        selected_layer = [selected_layer - 1, 0].max
       end
+    end
 
-      GUI.spacer(8)
-      GUI.divider
-      GUI.label("=== Global Actions ===", size: 15, color: Color.new(100, 220, 255))
-      GUI.spacer(4)
+    selected_layer = [[selected_layer, 0].max, system.emitters.length - 1].min
+    em = system.emitters[selected_layer]
 
-      GUI.row(cols: 2, spacing: 6) do
-        system.burst if GUI.button("💥 BURST! (Space)")
-        system.clear if GUI.button("Clear All")
-      end
+    GUI.spacer(4)
+    tab_index = GUI.tabs(["Presets", "Spawn", "Physics", "Visuals", "Export"], tab_index, h: 32.0)
+    GUI.spacer(4)
 
-      GUI.spacer(6)
-      system.emitting = GUI.checkbox("Continuous Emission", system.emitting)
-
-      GUI.spacer(8)
-      GUI.divider
-      GUI.label("=== Background Preview ===", size: 15, color: Color.new(255, 200, 80))
-      GUI.row(cols: 3, spacing: 4) do
-        bg_mode = 0 if GUI.radio("Dark", bg_mode == 0)
-        bg_mode = 1 if GUI.radio("Black", bg_mode == 1)
-        bg_mode = 2 if GUI.radio("Gray", bg_mode == 2)
-      end
-
-    when 1 # Emitter & Timing
-      GUI.label("=== Emitter Timing ===", size: 15, color: Color.new(255, 200, 80))
-      system.emission_rate = GUI.slider("Emit Rate (p/s)", system.emission_rate, 5.0, 500.0)
-      system.burst_count   = GUI.spinner("Burst Count", system.burst_count, min: 10, max: 500, step: 10)
-
-      GUI.spacer(6)
-      GUI.divider
-      GUI.label("=== Particle Lifetime ===", size: 15, color: Color.new(255, 200, 80))
-      system.lifetime     = GUI.slider("Lifetime (s)", system.lifetime, 0.1, 4.0)
-      system.lifetime_var = GUI.slider("Lifetime Var (s)", system.lifetime_var, 0.0, 1.5)
-
-    when 2 # Motion & Physics
-      GUI.label("=== Velocity & Direction ===", size: 15, color: Color.new(255, 200, 80))
-      system.speed       = GUI.slider("Speed", system.speed, 0.0, 600.0)
-      system.speed_var   = GUI.slider("Speed Variance", system.speed_var, 0.0, 250.0)
-      system.angle_deg   = GUI.slider("Angle (deg)", system.angle_deg, 0.0, 360.0)
-      system.spread_deg  = GUI.slider("Spread (deg)", system.spread_deg, 0.0, 360.0)
-
-      GUI.spacer(6)
-      GUI.divider
-      GUI.label("=== Forces & Damping ===", size: 15, color: Color.new(255, 200, 80))
-      system.gravity_x   = GUI.slider("Gravity X", system.gravity_x, -400.0, 400.0)
-      system.gravity_y   = GUI.slider("Gravity Y", system.gravity_y, -600.0, 600.0)
-      system.friction    = GUI.slider("Friction", system.friction, 0.90, 1.0)
-
-      GUI.spacer(6)
-      GUI.divider
-      GUI.label("=== Turbulence & Spin ===", size: 15, color: Color.new(255, 200, 80))
-      system.wobble_amp  = GUI.slider("Wobble Amp", system.wobble_amp, 0.0, 60.0)
-      system.wobble_freq = GUI.slider("Wobble Freq", system.wobble_freq, 0.5, 20.0)
-      system.spin_speed  = GUI.slider("Spin Speed (deg/s)", system.spin_speed, 0.0, 720.0)
-
-    when 3 # Visuals & Color
-      GUI.label("=== Particle Shape & Blend ===", size: 15, color: Color.new(255, 200, 80))
-      GUI.label("Shape: #{shape_names[system.shape_type]}", size: 13, color: Color.new(120, 220, 255))
-      GUI.row(cols: 2, spacing: 4) do
-        system.shape_type = 0 if GUI.radio("Circle (Glow)", system.shape_type == 0)
-        system.shape_type = 1 if GUI.radio("Box (Rotate)", system.shape_type == 1)
-      end
-      GUI.row(cols: 2, spacing: 4) do
-        system.shape_type = 2 if GUI.radio("Spark (Line)", system.shape_type == 2)
-        system.shape_type = 3 if GUI.radio("Ring (Wave)", system.shape_type == 3)
-      end
-
-      GUI.spacer(4)
-      GUI.row(cols: 2, spacing: 4) do
-        system.blend_mode = :add if GUI.radio("Blend: Add", system.blend_mode == :add)
-        system.blend_mode = :alpha if GUI.radio("Blend: Alpha", system.blend_mode == :alpha)
-      end
-
-      GUI.spacer(6)
-      GUI.divider
-      GUI.label("=== Size Transition ===", size: 15, color: Color.new(255, 200, 80))
-      system.start_size = GUI.slider("Start Size", system.start_size, 1.0, 80.0)
-      system.end_size   = GUI.slider("End Size", system.end_size, 0.0, 80.0)
-
-      GUI.spacer(6)
-      GUI.divider
-      GUI.label("=== Start Color (RGBA) ===", size: 15, color: Color.new(255, 200, 80))
-      system.start_r = GUI.slider("Start R", system.start_r, 0.0, 255.0)
-      system.start_g = GUI.slider("Start G", system.start_g, 0.0, 255.0)
-      system.start_b = GUI.slider("Start B", system.start_b, 0.0, 255.0)
-      system.start_a = GUI.slider("Start Alpha", system.start_a, 0.0, 255.0)
-
-      GUI.spacer(4)
-      GUI.label("=== End Color (RGBA) ===", size: 15, color: Color.new(255, 200, 80))
-      system.end_r = GUI.slider("End R", system.end_r, 0.0, 255.0)
-      system.end_g = GUI.slider("End G", system.end_g, 0.0, 255.0)
-      system.end_b = GUI.slider("End B", system.end_b, 0.0, 255.0)
-      system.end_a = GUI.slider("End Alpha", system.end_a, 0.0, 255.0)
-
-    when 4 # Code Export
-      GUI.label("=== Zenoo Particle Integration ===", size: 15, color: Color.new(255, 200, 80))
-      GUI.label("Use this snippet in your game code:", size: 12, color: Color.new(160, 160, 180))
-      GUI.spacer(6)
-
-      GUI.scroll_view("export_code_scroll", h: 360.0) do
-        GUI.label("# --- Particle Emitter Setup ---", size: 12, color: Color.new(120, 220, 255))
-        GUI.label("ps = ParticleSystem.new(x, y)", size: 12)
-        GUI.label("ps.shape_type    = #{system.shape_type}", size: 12)
-        GUI.label("ps.blend_mode    = :#{system.blend_mode}", size: 12)
-        GUI.label("ps.emission_rate = #{system.emission_rate.round(1)}", size: 12)
-        GUI.label("ps.lifetime      = #{system.lifetime.round(2)}", size: 12)
-        GUI.label("ps.speed         = #{system.speed.round(1)}", size: 12)
-        GUI.label("ps.angle_deg     = #{system.angle_deg.round(1)}", size: 12)
-        GUI.label("ps.spread_deg    = #{system.spread_deg.round(1)}", size: 12)
-        GUI.label("ps.gravity_y     = #{system.gravity_y.round(1)}", size: 12)
-        GUI.label("ps.friction      = #{system.friction.round(3)}", size: 12)
-        GUI.label("ps.start_size    = #{system.start_size.round(1)}", size: 12)
-        GUI.label("ps.end_size      = #{system.end_size.round(1)}", size: 12)
-        GUI.label("ps.start_r = #{system.start_r.to_i}; ps.start_g = #{system.start_g.to_i}; ps.start_b = #{system.start_b.to_i}; ps.start_a = #{system.start_a.to_i}", size: 12)
-        GUI.label("ps.end_r   = #{system.end_r.to_i};   ps.end_g   = #{system.end_g.to_i};   ps.end_b   = #{system.end_b.to_i};   ps.end_a   = #{system.end_a.to_i}", size: 12)
+    GUI.scroll_view("particle_inspector_scroll", h: 555.0) do
+      case tab_index
+      when 0 # Presets & Global Controls
+        GUI.label("=== Multi-Layer Rich Presets ===", size: 15, color: Color.new(255, 205, 80))
         GUI.spacer(4)
-        GUI.label("# In game loop:", size: 12, color: Color.new(140, 240, 180))
-        GUI.label("ps.update(Window.delta_time)", size: 12, color: Color.new(255, 220, 100))
-        GUI.label("ps.draw", size: 12, color: Color.new(255, 220, 100))
+
+        GUI.row(cols: 2, spacing: 6) do
+          if GUI.button("🔥 Campfire (炎+煙+火花)")
+            system.apply_preset(:fire)
+            selected_layer = 1
+          end
+          if GUI.button("💥 Explosion (4層大爆発)")
+            system.apply_preset(:explosion)
+            selected_layer = 1
+          end
+        end
+        GUI.spacer(4)
+        GUI.row(cols: 2, spacing: 6) do
+          if GUI.button("🌀 Magic Galaxy (銀河渦)")
+            system.apply_preset(:magic_galaxy)
+            selected_layer = 0
+          end
+          if GUI.button("⚡ Charge Aura (集束溜め)")
+            system.apply_preset(:charge_aura)
+            selected_layer = 0
+          end
+        end
+        GUI.spacer(4)
+        GUI.row(cols: 2, spacing: 6) do
+          if GUI.button("✨ Welding Sparks (火花)")
+            system.apply_preset(:sparks)
+            selected_layer = 0
+          end
+          if GUI.button("❄️ Blizzard (吹雪ボックス)")
+            system.apply_preset(:blizzard)
+            selected_layer = 0
+          end
+        end
+        GUI.spacer(4)
+        GUI.row(cols: 2, spacing: 6) do
+          if GUI.button("🌟 Star Fountain (星噴水)")
+            system.apply_preset(:star_fountain)
+            selected_layer = 0
+          end
+          if GUI.button("💠 Cyber Portal (渦ポータル)")
+            system.apply_preset(:cyber_portal)
+            selected_layer = 0
+          end
+        end
+
+        GUI.spacer(8)
+        GUI.divider
+        GUI.label("=== Playback & Trigger ===", size: 15, color: Color.new(100, 220, 255))
+        GUI.row(cols: 2, spacing: 6) do
+          system.burst if GUI.button("💥 BURST ALL! (Space)")
+          system.clear if GUI.button("Clear All Particles")
+        end
+
+        GUI.spacer(4)
+        em.emitting    = GUI.checkbox("Layer Emitting (連続放出)", em.emitting, id: "chk_emit")
+        em.local_space = GUI.checkbox("Local Space (エミッター移動に全粒子が追従)", em.local_space, id: "chk_local")
+        if GUI.checkbox("GPU Infinite Loop Mode (CPU転送完全ゼロ)", em.loop_mode, id: "chk_loop") != em.loop_mode
+          em.loop_mode = !em.loop_mode
+          em.fill_loop_pool!(em.max_particles) if em.loop_mode
+        end
+        show_gizmo = GUI.checkbox("Show Emitter Gizmo (放出範囲ガイド表示)", show_gizmo, id: "chk_gizmo")
+
+        GUI.spacer(6)
+        GUI.divider
+        GUI.label("=== Background Theme ===", size: 15, color: Color.new(255, 205, 80))
+        GUI.row(cols: 3, spacing: 4) do
+          bg_mode = 0 if GUI.radio("Navy", bg_mode == 0, id: "bg_0")
+          bg_mode = 1 if GUI.radio("Black", bg_mode == 1, id: "bg_1")
+          bg_mode = 2 if GUI.radio("Slate", bg_mode == 2, id: "bg_2")
+        end
+
+      when 1 # Spawn & Timing
+        GUI.label("=== Emission Rate & Lifetime ===", size: 15, color: Color.new(255, 205, 80))
+        em.emission_rate = GUI.slider("Emit Rate (p/s)", em.emission_rate, 0.0, 2000.0, step: 5.0)
+        em.burst_count   = GUI.slider("Burst Count", em.burst_count, 1.0, 1000.0, step: 1.0, format: "%d").to_i
+        em.lifetime      = GUI.slider("Lifetime (s)", em.lifetime, 0.1, 6.0, step: 0.05)
+        em.lifetime_var  = GUI.slider("Lifetime Var (s)", em.lifetime_var, 0.0, 2.5, step: 0.05)
+
+        GUI.spacer(6)
+        GUI.divider
+        GUI.label("=== Spawn Shape (放出領域) ===", size: 15, color: Color.new(100, 220, 255))
+        SPAWN_LABELS.each_with_index do |lbl, idx|
+          sp_sym = SPAWN_SHAPE_LIST[idx]
+          if GUI.radio(lbl, em.spawn_shape == sp_sym, id: "sp_shape_#{idx}")
+            em.spawn_shape = sp_sym
+          end
+        end
+
+        case em.spawn_shape
+        when :circle, :ring
+          em.spawn_radius       = GUI.slider("Outer Radius", em.spawn_radius, 1.0, 350.0, step: 1.0)
+          em.spawn_inner_radius = GUI.slider("Inner Radius / Thick", em.spawn_inner_radius, 0.0, 300.0, step: 1.0)
+          em.radial_direction   = GUI.checkbox("Radial Direction (中心から放射/集束)", em.radial_direction)
+        when :box
+          em.spawn_width      = GUI.slider("Box Width", em.spawn_width, 4.0, 800.0, step: 4.0)
+          em.spawn_height     = GUI.slider("Box Height", em.spawn_height, 4.0, 600.0, step: 4.0)
+          em.radial_direction = GUI.checkbox("Radial Direction (中心から外向き)", em.radial_direction)
+        when :line
+          em.spawn_width      = GUI.slider("Line Length", em.spawn_width, 10.0, 800.0, step: 5.0)
+        end
+
+      when 2 # Motion & Physics (GPU Real-time Uniforms!)
+        GUI.label("=== Initial Velocity ===", size: 15, color: Color.new(255, 205, 80))
+        em.speed     = GUI.slider("Speed (負で中心へ集束)", em.speed, -500.0, 800.0, step: 5.0)
+        em.speed_var = GUI.slider("Speed Variance", em.speed_var, 0.0, 400.0, step: 5.0)
+        em.angle     = GUI.slider("Angle (deg)", em.angle, 0.0, 360.0, step: 1.0)
+        em.spread    = GUI.slider("Spread (deg)", em.spread, 0.0, 360.0, step: 1.0)
+
+        GUI.spacer(6)
+        GUI.divider
+        GUI.label("=== GPU Forces (飛翔中の粒子にも即時反映!) ===", size: 15, color: Color.new(100, 220, 255))
+        em.gravity_x        = GUI.slider("Gravity X (風)", em.gravity_x, -600.0, 600.0, step: 5.0)
+        em.gravity_y        = GUI.slider("Gravity Y (重力/浮力)", em.gravity_y, -800.0, 800.0, step: 5.0)
+        em.drag             = GUI.slider("Air Drag (空気抵抗)", em.drag, 0.0, 8.0, step: 0.05)
+        em.radial_accel     = GUI.slider("Radial Accel (斥力/引力)", em.radial_accel, -400.0, 400.0, step: 5.0)
+        em.tangential_accel = GUI.slider("Vortex Swirl (渦回転)", em.tangential_accel, -400.0, 400.0, step: 5.0)
+
+        GUI.spacer(6)
+        GUI.divider
+        GUI.label("=== Turbulence & Orientation ===", size: 15, color: Color.new(255, 205, 80))
+        em.wobble_amp        = GUI.slider("Wobble Amp (揺らぎ幅)", em.wobble_amp, 0.0, 80.0, step: 1.0)
+        em.wobble_freq       = GUI.slider("Wobble Freq (周波数)", em.wobble_freq, 0.5, 15.0, step: 0.2)
+        em.spin              = GUI.slider("Spin Speed (deg/s)", em.spin, -720.0, 720.0, step: 10.0)
+        em.spin_var          = GUI.slider("Spin Variance", em.spin_var, 0.0, 720.0, step: 10.0)
+        em.align_to_velocity = GUI.checkbox("Align to Velocity (進行方向を向く)", em.align_to_velocity)
+        em.stretch           = GUI.slider("Velocity Stretch (伸縮)", em.stretch, 1.0, 6.0, step: 0.1)
+
+      when 3 # Visuals, Size Curve & 3-Point Color
+        GUI.label("=== Procedural SDF Shape & Blend ===", size: 15, color: Color.new(255, 205, 80))
+        GUI.row(cols: 2, spacing: 4) do
+          em.shape = :circle  if GUI.radio("Circle (Glow)", em.shape == :circle,  id: "sh_0")
+          em.shape = :box     if GUI.radio("Box (Square)",  em.shape == :box,     id: "sh_1")
+        end
+        GUI.row(cols: 2, spacing: 4) do
+          em.shape = :spark   if GUI.radio("Spark (Line)",  em.shape == :spark,   id: "sh_2")
+          em.shape = :ring    if GUI.radio("Ring (Wave)",   em.shape == :ring,    id: "sh_3")
+        end
+        GUI.row(cols: 2, spacing: 4) do
+          em.shape = :star    if GUI.radio("Star (Sparkle)", em.shape == :star,    id: "sh_4")
+          em.shape = :diamond if GUI.radio("Diamond",        em.shape == :diamond, id: "sh_5")
+        end
+        em.shape = :soft if GUI.radio("Soft Smoke (Gaussian)", em.shape == :soft, id: "sh_6")
+
+        if em.shape == :ring
+          em.ring_thickness = GUI.slider("Ring Thickness", em.ring_thickness, 0.04, 0.6, step: 0.01)
+        end
+
+        GUI.spacer(4)
+        GUI.row(cols: 3, spacing: 4) do
+          em.blend = :add      if GUI.radio("Add",      em.blend == :add,      id: "bl_add")
+          em.blend = :alpha    if GUI.radio("Alpha",    em.blend == :alpha,    id: "bl_alp")
+          em.blend = :multiply if GUI.radio("Multiply", em.blend == :multiply, id: "bl_mul")
+        end
+
+        GUI.spacer(6)
+        GUI.divider
+        GUI.label("=== Size & Easing Curve ===", size: 15, color: Color.new(100, 220, 255))
+        em.start_size = GUI.slider("Start Size", em.start_size, 1.0, 250.0, step: 1.0)
+        em.end_size   = GUI.slider("End Size", em.end_size, 0.0, 350.0, step: 1.0)
+        em.size_var   = GUI.slider("Size Variance", em.size_var, 0.0, 0.9, step: 0.05)
+
+        GUI.row(cols: 2, spacing: 4) do
+          em.size_curve = :linear   if GUI.radio("Linear",        em.size_curve == :linear,   id: "cv_0")
+          em.size_curve = :sine     if GUI.radio("Sine (山なり)", em.size_curve == :sine,     id: "cv_1")
+        end
+        GUI.row(cols: 2, spacing: 4) do
+          em.size_curve = :ease_out if GUI.radio("EaseOut",       em.size_curve == :ease_out, id: "cv_2")
+          em.size_curve = :ease_in  if GUI.radio("EaseIn",        em.size_curve == :ease_in,  id: "cv_3")
+        end
+
+        GUI.spacer(6)
+        GUI.divider
+        GUI.label("=== 3-Point Color Gradient & Fade ===", size: 15, color: Color.new(255, 205, 80))
+        em.fade_in       = GUI.slider("Alpha Fade-In Ratio", em.fade_in, 0.0, 0.5, step: 0.02)
+        em.fade_out      = GUI.slider("Alpha Fade-Out Ratio", em.fade_out, 0.0, 0.8, step: 0.02)
+        em.color_mid_pos = GUI.slider("Mid Color Timing", em.color_mid_pos, 0.1, 0.9, step: 0.05)
+        em.color_var     = GUI.slider("Brightness Variance", em.color_var, 0.0, 0.4, step: 0.02)
+
+        sc = em.to_h[:start_color]
+        GUI.label("Start Color (RGBA)", size: 13, color: Color.new(sc[0], sc[1], sc[2], 255))
+        sr = GUI.slider("Start R", sc[0], 0, 255, step: 1, format: "%d").to_i
+        sg = GUI.slider("Start G", sc[1], 0, 255, step: 1, format: "%d").to_i
+        sb = GUI.slider("Start B", sc[2], 0, 255, step: 1, format: "%d").to_i
+        sa = GUI.slider("Start A", sc[3], 0, 255, step: 1, format: "%d").to_i
+        em.start_color = [sr, sg, sb, sa]
+
+        mc = em.to_h[:mid_color]
+        GUI.label("Mid Color (RGBA)", size: 13, color: Color.new(mc[0], mc[1], mc[2], 255))
+        mr = GUI.slider("Mid R", mc[0], 0, 255, step: 1, format: "%d").to_i
+        mg = GUI.slider("Mid G", mc[1], 0, 255, step: 1, format: "%d").to_i
+        mb = GUI.slider("Mid B", mc[2], 0, 255, step: 1, format: "%d").to_i
+        ma = GUI.slider("Mid A", mc[3], 0, 255, step: 1, format: "%d").to_i
+        em.mid_color = [mr, mg, mb, ma]
+
+        ec = em.to_h[:end_color]
+        GUI.label("End Color (RGBA)", size: 13, color: Color.new(ec[0], ec[1], ec[2], 255))
+        er = GUI.slider("End R", ec[0], 0, 255, step: 1, format: "%d").to_i
+        eg = GUI.slider("End G", ec[1], 0, 255, step: 1, format: "%d").to_i
+        eb = GUI.slider("End B", ec[2], 0, 255, step: 1, format: "%d").to_i
+        ea = GUI.slider("End A", ec[3], 0, 255, step: 1, format: "%d").to_i
+        em.end_color = [er, eg, eb, ea]
+
+      when 4 # Code Export
+        GUI.label("=== Ruby Code Export ===", size: 15, color: Color.new(255, 205, 80))
+        code_text = generate_ruby_code(system)
+        if GUI.button(copy_feedback_timer > 0.0 ? "✅ Copied to Clipboard!" : "📋 Copy Ruby Code to Clipboard")
+          Input.clipboard = code_text
+          copy_feedback_timer = 2.0
+        end
+        GUI.spacer(6)
+        code_text.each_line do |line|
+          col = line.strip.start_with?("#") ? Color.new(120, 210, 255) : Color.new(220, 230, 240)
+          GUI.label(line.chomp, size: 12, color: col)
+        end
       end
     end
   end
@@ -652,4 +424,4 @@ Window.loop(1280, 720, "Zenoo - 2D Particle Effect Designer & Editor", msaa: 4) 
   break if test_max > 0 && frame_count >= test_max
 end
 
-puts "Particle Editor test completed (#{frame_count} frames)."
+puts "GPU Particle Editor test completed (#{frame_count} frames)."
