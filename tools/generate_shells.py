@@ -12,6 +12,33 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'examples', 'web', 'shell_template.html')
 WEB_DIR = os.path.join(BASE_DIR, 'examples', 'web')
+DOCS_DIR = os.path.join(BASE_DIR, 'docs')
+
+DOCS_MAP = {
+    "shell.html": "vector",
+    "shell_articulated.html": "articulated",
+    "shell_atlas.html": "atlas",
+    "shell_billiards.html": "billiards",
+    "shell_canvas_mesh.html": "canvas_mesh",
+    "shell_clip.html": "clip",
+    "shell_collision.html": "collision",
+    "shell_coords.html": "coords",
+    "shell_danmaku.html": "danmaku",
+    "shell_font.html": "font",
+    "shell_game.html": "game",
+    "shell_gui.html": "gui",
+    "shell_image.html": "image",
+    "shell_mesh_deform.html": "mesh_deform",
+    "shell_particles.html": "particles",
+    "shell_procedural_runner.html": "procedural_runner",
+    "shell_scene.html": "scene",
+    "shell_skinned_mesh.html": "skinned_mesh",
+    "shell_sound.html": "sound",
+    "shell_sound_generator.html": "sound_generator",
+    "shell_sprite_animation.html": "sprite_animation",
+    "shell_tween.html": "tween",
+    "shell_zero_gravity.html": "zero_gravity",
+}
 
 DEMOS = {
     "shell.html": {
@@ -98,6 +125,13 @@ DEMOS = {
         "src": "https://github.com/mirichi/zenoo/blob/master/examples/demo_gui_widgets.rb",
         "menu": False
     },
+    "shell_procedural_runner.html": {
+        "title": "Zenoo Procedural Runner & Sword IK (Spinel Wasm)",
+        "heading": "ZENOO PROCEDURAL RUNNER &amp; SWORD IK",
+        "desc": "走る脚の楕円接地IK・凝った腰の4大挙動 &amp; 肩子Sprite腕IK剣撃デモ | Powered by Spinel AOT",
+        "src": "https://github.com/mirichi/zenoo/blob/master/examples/demo_procedural_runner.rb",
+        "menu": False
+    },
     "shell_image.html": {
         "title": "Zenoo Sprite & Blend Modes Showcase (Spinel Wasm)",
         "heading": "Zenoo: Sprite &amp; Blend Modes Showcase",
@@ -179,7 +213,7 @@ DEMOS = {
 
 MENU_BUTTON_HTML = '<button class="btn btn-menu" id="btn-menu">MENU (右クリック/ESC)</button>'
 
-def generate_all():
+def generate_targets(targets=None):
     if not os.path.exists(TEMPLATE_PATH):
         print(f"Error: Template not found at {TEMPLATE_PATH}", file=sys.stderr)
         sys.exit(1)
@@ -187,8 +221,31 @@ def generate_all():
     with open(TEMPLATE_PATH, 'r', encoding='utf-8') as f:
         template = f.read()
 
+    # 指定された対象のみに絞り込み (未指定なら全件)
+    # 引数は "shell_procedural_runner.html", "shell_procedural_runner", "procedural_runner" いずれの形式でも受け付ける
+    items = []
+    if targets:
+        target_keys = set()
+        for t in targets:
+            name = t.strip()
+            if not name.endswith(".html"):
+                name = name + ".html"
+            if not name.startswith("shell_") and name != "shell.html":
+                name = "shell_" + name
+            target_keys.add(name)
+
+        for filename, meta in DEMOS.items():
+            if filename in target_keys:
+                items.append((filename, meta))
+        if not items:
+            print(f"Warning: No matching demos found for targets: {targets}", file=sys.stderr)
+            return
+    else:
+        items = list(DEMOS.items())
+
     count = 0
-    for filename, meta in DEMOS.items():
+    skipped = 0
+    for filename, meta in items:
         out_path = os.path.join(WEB_DIR, filename)
         extra_btn = MENU_BUTTON_HTML if meta.get("menu") else ""
         
@@ -199,11 +256,43 @@ def generate_all():
         content = content.replace("{{SOURCE_URL}}", meta["src"])
         content = content.replace("{{EXTRA_BUTTONS}}", extra_btn)
 
-        with open(out_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        count += 1
+        # 改行コードの差異や内容に変更がない場合は上書き書き込みせずスキップ (git dirty防止)
+        need_write_web = True
+        if os.path.exists(out_path):
+            with open(out_path, 'r', encoding='utf-8') as ef:
+                existing = ef.read()
+            if existing == content:
+                need_write_web = False
+                skipped += 1
 
-    print(f"Successfully generated {count} shell HTML files from shell_template.html!")
+        if need_write_web:
+            with open(out_path, 'w', encoding='utf-8', newline='\n') as f:
+                f.write(content)
+            count += 1
+
+        # docs/<dir>/index.html が既に存在する場合、Wasm再ビルド不要でシェルHTMLのみ即座に同期
+        dir_name = DOCS_MAP.get(filename)
+        if dir_name:
+            docs_target = os.path.join(DOCS_DIR, dir_name, "index.html")
+            if os.path.exists(docs_target):
+                docs_content = content.replace("{{{ SCRIPT }}}", '<script async type="text/javascript" src="index.js"></script>')
+                with open(docs_target, 'r', encoding='utf-8') as df:
+                    existing_docs = df.read()
+                if existing_docs != docs_content:
+                    with open(docs_target, 'w', encoding='utf-8', newline='\n') as df:
+                        df.write(docs_content)
+
+    if targets:
+        print(f"Successfully generated {count} shell HTML files (targets: {', '.join(targets)})!")
+    else:
+        print(f"Successfully updated {count} shell HTML files ({skipped} unchanged files skipped)!")
+
+def generate_all():
+    generate_targets(None)
 
 if __name__ == "__main__":
-    generate_all()
+    args = sys.argv[1:]
+    if args:
+        generate_targets(args)
+    else:
+        generate_all()
