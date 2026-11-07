@@ -35,14 +35,15 @@ module Zenoo
     # Stick: フローティング / 固定バーチャルスティック
     # ==========================================================================
     class Stick
-      attr_accessor :zone, :radius, :knob_radius, :deadzone, :follow
+      attr_accessor :zone, :target, :radius, :knob_radius, :deadzone, :follow
       attr_accessor :fixed_x, :fixed_y, :color, :border_color, :knob_color
       attr_reader   :touch, :ox, :oy, :cx, :cy, :vx, :vy, :last_ox, :last_oy
 
-      def initialize(zone: :left_half, radius: 90.0, knob_radius: 40.0, deadzone: 12.0,
+      def initialize(zone: :left_half, target: :move, radius: 90.0, knob_radius: 40.0, deadzone: 12.0,
                      follow: true, fixed_x: nil, fixed_y: nil,
                      color: [0, 0, 0, 70], border_color: [100, 200, 255, 160], knob_color: [0, 220, 255, 180])
         @zone         = zone
+        @target       = target.to_sym
         @radius       = radius.to_f
         @knob_radius  = knob_radius.to_f
         @deadzone     = deadzone.to_f
@@ -393,6 +394,17 @@ module Zenoo
       pad
     end
 
+    # プリセット4: ツインスティック型 (左: 移動スティック / 右: 照準スティック)
+    def self.twin_stick
+      pad = new(preset_name: :twin_stick)
+      pad.add_stick(zone: :left_half, target: :move, radius: 90.0, knob_radius: 40.0, follow: true)
+      pad.add_stick(
+        zone: :right_half, target: :aim, radius: 90.0, knob_radius: 40.0, follow: true,
+        border_color: [255, 170, 90, 160], knob_color: [255, 180, 50, 180]
+      )
+      pad
+    end
+
     # --------------------------------------------------------------------------
     # パーツ追加 API
     # --------------------------------------------------------------------------
@@ -444,29 +456,49 @@ module Zenoo
 
       touches = collect_active_touches
 
-      # 1. スティックの更新と移動ベクトル合成
-      vx = 0.0
-      vy = 0.0
-      stick_moving = false
+      # 1. スティックの更新と移動・照準ベクトル合成
+      move_vx = 0.0
+      move_vy = 0.0
+      move_moving = false
+
+      aim_vx = 0.0
+      aim_vy = 0.0
+      aim_moving = false
+
       i = 0
       while i < @sticks.length
         st = @sticks[i]
         st.update(touches, win_w, win_h)
         if st.moving?
-          vx += st.vx
-          vy += st.vy
-          stick_moving = true
+          if st.target == :aim || st.target == :right
+            aim_vx += st.vx
+            aim_vy += st.vy
+            aim_moving = true
+          else
+            move_vx += st.vx
+            move_vy += st.vy
+            move_moving = true
+          end
         end
         i += 1
       end
 
-      if stick_moving
-        mag = Math.hypot(vx, vy)
+      if move_moving
+        mag = Math.hypot(move_vx, move_vy)
         if mag > 1.0
-          vx /= mag
-          vy /= mag
+          move_vx /= mag
+          move_vy /= mag
         end
-        Input.inject_vector(vx, vy)
+        Input.inject_vector(move_vx, move_vy)
+      end
+
+      if aim_moving
+        mag = Math.hypot(aim_vx, aim_vy)
+        if mag > 1.0
+          aim_vx /= mag
+          aim_vy /= mag
+        end
+        Input.inject_right_vector(aim_vx, aim_vy)
       end
 
       # 2. ボタングループの更新 (ワイド判定 & 最寄りボタン吸着)
@@ -475,7 +507,7 @@ module Zenoo
       # 3. ジェスチャー領域の更新 (リリース時のタップ・フリック判定)
       i = 0
       while i < @gestures.length
-        @gestures[i].update(touches, @sticks, stick_moving, win_w, win_h)
+        @gestures[i].update(touches, @sticks, (move_moving || aim_moving), win_w, win_h)
         i += 1
       end
     end
