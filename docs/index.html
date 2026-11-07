@@ -420,6 +420,17 @@
       background: #fbbf24;
       box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
     }
+    .card.particle_editor::before {
+      background: linear-gradient(90deg, #ec4899, #f59e0b);
+    }
+    .card.particle_editor .btn-launch {
+      background: #ec4899;
+      color: #ffffff;
+    }
+    .card.particle_editor .btn-launch:hover {
+      background: #f472b6;
+      box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
+    }
 
     .card-actions {
       display: flex;
@@ -945,6 +956,27 @@
       <div class="card-actions">
         <a href="sound_generator/" class="btn-launch">SEジェネレータ起動 (Launch Tool) →</a>
         <a href="https://github.com/mirichi/zenoo/blob/master/tools/sound_generator.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
+    </div>
+
+    <!-- GPU Particle Designer & Editor Card -->
+    <div class="card particle_editor">
+      <div>
+        <div class="card-tag">Particle Tool &amp; Designer</div>
+        <h2>GPU Particle Designer &amp; Editor</h2>
+        <p class="desc">
+          数千〜数万個のパーティクルをリアルタイムに編集・合成・コード出力できるGPUパーティクルツール。マルチレイヤー対応、即座に反映されるUniform物理パラメータ、Rubyコード自動生成。
+        </p>
+        <ul class="features">
+          <li>InstanceBuffer + GPU解析シェーダーによる高効率レンダリング</li>
+          <li>マルチレイヤー合成（煙＋炎コア＋火花＋衝撃波等）</li>
+          <li>飛翔中の粒子にも即時反映される物理・カラーグラデーション</li>
+          <li>ワンクリックで組み込める Ruby コード生成＆クリップボードコピー</li>
+        </ul>
+      </div>
+      <div class="card-actions">
+        <a href="particle_editor/" class="btn-launch">パーティクルエディタ起動 (Launch Tool) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/tools/particle_editor.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
       </div>
     </div>
   </main>
