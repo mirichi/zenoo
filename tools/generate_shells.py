@@ -29,6 +29,7 @@ DOCS_MAP = {
     "shell_gui.html": "gui",
     "shell_image.html": "image",
     "shell_mesh_deform.html": "mesh_deform",
+    "shell_particle_editor.html": "particle_editor",
     "shell_particles.html": "particles",
     "shell_procedural_runner.html": "procedural_runner",
     "shell_scene.html": "scene",
@@ -144,6 +145,13 @@ DEMOS = {
         "heading": "Zenoo 2D Mesh Deformation &amp; 2-Stream Instancing",
         "desc": "Pure Ruby + WebGL 2.0 (Spinel AOT) | 2ストリームVBO &amp; Mesh変形API",
         "src": "https://github.com/mirichi/zenoo/blob/master/examples/demo_mesh_deform.rb",
+        "menu": False
+    },
+    "shell_particle_editor.html": {
+        "title": "Zenoo 2D GPU Particle Designer & Editor (Spinel Wasm)",
+        "heading": "ZENOO GPU PARTICLE DESIGNER &amp; EDITOR",
+        "desc": "InstanceBuffer + GPU解析シェーダー マルチレイヤーパーティクルエディタ | Powered by Spinel AOT",
+        "src": "https://github.com/mirichi/zenoo/blob/master/tools/particle_editor.rb",
         "menu": False
     },
     "shell_particles.html": {

@@ -14,7 +14,7 @@ module Zenoo
   # ====================================================================
   class ParticleEmitter
     DEG_TO_RAD = Math::PI / 180.0
-    FLOATS_PER_PARTICLE = 12
+    FLOATS_PER_PARTICLE = 16
     BYTES_PER_PARTICLE  = FLOATS_PER_PARTICLE * 4
 
     SHAPES = {
@@ -47,6 +47,7 @@ module Zenoo
       layout (location = 0) in vec4 in_origin_vel; // x0, y0, vx0, vy0
       layout (location = 1) in vec4 in_timing;     // t0, life, size_mul, spin
       layout (location = 2) in vec4 in_seeds;      // angle0, wobble_phase, color_var, rand_seed
+      layout (location = 3) in vec4 in_tint;       // r, g, b, a (0.0=use uniform gradient, >0.0=use per-particle tint)
 
       uniform vec2  u_resolution;
       uniform float u_flip_y;
@@ -165,13 +166,21 @@ module Zenoo
               return;
           }
 
-          // カラー3点補間 (Start -> Mid -> End)
+          // カラー補間 (in_tint.a > 0.001 なら個別ティントカラーを優先、それ以外は3点グラデーション)
           float mid_pos = clamp(u_fade_uv.y, 0.01, 0.99);
-          vec4 col;
+          vec4 grad_col;
           if (progress < mid_pos) {
-              col = mix(u_start_color, u_mid_color, progress / mid_pos);
+              grad_col = mix(u_start_color, u_mid_color, progress / mid_pos);
           } else {
-              col = mix(u_mid_color, u_end_color, (progress - mid_pos) / (1.0 - mid_pos));
+              grad_col = mix(u_mid_color, u_end_color, (progress - mid_pos) / (1.0 - mid_pos));
+          }
+
+          vec4 col;
+          if (in_tint.a > 0.001) {
+              vec3 end_rgb = in_tint.rgb * 0.35;
+              col = vec4(mix(in_tint.rgb, end_rgb, progress * 0.7), in_tint.a * grad_col.a);
+          } else {
+              col = grad_col;
           }
 
           // 個別明度・色相ばらつき (color_var)
@@ -352,7 +361,7 @@ module Zenoo
 
     # --- 座標・空間設定 ---
     attr_accessor :x, :y, :z, :local_space, :camera
-    attr_reader   :max_particles, :write_cursor, :time
+    attr_reader   :max_particles, :write_cursor, :used_count, :time
 
     # --- 放出 (Emission & Spawn Shape) ---
     attr_accessor :emitting, :loop_mode, :emission_rate, :burst_count
@@ -452,6 +461,8 @@ module Zenoo
       @time               = 0.0
       @emit_accumulator   = 0.0
       @write_cursor       = 0
+      @used_count         = 0
+      @max_expire_time    = 0.0
       @expire_times       = Array.new(@max_particles, -1.0) if @max_particles
       self
     end
@@ -516,10 +527,11 @@ module Zenoo
     # 現在生存中のパーティクル数 (概算または正確カウント)
     def alive_count
       return @max_particles if @loop_mode
+      return 0 if @used_count <= 0 || @time >= @max_expire_time
       c = 0
       i = 0
       t = @time
-      len = @expire_times.length
+      len = @used_count
       while i < len
         c += 1 if @expire_times[i] > t
         i += 1
@@ -532,28 +544,46 @@ module Zenoo
       @time = 0.0
       @emit_accumulator = 0.0
       @write_cursor = 0
+      @used_count = 0
+      @max_expire_time = 0.0
       i = 0
       while i < @max_particles
         @expire_times[i] = -1.0
         i += 1
       end
-      zero_bin = "\x00" * (@max_particles * BYTES_PER_PARTICLE)
-      @instance_buffer.update(zero_bin, offset: 0, count: @max_particles)
       self
     end
 
     # ワンショット一斉放出 (Burst)
-    # x, y を指定すると一時的にその座標から放出します
-    def burst(count = @burst_count, x: nil, y: nil)
+    # x, y, color, speed, size, angle, spread, lifetime を一時オーバーライドして放出可能
+    def burst(count = @burst_count, x: nil, y: nil, color: nil, speed: nil, size: nil, angle: nil, spread: nil, lifetime: nil)
       n = count.to_i
       return self if n <= 0
-      old_x = @x
-      old_y = @y
-      @x = x.to_f if x
-      @y = y.to_f if y
-      emit_batch(n)
-      @x = old_x
-      @y = old_y
+      old_x      = @x
+      old_y      = @y
+      old_speed  = @speed
+      old_angle  = @angle
+      old_spread = @spread
+      old_life   = @lifetime
+
+      @x        = x.to_f if x
+      @y        = y.to_f if y
+      @speed    = speed.to_f if speed
+      @angle    = angle.to_f if angle
+      @spread   = spread.to_f if spread
+      @lifetime = lifetime.to_f if lifetime
+
+      size_scale = size ? (size.to_f / [@start_size, 0.1].max) : 1.0
+      tint_f4    = color ? Backend.normalize_color(color) : nil
+
+      emit_batch(n, size_scale: size_scale, tint_f4: tint_f4)
+
+      @x        = old_x
+      @y        = old_y
+      @speed    = old_speed
+      @angle    = old_angle
+      @spread   = old_spread
+      @lifetime = old_life
       self
     end
 
@@ -570,6 +600,11 @@ module Zenoo
     def update(dt = Window.delta_time)
       @time += dt.to_f
 
+      if !@loop_mode && @used_count > 0 && @time >= @max_expire_time
+        @used_count = 0
+        @write_cursor = 0
+      end
+
       if !@loop_mode && @emitting && @emission_rate > 0.0
         @emit_accumulator += @emission_rate * dt.to_f
         spawn_n = @emit_accumulator.to_i
@@ -584,6 +619,8 @@ module Zenoo
 
     # 描画 (1 ドローコール)
     def draw(x: nil, y: nil, z: nil, camera: nil)
+      return self if @used_count <= 0 && !@loop_mode
+
       draw_x = x ? x.to_f : @x
       draw_y = y ? y.to_f : @y
       draw_z = z ? z.to_f : @z
@@ -644,33 +681,39 @@ module Zenoo
     def init_gpu_buffer
       @expire_times = Array.new(@max_particles, -1.0)
       @staging_floats = []
+      @used_count = 0
+      @max_expire_time = 0.0
       zero_bin = "\x00" * (@max_particles * BYTES_PER_PARTICLE)
       @instance_buffer = InstanceBuffer.new(
         data: zero_bin,
         count: @max_particles,
-        layout: [4, 4, 4],
+        layout: [4, 4, 4, 4],
         shader: ParticleEmitter.default_shader,
         blend: @blend
       )
     end
 
-    def emit_batch(count, random_time_offset: false)
+    def emit_batch(count, random_time_offset: false, size_scale: 1.0, tint_f4: nil)
       return if count <= 0
       remaining = count
       while remaining > 0
         chunk = [remaining, @max_particles - @write_cursor].min
-        write_chunk(@write_cursor, chunk, random_time_offset)
+        write_chunk(@write_cursor, chunk, random_time_offset, size_scale, tint_f4)
         @write_cursor = (@write_cursor + chunk) % @max_particles
         remaining -= chunk
       end
     end
 
-    def write_chunk(start_index, count, random_time_offset)
+    def write_chunk(start_index, count, random_time_offset, size_scale = 1.0, tint_f4 = nil)
       @staging_floats.clear
       deg_rad = DEG_TO_RAD
       base_x = @local_space ? 0.0 : @x
       base_y = @local_space ? 0.0 : @y
       s_type = SPAWN_SHAPES[@spawn_shape] || @spawn_shape.to_i
+      tr = tint_f4 ? tint_f4[0] : 0.0
+      tg = tint_f4 ? tint_f4[1] : 0.0
+      tb = tint_f4 ? tint_f4[2] : 0.0
+      ta = tint_f4 ? tint_f4[3] : 0.0
 
       i = 0
       while i < count
@@ -720,7 +763,7 @@ module Zenoo
         # 3. 寿命・発生時刻・サイズ倍率・スピン
         life = [@lifetime + (@rng.rand * 2.0 - 1.0) * @lifetime_var, 0.05].max
         t0 = random_time_offset ? (@time - @rng.rand * life) : @time
-        size_mul = [1.0 + (@rng.rand * 2.0 - 1.0) * @size_var, 0.1].max
+        size_mul = [1.0 + (@rng.rand * 2.0 - 1.0) * @size_var, 0.1].max * size_scale
         spin_spd = @spin + (@rng.rand * 2.0 - 1.0) * @spin_var
 
         # 4. 初期角度・揺らぎ位相・明度ばらつき・乱数シード
@@ -732,15 +775,21 @@ module Zenoo
         @staging_floats.push(
           px, py, vx, vy,
           t0, life, size_mul, spin_spd,
-          ang0, wob_phase, c_var, r_seed
+          ang0, wob_phase, c_var, r_seed,
+          tr, tg, tb, ta
         )
 
-        @expire_times[start_index + i] = t0 + life
+        exp = t0 + life
+        @expire_times[start_index + i] = exp
+        @max_expire_time = exp if exp > @max_expire_time
         i += 1
       end
 
+      end_idx = start_index + count
+      @used_count = end_idx if end_idx > @used_count
+
       bin = @staging_floats.pack("f*")
-      @instance_buffer.update(bin, offset: start_index * BYTES_PER_PARTICLE, count: @max_particles)
+      @instance_buffer.update(bin, offset: start_index * BYTES_PER_PARTICLE, count: @used_count)
     end
 
     def color_to_rgba_array(col)

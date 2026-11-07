@@ -42,6 +42,7 @@ mkdir -p "${DOCS_DIR}/canvas_mesh"
 mkdir -p "${DOCS_DIR}/mesh_deform"
 mkdir -p "${DOCS_DIR}/scene"
 mkdir -p "${DOCS_DIR}/sound_generator"
+mkdir -p "${DOCS_DIR}/particle_editor"
 mkdir -p "${DOCS_DIR}/sprite_animation"
 mkdir -p "${DOCS_DIR}/procedural_runner"
 mkdir -p "${CACHE_DIR}/rt"
@@ -217,6 +218,7 @@ build_canvas_mesh()  { build_item "Canvas to Mesh & Vector Sprites" "canvas_mesh
 build_mesh_deform()  { build_item "2D Mesh Deformation & 2-Stream Instancing" "mesh_deform" "examples/demo_mesh_deform.rb" "examples/web/shell_mesh_deform.html"; }
 build_scene()        { build_item "Scene & Transition Demo" "scene" "examples/demo_scene.rb" "examples/web/shell_scene.html"; }
 build_sound_generator() { build_item "Retro Sound Generator" "sound_generator" "tools/sound_generator.rb" "examples/web/shell_sound_generator.html"; }
+build_particle_editor()  { build_item "GPU Particle Designer & Editor" "particle_editor" "tools/particle_editor.rb" "examples/web/shell_particle_editor.html"; }
 build_sprite_animation() { build_item "Diagonal Sprite & Multi-Layer Tilemap" "sprite_animation" "examples/demo_sprite_animation.rb" "examples/web/shell_sprite_animation.html"; }
 build_procedural_runner() { build_item "Procedural Runner & Sword IK Demo" "procedural_runner" "examples/demo_procedural_runner.rb" "examples/web/shell_procedural_runner.html"; }
 
@@ -242,6 +244,7 @@ case "$TARGET" in
     mesh_deform)  build_mesh_deform ;;
     scene)        build_scene ;;
     sound_generator) build_sound_generator ;;
+    particle_editor) build_particle_editor ;;
     sprite_animation) build_sprite_animation ;;
     procedural_runner) build_procedural_runner ;;
     all)
