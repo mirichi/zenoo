@@ -173,7 +173,6 @@ COLOR_BOSS_HP      = Color.new(255, 60, 100)
 UPGRADE_COUNT = 8
 
 # オブジェクト上限 (描画キュー・メモリ保護)
-MAX_PARTICLES    = 250
 MAX_DAMAGE_TEXTS = 60
 
 # ==========================================
@@ -239,43 +238,176 @@ class Sfx
 end
 
 # ==========================================
-# 1. パーティクル & エフェクト (短命GCオブジェクト)
+# 1. GPU パーティクル & テキストエフェクト
 # ==========================================
-class Particle
-  attr_reader :x, :y
+# InstanceBuffer + GPU ステートレス・シェーダーによる超大量・上限フリーの演出プール
+class GameParticleVfx
+  attr_reader :poly_emitter, :spark_emitter, :ring_emitter, :star_emitter
 
-  def initialize(x, y, vx, vy, life, color, size = 6.0)
-    @x = x.to_f
-    @y = y.to_f
-    @vx = vx.to_f
-    @vy = vy.to_f
-    @life = life
-    @max_life = life
-    @color = color
-    @size = size.to_f
-    @vanished = false
+  def initialize
+    # 1. ポリゴン破片プール (最大 16,000 個: 敵撃破・ミサイル爆煙・ジェット軌跡など、高速スピンする幾何学四角形)
+    @poly_emitter = ParticleEmitter.new(
+      0.0, 0.0,
+      max_particles: 16_000,
+      emitting: false,
+      shape: :box,
+      blend: :add,
+      lifetime: 0.75, lifetime_var: 0.25,
+      speed: 240.0, speed_var: 140.0, spread: 360.0,
+      drag: 3.2,
+      wobble_amp: 10.0, wobble_freq: 4.0,
+      spin: 260.0, spin_var: 360.0,
+      start_size: 11.0, end_size: 0.0, size_var: 0.35, size_curve: :ease_out,
+      fade_in: 0.02, fade_out: 0.35, color_var: 0.08
+    )
+
+    # 2. 高速指向性スパークプール (最大 12,000 個: 着弾火花・マズルフラッシュ・大爆発の閃光針)
+    @spark_emitter = ParticleEmitter.new(
+      0.0, 0.0,
+      max_particles: 12_000,
+      emitting: false,
+      shape: :spark,
+      blend: :add,
+      lifetime: 0.45, lifetime_var: 0.18,
+      speed: 420.0, speed_var: 200.0, spread: 360.0,
+      drag: 4.0,
+      align_to_velocity: true, stretch: 2.8,
+      start_size: 8.0, end_size: 1.0, size_var: 0.3, size_curve: :ease_out,
+      fade_in: 0.0, fade_out: 0.3, color_var: 0.1
+    )
+
+    # 3. 衝撃波リングプール (最大 512 個: 撃破・爆発・被弾時に広がる幾何学ショックウェーブ)
+    @ring_emitter = ParticleEmitter.new(
+      0.0, 0.0,
+      max_particles: 512,
+      emitting: false,
+      shape: :ring,
+      ring_thickness: 0.14,
+      blend: :add,
+      lifetime: 0.38, lifetime_var: 0.04,
+      speed: 0.0, speed_var: 0.0,
+      start_size: 16.0, end_size: 160.0, size_var: 0.1, size_curve: :ease_out,
+      fade_in: 0.02, fade_out: 0.5
+    )
+
+    # 4. キラキラ星・クリスタルプール (最大 4,000 個: ジェム取得・回復・オービター軌跡・レベルアップ)
+    @star_emitter = ParticleEmitter.new(
+      0.0, 0.0,
+      max_particles: 4_000,
+      emitting: false,
+      shape: :star,
+      blend: :add,
+      lifetime: 0.65, lifetime_var: 0.2,
+      speed: 140.0, speed_var: 70.0, spread: 360.0,
+      drag: 2.5,
+      spin: 180.0, spin_var: 180.0,
+      start_size: 15.0, end_size: 2.0, size_var: 0.25, size_curve: :sine,
+      fade_in: 0.05, fade_out: 0.35, color_var: 0.08
+    )
   end
 
-  def vanish
-    @vanished = true
+  def clear
+    @poly_emitter.clear
+    @spark_emitter.clear
+    @ring_emitter.clear
+    @star_emitter.clear
   end
 
-  def vanished?
-    @vanished
+  def used_count
+    @poly_emitter.used_count + @spark_emitter.used_count + @ring_emitter.used_count + @star_emitter.used_count
   end
 
-  def update
-    @x += @vx
-    @y += @vy
-    @vx *= 0.94
-    @vy *= 0.94
-    @life -= 1
-    vanish if @life <= 0
+  def update(dt = Window.delta_time)
+    @poly_emitter.update(dt)
+    @spark_emitter.update(dt)
+    @ring_emitter.update(dt)
+    @star_emitter.update(dt)
   end
 
   def draw
-    s = (@life.to_f / @max_life) * @size
-    Window.draw_rect(@x - s * 0.5, @y - s * 0.5, s, s, color: @color)
+    @ring_emitter.draw
+    @poly_emitter.draw
+    @spark_emitter.draw
+    @star_emitter.draw
+  end
+
+  # ショット発射時のマズルフラッシュ
+  def emit_muzzle(x, y, angle_rad)
+    deg = angle_rad * (180.0 / Math::PI)
+    @spark_emitter.burst(3, x: x, y: y, color: Color::YELLOW, speed: 260.0, size: 6.5, angle: deg, spread: 45.0, lifetime: 0.18)
+  end
+
+  # 移動時・ミサイル飛翔時の推進スラスター軌跡
+  def emit_thruster(x, y, angle_rad, color, size = 7.0)
+    deg = angle_rad * (180.0 / Math::PI)
+    @poly_emitter.burst(2, x: x, y: y, color: color, speed: 95.0, size: size, angle: deg, spread: 35.0, lifetime: 0.32)
+  end
+
+  # オービター旋回刃の光の残像
+  def emit_orbiter_trail(x, y)
+    @star_emitter.burst(1, x: x, y: y, color: Color::CYAN, speed: 30.0, size: 9.0, lifetime: 0.28)
+  end
+
+  # 敵への弾着弾スパーク
+  def emit_hit(x, y, color = Color::WHITE)
+    @spark_emitter.burst(8, x: x, y: y, color: color, speed: 320.0, size: 7.0, lifetime: 0.28)
+    @poly_emitter.burst(4, x: x, y: y, color: color, speed: 160.0, size: 6.5, lifetime: 0.35)
+  end
+
+  # ジェム / ハート取得エフェクト
+  def emit_pickup(x, y, color, is_heart = false)
+    if is_heart
+      @star_emitter.burst(28, x: x, y: y, color: color, speed: 200.0, size: 16.0, lifetime: 0.7)
+      @ring_emitter.burst(1, x: x, y: y, color: color, size: 12.0, lifetime: 0.35)
+    else
+      @star_emitter.burst(8, x: x, y: y, color: color, speed: 120.0, size: 11.0, lifetime: 0.4)
+    end
+  end
+
+  # ミサイル範囲爆発
+  def emit_missile_explosion(x, y)
+    @poly_emitter.burst(45, x: x, y: y, color: Color::RED, speed: 300.0, size: 13.0, lifetime: 0.65)
+    @spark_emitter.burst(35, x: x, y: y, color: COLOR_ORANGE, speed: 460.0, size: 9.0, lifetime: 0.45)
+    @ring_emitter.burst(1, x: x, y: y, color: COLOR_ORANGE, size: 18.0, lifetime: 0.32)
+  end
+
+  # 敵撃破時のポリゴン飛散 (通常 / エリート / ボス)
+  def emit_enemy_kill(x, y, type, base_color)
+    case type
+    when :boss
+      @poly_emitter.burst(280, x: x, y: y, color: COLOR_PURPLE, speed: 520.0, size: 18.0, lifetime: 1.35)
+      @poly_emitter.burst(120, x: x, y: y, color: Color::CYAN, speed: 380.0, size: 14.0, lifetime: 1.1)
+      @spark_emitter.burst(200, x: x, y: y, color: Color::WHITE, speed: 700.0, size: 12.0, lifetime: 0.9)
+      @star_emitter.burst(80, x: x, y: y, color: Color::YELLOW, speed: 420.0, size: 22.0, lifetime: 1.2)
+      @ring_emitter.burst(3, x: x, y: y, color: COLOR_PURPLE, size: 32.0, lifetime: 0.55)
+    when :elite
+      @poly_emitter.burst(75, x: x, y: y, color: Color::RED, speed: 340.0, size: 13.0, lifetime: 0.85)
+      @spark_emitter.burst(50, x: x, y: y, color: COLOR_ORANGE, speed: 480.0, size: 9.5, lifetime: 0.55)
+      @ring_emitter.burst(1, x: x, y: y, color: Color::RED, size: 18.0, lifetime: 0.38)
+    else
+      @poly_emitter.burst(28, x: x, y: y, color: base_color, speed: 240.0, size: 10.0, lifetime: 0.6)
+      @spark_emitter.burst(16, x: x, y: y, color: COLOR_ORANGE, speed: 340.0, size: 7.5, lifetime: 0.4)
+    end
+  end
+
+  # 自機被弾・撃墜エフェクト
+  def emit_player_damage(x, y)
+    @poly_emitter.burst(40, x: x, y: y, color: COLOR_HEART_RED, speed: 320.0, size: 12.0, lifetime: 0.7)
+    @spark_emitter.burst(35, x: x, y: y, color: Color::WHITE, speed: 480.0, size: 9.0, lifetime: 0.45)
+    @ring_emitter.burst(1, x: x, y: y, color: COLOR_HEART_RED, size: 20.0, lifetime: 0.35)
+  end
+
+  def emit_player_death(x, y)
+    @poly_emitter.burst(220, x: x, y: y, color: Color::GREEN, speed: 480.0, size: 16.0, lifetime: 1.4)
+    @spark_emitter.burst(160, x: x, y: y, color: Color::WHITE, speed: 620.0, size: 11.0, lifetime: 1.0)
+    @star_emitter.burst(70, x: x, y: y, color: Color::CYAN, speed: 350.0, size: 18.0, lifetime: 1.2)
+    @ring_emitter.burst(3, x: x, y: y, color: Color::GREEN, size: 28.0, lifetime: 0.55)
+  end
+
+  def emit_levelup(x, y)
+    @star_emitter.burst(60, x: x, y: y, color: COLOR_EXP_GREEN, speed: 340.0, size: 20.0, lifetime: 0.9)
+    @spark_emitter.burst(45, x: x, y: y, color: Color::CYAN, speed: 420.0, size: 9.0, lifetime: 0.65)
+    @ring_emitter.burst(2, x: x, y: y, color: COLOR_EXP_GREEN, size: 24.0, lifetime: 0.45)
   end
 end
 
@@ -357,7 +489,7 @@ class Missile < Sprite
     set_collider(:circle, radius: 4.0)
   end
 
-  def update(enemies)
+  def update(enemies, vfx = nil)
     @life -= 1
     if @life <= 0
       vanish
@@ -391,6 +523,7 @@ class Missile < Sprite
 
     self.x += @vx
     self.y += @vy
+    vfx.emit_thruster(self.x, self.y, Math.atan2(-@vy, -@vx), COLOR_ORANGE, 6.5) if vfx
   end
 
   def explode
@@ -740,9 +873,11 @@ class Player < Sprite
     end
   end
 
-  def update(bullets, missiles, enemies, particles, camera = nil)
+  def update(bullets, missiles, enemies, vfx, camera = nil)
     @fired = false
     @invincible -= 1 if @invincible > 0
+    prev_x = self.x
+    prev_y = self.y
 
     # 移動
     move_x, move_y = Input.vector
@@ -812,12 +947,20 @@ class Player < Sprite
     end
     self.angle = @rotation * (180.0 / Math::PI)
 
+    # 移動時のジェット推進パーティクル
+    if (self.x - prev_x).abs > 0.1 || (self.y - prev_y).abs > 0.1
+      rear_ang = @rotation + Math::PI
+      tx = self.x + (@radius * 0.45) * Math.cos(rear_ang)
+      ty = self.y + (@radius * 0.45) * Math.sin(rear_ang)
+      vfx.emit_thruster(tx, ty, rear_ang, Color::CYAN, 6.0)
+    end
+
     # メインショット発射
     if @fire_timer > 0
       @fire_timer -= 1
     else
       @fire_timer = @fire_rate
-      fire_shots(bullets, particles)
+      fire_shots(bullets, vfx)
       @fired = true
     end
 
@@ -844,11 +987,14 @@ class Player < Sprite
       end
     end
 
-    # オービター更新
-    @orbiters.each { |orb| orb.update(self.x, self.y) }
+    # オービター更新 & 軌跡パーティクル
+    @orbiters.each do |orb|
+      orb.update(self.x, self.y)
+      vfx.emit_orbiter_trail(orb.x, orb.y)
+    end
   end
 
-  def fire_shots(bullets, particles)
+  def fire_shots(bullets, vfx)
     # 1. 正面頂点からのショット (shot_level に応じた WAY 拡散)
     front_ang = @rotation
     front_vx = self.x + @radius * Math.cos(front_ang)
@@ -880,7 +1026,7 @@ class Player < Sprite
 
     front_angles.each do |ang|
       bullets << Bullet.new(front_vx, front_vy, ang)
-      particles << Particle.new(front_vx, front_vy, Math.cos(ang) * 4.0, Math.sin(ang) * 4.0, 8, Color::YELLOW, 3.0)
+      vfx.emit_muzzle(front_vx, front_vy, ang)
     end
 
     # 2. 正面以外の各頂点からも発射 (三角形なら残り2頂点、四角形なら残り3頂点...)
@@ -891,7 +1037,7 @@ class Player < Sprite
         vx = self.x + @radius * Math.cos(ang)
         vy = self.y + @radius * Math.sin(ang)
         bullets << Bullet.new(vx, vy, ang)
-        particles << Particle.new(vx, vy, Math.cos(ang) * 4.0, Math.sin(ang) * 4.0, 8, Color::YELLOW, 3.0)
+        vfx.emit_muzzle(vx, vy, ang)
       end
     end
   end
@@ -926,13 +1072,8 @@ end
 #    どの画面 (シーン) からも同じ Game インスタンスを参照して使う。
 # ==========================================
 class Game
-  attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :particles, :damage_texts, :crt_enabled, :collision_mode
+  attr_accessor :player, :camera, :bullets, :missiles, :enemies, :items, :vfx, :damage_texts, :crt_enabled, :collision_mode
   attr_reader :sfx, :best_score, :new_record, :kills, :max_combo, :frames_alive
-
-  def spawn_particle(p)
-    @particles.shift if @particles.size >= MAX_PARTICLES
-    @particles << p
-  end
 
   def spawn_damage_text(t)
     @damage_texts.shift if @damage_texts.size >= MAX_DAMAGE_TEXTS
@@ -970,7 +1111,11 @@ class Game
     @missiles = []
     @enemies = []
     @items = []
-    @particles = []
+    if @vfx
+      @vfx.clear
+    else
+      @vfx = GameParticleVfx.new
+    end
     @damage_texts = []
     @spawn_timer = 0
     @spawn_interval = 50.0
@@ -1210,7 +1355,8 @@ class Game
           @player.exp += item.value
           @sfx.play(Sfx::GEM, 3)
           # 取得キラキラパーティクル
-          spawn_particle(Particle.new(item.x, item.y, (rand(4) - 2).to_f, (rand(4) - 2).to_f, 12, COLOR_EXP_GREEN, 4.0))
+          gem_col = item.value > 10 ? COLOR_EXP_GREEN : Color::YELLOW
+          @vfx.emit_pickup(item.x, item.y, gem_col, false)
         end
       end
     end
@@ -1226,10 +1372,7 @@ class Game
       spawn_damage_text(DamageText.new(@player.x - 30.0, @player.y - 50.0, "+100", COLOR_HEART_RED, 22))
     end
     @sfx.play(Sfx::HEAL, 4)
-    8.times do
-      ang = rand(360) * Math::PI / 180.0
-      spawn_particle(Particle.new(item.x, item.y, 3.0 * Math.cos(ang), 3.0 * Math.sin(ang), 18, COLOR_HEART_RED, 5.0))
-    end
+    @vfx.emit_pickup(item.x, item.y, COLOR_HEART_RED, true)
   end
 
   # 自機被弾時の演出・振動・ノックバック
@@ -1262,11 +1405,7 @@ class Game
       end
     end
 
-    12.times do
-      ang = rand(360) * Math::PI / 180.0
-      spd = rand(6).to_f + 2.0
-      spawn_particle(Particle.new(@player.x, @player.y, spd * Math.cos(ang), spd * Math.sin(ang), 20, COLOR_HEART_RED, 6.0))
-    end
+    @vfx.emit_player_damage(@player.x, @player.y)
 
     on_player_death if @player.hp <= 0
   end
@@ -1278,11 +1417,7 @@ class Game
     add_hitstop(12)
     @sfx.play(Sfx::BOSS_KILL, 30)
     Input.vibrate_gamepad(0, 1.0, 1.0, 0.6)
-    80.times do
-      ang = rand(360) * Math::PI / 180.0
-      spd = rand(12).to_f + 2.0
-      spawn_particle(Particle.new(@player.x, @player.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(40) + 30, Color::GREEN, 9.0))
-    end
+    @vfx.emit_player_death(@player.x, @player.y)
   end
 
   def damage_enemy(e, dmg, text_color)
@@ -1291,9 +1426,7 @@ class Game
     @sfx.play(Sfx::HIT, 3)
     spawn_damage_text(DamageText.new(e.x, e.y - e.radius, dmg, text_color))
     # 被弾スパーク
-    3.times do
-      spawn_particle(Particle.new(e.x, e.y, (rand(6) - 3).to_f, (rand(6) - 3).to_f, 10, Color::WHITE, 3.0))
-    end
+    @vfx.emit_hit(e.x, e.y, text_color)
 
     if e.hp <= 0
       e.vanish
@@ -1313,13 +1446,10 @@ class Game
     @max_combo = @combo if @combo > @max_combo
     @player.score += e.score_value * combo_multiplier
 
+    @vfx.emit_enemy_kill(e.x, e.y, e.is_boss ? :boss : e.type, e.color)
+
     if e.is_boss
       # ボス撃破：大爆発＆大量ジェム
-      60.times do
-        ang = rand(360) * Math::PI / 180.0
-        spd = rand(10).to_f + 2.0
-        spawn_particle(Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(30) + 20, COLOR_PURPLE, 10.0))
-      end
       12.times do
         @items << Item.new(e.x + (rand(80) - 40).to_f, e.y + (rand(80) - 40).to_f, 30)
       end
@@ -1347,11 +1477,6 @@ class Game
       @glitch_timer = 70
     elsif e.type == :elite
       # エリート撃破
-      25.times do
-        ang = rand(360) * Math::PI / 180.0
-        spd = rand(7).to_f + 2.0
-        spawn_particle(Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(20) + 15, Color::RED, 7.0))
-      end
       4.times do
         @items << Item.new(e.x + (rand(40) - 20).to_f, e.y + (rand(40) - 20).to_f, 20)
       end
@@ -1362,11 +1487,6 @@ class Game
       @sfx.play(Sfx::EXPLODE, 4)
     else
       # 通常・チビ撃破
-      12.times do
-        ang = rand(360) * Math::PI / 180.0
-        spd = rand(5).to_f + 2.0
-        spawn_particle(Particle.new(e.x, e.y, spd * Math.cos(ang), spd * Math.sin(ang), rand(15) + 10, COLOR_ORANGE, 5.0))
-      end
       @items << Item.new(e.x, e.y, 10)
       add_shake(0.6)
       @sfx.play(Sfx::KILL, 3)
@@ -1377,11 +1497,7 @@ class Game
     add_shake(2.5)
     @sfx.play(Sfx::EXPLODE, 4)
     # 爆発パーティクル
-    25.times do
-      ang = rand(360) * Math::PI / 180.0
-      spd = rand(8).to_f + 2.0
-      spawn_particle(Particle.new(x, y, spd * Math.cos(ang), spd * Math.sin(ang), rand(20) + 10, Color::RED, 8.0))
-    end
+    @vfx.emit_missile_explosion(x, y)
     # 範囲内の敵全員にダメージ
     @enemies.each do |e|
       next if e.vanished?
@@ -1429,7 +1545,7 @@ class Game
   def render_with_post_effects
     Profiler.measure(:render) do
       if @crt_enabled || @shockwave_timer > 0
-        @game_screen ||= Image.create_msaa(1280, 720)
+        @game_screen ||= Image.new(1280, 720)
         Image.render_to(@game_screen) do
           Window.clear(Color::BLACK)
           yield
@@ -1521,7 +1637,7 @@ class Game
     unless @player_dead
       @frames_alive += 1
       Profiler.measure(:player) do
-        @player.update(@bullets, @missiles, @enemies, @particles, @camera)
+        @player.update(@bullets, @missiles, @enemies, @vfx, @camera)
         @sfx.play(Sfx::SHOT, 4) if @player.fired
       end
     end
@@ -1529,7 +1645,7 @@ class Game
     @bullets.each { |b| b.update }
 
     Profiler.measure(:missile) do
-      @missiles.each { |m| m.update(@enemies) }
+      @missiles.each { |m| m.update(@enemies, @vfx) }
     end
 
     Profiler.measure(:enemy_move) do
@@ -1541,7 +1657,7 @@ class Game
     end
 
     @items.each { |i| i.update(@player.x, @player.y, @player.magnet_radius) }
-    @particles.each { |p| p.update }
+    @vfx.update
     @damage_texts.each { |t| t.update }
 
     # 3. 当たり判定 (物理・衝突)
@@ -1555,7 +1671,6 @@ class Game
       Sprite.clean(@missiles)
       Sprite.clean(@enemies)
       Sprite.clean(@items)
-      Sprite.clean(@particles)
       Sprite.clean(@damage_texts)
 
       # 敵を倒して空いた枠へ、ストックから即座にスポーン補充
@@ -1603,7 +1718,7 @@ class Game
     Window.camera(@camera) do
       draw_grid
       @items.each { |i| i.draw if i.x >= cull_l && i.x <= cull_r && i.y >= cull_t && i.y <= cull_b }
-      @particles.each { |p| p.draw if p.x >= cull_l && p.x <= cull_r && p.y >= cull_t && p.y <= cull_b }
+      @vfx.draw
       @enemies.each { |e| e.draw if e.x >= cull_l && e.x <= cull_r && e.y >= cull_t && e.y <= cull_b }
       @bullets.each { |b| b.draw if b.x >= cull_l && b.x <= cull_r && b.y >= cull_t && b.y <= cull_b }
       @missiles.each(&:draw)
@@ -1678,6 +1793,7 @@ class Game
     when 7 # HP全回復
       @player.hp = @player.max_hp
     end
+    @vfx.emit_levelup(@player.x, @player.y)
   end
 
   def upgrade_title(idx)
@@ -1794,7 +1910,7 @@ class Game
     # デバッグ情報
     pad_str = Input.gamepad_connected?(0) ? "[PAD: ON]" : "[PAD: OFF]"
     stock_str = @enemy_stock > 0 ? " (+#{@enemy_stock})" : ""
-    dbg_str = "FPS: #{Window.fps.to_i}  ENEMY: #{@enemies.size}#{stock_str}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
+    dbg_str = "FPS: #{Window.fps.to_i}  ENEMY: #{@enemies.size}#{stock_str}  VFX: #{@vfx.used_count}  [F3/TAB: Profiler]  #{pad_str}  [C: CRT #{@crt_enabled ? 'ON' : 'OFF'}]  [B: Boss]"
     Window.draw_text(20.0, 684.0, dbg_str, font: Font::SINCLAIR, size: 14, color: COLOR_TEXT_GRAY, z: 5.0)
   end
 end
