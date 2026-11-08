@@ -480,9 +480,9 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
   # --------------------------------------------------
   # 7. UI / ステータスHUD表示
   # --------------------------------------------------
-  Window.draw_rect(16, 16, 420, 222, color: [10, 15, 25, 215], border_color: [60, 100, 160], border_width: 1.5)
-  Window.draw_text(28, 24, "PRO PROCEDURAL RUNNER & UNEVEN TERRAIN IK", size: 16, color: [0, 240, 255])
-  Window.draw_line(28, 48, 424, 48, color: [40, 70, 110], width: 1.0)
+  Window.draw_rect(16, 16, 380, 154, color: [10, 15, 25, 215], border_color: [60, 100, 160], border_width: 1.5)
+  Window.draw_text(26, 24, "PRO PROCEDURAL RUNNER & UNEVEN TERRAIN IK", size: 15, color: [0, 240, 255])
+  Window.draw_line(26, 46, 386, 46, color: [40, 70, 110], width: 1.0)
 
   spd_label = case
               when abs_speed < 10.0  then "STOPPED"
@@ -491,12 +491,13 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
               else                        "FULL SPRINT (DASH)"
               end
 
-  Window.draw_text(28, 56,  "Speed: #{speed.round(1)} px/s  [#{spd_label}]", size: 13, color: :white)
-  Window.draw_text(28, 74,  "Pelvis Bounce (2θ) : #{pelvis_bounce.round(1)} px", size: 13, color: [200, 220, 255])
-  Window.draw_text(28, 92,  "Terrain Slope Lean : #{terrain_slope_angle.round(1)} deg", size: 13, color: [200, 220, 255])
-  Window.draw_text(28, 110, "Terrain Roughness   : #{roughness.round(2)}", size: 13, color: [120, 240, 180])
-  Window.draw_text(28, 172, "[SPACE/Click] Slash | [TAB] Debug", size: 12, color: [140, 170, 210])
-  Window.draw_text(28, 192, "[A][D] Speed | [0..3] Preset | [W][S] Pelvis Height", size: 12, color: [110, 140, 180])
+  Window.draw_text(26, 52,  "Speed: #{speed.round(1)} px/s  [#{spd_label}]", size: 13, color: :white)
+  Window.draw_text(26, 70,  "Pelvis Bounce (2θ) : #{pelvis_bounce.round(1)} px", size: 13, color: [200, 220, 255])
+  Window.draw_text(26, 88,  "Terrain Slope Lean : #{terrain_slope_angle.round(1)} deg", size: 13, color: [200, 220, 255])
+  Window.draw_text(26, 106, "Terrain Roughness   : #{roughness.round(2)}", size: 13, color: [120, 240, 180])
+  Window.draw_line(26, 126, 386, 126, color: [40, 70, 110, 160], width: 1.0)
+  Window.draw_text(26, 132, "[SPACE/Click] Slash | [TAB] Debug", size: 12, color: [140, 170, 210])
+  Window.draw_text(26, 148, "[A][D] Speed | [W][S] Pelvis Height | [0..3] Preset", size: 12, color: [110, 140, 180])
 
   # --------------------------------------------------
   # 8. 画面右上コントロールスライダー (GUI)
