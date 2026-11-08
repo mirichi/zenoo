@@ -124,25 +124,25 @@ module Zenoo
           return unless @visible
 
           Window.without_camera do
-            # スリムなコンパクトウィンドウ (GUI.window 内は自動でローカル座標系)
-            GUI.window("🔍 Inspector (F12)", x: 20, y: 20, w: 360, h: 540, resizable: true, min_w: 280, min_h: 300) do |win|
+            # スリムなコンパクトウィンドウ (ImGui.window 内は自動でローカル座標系)
+            ImGui.window("🔍 Inspector (F12)", x: 20, y: 20, w: 360, h: 540, resizable: true, min_w: 280, min_h: 300) do |win|
               content_w = [win.w - 24.0, 100.0].max
               content_h = [win.h - 56.0, 100.0].max
 
               # 1. コンパクトなタブバー (ローカル座標 (0, 0))
-              GUI.cursor(0, 0)
+              ImGui.cursor(0, 0)
               @tab_index ||= 0
-              @tab_index = GUI.tabs(["Sprites", "Stats", "Globals"], @tab_index, h: 26.0)
+              @tab_index = ImGui.tabs(["Sprites", "Stats", "Globals"], @tab_index, h: 26.0)
 
               # 2. コンパクトなオプションバー (ローカル座標 (0, 32))
               opt_y = 32.0
-              GUI.cursor(0, opt_y)
-              @show_colliders = GUI.checkbox("Colliders", @show_colliders, h: 22.0)
-              GUI.cursor(110, opt_y)
-              @pause_game = GUI.checkbox("Pause", @pause_game, h: 22.0)
+              ImGui.cursor(0, opt_y)
+              @show_colliders = ImGui.checkbox("Colliders", @show_colliders, h: 22.0)
+              ImGui.cursor(110, opt_y)
+              @pause_game = ImGui.checkbox("Pause", @pause_game, h: 22.0)
               if @pause_game
-                GUI.cursor(185, opt_y)
-                if GUI.button("Step", w: 50.0, h: 22.0)
+                ImGui.cursor(185, opt_y)
+                if ImGui.button("Step", w: 50.0, h: 22.0)
                   Zenoo::Dev.step_frame!
                 end
               end
@@ -189,7 +189,7 @@ module Zenoo
           end
 
           sel_idx = sprites.index(@selected_object)
-          new_sel_idx = GUI.table(
+          new_sel_idx = ImGui.table(
             "Active Sprites (#{sprites.size})",
             sprite_cols, sprite_rows, sel_idx,
             x: 0.0, y: top_y, w: w, h: list_h, item_height: 18.0, id: "sp_tbl"
@@ -228,7 +228,7 @@ module Zenoo
 
           prop_cols = [["Property", 110], "Value"]
           sel_prop_idx = props.find_index { |p| p[0] == @selected_var }
-          new_prop_idx = GUI.table(
+          new_prop_idx = ImGui.table(
             title_text,
             prop_cols, props, sel_prop_idx,
             x: 0.0, y: sheet_y, w: w, h: prop_h, item_height: 18.0, id: "prop_tbl"
@@ -260,7 +260,7 @@ module Zenoo
           end
 
           tbl_h = [h - 40.0, 60.0].max
-          GUI.table(
+          ImGui.table(
             "Runtime Statistics",
             [["Metric", 140], "Value"],
             @cached_stat_lines, nil,
@@ -268,8 +268,8 @@ module Zenoo
           )
 
           # GC 実行ボタン (コンパクト)
-          GUI.cursor(10.0, top_y + tbl_h + 8.0)
-          if GUI.button("Run Full GC (rb_gc)", w: w - 20.0, h: 26.0)
+          ImGui.cursor(10.0, top_y + tbl_h + 8.0)
+          if ImGui.button("Run Full GC (rb_gc)", w: w - 20.0, h: 26.0)
             GC.start
             @cached_stat_lines.clear
           end
@@ -283,7 +283,7 @@ module Zenoo
             ["Engine", defined?(RUBY_ENGINE) ? RUBY_ENGINE : "CRuby"],
             ["Dev Mode", Dev.enabled ? "Active (Hot-reload)" : "Disabled"]
           ]
-          GUI.table(
+          ImGui.table(
             "System Environment",
             [["Property", 140], "Value"],
             global_rows, nil,

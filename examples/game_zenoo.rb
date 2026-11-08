@@ -1628,8 +1628,8 @@ class Game
   def draw_profiler_gui
     if @show_profiler
       Profiler.measure(:gui) do
-        GUI.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 270) do
-          GUI.profile_graph(w: 290, h: 80, max_ms: 33.33)
+        ImGui.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 270) do
+          ImGui.profile_graph(w: 290, h: 80, max_ms: 33.33)
         end
       end
     end

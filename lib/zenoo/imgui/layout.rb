@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Zenoo
-  module GUI
+  module ImGui
     # コンテナ・行ごとのレイアウトスコープ状態
     class LayoutScope
       attr_accessor :cursor_x, :cursor_y, :line_start_x, :line_max_h,

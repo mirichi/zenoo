@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Zenoo
-  module GUI
+  module ImGui
     # 描画レンダラー基底クラス (Pluggable Renderer)
     # ユーザーはこのクラスを継承して独自の描画ロジックに差し替えることができます。
     class Renderer

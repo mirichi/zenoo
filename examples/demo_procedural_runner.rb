@@ -500,19 +500,19 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
   Window.draw_text(26, 148, "[A][D] Speed | [W][S] Pelvis Height | [0..3] Preset", size: 12, color: [110, 140, 180])
 
   # --------------------------------------------------
-  # 8. 画面右上コントロールスライダー (GUI)
+  # 8. 画面右上コントロールスライダー (ImGui)
   # --------------------------------------------------
-  GUI.panel("パラメータ調整 (Mouse Controls)", x: SCREEN_WIDTH - 280, y: 16, w: 264, h: 222, spacing_y: 6) do
+  ImGui.panel("パラメータ調整 (Mouse Controls)", x: SCREEN_WIDTH - 280, y: 16, w: 264, h: 222, spacing_y: 6) do
     # 1. 移動速度
-    new_spd = GUI.slider("速度 (Speed)", target_speed, -180.0, 550.0, unit: " px/s", format: "%.0f")
+    new_spd = ImGui.slider("速度 (Speed)", target_speed, -180.0, 550.0, unit: " px/s", format: "%.0f")
     target_speed = new_spd if (new_spd - target_speed).abs > 0.01
 
     # 2. 腰の高さ (280..410)
-    new_hip_y = GUI.slider("腰の高さ (Hip Y)", base_hip_y, 280.0, 410.0, unit: " px", format: "%.0f")
+    new_hip_y = ImGui.slider("腰の高さ (Hip Y)", base_hip_y, 280.0, 410.0, unit: " px", format: "%.0f")
     base_hip_y = new_hip_y if (new_hip_y - base_hip_y).abs > 0.01
 
     # 3. 地面の起伏 (0.0..2.5)
-    new_rough = GUI.slider("地面起伏 (Roughness)", roughness, 0.0, 2.5, format: "%.2f")
+    new_rough = ImGui.slider("地面起伏 (Roughness)", roughness, 0.0, 2.5, format: "%.2f")
     if (new_rough - roughness).abs > 0.001
       roughness = new_rough
     end

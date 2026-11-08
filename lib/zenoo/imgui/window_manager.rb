@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Zenoo
-  module GUI
+  module ImGui
     # ウィンドウ状態オブジェクト (位置・サイズ・フォーカス・開閉状態・折りたたみ)
     class WindowState
       attr_accessor :id, :title, :x, :y, :w, :h, :z, :open,
@@ -58,7 +58,7 @@ module Zenoo
       def begin_frame(mouse_x, mouse_y, mouse_down, mouse_push)
         # 1. ウィンドウのドラッグ / リサイズ継続処理
         if @resizing_window_id
-          GUI.set_mouse_cursor(:resize_nwse)
+          ImGui.set_mouse_cursor(:resize_nwse)
           if mouse_down && (win = @windows[@resizing_window_id])
             dw = mouse_x - @resize_start_mouse_x
             dh = mouse_y - @resize_start_mouse_y
@@ -70,7 +70,7 @@ module Zenoo
             @resizing_window_id = nil
           end
         elsif @dragging_window_id
-          GUI.set_mouse_cursor(:hand)
+          ImGui.set_mouse_cursor(:hand)
           if mouse_down && (win = @windows[@dragging_window_id])
             win.x = mouse_x - @drag_offset_x
             win.y = mouse_y - @drag_offset_y
@@ -208,7 +208,7 @@ module Zenoo
         hx = win.x + win.w - handle_size
         hy = win.y + win.h - handle_size
         if in_rect?(mouse_x, mouse_y, hx, hy, handle_size, handle_size)
-          GUI.set_mouse_cursor(:resize_nwse)
+          ImGui.set_mouse_cursor(:resize_nwse)
           if mouse_push
             @resizing_window_id = win.id
             @resize_start_w = win.w

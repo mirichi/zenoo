@@ -3,7 +3,7 @@
 require_relative 'renderer'
 
 module Zenoo
-  module GUI
+  module ImGui
     # draw_rect を活用した標準のモダン・カード描画レンダラー
     class CardRenderer < Renderer
       # ----------------------------------------------------

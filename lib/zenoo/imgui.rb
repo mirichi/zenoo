@@ -1,17 +1,17 @@
 # frozen_string_literal: true
 
-require_relative 'gui/theme'
-require_relative 'gui/renderer'
-require_relative 'gui/card_renderer'
-require_relative 'gui/layout'
-require_relative 'gui/window_manager'
-require_relative 'gui/text_edit'
-require_relative 'gui/profile_graph'
-require_relative 'gui/widgets'
+require_relative 'imgui/theme'
+require_relative 'imgui/renderer'
+require_relative 'imgui/card_renderer'
+require_relative 'imgui/layout'
+require_relative 'imgui/window_manager'
+require_relative 'imgui/text_edit'
+require_relative 'imgui/profile_graph'
+require_relative 'imgui/widgets'
 
 module Zenoo
   # 即時モード (Immediate Mode) GUI システム
-  module GUI
+  module ImGui
     extend Widgets
 
     @theme      = Theme.new
@@ -140,8 +140,18 @@ module Zenoo
         @requested_cursor = shape
       end
 
+      def requested_cursor
+        @requested_cursor
+      end
+
       def end_frame
-        Window.cursor = @requested_cursor
+        if @requested_cursor != :arrow
+          Window.cursor = @requested_cursor
+        elsif UI.requested_cursor
+          Window.cursor = UI.requested_cursor
+        else
+          Window.cursor = :arrow
+        end
       end
 
       # --------------------------------------------------
