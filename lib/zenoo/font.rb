@@ -33,6 +33,7 @@ module Zenoo
     # グリフの取得 (Ruby側でキャッシュして C拡張呼び出しと配列生成を最小化)
     # 返り値: [visible, u0, v0, u1, v1, x0, y0, x1, y1, advance_x] または nil
     def get_glyph(char_or_cp, size = 24.0, sdf = nil, r_scale = 1.0)
+      Font.atlas_image # アトラス画像が初回グリフ要求時に確実に登録・一元化されることを保証
       cp = char_or_cp.is_a?(String) ? char_or_cp.ord : char_or_cp.to_i
       sdf_flag = (sdf == true ? 1 : (sdf.nil? ? 0 : 2))
       # 31bit正のFixnum内に収まるビットパック (Wasm 32bit環境でオーバーフローゼロ)
