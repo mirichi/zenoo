@@ -564,7 +564,7 @@ class SlimeEnemy < Zenoo::Sprite
     @facing_x = 1.0
     self.z = y
 
-    set_collider(:circle, radius_x: 24.0, radius_y: 12.0, anchor: :bottom_center, offset_y: -8.0)
+    set_collider(:circle, radius_x: 24.0, radius_y: 12.0, at: :bottom_center, offset_y: -8.0)
   end
 
   def dying?
@@ -738,7 +738,7 @@ class IsoPlayer < Zenoo::Sprite
     load_animations
     play(IDLE_ANIMS[@dir_y])
 
-    set_collider(:circle, radius_x: 11.0, radius_y: 8.0, anchor: :bottom_center, offset_y: -8.0)
+    set_collider(:circle, radius_x: 11.0, radius_y: 8.0, at: :bottom_center, offset_y: -8.0)
     self.z = y
   end
 
