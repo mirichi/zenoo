@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Zenoo
-  module GUI
+  module ImGui
     class Theme
       @custom_presets = {}
 

@@ -3,8 +3,8 @@
 require_relative '../lib/zenoo'
 
 # 日本語フォントとテーマ
-GUI.theme.font = Font::MPLUS
-GUI.theme.font_size = 16
+ImGui.theme.font = Font::MPLUS
+ImGui.theme.font_size = 16
 
 # ----------------------------------------------------
 # 1. 動的テクスチャアトラスの構築 (オフスクリーン描画)
@@ -381,9 +381,9 @@ Window.loop(1280, 720, "Zenoo Texture Atlas & sub_image Showcase") do
   # ----------------------------------------------------
   # A. ヘッダー & 説明UI
   # ----------------------------------------------------
-  GUI.cursor(30.0, 20.0)
-  GUI.label("=== Zenoo Texture Atlas & sub_image Showcase ===", size: 22, color: Color::WHITE)
-  GUI.label("1枚のテクスチャ (256x256) から切り出した sub_image 群を、自動バッチ結合により単一ドローコールで高速描画しています。", size: 14, color: Color.new(160, 180, 210))
+  ImGui.cursor(30.0, 20.0)
+  ImGui.label("=== Zenoo Texture Atlas & sub_image Showcase ===", size: 22, color: Color::WHITE)
+  ImGui.label("1枚のテクスチャ (256x256) から切り出した sub_image 群を、自動バッチ結合により単一ドローコールで高速描画しています。", size: 14, color: Color.new(160, 180, 210))
 
   # ----------------------------------------------------
   # B. スプライトギャラリー展示台

@@ -345,7 +345,7 @@ class RetroSynth
 end
 
 # ------------------------------------------------------------------------------
-# 2. GUI メインアプリケーション
+# 2. ImGui メインアプリケーション
 # ------------------------------------------------------------------------------
 if __FILE__ == $0
   synth = RetroSynth.new
@@ -429,12 +429,12 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
   # -------------------------------------------------------------------
   # パネル 1: プリセット＆アクション (左側: 幅 260)
   # -------------------------------------------------------------------
-  GUI.panel("Presets & Actions", x: 20, y: 75, w: 260, h: 620, padding: 12.0) do
-    GUI.label("=== Quick Presets ===", size: 14, color: Color.new(255, 200, 80))
-    GUI.spacer(4)
+  ImGui.panel("Presets & Actions", x: 20, y: 75, w: 260, h: 620, padding: 12.0) do
+    ImGui.label("=== Quick Presets ===", size: 14, color: Color.new(255, 200, 80))
+    ImGui.spacer(4)
 
-    GUI.row(cols: 2, spacing: 4) do
-      if GUI.button("Coin", h: 34.0)
+    ImGui.row(cols: 2, spacing: 4) do
+      if ImGui.button("Coin", h: 34.0)
         synth.preset_coin
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -443,7 +443,7 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
         is_playing = true
         status_message = "Preset: Coin"
       end
-      if GUI.button("Laser", h: 34.0)
+      if ImGui.button("Laser", h: 34.0)
         synth.preset_laser
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -454,9 +454,9 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
       end
     end
 
-    GUI.spacer(3)
-    GUI.row(cols: 2, spacing: 4) do
-      if GUI.button("Explosion", h: 34.0)
+    ImGui.spacer(3)
+    ImGui.row(cols: 2, spacing: 4) do
+      if ImGui.button("Explosion", h: 34.0)
         synth.preset_explosion
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -465,7 +465,7 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
         is_playing = true
         status_message = "Preset: Explosion"
       end
-      if GUI.button("Powerup", h: 34.0)
+      if ImGui.button("Powerup", h: 34.0)
         synth.preset_powerup
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -476,9 +476,9 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
       end
     end
 
-    GUI.spacer(3)
-    GUI.row(cols: 2, spacing: 4) do
-      if GUI.button("Hit/Hurt", h: 34.0)
+    ImGui.spacer(3)
+    ImGui.row(cols: 2, spacing: 4) do
+      if ImGui.button("Hit/Hurt", h: 34.0)
         synth.preset_hit
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -487,7 +487,7 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
         is_playing = true
         status_message = "Preset: Hit"
       end
-      if GUI.button("Jump", h: 34.0)
+      if ImGui.button("Jump", h: 34.0)
         synth.preset_jump
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -498,9 +498,9 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
       end
     end
 
-    GUI.spacer(3)
-    GUI.row(cols: 2, spacing: 4) do
-      if GUI.button("Select", h: 34.0)
+    ImGui.spacer(3)
+    ImGui.row(cols: 2, spacing: 4) do
+      if ImGui.button("Select", h: 34.0)
         synth.preset_select
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -509,7 +509,7 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
         is_playing = true
         status_message = "Preset: Select"
       end
-      if GUI.button("Reset", h: 34.0)
+      if ImGui.button("Reset", h: 34.0)
         synth.reset_defaults
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -520,13 +520,13 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
       end
     end
 
-    GUI.spacer(6)
-    GUI.divider
-    GUI.label("=== Variation ===", size: 14, color: Color.new(255, 200, 80))
-    GUI.spacer(3)
+    ImGui.spacer(6)
+    ImGui.divider
+    ImGui.label("=== Variation ===", size: 14, color: Color.new(255, 200, 80))
+    ImGui.spacer(3)
 
-    GUI.row(cols: 2, spacing: 4) do
-      if GUI.button("Mutate", h: 34.0)
+    ImGui.row(cols: 2, spacing: 4) do
+      if ImGui.button("Mutate", h: 34.0)
         synth.mutate
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -535,7 +535,7 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
         is_playing = true
         status_message = "Mutated slightly."
       end
-      if GUI.button("Random!", h: 34.0)
+      if ImGui.button("Random!", h: 34.0)
         synth.randomize
         samples_cache = synth.synthesize
         current_sound = synth.generate_sound.play
@@ -546,13 +546,13 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
       end
     end
 
-    GUI.spacer(8)
-    GUI.divider
+    ImGui.spacer(8)
+    ImGui.divider
 
-    GUI.label("=== Playback & Export ===", size: 14, color: Color.new(100, 220, 255))
-    GUI.spacer(4)
+    ImGui.label("=== Playback & Export ===", size: 14, color: Color.new(100, 220, 255))
+    ImGui.spacer(4)
 
-    if GUI.button("[>] PLAY (Space)", h: 42.0)
+    if ImGui.button("[>] PLAY (Space)", h: 42.0)
       current_sound&.stop
       samples_cache = synth.synthesize
       current_sound = synth.generate_sound.play
@@ -562,109 +562,109 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
       status_message = "Playing sound..."
     end
 
-    GUI.spacer(6)
-    GUI.label("Sample Rate:", size: 12, color: Color.new(180, 180, 190))
-    GUI.row(cols: 3, spacing: 4) do
-      synth.sample_rate = 44100 if GUI.radio("44.1k", synth.sample_rate == 44100)
-      synth.sample_rate = 22050 if GUI.radio("22k", synth.sample_rate == 22050)
-      synth.sample_rate = 11025 if GUI.radio("11k", synth.sample_rate == 11025)
+    ImGui.spacer(6)
+    ImGui.label("Sample Rate:", size: 12, color: Color.new(180, 180, 190))
+    ImGui.row(cols: 3, spacing: 4) do
+      synth.sample_rate = 44100 if ImGui.radio("44.1k", synth.sample_rate == 44100)
+      synth.sample_rate = 22050 if ImGui.radio("22k", synth.sample_rate == 22050)
+      synth.sample_rate = 11025 if ImGui.radio("11k", synth.sample_rate == 11025)
     end
 
-    GUI.spacer(4)
-    GUI.label("WAV Output File:", size: 12, color: Color.new(180, 180, 190))
-    export_filename = GUI.text_box("filename_box", export_filename)
+    ImGui.spacer(4)
+    ImGui.label("WAV Output File:", size: 12, color: Color.new(180, 180, 190))
+    export_filename = ImGui.text_box("filename_box", export_filename)
 
-    GUI.spacer(6)
-    if GUI.button("Save WAV File", h: 34.0)
+    ImGui.spacer(6)
+    if ImGui.button("Save WAV File", h: 34.0)
       out_path = export_filename.to_s.empty? ? "sound.wav" : export_filename
       synth.save_wav(out_path)
       status_message = "Exported: #{File.expand_path(out_path)}"
     end
 
-    GUI.spacer(6)
-    GUI.divider
-    GUI.label("Status: #{status_message}", size: 11, color: Color.new(140, 240, 180))
+    ImGui.spacer(6)
+    ImGui.divider
+    ImGui.label("Status: #{status_message}", size: 11, color: Color.new(140, 240, 180))
   end
 
   # -------------------------------------------------------------------
   # パネル 2: 全パラメータ一括表示 (中央: 幅 600, 2列グリッド)
   # -------------------------------------------------------------------
-  GUI.panel("Synthesizer Controls", x: 295, y: 75, w: 600, h: 620, padding: 14.0) do
+  ImGui.panel("Synthesizer Controls", x: 295, y: 75, w: 600, h: 620, padding: 14.0) do
     # 波形選択 (5ボタン横並び)
-    GUI.label("=== Waveform ===", size: 14, color: Color.new(255, 200, 80))
-    GUI.spacer(2)
-    GUI.row(cols: 5, spacing: 4) do
-      synth.wave_type = 0 if GUI.radio("Square", synth.wave_type == 0)
-      synth.wave_type = 1 if GUI.radio("Saw", synth.wave_type == 1)
-      synth.wave_type = 2 if GUI.radio("Sine", synth.wave_type == 2)
-      synth.wave_type = 3 if GUI.radio("Triangle", synth.wave_type == 3)
-      synth.wave_type = 4 if GUI.radio("Noise", synth.wave_type == 4)
+    ImGui.label("=== Waveform ===", size: 14, color: Color.new(255, 200, 80))
+    ImGui.spacer(2)
+    ImGui.row(cols: 5, spacing: 4) do
+      synth.wave_type = 0 if ImGui.radio("Square", synth.wave_type == 0)
+      synth.wave_type = 1 if ImGui.radio("Saw", synth.wave_type == 1)
+      synth.wave_type = 2 if ImGui.radio("Sine", synth.wave_type == 2)
+      synth.wave_type = 3 if ImGui.radio("Triangle", synth.wave_type == 3)
+      synth.wave_type = 4 if ImGui.radio("Noise", synth.wave_type == 4)
     end
 
-    GUI.spacer(6)
-    GUI.divider
+    ImGui.spacer(6)
+    ImGui.divider
 
     # セクション 1: エンベロープ (左) ＆ 周波数 (右)
-    GUI.label("=== Envelope (Left) & Frequency (Right) ===", size: 13, color: Color.new(255, 200, 80))
-    GUI.spacer(2)
+    ImGui.label("=== Envelope (Left) & Frequency (Right) ===", size: 13, color: Color.new(255, 200, 80))
+    ImGui.spacer(2)
 
-    GUI.row(cols: 2, spacing: 14) do
-      synth.env_attack = GUI.slider("Attack (s)", synth.env_attack, 0.0, 0.5, h: 36.0, step: 0.001).round(3)
-      synth.base_freq  = GUI.slider("Start Freq (Hz)", synth.base_freq, 40.0, 2000.0, h: 36.0, step: 1.0).round(1)
+    ImGui.row(cols: 2, spacing: 14) do
+      synth.env_attack = ImGui.slider("Attack (s)", synth.env_attack, 0.0, 0.5, h: 36.0, step: 0.001).round(3)
+      synth.base_freq  = ImGui.slider("Start Freq (Hz)", synth.base_freq, 40.0, 2000.0, h: 36.0, step: 1.0).round(1)
     end
-    GUI.row(cols: 2, spacing: 14) do
-      synth.env_sustain = GUI.slider("Sustain (s)", synth.env_sustain, 0.0, 0.8, h: 36.0, step: 0.001).round(3)
-      synth.min_freq    = GUI.slider("Min Freq (Hz)", synth.min_freq, 20.0, 500.0, h: 36.0, step: 1.0).round(1)
+    ImGui.row(cols: 2, spacing: 14) do
+      synth.env_sustain = ImGui.slider("Sustain (s)", synth.env_sustain, 0.0, 0.8, h: 36.0, step: 0.001).round(3)
+      synth.min_freq    = ImGui.slider("Min Freq (Hz)", synth.min_freq, 20.0, 500.0, h: 36.0, step: 1.0).round(1)
     end
-    GUI.row(cols: 2, spacing: 14) do
-      synth.env_punch = GUI.slider("Punch", synth.env_punch, 0.0, 1.0, h: 36.0, step: 0.01).round(2)
-      synth.slide     = GUI.slider("Slide (Hz/s)", synth.slide, -4000.0, 4000.0, h: 36.0, step: 10.0).round(1)
+    ImGui.row(cols: 2, spacing: 14) do
+      synth.env_punch = ImGui.slider("Punch", synth.env_punch, 0.0, 1.0, h: 36.0, step: 0.01).round(2)
+      synth.slide     = ImGui.slider("Slide (Hz/s)", synth.slide, -4000.0, 4000.0, h: 36.0, step: 10.0).round(1)
     end
-    GUI.row(cols: 2, spacing: 14) do
-      synth.env_decay   = GUI.slider("Decay (s)", synth.env_decay, 0.01, 1.5, h: 36.0, step: 0.001).round(3)
-      synth.slide_accel = GUI.slider("Slide Accel", synth.slide_accel, -2000.0, 2000.0, h: 36.0, step: 10.0).round(1)
+    ImGui.row(cols: 2, spacing: 14) do
+      synth.env_decay   = ImGui.slider("Decay (s)", synth.env_decay, 0.01, 1.5, h: 36.0, step: 0.001).round(3)
+      synth.slide_accel = ImGui.slider("Slide Accel", synth.slide_accel, -2000.0, 2000.0, h: 36.0, step: 10.0).round(1)
     end
 
-    GUI.spacer(6)
-    GUI.divider
+    ImGui.spacer(6)
+    ImGui.divider
 
     # セクション 2: ビブラート・アルペジオ (左) ＆ デューティ・フィルタ・音量 (右)
     is_square = (synth.wave_type == 0)
     duty_label = is_square ? "Duty Cycle" : "Duty Cycle (Square only)"
     sweep_label = is_square ? "Duty Sweep" : "Duty Sweep (Square only)"
 
-    GUI.label("=== Vibrato & Arp (Left) & Tone & Filter (Right) ===", size: 13, color: Color.new(255, 200, 80))
-    GUI.spacer(2)
+    ImGui.label("=== Vibrato & Arp (Left) & Tone & Filter (Right) ===", size: 13, color: Color.new(255, 200, 80))
+    ImGui.spacer(2)
 
-    GUI.row(cols: 2, spacing: 14) do
-      synth.vib_depth = GUI.slider("Vibrato Depth (Hz)", synth.vib_depth, 0.0, 100.0, h: 36.0, step: 0.5).round(1)
-      synth.duty      = GUI.slider(duty_label, synth.duty, 0.1, 0.9, h: 36.0, step: 0.01, enabled: is_square).round(2)
+    ImGui.row(cols: 2, spacing: 14) do
+      synth.vib_depth = ImGui.slider("Vibrato Depth (Hz)", synth.vib_depth, 0.0, 100.0, h: 36.0, step: 0.5).round(1)
+      synth.duty      = ImGui.slider(duty_label, synth.duty, 0.1, 0.9, h: 36.0, step: 0.01, enabled: is_square).round(2)
     end
-    GUI.row(cols: 2, spacing: 14) do
-      synth.vib_speed  = GUI.slider("Vibrato Speed (Hz)", synth.vib_speed, 0.5, 30.0, h: 36.0, step: 0.5).round(1)
-      synth.duty_sweep = GUI.slider(sweep_label, synth.duty_sweep, -0.5, 0.5, h: 36.0, step: 0.01, enabled: is_square).round(2)
+    ImGui.row(cols: 2, spacing: 14) do
+      synth.vib_speed  = ImGui.slider("Vibrato Speed (Hz)", synth.vib_speed, 0.5, 30.0, h: 36.0, step: 0.5).round(1)
+      synth.duty_sweep = ImGui.slider(sweep_label, synth.duty_sweep, -0.5, 0.5, h: 36.0, step: 0.01, enabled: is_square).round(2)
     end
-    GUI.row(cols: 2, spacing: 14) do
-      synth.arp_mod    = GUI.slider("Pitch Jump Multiplier", synth.arp_mod, 0.5, 2.5, h: 36.0, step: 0.01).round(2)
-      synth.lpf_cutoff = GUI.slider("LPF Cutoff (Hz)", synth.lpf_cutoff, 500.0, 20000.0, h: 36.0, step: 50.0).round(0)
+    ImGui.row(cols: 2, spacing: 14) do
+      synth.arp_mod    = ImGui.slider("Pitch Jump Multiplier", synth.arp_mod, 0.5, 2.5, h: 36.0, step: 0.01).round(2)
+      synth.lpf_cutoff = ImGui.slider("LPF Cutoff (Hz)", synth.lpf_cutoff, 500.0, 20000.0, h: 36.0, step: 50.0).round(0)
     end
-    GUI.row(cols: 2, spacing: 14) do
-      synth.arp_time = GUI.slider("Trigger Time (s)", synth.arp_time, 0.0, 0.3, h: 36.0, step: 0.001).round(3)
-      synth.volume   = GUI.slider("Master Volume", synth.volume, 0.0, 1.0, h: 36.0, step: 0.01).round(2)
+    ImGui.row(cols: 2, spacing: 14) do
+      synth.arp_time = ImGui.slider("Trigger Time (s)", synth.arp_time, 0.0, 0.3, h: 36.0, step: 0.001).round(3)
+      synth.volume   = ImGui.slider("Master Volume", synth.volume, 0.0, 1.0, h: 36.0, step: 0.01).round(2)
     end
   end
 
   # -------------------------------------------------------------------
   # パネル 3: 波形オシロスコープ & コード出力 (右側: 幅 350)
   # -------------------------------------------------------------------
-  GUI.panel("Waveform & Snippet", x: 910, y: 75, w: 350, h: 620, padding: 12.0) do
-    GUI.label("=== Waveform Visualizer ===", size: 14, color: Color.new(255, 200, 80))
-    GUI.label("Duration: #{sound_duration.round(3)}s | #{samples_cache.length} samples", size: 11, color: Color.new(160, 160, 180))
-    GUI.spacer(4)
+  ImGui.panel("Waveform & Snippet", x: 910, y: 75, w: 350, h: 620, padding: 12.0) do
+    ImGui.label("=== Waveform Visualizer ===", size: 14, color: Color.new(255, 200, 80))
+    ImGui.label("Duration: #{sound_duration.round(3)}s | #{samples_cache.length} samples", size: 11, color: Color.new(160, 160, 180))
+    ImGui.spacer(4)
 
     # コンテナ内ローカル座標でスコープを描画
     scope_x = 0.0
-    scope_y = GUI.layout.cursor_y
+    scope_y = ImGui.layout.cursor_y
     scope_w = 326.0
     scope_h = 135.0
 
@@ -702,33 +702,33 @@ Window.loop(1280, 720, "Zenoo - Retro Sound Effect Synthesizer (SE Generator)", 
     end
 
     # スコープの高さ分レイアウトカーソルを進める
-    GUI.spacer(scope_h + 8.0)
-    GUI.divider
+    ImGui.spacer(scope_h + 8.0)
+    ImGui.divider
 
-    GUI.label("=== Ruby Code Snippet ===", size: 14, color: Color.new(255, 200, 80))
-    GUI.spacer(3)
+    ImGui.label("=== Ruby Code Snippet ===", size: 14, color: Color.new(255, 200, 80))
+    ImGui.spacer(3)
 
     # クリップボードへコピーボタン
     btn_label = copy_timer > 0.0 ? "✓ Copied to Clipboard!" : "Copy Code to Clipboard"
-    if GUI.button(btn_label, h: 32.0)
+    if ImGui.button(btn_label, h: 32.0)
       Input.clipboard = synth.to_ruby_code
       copy_timer = 2.0
     end
-    GUI.spacer(4)
+    ImGui.spacer(4)
 
     # to_ruby_code の出力をそのまま行分割してリアルタイム表示
     code_lines = synth.to_ruby_code.lines
-    GUI.scroll_view("code_scroll", h: 185.0) do
+    ImGui.scroll_view("code_scroll", h: 185.0) do
       i = 0
       len = code_lines.length
       while i < len
         line = code_lines[i].rstrip
         if line.start_with?("#")
-          GUI.label(line, size: 11, color: Color.new(120, 200, 140))
+          ImGui.label(line, size: 11, color: Color.new(120, 200, 140))
         elsif line.include?("se_data =") || line.include?("sound =") || line.include?("sound.play")
-          GUI.label(line, size: 11, color: Color.new(255, 220, 100))
+          ImGui.label(line, size: 11, color: Color.new(255, 220, 100))
         else
-          GUI.label(line, size: 11, color: Color.new(210, 220, 235))
+          ImGui.label(line, size: 11, color: Color.new(210, 220, 235))
         end
         i += 1
       end

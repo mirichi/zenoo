@@ -145,13 +145,13 @@ module Zenoo
       # ユーザーのゲームブロック実行中かつインスペクタが表示されており、インスペクタ等のGUIがマウスを捕捉している場合はマスク
       def mask_mouse_input?
         return false unless @enabled && @game_block_active && Inspector.visible
-        Zenoo::GUI.mouse_captured? || !Zenoo::GUI.hovered_window_id.nil?
+        Zenoo::ImGui.mouse_captured? || !Zenoo::ImGui.hovered_window_id.nil?
       end
 
       # ユーザーのゲームブロック実行中かつインスペクタが表示されており、GUI要素（テキスト入力等）にフォーカスがある場合はマスク
       def mask_keyboard_input?
         return false unless @enabled && @game_block_active && Inspector.visible
-        !Zenoo::GUI.focus_id.nil?
+        !Zenoo::ImGui.focus_id.nil?
       end
 
       # 画面キューのコマンド群をスナップショットとして保持
@@ -378,7 +378,8 @@ module Zenoo
         Audio.update(delta_time)
         Tween.__update_step(delta_time) if @current_frame_ran_game
         Input.__begin_frame
-        GUI.begin_frame
+        ImGui.begin_frame
+        UI.begin_frame
         Input.__update_virtual_pad if @current_frame_ran_game
         if @main_loop_block
           begin
@@ -398,13 +399,15 @@ module Zenoo
           end
         end
 
+        UI.end_frame
+
         # ゲームブロック直後: インスペクタGUIがキューに積まれる前に純粋なゲーム画面のスナップショットを取得！
         Zenoo::Dev.capture_screen_snapshot if Zenoo::Dev.enabled && @current_frame_ran_game
 
         # F12 インスペクタ GUI の描画
         Zenoo::Dev::Inspector.render_gui if Zenoo::Dev.enabled
 
-        GUI.end_frame
+        ImGui.end_frame
         Input.__update_step
       end
 

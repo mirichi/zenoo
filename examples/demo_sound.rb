@@ -66,57 +66,57 @@ Window.loop(1080, 760, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
   Window.draw_text(30, 725, "Status: #{current_status}", size: 15, color: Color.new(150, 220, 120))
 
   # 左側: 動的波形生成 (SoundEffect)
-  GUI.cursor(30.0, 80.0)
-  GUI.panel("Dynamic Sound Effects (PCM)", w: 495.0, h: 615.0) do
-    GUI.label("Generated on-the-fly with mathematical waveforms", size: 13, color: Color.new(150, 160, 180))
+  ImGui.cursor(30.0, 80.0)
+  ImGui.panel("Dynamic Sound Effects (PCM)", w: 495.0, h: 615.0) do
+    ImGui.label("Generated on-the-fly with mathematical waveforms", size: 13, color: Color.new(150, 160, 180))
 
-    GUI.row(cols: 2, spacing: 12) do
-      if Input.key_push?(:"1") || GUI.button("[1] Sine (440Hz)", h: 42.0)
+    ImGui.row(cols: 2, spacing: 12) do
+      if Input.key_push?(:"1") || ImGui.button("[1] Sine (440Hz)", h: 42.0)
         sound_sine.play
         current_status = "Playing Sine wave tone (440Hz)"
       end
-      if Input.key_push?(:"2") || GUI.button("[2] Square (440Hz)", h: 42.0)
+      if Input.key_push?(:"2") || ImGui.button("[2] Square (440Hz)", h: 42.0)
         sound_square.play
         current_status = "Playing Square wave tone (440Hz)"
       end
     end
 
-    GUI.row(cols: 2, spacing: 12) do
-      if Input.key_push?(:"3") || GUI.button("[3] Triangle (440Hz)", h: 42.0)
+    ImGui.row(cols: 2, spacing: 12) do
+      if Input.key_push?(:"3") || ImGui.button("[3] Triangle (440Hz)", h: 42.0)
         sound_triangle.play
         current_status = "Playing Triangle wave tone (440Hz)"
       end
-      if Input.key_push?(:"4") || GUI.button("[4] Sawtooth (440Hz)", h: 42.0)
+      if Input.key_push?(:"4") || ImGui.button("[4] Sawtooth (440Hz)", h: 42.0)
         sound_saw.play
         current_status = "Playing Sawtooth wave tone (440Hz)"
       end
     end
 
-    GUI.label("Chirps / Sweeps (Dynamic Pitch Bend):", size: 14, color: Color.new(220, 200, 120))
+    ImGui.label("Chirps / Sweeps (Dynamic Pitch Bend):", size: 14, color: Color.new(220, 200, 120))
 
-    GUI.row(cols: 2, spacing: 12) do
-      if Input.key_push?(:"5") || GUI.button("[5] Laser (Down)", h: 42.0)
+    ImGui.row(cols: 2, spacing: 12) do
+      if Input.key_push?(:"5") || ImGui.button("[5] Laser (Down)", h: 42.0)
         sound_laser.play
         current_status = "Playing Laser sweep (900Hz -> 200Hz)"
       end
-      if Input.key_push?(:"6") || GUI.button("[6] Jump (Up)", h: 42.0)
+      if Input.key_push?(:"6") || ImGui.button("[6] Jump (Up)", h: 42.0)
         sound_jump.play
         current_status = "Playing Jump sweep (250Hz -> 700Hz)"
       end
     end
 
-    GUI.label("Noise (Perlin / White Noise):", size: 14, color: Color.new(220, 200, 120))
+    ImGui.label("Noise (Perlin / White Noise):", size: 14, color: Color.new(220, 200, 120))
 
-    if Input.key_push?(:"7") || GUI.button("[7] Explosion (Noise)", h: 42.0)
+    if Input.key_push?(:"7") || ImGui.button("[7] Explosion (Noise)", h: 42.0)
       sound_boom.play
       current_status = "Playing White Noise explosion sound"
     end
 
-    GUI.divider
-    GUI.label("Polyphony & Limiter Test (Anti-Clipping):", size: 14, color: Color.new(120, 220, 180))
+    ImGui.divider
+    ImGui.label("Polyphony & Limiter Test (Anti-Clipping):", size: 14, color: Color.new(120, 220, 180))
 
-    GUI.row(cols: 2, spacing: 10) do
-      if GUI.button("Rapid Fire (10x in 1 frame)", h: 36.0)
+    ImGui.row(cols: 2, spacing: 10) do
+      if ImGui.button("Rapid Fire (10x in 1 frame)", h: 36.0)
         # 同一フレームで10回 play 呼んでも重複抑制され、安全に鳴る
         sound_laser.max_polyphony = 3
         sound_laser.dedup_frame = true
@@ -124,7 +124,7 @@ Window.loop(1080, 760, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
         current_status = "Triggered 10x in same frame (Dedup: 1 sound played, 0 clipping!)"
       end
 
-      if GUI.button("Multi-Voice (Polyphony 3)", h: 36.0)
+      if ImGui.button("Multi-Voice (Polyphony 3)", h: 36.0)
         # 3音まで重なるポリフォニー
         sound_laser.max_polyphony = 3
         sound_laser.dedup_frame = false
@@ -135,36 +135,36 @@ Window.loop(1080, 760, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
   end
 
   # 右側: ファイルオーディオ (OGG / WAV) & オーディオコントロール
-  GUI.cursor(550.0, 80.0)
-  GUI.panel("File Audio & Engine Controls", w: 495.0, h: 615.0) do
-    GUI.label("Decoded via stb_vorbis & miniaudio engine", size: 13, color: Color.new(150, 160, 180))
+  ImGui.cursor(550.0, 80.0)
+  ImGui.panel("File Audio & Engine Controls", w: 495.0, h: 615.0) do
+    ImGui.label("Decoded via stb_vorbis & miniaudio engine", size: 13, color: Color.new(150, 160, 180))
 
     if bgm_ogg
       ogg_state = bgm_ogg.fading? ? "Fading..." : (bgm_ogg.playing? ? "Playing" : "Stopped")
-      GUI.label("Sample OGG [Bus: :bgm]: #{ogg_state} (#{bgm_ogg.time.to_f.round(1)}s / #{bgm_ogg.length.to_f.round(1)}s)", size: 14, color: Color.new(240, 180, 100))
+      ImGui.label("Sample OGG [Bus: :bgm]: #{ogg_state} (#{bgm_ogg.time.to_f.round(1)}s / #{bgm_ogg.length.to_f.round(1)}s)", size: 14, color: Color.new(240, 180, 100))
 
-      GUI.row(cols: 3, spacing: 10) do
-        if GUI.button("Play OGG", h: 36.0)
+      ImGui.row(cols: 3, spacing: 10) do
+        if ImGui.button("Play OGG", h: 36.0)
           bgm_ogg.play
           current_status = "Playing sample.ogg"
         end
-        if GUI.button("Pause", h: 36.0)
+        if ImGui.button("Pause", h: 36.0)
           bgm_ogg.pause
           current_status = "Paused sample.ogg"
         end
-        if GUI.button("Stop", h: 36.0)
+        if ImGui.button("Stop", h: 36.0)
           bgm_ogg.stop
           current_status = "Stopped sample.ogg"
         end
       end
 
       # フェード制御ボタン
-      GUI.row(cols: 2, spacing: 10) do
-        if GUI.button("Fade In (2.0s)", h: 36.0)
+      ImGui.row(cols: 2, spacing: 10) do
+        if ImGui.button("Fade In (2.0s)", h: 36.0)
           bgm_ogg.fade_in(2.0)
           current_status = "Fade In sample.ogg (2.0s)"
         end
-        if GUI.button("Fade Out (2.0s)", h: 36.0)
+        if ImGui.button("Fade Out (2.0s)", h: 36.0)
           bgm_ogg.fade_out(2.0)
           current_status = "Fade Out sample.ogg (2.0s)"
         end
@@ -172,44 +172,44 @@ Window.loop(1080, 760, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
     end
 
     if bgm_wav
-      GUI.row(cols: 3, spacing: 10) do
-        if GUI.button("Play WAV [Bus: :se]", h: 36.0)
+      ImGui.row(cols: 3, spacing: 10) do
+        if ImGui.button("Play WAV [Bus: :se]", h: 36.0)
           bgm_wav.play
           current_status = "Playing sample.wav"
         end
       end
     end
 
-    GUI.divider
-    GUI.label("Buses & Engine Parameters", size: 14, color: Color.new(180, 180, 200))
+    ImGui.divider
+    ImGui.label("Buses & Engine Parameters", size: 14, color: Color.new(180, 180, 200))
 
     # カテゴリ / バス管理スライダー
     bgm_bus_vol = Audio.bus_volume(:bgm)
-    new_bgm_bus = GUI.slider("BGM Bus Vol", bgm_bus_vol, 0.0, 1.5)
+    new_bgm_bus = ImGui.slider("BGM Bus Vol", bgm_bus_vol, 0.0, 1.5)
     Audio.set_bus_volume(:bgm, new_bgm_bus) if (new_bgm_bus - bgm_bus_vol).abs > 0.01
 
     se_bus_vol = Audio.bus_volume(:se)
-    new_se_bus = GUI.slider("SE Bus Vol", se_bus_vol, 0.0, 1.5)
+    new_se_bus = ImGui.slider("SE Bus Vol", se_bus_vol, 0.0, 1.5)
     Audio.set_bus_volume(:se, new_se_bus) if (new_se_bus - se_bus_vol).abs > 0.01
 
     # マスター音量
-    new_vol = GUI.slider("Master Vol", master_vol, 0.0, 1.0)
+    new_vol = ImGui.slider("Master Vol", master_vol, 0.0, 1.0)
     if (new_vol.to_f - master_vol).abs > 0.01
       master_vol = new_vol.to_f
       Audio.master_volume = master_vol
     end
 
     if bgm_ogg
-      GUI.divider
-      GUI.label("BGM Sound Properties", size: 14, color: Color.new(180, 180, 200))
+      ImGui.divider
+      ImGui.label("BGM Sound Properties", size: 14, color: Color.new(180, 180, 200))
 
-      new_pitch = GUI.slider("Pitch", bgm_pitch, 0.5, 2.0)
+      new_pitch = ImGui.slider("Pitch", bgm_pitch, 0.5, 2.0)
       if (new_pitch.to_f - bgm_pitch).abs > 0.01
         bgm_pitch = new_pitch.to_f
         bgm_ogg.pitch = bgm_pitch
       end
 
-      new_pan = GUI.slider("Pan", bgm_pan, -1.0, 1.0)
+      new_pan = ImGui.slider("Pan", bgm_pan, -1.0, 1.0)
       if (new_pan.to_f - bgm_pan).abs > 0.01
         bgm_pan = new_pan.to_f
         bgm_ogg.pan = bgm_pan
@@ -218,14 +218,14 @@ Window.loop(1080, 760, "Zenoo Audio & Sound Demo (miniaudio + Ogg Vorbis + Sound
       has_lp = bgm_ogg.has_loop_points?
       lp_label = has_lp ? "Loop Point: Active (1.0s~)" : "Set Loop Point (1.0s~)"
 
-      GUI.row(cols: 2, spacing: 10) do
-        if GUI.button(bgm_loop ? "BGM Loop: Enabled" : "BGM Loop: Disabled", h: 36.0)
+      ImGui.row(cols: 2, spacing: 10) do
+        if ImGui.button(bgm_loop ? "BGM Loop: Enabled" : "BGM Loop: Disabled", h: 36.0)
           bgm_loop = !bgm_loop
           bgm_ogg.looping = bgm_loop
           current_status = "BGM Loop set to #{bgm_loop}"
         end
 
-        if GUI.button(lp_label, h: 36.0)
+        if ImGui.button(lp_label, h: 36.0)
           if has_lp
             bgm_ogg.clear_loop_points
             current_status = "Cleared BGM loop points"

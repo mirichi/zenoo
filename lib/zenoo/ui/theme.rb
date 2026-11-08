@@ -1,0 +1,194 @@
+# frozen_string_literal: true
+
+module Zenoo
+  module UI
+    class Theme
+      @custom_presets = {}
+
+      class << self
+        attr_reader :custom_presets
+
+        def register(name, base: :modern_dark, **attrs)
+          @custom_presets[name.to_sym] = { base: base, attrs: attrs }
+        end
+      end
+
+      attr_accessor :bg_normal, :bg_hover, :bg_active,
+                    :border_normal, :border_hover, :border_active,
+                    :shadow_normal, :shadow_hover, :shadow_active,
+                    :win_bg, :win_title_bg, :win_title_bg_active,
+                    :win_border_normal, :win_border_active,
+                    :text_color, :text_disabled,
+                    :accent_color, :accent_hover, :track_bg, :track_border,
+                    :corner_radius, :font_size, :font
+
+      def initialize(preset = :modern_dark, **overrides)
+        apply_preset(preset)
+        configure(**overrides) unless overrides.empty?
+      end
+
+      def configure(
+        bg_normal: nil, bg_hover: nil, bg_active: nil,
+        border_normal: nil, border_hover: nil, border_active: nil,
+        shadow_normal: nil, shadow_hover: nil, shadow_active: nil,
+        win_bg: nil, win_title_bg: nil, win_title_bg_active: nil,
+        win_border_normal: nil, win_border_active: nil,
+        text_color: nil, text_disabled: nil,
+        accent_color: nil, accent_hover: nil, track_bg: nil, track_border: nil,
+        corner_radius: nil, font_size: nil, font: nil
+      )
+        self.bg_normal     = normalize_color(bg_normal) unless bg_normal.nil?
+        self.bg_hover      = normalize_color(bg_hover) unless bg_hover.nil?
+        self.bg_active     = normalize_color(bg_active) unless bg_active.nil?
+        self.border_normal = normalize_pair(border_normal) unless border_normal.nil?
+        self.border_hover  = normalize_pair(border_hover) unless border_hover.nil?
+        self.border_active = normalize_pair(border_active) unless border_active.nil?
+        self.shadow_normal = normalize_pair(shadow_normal) unless shadow_normal.nil?
+        self.shadow_hover  = normalize_pair(shadow_hover) unless shadow_hover.nil?
+        self.shadow_active = normalize_pair(shadow_active) unless shadow_active.nil?
+        self.win_bg        = normalize_color(win_bg) unless win_bg.nil?
+        self.win_title_bg  = normalize_color(win_title_bg) unless win_title_bg.nil?
+        self.win_title_bg_active = normalize_color(win_title_bg_active) unless win_title_bg_active.nil?
+        self.win_border_normal   = normalize_pair(win_border_normal) unless win_border_normal.nil?
+        self.win_border_active   = normalize_pair(win_border_active) unless win_border_active.nil?
+        self.text_color    = normalize_color(text_color) unless text_color.nil?
+        self.text_disabled = normalize_color(text_disabled) unless text_disabled.nil?
+        self.accent_color  = normalize_color(accent_color) unless accent_color.nil?
+        self.accent_hover  = normalize_color(accent_hover) unless accent_hover.nil?
+        self.track_bg      = normalize_color(track_bg) unless track_bg.nil?
+        self.track_border  = normalize_pair(track_border) unless track_border.nil?
+        self.corner_radius = corner_radius.to_f unless corner_radius.nil?
+        self.font_size     = font_size.to_i unless font_size.nil?
+        self.font          = font unless font.nil?
+        self
+      end
+
+      def apply_preset(preset)
+        sym = preset.to_sym
+        custom = Theme.custom_presets[sym]
+        if !custom.nil?
+          apply_preset(custom[:base])
+          configure(**custom[:attrs])
+        elsif sym == :cyber
+          apply_cyber
+        elsif sym == :tool_dark
+          apply_tool_dark
+        else
+          apply_modern_dark
+        end
+      end
+
+      # モダン・リッチダークテーマ (デフォルト)
+      def apply_modern_dark
+        @font           = nil
+        @bg_normal      = Color.new(42, 48, 62, 235)
+        @bg_hover       = Color.new(58, 68, 88, 245)
+        @bg_active      = Color.new(74, 88, 118, 255)
+
+        @win_bg              = Color.new(26, 30, 40, 242)
+        @win_title_bg        = Color.new(36, 42, 56, 245)
+        @win_title_bg_active = Color.new(46, 56, 78, 255)
+        @win_border_normal   = [1.5, Color.new(68, 78, 100, 200)]
+        @win_border_active   = [1.5, Color.new(95, 165, 255, 240)]
+
+        @border_normal  = [1.0, Color.new(82, 94, 120, 200)]
+        @border_hover   = [1.5, Color.new(110, 175, 255, 240)]
+        @border_active  = [2.0, Color.new(140, 210, 255, 255)]
+
+        @shadow_normal  = [8.0, Color.new(0, 0, 0, 120)]
+        @shadow_hover   = [12.0, Color.new(40, 120, 255, 90)]
+        @shadow_active  = [4.0, Color.new(0, 0, 0, 160)]
+
+        @text_color     = Color.new(240, 244, 250)
+        @text_disabled  = Color.new(115, 122, 138)
+
+        @accent_color   = Color.new(75, 155, 250)
+        @accent_hover   = Color.new(110, 185, 255)
+        @track_bg       = Color.new(20, 24, 32, 230)
+        @track_border   = [1.0, Color.new(60, 70, 90, 180)]
+
+        @corner_radius  = 6.0
+        @font_size      = 15
+      end
+
+      # ツール・デバッグ向けのフラットなグレースケールテーマ
+      def apply_tool_dark
+        @font           = nil
+        @bg_normal      = Color.new(46, 46, 50, 240)
+        @bg_hover       = Color.new(62, 62, 68, 245)
+        @bg_active      = Color.new(78, 78, 86, 255)
+
+        @win_bg              = Color.new(30, 30, 32, 245)
+        @win_title_bg        = Color.new(42, 42, 45, 240)
+        @win_title_bg_active = Color.new(52, 52, 58, 255)
+        @win_border_normal   = [1.0, Color.new(65, 65, 70, 200)]
+        @win_border_active   = [1.0, Color.new(120, 120, 130, 240)]
+
+        @border_normal  = [1.0, Color.new(90, 95, 105, 220)]
+        @border_hover   = [1.0, Color.new(145, 150, 165, 240)]
+        @border_active  = [1.5, Color.new(190, 195, 210, 255)]
+
+        @shadow_normal  = [4.0, Color.new(0, 0, 0, 100)]
+        @shadow_hover   = [6.0, Color.new(0, 0, 0, 140)]
+        @shadow_active  = [2.0, Color.new(0, 0, 0, 160)]
+
+        @text_color     = Color.new(235, 235, 235)
+        @text_disabled  = Color.new(110, 110, 115)
+
+        @accent_color   = Color.new(175, 180, 195)
+        @accent_hover   = Color.new(215, 220, 235)
+        @track_bg       = Color.new(32, 32, 36, 230)
+        @track_border   = [1.0, Color.new(70, 75, 85, 180)]
+
+        @corner_radius  = 4.0
+        @font_size      = 15
+      end
+
+      # サイバー・ゲーム風テーマ
+      def apply_cyber
+        @font           = nil
+        @win_bg              = Color.new(22, 26, 36, 245)
+        @win_title_bg        = Color.new(28, 32, 44, 230)
+        @win_title_bg_active = Color.new(35, 45, 65, 230)
+        @win_border_normal   = [1.5, Color.new(60, 70, 90, 180)]
+        @win_border_active   = [2.0, Color.new(0, 200, 255, 220)]
+
+        @bg_normal      = Color.new(40, 44, 52, 230)
+        @bg_hover       = Color.new(55, 60, 72, 245)
+        @bg_active      = Color.new(70, 80, 100, 255)
+
+        @border_normal  = [1.0, Color.new(80, 88, 104, 180)]
+        @border_hover   = [1.5, Color.new(0, 210, 255, 230)]
+        @border_active  = [2.0, Color.new(0, 255, 200, 255)]
+
+        @shadow_normal  = [6.0, Color.new(0, 0, 0, 120)]
+        @shadow_hover   = [12.0, Color.new(0, 180, 255, 100)]
+        @shadow_active  = [4.0, Color.new(0, 0, 0, 180)]
+
+        @text_color     = Color::WHITE
+        @text_disabled  = Color.new(120, 120, 130)
+
+        @accent_color   = Color.new(0, 195, 255)
+        @accent_hover   = Color.new(50, 220, 255)
+        @track_bg       = Color.new(25, 28, 35, 220)
+        @track_border   = [1.0, Color.new(60, 65, 80, 150)]
+
+        @corner_radius  = 8.0
+        @font_size      = 16
+      end
+
+      private
+
+      def normalize_color(val)
+        return val if val.is_a?(Color)
+        return Color.new(*val) if val.is_a?(Array)
+        val
+      end
+
+      def normalize_pair(val)
+        return val unless val.is_a?(Array)
+        [val[0], normalize_color(val[1])]
+      end
+    end
+  end
+end

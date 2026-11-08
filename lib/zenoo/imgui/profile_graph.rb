@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Zenoo
-  module GUI
+  module ImGui
     # プロファイルグラフ (Profile Graph / Frame Time Histogram) 描画モジュール
     module ProfileGraph
       class << self

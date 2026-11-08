@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Zenoo
-  module GUI
+  module ImGui
     # テキストボックスのキャレット位置算出・IME座標同期・キー入力編集ロジック
     module TextEdit
       class << self

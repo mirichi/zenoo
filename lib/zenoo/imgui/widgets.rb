@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Zenoo
-  module GUI
+  module ImGui
     # 拡張ウィジェット群 (チェックボックス, ラジオボタン, タブ, スピンボタン, リストボックス, ドロップダウン, スクロールバー)
     module Widgets
       # 状態保持用ハッシュ

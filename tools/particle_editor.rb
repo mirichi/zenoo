@@ -131,7 +131,7 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 2D GPU Particle Designer & Editor") do
   # -------------------------------------------------------------------
   # 2. キャンバス操作 (マウス左ドラッグで移動、右クリック/SpaceでBurst)
   # -------------------------------------------------------------------
-  if mx < CANVAS_W && !GUI.mouse_captured?
+  if mx < CANVAS_W && !ImGui.mouse_captured?
     if Input.mouse_pressed?(:left)
       system.move_to(mx, my)
     end
@@ -161,30 +161,30 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 2D GPU Particle Designer & Editor") do
   Window.draw_text(28.0, 44.0, info_str, size: 13, color: Color.new(130, 220, 255), z: 51.0)
 
   # -------------------------------------------------------------------
-  # 5. 右側 GUI コントロールパネル
+  # 5. 右側 ImGui コントロールパネル
   # -------------------------------------------------------------------
-  GUI.window("GPU Particle Inspector", x: 820, y: 10, w: 450, h: 700, resizable: false, collapsible: false) do
+  ImGui.window("GPU Particle Inspector", x: 820, y: 10, w: 450, h: 700, resizable: false, collapsible: false) do
     # --- レイヤー管理バー ---
-    GUI.row(cols: 4, spacing: 4) do
+    ImGui.row(cols: 4, spacing: 4) do
       system.emitters.each_with_index do |em, idx|
-        if GUI.button("L#{idx + 1}:#{em.shape}", h: 28.0, active: (selected_layer == idx), id: "layer_sel_#{idx}")
+        if ImGui.button("L#{idx + 1}:#{em.shape}", h: 28.0, active: (selected_layer == idx), id: "layer_sel_#{idx}")
           selected_layer = idx
         end
       end
     end
-    GUI.spacer(2)
-    GUI.row(cols: 3, spacing: 6) do
-      if GUI.button("+ Add Layer", h: 28.0) && system.emitters.length < 4
+    ImGui.spacer(2)
+    ImGui.row(cols: 3, spacing: 6) do
+      if ImGui.button("+ Add Layer", h: 28.0) && system.emitters.length < 4
         new_em = system.add_emitter(max_particles: 2000)
         new_em.configure(**active_em.to_h) if active_em
         selected_layer = system.emitters.length - 1
       end
-      if GUI.button("Duplicate", h: 28.0) && system.emitters.length < 4 && active_em
+      if ImGui.button("Duplicate", h: 28.0) && system.emitters.length < 4 && active_em
         new_em = system.add_emitter(max_particles: active_em.max_particles)
         new_em.configure(**active_em.to_h)
         selected_layer = system.emitters.length - 1
       end
-      if GUI.button("- Remove", h: 28.0) && system.emitters.length > 1
+      if ImGui.button("- Remove", h: 28.0) && system.emitters.length > 1
         system.remove_emitter(selected_layer)
         selected_layer = [selected_layer - 1, 0].max
       end
@@ -193,228 +193,228 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 2D GPU Particle Designer & Editor") do
     selected_layer = [[selected_layer, 0].max, system.emitters.length - 1].min
     em = system.emitters[selected_layer]
 
-    GUI.spacer(4)
-    tab_index = GUI.tabs(["Presets", "Spawn", "Physics", "Visuals", "Export"], tab_index, h: 32.0)
-    GUI.spacer(4)
+    ImGui.spacer(4)
+    tab_index = ImGui.tabs(["Presets", "Spawn", "Physics", "Visuals", "Export"], tab_index, h: 32.0)
+    ImGui.spacer(4)
 
-    GUI.scroll_view("particle_inspector_scroll", h: 555.0) do
+    ImGui.scroll_view("particle_inspector_scroll", h: 555.0) do
       case tab_index
       when 0 # Presets & Global Controls
-        GUI.label("=== Multi-Layer Rich Presets ===", size: 15, color: Color.new(255, 205, 80))
-        GUI.spacer(4)
+        ImGui.label("=== Multi-Layer Rich Presets ===", size: 15, color: Color.new(255, 205, 80))
+        ImGui.spacer(4)
 
-        GUI.row(cols: 2, spacing: 6) do
-          if GUI.button("🔥 Campfire (炎+煙+火花)")
+        ImGui.row(cols: 2, spacing: 6) do
+          if ImGui.button("🔥 Campfire (炎+煙+火花)")
             system.apply_preset(:fire)
             selected_layer = 1
           end
-          if GUI.button("💥 Explosion (4層大爆発)")
+          if ImGui.button("💥 Explosion (4層大爆発)")
             system.apply_preset(:explosion)
             selected_layer = 1
           end
         end
-        GUI.spacer(4)
-        GUI.row(cols: 2, spacing: 6) do
-          if GUI.button("🌀 Magic Galaxy (銀河渦)")
+        ImGui.spacer(4)
+        ImGui.row(cols: 2, spacing: 6) do
+          if ImGui.button("🌀 Magic Galaxy (銀河渦)")
             system.apply_preset(:magic_galaxy)
             selected_layer = 0
           end
-          if GUI.button("⚡ Charge Aura (集束溜め)")
+          if ImGui.button("⚡ Charge Aura (集束溜め)")
             system.apply_preset(:charge_aura)
             selected_layer = 0
           end
         end
-        GUI.spacer(4)
-        GUI.row(cols: 2, spacing: 6) do
-          if GUI.button("✨ Welding Sparks (火花)")
+        ImGui.spacer(4)
+        ImGui.row(cols: 2, spacing: 6) do
+          if ImGui.button("✨ Welding Sparks (火花)")
             system.apply_preset(:sparks)
             selected_layer = 0
           end
-          if GUI.button("❄️ Blizzard (吹雪ボックス)")
+          if ImGui.button("❄️ Blizzard (吹雪ボックス)")
             system.apply_preset(:blizzard)
             selected_layer = 0
           end
         end
-        GUI.spacer(4)
-        GUI.row(cols: 2, spacing: 6) do
-          if GUI.button("🌟 Star Fountain (星噴水)")
+        ImGui.spacer(4)
+        ImGui.row(cols: 2, spacing: 6) do
+          if ImGui.button("🌟 Star Fountain (星噴水)")
             system.apply_preset(:star_fountain)
             selected_layer = 0
           end
-          if GUI.button("💠 Cyber Portal (渦ポータル)")
+          if ImGui.button("💠 Cyber Portal (渦ポータル)")
             system.apply_preset(:cyber_portal)
             selected_layer = 0
           end
         end
 
-        GUI.spacer(8)
-        GUI.divider
-        GUI.label("=== Playback & Trigger ===", size: 15, color: Color.new(100, 220, 255))
-        GUI.row(cols: 2, spacing: 6) do
-          system.burst if GUI.button("💥 BURST ALL! (Space)")
-          system.clear if GUI.button("Clear All Particles")
+        ImGui.spacer(8)
+        ImGui.divider
+        ImGui.label("=== Playback & Trigger ===", size: 15, color: Color.new(100, 220, 255))
+        ImGui.row(cols: 2, spacing: 6) do
+          system.burst if ImGui.button("💥 BURST ALL! (Space)")
+          system.clear if ImGui.button("Clear All Particles")
         end
 
-        GUI.spacer(4)
-        em.emitting    = GUI.checkbox("Layer Emitting (連続放出)", em.emitting, id: "chk_emit")
-        em.local_space = GUI.checkbox("Local Space (エミッター移動に全粒子が追従)", em.local_space, id: "chk_local")
-        if GUI.checkbox("GPU Infinite Loop Mode (CPU転送完全ゼロ)", em.loop_mode, id: "chk_loop") != em.loop_mode
+        ImGui.spacer(4)
+        em.emitting    = ImGui.checkbox("Layer Emitting (連続放出)", em.emitting, id: "chk_emit")
+        em.local_space = ImGui.checkbox("Local Space (エミッター移動に全粒子が追従)", em.local_space, id: "chk_local")
+        if ImGui.checkbox("GPU Infinite Loop Mode (CPU転送完全ゼロ)", em.loop_mode, id: "chk_loop") != em.loop_mode
           em.loop_mode = !em.loop_mode
           em.fill_loop_pool!(em.max_particles) if em.loop_mode
         end
-        show_gizmo = GUI.checkbox("Show Emitter Gizmo (放出範囲ガイド表示)", show_gizmo, id: "chk_gizmo")
+        show_gizmo = ImGui.checkbox("Show Emitter Gizmo (放出範囲ガイド表示)", show_gizmo, id: "chk_gizmo")
 
-        GUI.spacer(6)
-        GUI.divider
-        GUI.label("=== Background Theme ===", size: 15, color: Color.new(255, 205, 80))
-        GUI.row(cols: 3, spacing: 4) do
-          bg_mode = 0 if GUI.radio("Navy", bg_mode == 0, id: "bg_0")
-          bg_mode = 1 if GUI.radio("Black", bg_mode == 1, id: "bg_1")
-          bg_mode = 2 if GUI.radio("Slate", bg_mode == 2, id: "bg_2")
+        ImGui.spacer(6)
+        ImGui.divider
+        ImGui.label("=== Background Theme ===", size: 15, color: Color.new(255, 205, 80))
+        ImGui.row(cols: 3, spacing: 4) do
+          bg_mode = 0 if ImGui.radio("Navy", bg_mode == 0, id: "bg_0")
+          bg_mode = 1 if ImGui.radio("Black", bg_mode == 1, id: "bg_1")
+          bg_mode = 2 if ImGui.radio("Slate", bg_mode == 2, id: "bg_2")
         end
 
       when 1 # Spawn & Timing
-        GUI.label("=== Emission Rate & Lifetime ===", size: 15, color: Color.new(255, 205, 80))
-        em.emission_rate = GUI.slider("Emit Rate (p/s)", em.emission_rate, 0.0, 2000.0, step: 5.0)
-        em.burst_count   = GUI.slider("Burst Count", em.burst_count, 1.0, 1000.0, step: 1.0, format: "%d").to_i
-        em.lifetime      = GUI.slider("Lifetime (s)", em.lifetime, 0.1, 6.0, step: 0.05)
-        em.lifetime_var  = GUI.slider("Lifetime Var (s)", em.lifetime_var, 0.0, 2.5, step: 0.05)
+        ImGui.label("=== Emission Rate & Lifetime ===", size: 15, color: Color.new(255, 205, 80))
+        em.emission_rate = ImGui.slider("Emit Rate (p/s)", em.emission_rate, 0.0, 2000.0, step: 5.0)
+        em.burst_count   = ImGui.slider("Burst Count", em.burst_count, 1.0, 1000.0, step: 1.0, format: "%d").to_i
+        em.lifetime      = ImGui.slider("Lifetime (s)", em.lifetime, 0.1, 6.0, step: 0.05)
+        em.lifetime_var  = ImGui.slider("Lifetime Var (s)", em.lifetime_var, 0.0, 2.5, step: 0.05)
 
-        GUI.spacer(6)
-        GUI.divider
-        GUI.label("=== Spawn Shape (放出領域) ===", size: 15, color: Color.new(100, 220, 255))
+        ImGui.spacer(6)
+        ImGui.divider
+        ImGui.label("=== Spawn Shape (放出領域) ===", size: 15, color: Color.new(100, 220, 255))
         SPAWN_LABELS.each_with_index do |lbl, idx|
           sp_sym = SPAWN_SHAPE_LIST[idx]
-          if GUI.radio(lbl, em.spawn_shape == sp_sym, id: "sp_shape_#{idx}")
+          if ImGui.radio(lbl, em.spawn_shape == sp_sym, id: "sp_shape_#{idx}")
             em.spawn_shape = sp_sym
           end
         end
 
         case em.spawn_shape
         when :circle, :ring
-          em.spawn_radius       = GUI.slider("Outer Radius", em.spawn_radius, 1.0, 350.0, step: 1.0)
-          em.spawn_inner_radius = GUI.slider("Inner Radius / Thick", em.spawn_inner_radius, 0.0, 300.0, step: 1.0)
-          em.radial_direction   = GUI.checkbox("Radial Direction (中心から放射/集束)", em.radial_direction)
+          em.spawn_radius       = ImGui.slider("Outer Radius", em.spawn_radius, 1.0, 350.0, step: 1.0)
+          em.spawn_inner_radius = ImGui.slider("Inner Radius / Thick", em.spawn_inner_radius, 0.0, 300.0, step: 1.0)
+          em.radial_direction   = ImGui.checkbox("Radial Direction (中心から放射/集束)", em.radial_direction)
         when :box
-          em.spawn_width      = GUI.slider("Box Width", em.spawn_width, 4.0, 800.0, step: 4.0)
-          em.spawn_height     = GUI.slider("Box Height", em.spawn_height, 4.0, 600.0, step: 4.0)
-          em.radial_direction = GUI.checkbox("Radial Direction (中心から外向き)", em.radial_direction)
+          em.spawn_width      = ImGui.slider("Box Width", em.spawn_width, 4.0, 800.0, step: 4.0)
+          em.spawn_height     = ImGui.slider("Box Height", em.spawn_height, 4.0, 600.0, step: 4.0)
+          em.radial_direction = ImGui.checkbox("Radial Direction (中心から外向き)", em.radial_direction)
         when :line
-          em.spawn_width      = GUI.slider("Line Length", em.spawn_width, 10.0, 800.0, step: 5.0)
+          em.spawn_width      = ImGui.slider("Line Length", em.spawn_width, 10.0, 800.0, step: 5.0)
         end
 
       when 2 # Motion & Physics (GPU Real-time Uniforms!)
-        GUI.label("=== Initial Velocity ===", size: 15, color: Color.new(255, 205, 80))
-        em.speed     = GUI.slider("Speed (負で中心へ集束)", em.speed, -500.0, 800.0, step: 5.0)
-        em.speed_var = GUI.slider("Speed Variance", em.speed_var, 0.0, 400.0, step: 5.0)
-        em.angle     = GUI.slider("Angle (deg)", em.angle, 0.0, 360.0, step: 1.0)
-        em.spread    = GUI.slider("Spread (deg)", em.spread, 0.0, 360.0, step: 1.0)
+        ImGui.label("=== Initial Velocity ===", size: 15, color: Color.new(255, 205, 80))
+        em.speed     = ImGui.slider("Speed (負で中心へ集束)", em.speed, -500.0, 800.0, step: 5.0)
+        em.speed_var = ImGui.slider("Speed Variance", em.speed_var, 0.0, 400.0, step: 5.0)
+        em.angle     = ImGui.slider("Angle (deg)", em.angle, 0.0, 360.0, step: 1.0)
+        em.spread    = ImGui.slider("Spread (deg)", em.spread, 0.0, 360.0, step: 1.0)
 
-        GUI.spacer(6)
-        GUI.divider
-        GUI.label("=== GPU Forces (飛翔中の粒子にも即時反映!) ===", size: 15, color: Color.new(100, 220, 255))
-        em.gravity_x        = GUI.slider("Gravity X (風)", em.gravity_x, -600.0, 600.0, step: 5.0)
-        em.gravity_y        = GUI.slider("Gravity Y (重力/浮力)", em.gravity_y, -800.0, 800.0, step: 5.0)
-        em.drag             = GUI.slider("Air Drag (空気抵抗)", em.drag, 0.0, 8.0, step: 0.05)
-        em.radial_accel     = GUI.slider("Radial Accel (斥力/引力)", em.radial_accel, -400.0, 400.0, step: 5.0)
-        em.tangential_accel = GUI.slider("Vortex Swirl (渦回転)", em.tangential_accel, -400.0, 400.0, step: 5.0)
+        ImGui.spacer(6)
+        ImGui.divider
+        ImGui.label("=== GPU Forces (飛翔中の粒子にも即時反映!) ===", size: 15, color: Color.new(100, 220, 255))
+        em.gravity_x        = ImGui.slider("Gravity X (風)", em.gravity_x, -600.0, 600.0, step: 5.0)
+        em.gravity_y        = ImGui.slider("Gravity Y (重力/浮力)", em.gravity_y, -800.0, 800.0, step: 5.0)
+        em.drag             = ImGui.slider("Air Drag (空気抵抗)", em.drag, 0.0, 8.0, step: 0.05)
+        em.radial_accel     = ImGui.slider("Radial Accel (斥力/引力)", em.radial_accel, -400.0, 400.0, step: 5.0)
+        em.tangential_accel = ImGui.slider("Vortex Swirl (渦回転)", em.tangential_accel, -400.0, 400.0, step: 5.0)
 
-        GUI.spacer(6)
-        GUI.divider
-        GUI.label("=== Turbulence & Orientation ===", size: 15, color: Color.new(255, 205, 80))
-        em.wobble_amp        = GUI.slider("Wobble Amp (揺らぎ幅)", em.wobble_amp, 0.0, 80.0, step: 1.0)
-        em.wobble_freq       = GUI.slider("Wobble Freq (周波数)", em.wobble_freq, 0.5, 15.0, step: 0.2)
-        em.spin              = GUI.slider("Spin Speed (deg/s)", em.spin, -720.0, 720.0, step: 10.0)
-        em.spin_var          = GUI.slider("Spin Variance", em.spin_var, 0.0, 720.0, step: 10.0)
-        em.align_to_velocity = GUI.checkbox("Align to Velocity (進行方向を向く)", em.align_to_velocity)
-        em.stretch           = GUI.slider("Velocity Stretch (伸縮)", em.stretch, 1.0, 6.0, step: 0.1)
+        ImGui.spacer(6)
+        ImGui.divider
+        ImGui.label("=== Turbulence & Orientation ===", size: 15, color: Color.new(255, 205, 80))
+        em.wobble_amp        = ImGui.slider("Wobble Amp (揺らぎ幅)", em.wobble_amp, 0.0, 80.0, step: 1.0)
+        em.wobble_freq       = ImGui.slider("Wobble Freq (周波数)", em.wobble_freq, 0.5, 15.0, step: 0.2)
+        em.spin              = ImGui.slider("Spin Speed (deg/s)", em.spin, -720.0, 720.0, step: 10.0)
+        em.spin_var          = ImGui.slider("Spin Variance", em.spin_var, 0.0, 720.0, step: 10.0)
+        em.align_to_velocity = ImGui.checkbox("Align to Velocity (進行方向を向く)", em.align_to_velocity)
+        em.stretch           = ImGui.slider("Velocity Stretch (伸縮)", em.stretch, 1.0, 6.0, step: 0.1)
 
       when 3 # Visuals, Size Curve & 3-Point Color
-        GUI.label("=== Procedural SDF Shape & Blend ===", size: 15, color: Color.new(255, 205, 80))
-        GUI.row(cols: 2, spacing: 4) do
-          em.shape = :circle  if GUI.radio("Circle (Glow)", em.shape == :circle,  id: "sh_0")
-          em.shape = :box     if GUI.radio("Box (Square)",  em.shape == :box,     id: "sh_1")
+        ImGui.label("=== Procedural SDF Shape & Blend ===", size: 15, color: Color.new(255, 205, 80))
+        ImGui.row(cols: 2, spacing: 4) do
+          em.shape = :circle  if ImGui.radio("Circle (Glow)", em.shape == :circle,  id: "sh_0")
+          em.shape = :box     if ImGui.radio("Box (Square)",  em.shape == :box,     id: "sh_1")
         end
-        GUI.row(cols: 2, spacing: 4) do
-          em.shape = :spark   if GUI.radio("Spark (Line)",  em.shape == :spark,   id: "sh_2")
-          em.shape = :ring    if GUI.radio("Ring (Wave)",   em.shape == :ring,    id: "sh_3")
+        ImGui.row(cols: 2, spacing: 4) do
+          em.shape = :spark   if ImGui.radio("Spark (Line)",  em.shape == :spark,   id: "sh_2")
+          em.shape = :ring    if ImGui.radio("Ring (Wave)",   em.shape == :ring,    id: "sh_3")
         end
-        GUI.row(cols: 2, spacing: 4) do
-          em.shape = :star    if GUI.radio("Star (Sparkle)", em.shape == :star,    id: "sh_4")
-          em.shape = :diamond if GUI.radio("Diamond",        em.shape == :diamond, id: "sh_5")
+        ImGui.row(cols: 2, spacing: 4) do
+          em.shape = :star    if ImGui.radio("Star (Sparkle)", em.shape == :star,    id: "sh_4")
+          em.shape = :diamond if ImGui.radio("Diamond",        em.shape == :diamond, id: "sh_5")
         end
-        em.shape = :soft if GUI.radio("Soft Smoke (Gaussian)", em.shape == :soft, id: "sh_6")
+        em.shape = :soft if ImGui.radio("Soft Smoke (Gaussian)", em.shape == :soft, id: "sh_6")
 
         if em.shape == :ring
-          em.ring_thickness = GUI.slider("Ring Thickness", em.ring_thickness, 0.04, 0.6, step: 0.01)
+          em.ring_thickness = ImGui.slider("Ring Thickness", em.ring_thickness, 0.04, 0.6, step: 0.01)
         end
 
-        GUI.spacer(4)
-        GUI.row(cols: 3, spacing: 4) do
-          em.blend = :add      if GUI.radio("Add",      em.blend == :add,      id: "bl_add")
-          em.blend = :alpha    if GUI.radio("Alpha",    em.blend == :alpha,    id: "bl_alp")
-          em.blend = :multiply if GUI.radio("Multiply", em.blend == :multiply, id: "bl_mul")
+        ImGui.spacer(4)
+        ImGui.row(cols: 3, spacing: 4) do
+          em.blend = :add      if ImGui.radio("Add",      em.blend == :add,      id: "bl_add")
+          em.blend = :alpha    if ImGui.radio("Alpha",    em.blend == :alpha,    id: "bl_alp")
+          em.blend = :multiply if ImGui.radio("Multiply", em.blend == :multiply, id: "bl_mul")
         end
 
-        GUI.spacer(6)
-        GUI.divider
-        GUI.label("=== Size & Easing Curve ===", size: 15, color: Color.new(100, 220, 255))
-        em.start_size = GUI.slider("Start Size", em.start_size, 1.0, 250.0, step: 1.0)
-        em.end_size   = GUI.slider("End Size", em.end_size, 0.0, 350.0, step: 1.0)
-        em.size_var   = GUI.slider("Size Variance", em.size_var, 0.0, 0.9, step: 0.05)
+        ImGui.spacer(6)
+        ImGui.divider
+        ImGui.label("=== Size & Easing Curve ===", size: 15, color: Color.new(100, 220, 255))
+        em.start_size = ImGui.slider("Start Size", em.start_size, 1.0, 250.0, step: 1.0)
+        em.end_size   = ImGui.slider("End Size", em.end_size, 0.0, 350.0, step: 1.0)
+        em.size_var   = ImGui.slider("Size Variance", em.size_var, 0.0, 0.9, step: 0.05)
 
-        GUI.row(cols: 2, spacing: 4) do
-          em.size_curve = :linear   if GUI.radio("Linear",        em.size_curve == :linear,   id: "cv_0")
-          em.size_curve = :sine     if GUI.radio("Sine (山なり)", em.size_curve == :sine,     id: "cv_1")
+        ImGui.row(cols: 2, spacing: 4) do
+          em.size_curve = :linear   if ImGui.radio("Linear",        em.size_curve == :linear,   id: "cv_0")
+          em.size_curve = :sine     if ImGui.radio("Sine (山なり)", em.size_curve == :sine,     id: "cv_1")
         end
-        GUI.row(cols: 2, spacing: 4) do
-          em.size_curve = :ease_out if GUI.radio("EaseOut",       em.size_curve == :ease_out, id: "cv_2")
-          em.size_curve = :ease_in  if GUI.radio("EaseIn",        em.size_curve == :ease_in,  id: "cv_3")
+        ImGui.row(cols: 2, spacing: 4) do
+          em.size_curve = :ease_out if ImGui.radio("EaseOut",       em.size_curve == :ease_out, id: "cv_2")
+          em.size_curve = :ease_in  if ImGui.radio("EaseIn",        em.size_curve == :ease_in,  id: "cv_3")
         end
 
-        GUI.spacer(6)
-        GUI.divider
-        GUI.label("=== 3-Point Color Gradient & Fade ===", size: 15, color: Color.new(255, 205, 80))
-        em.fade_in       = GUI.slider("Alpha Fade-In Ratio", em.fade_in, 0.0, 0.5, step: 0.02)
-        em.fade_out      = GUI.slider("Alpha Fade-Out Ratio", em.fade_out, 0.0, 0.8, step: 0.02)
-        em.color_mid_pos = GUI.slider("Mid Color Timing", em.color_mid_pos, 0.1, 0.9, step: 0.05)
-        em.color_var     = GUI.slider("Brightness Variance", em.color_var, 0.0, 0.4, step: 0.02)
+        ImGui.spacer(6)
+        ImGui.divider
+        ImGui.label("=== 3-Point Color Gradient & Fade ===", size: 15, color: Color.new(255, 205, 80))
+        em.fade_in       = ImGui.slider("Alpha Fade-In Ratio", em.fade_in, 0.0, 0.5, step: 0.02)
+        em.fade_out      = ImGui.slider("Alpha Fade-Out Ratio", em.fade_out, 0.0, 0.8, step: 0.02)
+        em.color_mid_pos = ImGui.slider("Mid Color Timing", em.color_mid_pos, 0.1, 0.9, step: 0.05)
+        em.color_var     = ImGui.slider("Brightness Variance", em.color_var, 0.0, 0.4, step: 0.02)
 
         sc = em.to_h[:start_color]
-        GUI.label("Start Color (RGBA)", size: 13, color: Color.new(sc[0], sc[1], sc[2], 255))
-        sr = GUI.slider("Start R", sc[0], 0, 255, step: 1, format: "%d").to_i
-        sg = GUI.slider("Start G", sc[1], 0, 255, step: 1, format: "%d").to_i
-        sb = GUI.slider("Start B", sc[2], 0, 255, step: 1, format: "%d").to_i
-        sa = GUI.slider("Start A", sc[3], 0, 255, step: 1, format: "%d").to_i
+        ImGui.label("Start Color (RGBA)", size: 13, color: Color.new(sc[0], sc[1], sc[2], 255))
+        sr = ImGui.slider("Start R", sc[0], 0, 255, step: 1, format: "%d").to_i
+        sg = ImGui.slider("Start G", sc[1], 0, 255, step: 1, format: "%d").to_i
+        sb = ImGui.slider("Start B", sc[2], 0, 255, step: 1, format: "%d").to_i
+        sa = ImGui.slider("Start A", sc[3], 0, 255, step: 1, format: "%d").to_i
         em.start_color = [sr, sg, sb, sa]
 
         mc = em.to_h[:mid_color]
-        GUI.label("Mid Color (RGBA)", size: 13, color: Color.new(mc[0], mc[1], mc[2], 255))
-        mr = GUI.slider("Mid R", mc[0], 0, 255, step: 1, format: "%d").to_i
-        mg = GUI.slider("Mid G", mc[1], 0, 255, step: 1, format: "%d").to_i
-        mb = GUI.slider("Mid B", mc[2], 0, 255, step: 1, format: "%d").to_i
-        ma = GUI.slider("Mid A", mc[3], 0, 255, step: 1, format: "%d").to_i
+        ImGui.label("Mid Color (RGBA)", size: 13, color: Color.new(mc[0], mc[1], mc[2], 255))
+        mr = ImGui.slider("Mid R", mc[0], 0, 255, step: 1, format: "%d").to_i
+        mg = ImGui.slider("Mid G", mc[1], 0, 255, step: 1, format: "%d").to_i
+        mb = ImGui.slider("Mid B", mc[2], 0, 255, step: 1, format: "%d").to_i
+        ma = ImGui.slider("Mid A", mc[3], 0, 255, step: 1, format: "%d").to_i
         em.mid_color = [mr, mg, mb, ma]
 
         ec = em.to_h[:end_color]
-        GUI.label("End Color (RGBA)", size: 13, color: Color.new(ec[0], ec[1], ec[2], 255))
-        er = GUI.slider("End R", ec[0], 0, 255, step: 1, format: "%d").to_i
-        eg = GUI.slider("End G", ec[1], 0, 255, step: 1, format: "%d").to_i
-        eb = GUI.slider("End B", ec[2], 0, 255, step: 1, format: "%d").to_i
-        ea = GUI.slider("End A", ec[3], 0, 255, step: 1, format: "%d").to_i
+        ImGui.label("End Color (RGBA)", size: 13, color: Color.new(ec[0], ec[1], ec[2], 255))
+        er = ImGui.slider("End R", ec[0], 0, 255, step: 1, format: "%d").to_i
+        eg = ImGui.slider("End G", ec[1], 0, 255, step: 1, format: "%d").to_i
+        eb = ImGui.slider("End B", ec[2], 0, 255, step: 1, format: "%d").to_i
+        ea = ImGui.slider("End A", ec[3], 0, 255, step: 1, format: "%d").to_i
         em.end_color = [er, eg, eb, ea]
 
       when 4 # Code Export
-        GUI.label("=== Ruby Code Export ===", size: 15, color: Color.new(255, 205, 80))
+        ImGui.label("=== Ruby Code Export ===", size: 15, color: Color.new(255, 205, 80))
         code_text = generate_ruby_code(system)
-        if GUI.button(copy_feedback_timer > 0.0 ? "✅ Copied to Clipboard!" : "📋 Copy Ruby Code to Clipboard")
+        if ImGui.button(copy_feedback_timer > 0.0 ? "✅ Copied to Clipboard!" : "📋 Copy Ruby Code to Clipboard")
           Input.clipboard = code_text
           copy_feedback_timer = 2.0
         end
-        GUI.spacer(6)
+        ImGui.spacer(6)
         code_text.each_line do |line|
           col = line.strip.start_with?("#") ? Color.new(120, 210, 255) : Color.new(220, 230, 240)
-          GUI.label(line.chomp, size: 12, color: col)
+          ImGui.label(line.chomp, size: 12, color: col)
         end
       end
     end

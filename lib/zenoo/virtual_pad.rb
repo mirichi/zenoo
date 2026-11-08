@@ -551,7 +551,7 @@ module Zenoo
       end
 
       @work_touches.clear
-      if @mouse_input && !GUI.mouse_captured?
+      if @mouse_input && !ImGui.mouse_captured? && !UI.mouse_captured?
         if @mouse_touch && (@mouse_touch.released? || @mouse_touch.cancelled?)
           @mouse_touch = nil
         end
