@@ -520,14 +520,14 @@
     <div class="card gui">
       <div>
         <div class="card-tag">UI System</div>
-        <h2>Immediate Mode GUI</h2>
+        <h2>Sprite-based Retained Mode UI</h2>
         <p class="desc">
-          Pure Ruby で実装された即時モード (Immediate Mode) GUI システム。ボタン、スライダー、ラベル、GPU SDF 角丸カードを体験できます。
+          Sprite を継承した保持モード (Retained Mode) UI ウィジェットシステム。Flexbox 自動レイアウト、リサイズ対応ウィンドウ、Tween 連携アニメーションを体験できます。
         </p>
         <ul class="features">
-          <li>SDF (符号付き距離関数) による角丸・枠線・影描画</li>
-          <li>マウスキャプチャ &amp; 排他制御付きボタン／スライダー</li>
-          <li>Style ボタンでモダンカード ↔ レトロフラットの即時切り替え</li>
+          <li>VBox / HBox / flex による柔軟な自動レイアウト</li>
+          <li>ドラッグ・リサイズ・折りたたみ対応の UI::Window</li>
+          <li>シザークリッピングによる ScrollView / ListBox &amp; 各種コントロール</li>
         </ul>
       </div>
       <div class="card-actions">

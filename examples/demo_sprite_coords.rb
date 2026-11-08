@@ -127,24 +127,6 @@ class CoordsSimulator
   attr_accessor :pulse_time
 
   def initialize
-    # このデモ専用のカスタムテーマを登録 (新機能: Theme.register)
-    ImGui::Theme.register(:coords_navy,
-      bg_normal:         [30, 40, 60, 200],
-      bg_hover:          [60, 75, 105, 230],
-      bg_active:         [40, 120, 220, 240],
-      border_normal:     [1.0, [70, 90, 125, 180]],
-      border_hover:      [1.0, [150, 180, 220, 220]],
-      border_active:     [2.0, [100, 200, 255, 255]],
-      win_bg:            [20, 26, 40, 230],
-      win_border_normal: [1.0, [60, 80, 115, 210]],
-      accent_color:      [50, 140, 230],
-      accent_hover:      [80, 170, 255],
-      track_bg:          [30, 40, 60, 255],
-      track_border:      [1.0, [60, 80, 110, 200]],
-      text_color:        [220, 230, 245],
-      corner_radius:     6.0
-    )
-
     @init_x = 640.0
     @init_y = 200.0
     @anchor_idx = 0
@@ -157,6 +139,166 @@ class CoordsSimulator
     @rotate_base_angle = 0.0
     @pulse_time = 0.0
     @initialized = false
+
+    build_ui
+  end
+
+  def build_ui
+    @stage = UI::Stage.new
+
+    @btn_anchors = []
+    @btn_pivots  = []
+    @btn_ats     = []
+    @btn_shapes  = []
+
+    # ----------------------------------------------------
+    # パネル 1: スプライト操作 & パラメータモニター
+    # ----------------------------------------------------
+    @panel_ctrl = @stage.panel(
+      20, 15, width: 350, height: 690,
+      title: "Controls & Monitor"
+    ) do |win|
+      win.label("Sprite & Collision Coords", size: 15, color: Color::WHITE)
+
+      # 衝突ステータスバナー (custom on_draw)
+      @banner = win.custom(height: 34) do |bx, by, bw, bh|
+        bg_col = @is_hit ? Color.new(220, 50, 70, 220) : Color.new(30, 45, 65, 200)
+        bd_col = @is_hit ? Color.new(255, 100, 120, 255) : Color.new(60, 85, 120, 200)
+        Window.draw_rect(bx, by, bw, bh, radius: 6.0, color: bg_col, border_width: 1.5, border_color: bd_col)
+        txt = @is_hit ? "COLLISION DETECTED! (HIT)" : "NO COLLISION (CLEAR)"
+        tcol = @is_hit ? Color::WHITE : Color.new(120, 230, 160)
+        Window.draw_text(bx + 12, by + 8, txt, size: 13, color: tcol)
+      end
+
+      win.label("=== Transform & Collider Sliders ===", size: 13, color: Color.new(255, 205, 85))
+
+      @sl_scale_x = win.slider("Sprite Scale X", 1.0, 0.2, 2.5, step: 0.05, unit: "x")
+      @sl_scale_x.on_change { |v| @sprite.scale_x = v if @sprite }
+
+      @sl_scale_y = win.slider("Sprite Scale Y", 1.0, 0.2, 2.5, step: 0.05, unit: "x")
+      @sl_scale_y.on_change { |v| @sprite.scale_y = v if @sprite }
+
+      @sl_offset_x = win.slider("Collider Offset X", 0.0, -80.0, 80.0, step: 1.0, unit: "px")
+      @sl_offset_x.on_change do |v|
+        @sprite.collider.offset_x = v if @sprite && @sprite.collider
+      end
+
+      @sl_offset_y = win.slider("Collider Offset Y", 0.0, -80.0, 80.0, step: 1.0, unit: "px")
+      @sl_offset_y.on_change do |v|
+        @sprite.collider.offset_y = v if @sprite && @sprite.collider
+      end
+
+      win.divider(height: 6)
+
+      win.label("=== Realtime Parameters ===", size: 13, color: Color.new(160, 205, 255))
+      @lbl_pos    = win.label("World Pos (x, y) : -", size: 12, color: Color.new(255, 120, 130))
+      @lbl_scale  = win.label("Scale (X, Y)     : -", size: 12, color: Color.new(140, 220, 255))
+      @lbl_anchor = win.label("Anchor           : -", size: 12, color: Color.new(80, 230, 140))
+      @lbl_pivot  = win.label("Pivot (支点)     : -", size: 12, color: Color.new(255, 210, 80))
+      @lbl_at     = win.label("Collider At (配置): -", size: 12, color: Color.new(255, 150, 200))
+      @lbl_angle  = win.label("Angle (回転角)   : -", size: 12, color: Color.new(120, 190, 255))
+      @lbl_offset = win.label("Collider Offset  : -", size: 12, color: Color.new(210, 130, 255))
+      @lbl_shape  = win.label("Collider Shape   : -", size: 12, color: Color.new(180, 210, 230))
+      @lbl_fps    = win.label("dt: - | [R]キーで初期配置にリセット", size: 11, color: Color.new(140, 160, 195))
+
+      win.spacer(4, flex: 1)
+      win.button("Reset All Settings [R]", height: 32) { reset_all! }
+    end
+
+    # ----------------------------------------------------
+    # パネル 2: プリセット切替 & 操作ガイド
+    # ----------------------------------------------------
+    @panel_presets = @stage.panel(
+      910, 15, width: 350, height: 690,
+      title: "Presets & Guide"
+    ) do |win|
+      # 1. Anchor 切替
+      win.label("[ 1. Anchor (配置基準) ]  キー [1]", size: 13, color: Color.new(100, 235, 150))
+      win.hbox(height: 28, gap: 6) do |row|
+        @btn_anchors << row.button("中央", flex: 1) { select_anchor(0) }
+        @btn_anchors << row.button("足元", flex: 1) { select_anchor(1) }
+        @btn_anchors << row.button("左上", flex: 1) { select_anchor(2) }
+      end
+      win.hbox(height: 28, gap: 6) do |row|
+        @btn_anchors << row.button("右上", flex: 1) { select_anchor(3) }
+        @btn_anchors << row.button("右下", flex: 1) { select_anchor(4) }
+      end
+
+      # 2. Pivot 切替
+      win.label("[ 2. Pivot (回転軸) ]    キー [2]", size: 13, color: Color.new(255, 220, 90))
+      win.hbox(height: 28, gap: 6) do |row|
+        @btn_pivots << row.button("中央", flex: 1) { select_pivot(0) }
+        @btn_pivots << row.button("足元", flex: 1) { select_pivot(1) }
+        @btn_pivots << row.button("左上", flex: 1) { select_pivot(2) }
+        @btn_pivots << row.button("右上", flex: 1) { select_pivot(3) }
+      end
+
+      # 3. Collider At 切替
+      win.label("[ 3. Collider At (配置先) ] キー [3]", size: 13, color: Color.new(255, 150, 200))
+      win.hbox(height: 28, gap: 6) do |row|
+        @btn_ats << row.button("中央", flex: 1) { select_at(0) }
+        @btn_ats << row.button("足元", flex: 1) { select_at(1) }
+        @btn_ats << row.button("頭上", flex: 1) { select_at(2) }
+        @btn_ats << row.button("Pivot連動", flex: 1) { select_at(3) }
+      end
+
+      # 4. Collider Shape 切替
+      win.label("[ 4. Collider 形状 (全5種) ]  キー [4]", size: 13, color: Color.new(160, 210, 255))
+      win.hbox(height: 28, gap: 6) do |row|
+        @btn_shapes << row.button("矩形", flex: 1) { select_shape(0) }
+        @btn_shapes << row.button("角丸", flex: 1) { select_shape(1) }
+        @btn_shapes << row.button("真円", flex: 1) { select_shape(2) }
+      end
+      win.hbox(height: 28, gap: 6) do |row|
+        @btn_shapes << row.button("縦長楕円", flex: 1) { select_shape(3) }
+        @btn_shapes << row.button("縦長6角形", flex: 1) { select_shape(4) }
+      end
+
+      win.divider(height: 6)
+
+      # 操作ガイド
+      win.label("=== 操作ガイド ===", size: 13, color: Color.new(255, 215, 120))
+      win.label("・マウス移動 : 検査円で衝突テスト", size: 12, color: Color.new(200, 215, 235))
+      win.label("・左ドラッグ : スプライト(x, y)移動", size: 12, color: Color.new(200, 215, 235))
+      win.label("・右ドラッグ/Q/E : 回転 (angle)", size: 12, color: Color.new(200, 215, 235))
+      win.label("・スライダー : Scale / Offset 調整", size: 12, color: Color.new(255, 230, 140))
+      win.label("・WASD / 矢印 : Offset 移動", size: 12, color: Color.new(200, 215, 235))
+      win.label("・1/2/3/4 キー : プリセット順送り", size: 12, color: Color.new(200, 215, 235))
+      win.label("・SPACE : Offsetリセット | R: 全リセット", size: 12, color: Color.new(255, 200, 150))
+    end
+
+    refresh_button_states
+  end
+
+  def select_anchor(idx)
+    @anchor_idx = idx
+    apply_anchor(ANCHOR_PRESETS[@anchor_idx][:val])
+    refresh_button_states
+  end
+
+  def select_pivot(idx)
+    @pivot_idx = idx
+    apply_pivot(PIVOT_PRESETS[@pivot_idx][:val])
+    refresh_button_states
+  end
+
+  def select_at(idx)
+    @at_idx = idx
+    apply_at(COLLIDER_AT_PRESETS[@at_idx][:val])
+    refresh_button_states
+  end
+
+  def select_shape(idx)
+    @shape_idx = idx
+    apply_collider_by_index(idx)
+    refresh_button_states
+  end
+
+  def refresh_button_states
+    @btn_anchors&.each_with_index { |b, i| b.active = (i == @anchor_idx) }
+    @btn_pivots&.each_with_index  { |b, i| b.active = (i == @pivot_idx) }
+    @btn_ats&.each_with_index     { |b, i| b.active = (i == @at_idx) }
+    @btn_shapes&.each_with_index  { |b, i| b.active = (i == @shape_idx) }
   end
 
   def init_gl_resources!
@@ -181,8 +323,6 @@ class CoordsSimulator
   def apply_at(val)
     @sprite.collider.at = val if @sprite && @sprite.collider
   end
-
-  def refresh_button_states; end
 
   def apply_collider_by_index(idx)
     preset = SHAPE_PRESETS[idx]
@@ -220,10 +360,10 @@ class CoordsSimulator
       @sprite.collider.offset_y = 0.0
     end
     apply_collider_by_index(@shape_idx)
-    @slider_scale_x&.set_value_quietly(1.0)
-    @slider_scale_y&.set_value_quietly(1.0)
-    @slider_offset_x&.set_value_quietly(0.0)
-    @slider_offset_y&.set_value_quietly(0.0)
+    @sl_scale_x.value  = 1.0 if @sl_scale_x
+    @sl_scale_y.value  = 1.0 if @sl_scale_y
+    @sl_offset_x.value = 0.0 if @sl_offset_x
+    @sl_offset_y.value = 0.0 if @sl_offset_y
     refresh_button_states
   end
 
@@ -239,43 +379,54 @@ class CoordsSimulator
 
     # [1] Anchor 切替
     if Input.key_push?(:"1")
-      @anchor_idx = (@anchor_idx + 1) % ANCHOR_PRESETS.length
-      apply_anchor(ANCHOR_PRESETS[@anchor_idx][:val])
-      refresh_button_states
+      select_anchor((@anchor_idx + 1) % ANCHOR_PRESETS.length)
     end
 
     # [2] Pivot 切替
     if Input.key_push?(:"2")
-      @pivot_idx = (@pivot_idx + 1) % PIVOT_PRESETS.length
-      apply_pivot(PIVOT_PRESETS[@pivot_idx][:val])
-      refresh_button_states
+      select_pivot((@pivot_idx + 1) % PIVOT_PRESETS.length)
     end
 
     # [3] Collider At 切替
     if Input.key_push?(:"3")
-      @at_idx = (@at_idx + 1) % COLLIDER_AT_PRESETS.length
-      apply_at(COLLIDER_AT_PRESETS[@at_idx][:val])
-      refresh_button_states
+      select_at((@at_idx + 1) % COLLIDER_AT_PRESETS.length)
     end
 
     # [4] Shape 切替 (全5種を順送り)
     if Input.key_push?(:"4")
-      @shape_idx = (@shape_idx + 1) % SHAPE_PRESETS.length
-      apply_collider_by_index(@shape_idx)
-      refresh_button_states
+      select_shape((@shape_idx + 1) % SHAPE_PRESETS.length)
     end
 
     # [W][A][S][D] / 矢印キー: Offset 移動
     spd = 2.0
     if @sprite && (col = @sprite.collider)
-      col.offset_x += spd if Input.key_pressed?(:d) || Input.key_pressed?(:right)
-      col.offset_x -= spd if Input.key_pressed?(:a) || Input.key_pressed?(:left)
-      col.offset_y += spd if Input.key_pressed?(:s) || Input.key_pressed?(:down)
-      col.offset_y -= spd if Input.key_pressed?(:w) || Input.key_pressed?(:up)
+      changed = false
+      if Input.key_pressed?(:d) || Input.key_pressed?(:right)
+        col.offset_x += spd
+        changed = true
+      end
+      if Input.key_pressed?(:a) || Input.key_pressed?(:left)
+        col.offset_x -= spd
+        changed = true
+      end
+      if Input.key_pressed?(:s) || Input.key_pressed?(:down)
+        col.offset_y += spd
+        changed = true
+      end
+      if Input.key_pressed?(:w) || Input.key_pressed?(:up)
+        col.offset_y -= spd
+        changed = true
+      end
 
       if Input.key_push?(:space)
         col.offset_x = 0.0
         col.offset_y = 0.0
+        changed = true
+      end
+
+      if changed
+        @sl_offset_x.value = col.offset_x if @sl_offset_x
+        @sl_offset_y.value = col.offset_y if @sl_offset_y
       end
     end
 
@@ -310,7 +461,7 @@ class CoordsSimulator
       end
     else
       # ドラッグ開始判定 (GUI操作・ホバーしていない場合のみ開始)
-      unless ImGui.mouse_captured?
+      unless UI.mouse_captured?
         if Input.mouse_push?(:left)
           # スプライト掴み開始
           @drag_target = :sprite
@@ -334,6 +485,24 @@ class CoordsSimulator
 
     # 衝突判定の実行
     @is_hit = @sprite.collide?(@mouse_circle)
+  end
+
+  def update_monitor_labels
+    return unless @lbl_pos && @sprite
+    sp = @sprite
+    col = sp.collider
+    off_x = col ? col.offset_x.round(1) : 0.0
+    off_y = col ? col.offset_y.round(1) : 0.0
+
+    @lbl_pos.text    = "World Pos (x, y) : (#{sp.x.round(1)}, #{sp.y.round(1)})"
+    @lbl_scale.text  = sprintf("Scale (X, Y)     : (%.2f, %.2f)", sp.scale_x, sp.scale_y)
+    @lbl_anchor.text = "Anchor           : #{ANCHOR_PRESETS[@anchor_idx][:name]} (#{sp.anchor_x.round(2)}, #{sp.anchor_y.round(2)})"
+    @lbl_pivot.text  = "Pivot (支点)     : #{PIVOT_PRESETS[@pivot_idx][:name]} (#{sp.pivot_x.round(2)}, #{sp.pivot_y.round(2)})"
+    @lbl_at.text     = "Collider At (配置): #{COLLIDER_AT_PRESETS[@at_idx][:name]}"
+    @lbl_angle.text  = sprintf("Angle (回転角)   : %.1f deg", sp.angle)
+    @lbl_offset.text = "Collider Offset  : (#{off_x}, #{off_y})"
+    @lbl_shape.text  = "Collider Shape   : #{SHAPE_PRESETS[@shape_idx][:name]}"
+    @lbl_fps.text    = sprintf("dt: %.4fs | [R]でリセット", Window.delta_time)
   end
 
   def draw(mx, my)
@@ -476,7 +645,7 @@ class CoordsSimulator
       # At 目標位置マーカー (桃色の丸・ターゲット)
       Window.draw_circle(wat_x, wat_y, 6, color: [255, 120, 180, 230], border_color: [255, 255, 255, 255], border_width: 1.5)
       Window.draw_circle(wat_x, wat_y, 2, color: [255, 255, 255, 255])
-      Window.draw_text(wat_x + 8, wat_y + 6, "At (#{at_x.round(2)}, #{at_y.round(2)})", size: 13, color: [255, 160, 210, 255])
+      Window.draw_text(wat_x + 8, wat_y + 6, "At: #{COLLIDER_AT_PRESETS[@at_idx][:name]}", size: 13, color: [255, 160, 210, 255])
 
       # Offset 矢印 (At目標点 〜 コライダー中心)
       if col.offset_x.abs > 0.5 || col.offset_y.abs > 0.5
@@ -488,7 +657,7 @@ class CoordsSimulator
     # 7. ピボット位置マーカー (黄色の星 / 二重丸)
     Window.draw_circle(wpv_x, wpv_y, 8, color: [255, 210, 60, 255], border_color: [120, 90, 20, 255], border_width: 2.0)
     Window.draw_circle(wpv_x, wpv_y, 3, color: [255, 255, 255, 255])
-    Window.draw_text(wpv_x + 12, wpv_y - 20, "Pivot (#{px.round(2)}, #{py.round(2)})", size: 15, color: [255, 220, 80, 255])
+    Window.draw_text(wpv_x + 12, wpv_y - 20, "Pivot: #{PIVOT_PRESETS[@pivot_idx][:name]}", size: 15, color: [255, 220, 80, 255])
 
     # 回転ドラッグ中の操作ガイド線
     if @drag_target == :rotate
@@ -519,119 +688,28 @@ class CoordsSimulator
       Window.draw_circle(mx, my, pulse_r, color: [0, 0, 0, 0], border_color: [255, 90, 110, 200], border_width: 2.5)
       Window.draw_text(mx - 32, my - 52, "HIT!!", size: 24, color: [255, 90, 110, 255])
     end
-
-    # 11. ヘッダー / HUD 情報パネル & ImGui コントロール
-    # 一時的に専用カスタムテーマを適用して描画 (新機能: ImGui.with_theme)
-    ImGui.with_theme(:coords_navy) do
-      draw_hud(mx, my)
-    end
-  end
-
-  def draw_hud(_mx, _my)
-    # 左上タイトル
-    ImGui.label("Zenoo Sprite & Collision Coords Visualizer", x: 25, y: 18, size: 28, color: :white)
-    ImGui.label("Anchor / Pivot / Offset / Position 実機シミュレーター", x: 25, y: 54, size: 16, color: [150, 185, 230, 255])
-
-    # 衝突ステータスバナー
-    status_bg = @is_hit ? [220, 50, 70, 220] : [30, 45, 65, 200]
-    status_border = @is_hit ? [255, 100, 120, 255] : [60, 85, 120, 200]
-    status_text = @is_hit ? "COLLISION DETECTED! (HIT)" : "NO COLLISION (CLEAR)"
-    status_tcol = @is_hit ? [255, 255, 255, 255] : [120, 230, 160, 255]
-
-    ImGui.panel(x: 25, y: 84, w: 430, h: 46, radius: 8, color: status_bg, border_color: status_border, border_width: 2.0)
-    ImGui.label(status_text, x: 42, y: 96, size: 18, color: status_tcol)
-
-    # スライダー調整パネル (Scale X/Y, Offset X/Y)
-    ImGui.panel("[ スケール & オフセット調整 (スライダー) ]", x: 25, y: 140, w: 430, h: 260, title_size: 15, title_color: [160, 205, 255, 255], spacing_y: 10) do
-      @sprite.scale_x = ImGui.slider("Sprite Scale X", @sprite.scale_x, 0.2, 2.5, step: 0.05, unit: "x")
-      @sprite.scale_y = ImGui.slider("Sprite Scale Y", @sprite.scale_y, 0.2, 2.5, step: 0.05, unit: "x")
-      if @sprite && (col = @sprite.collider)
-        col.offset_x = ImGui.slider("Collider Offset X", col.offset_x, -80.0, 80.0, step: 1.0, unit: "px")
-        col.offset_y = ImGui.slider("Collider Offset Y", col.offset_y, -80.0, 80.0, step: 1.0, unit: "px")
-      end
-    end
-
-    # 左下パラメータモニター
-    ImGui.panel("[ リアルタイム・パラメータ ]", x: 25, y: 415, w: 530, h: 295, title_size: 16, title_color: [160, 205, 255, 255], spacing_y: 10) do
-      sp = @sprite
-      col = sp ? sp.collider : nil
-      off_x = col ? col.offset_x.round(1) : 0.0
-      off_y = col ? col.offset_y.round(1) : 0.0
-
-      ImGui.label("World Pos (x, y) : (#{sp.x.round(1)}, #{sp.y.round(1)}) [左ドラッグで移動]", size: 15, color: [255, 120, 130, 255])
-      ImGui.label("Scale (X, Y)     : (#{sp.scale_x.round(2)}, #{sp.scale_y.round(2)}) [スライダーで個別調整]", size: 15, color: [140, 220, 255, 255])
-      ImGui.label("Anchor           : #{ANCHOR_PRESETS[@anchor_idx][:name]} (#{sp.anchor_x.round(2)}, #{sp.anchor_y.round(2)})", size: 15, color: [80, 230, 140, 255])
-      ImGui.label("Pivot (回転支点) : #{PIVOT_PRESETS[@pivot_idx][:name]} (#{sp.pivot_x.round(2)}, #{sp.pivot_y.round(2)})", size: 15, color: [255, 210, 80, 255])
-      ImGui.label("Collider At (配置): #{COLLIDER_AT_PRESETS[@at_idx][:name]} (#{col ? col.at.inspect : ''})", size: 15, color: [255, 150, 200, 255])
-      ImGui.label("Angle (回転角)   : #{sp.angle.round(1)} deg [右ドラッグ / Q / E]", size: 15, color: [120, 190, 255, 255])
-      ImGui.label("Collider Offset  : (#{off_x}, #{off_y}) [スライダー / WASD / SPACE]", size: 15, color: [210, 130, 255, 255])
-      ImGui.label("Collider Shape   : #{SHAPE_PRESETS[@shape_idx][:name]} (#{SHAPE_PRESETS[@shape_idx][:desc]})", size: 15, color: [180, 210, 230, 255])
-      ImGui.label("FPS: #{Window.fps.round(1)}  |  [R]キーで初期配置にリセット", size: 14, color: [140, 160, 195, 255])
-    end
-
-    # 右上パネル見出し & ボタン群 (ImGui.button による即時モードUI)
-    ImGui.label("[ 1. Anchor (配置基準) ]  キー [1]", x: 860, y: 15, size: 15, color: [100, 235, 150, 255])
-    ANCHOR_PRESETS.each_with_index do |p, i|
-      bx = (i % 2 == 0) ? 860 : 1065
-      by = 36 + (i / 2) * 32
-      if ImGui.button("Anchor: #{p[:label]}", x: bx, y: by, w: 195, h: 28, active: (i == @anchor_idx))
-        @anchor_idx = i
-        apply_anchor(p[:val])
-      end
-    end
-
-    ImGui.label("[ 2. Pivot (回転軸) ]    キー [2]", x: 860, y: 136, size: 15, color: [255, 220, 90, 255])
-    PIVOT_PRESETS.each_with_index do |p, i|
-      bx = (i % 2 == 0) ? 860 : 1065
-      by = 157 + (i / 2) * 32
-      if ImGui.button("Pivot: #{p[:label]}", x: bx, y: by, w: 195, h: 28, active: (i == @pivot_idx))
-        @pivot_idx = i
-        apply_pivot(p[:val])
-      end
-    end
-
-    ImGui.label("[ 3. Collider At (配置先) ] キー [3]", x: 860, y: 226, size: 15, color: [255, 150, 200, 255])
-    COLLIDER_AT_PRESETS.each_with_index do |p, i|
-      bx = (i % 2 == 0) ? 860 : 1065
-      by = 247 + (i / 2) * 32
-      if ImGui.button("At: #{p[:label]}", x: bx, y: by, w: 195, h: 28, active: (i == @at_idx))
-        @at_idx = i
-        apply_at(p[:val])
-      end
-    end
-
-    ImGui.label("[ 4. Collider 形状 (全5種) ]  キー [4]", x: 860, y: 316, size: 15, color: [160, 210, 255, 255])
-    SHAPE_PRESETS.each_with_index do |p, i|
-      bx = (i % 2 == 0) ? 860 : 1065
-      by = 337 + (i / 2) * 32
-      if ImGui.button(p[:btn_label], x: bx, y: by, w: 195, h: 28, active: (i == @shape_idx))
-        @shape_idx = i
-        apply_collider_by_index(i)
-      end
-    end
-
-    # 右側操作ヘルプパネル
-    ImGui.panel("[ 操作ガイド ]", x: 860, y: 442, w: 400, h: 260, title_size: 15, title_color: [255, 215, 120, 255], spacing_y: 11) do
-      ImGui.label("・マウス移動 : 検査円を動かしてリアルタイム衝突テスト", size: 13, color: [200, 215, 235, 255])
-      ImGui.label("・左ドラッグ : スプライト本体の (x, y) を移動", size: 13, color: [200, 215, 235, 255])
-      ImGui.label("・右ドラッグ / [Q][E] : スプライトを回転 (angle)", size: 13, color: [200, 215, 235, 255])
-      ImGui.label("・スライダー : Scale X/Y, Offset X/Y をドラッグ調整", size: 13, color: [255, 230, 140, 255])
-      ImGui.label("・[W][A][S][D] / 矢印 : 当たり判定 Offset を移動", size: 13, color: [200, 215, 235, 255])
-      ImGui.label("・[1][2][3][4] キー : Anchor / Pivot / At / 形状 を順送り", size: 13, color: [200, 215, 235, 255])
-      ImGui.label("・[SPACE] : Offsetリセット  |  [R] : 全設定リセット", size: 13, color: [255, 200, 150, 255])
-    end
   end
 
   def step_frame
     init_gl_resources!
 
-    mx = Input.mouse_x
-    my = Input.mouse_y
+    mx = Input.mouse_x.to_f
+    my = Input.mouse_y.to_f
     mx = 640.0 if mx < 0 || mx > 1280
     my = 360.0 if my < 0 || my > 720
 
+    # 1. UI ツリー全体の更新 (レイアウト・マウス入力・Tween等)
+    @stage.update
+
+    # 2. ゲームロジック・入力・衝突判定・モニター更新
     update(mx, my)
+    update_monitor_labels
+
+    # 3. 背景・スプライト・コライダー・幾何マーカー描画
     draw(mx, my)
+
+    # 4. UI ウィンドウ・HUD の描画 (最前面)
+    @stage.draw
   end
 end
 
