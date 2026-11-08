@@ -179,15 +179,15 @@ class CoordsSimulator
   end
 
   def apply_at(val)
-    @sprite.collider_at = val if @sprite
+    @sprite.collider.at = val if @sprite && @sprite.collider
   end
 
   def refresh_button_states; end
 
   def apply_collider_by_index(idx)
     preset = SHAPE_PRESETS[idx]
-    cur_ox = @sprite ? @sprite.collider_offset_x : 0.0
-    cur_oy = @sprite ? @sprite.collider_offset_y : 0.0
+    cur_ox = (@sprite && @sprite.collider) ? @sprite.collider.offset_x : 0.0
+    cur_oy = (@sprite && @sprite.collider) ? @sprite.collider.offset_y : 0.0
     at_val = COLLIDER_AT_PRESETS[@at_idx][:val]
     case preset[:id]
     when :rect
@@ -215,8 +215,10 @@ class CoordsSimulator
     @shape_idx = 0
     apply_anchor(ANCHOR_PRESETS[@anchor_idx][:val])
     apply_pivot(PIVOT_PRESETS[@pivot_idx][:val])
-    @sprite.collider_offset_x = 0.0
-    @sprite.collider_offset_y = 0.0
+    if @sprite && @sprite.collider
+      @sprite.collider.offset_x = 0.0
+      @sprite.collider.offset_y = 0.0
+    end
     apply_collider_by_index(@shape_idx)
     @slider_scale_x&.set_value_quietly(1.0)
     @slider_scale_y&.set_value_quietly(1.0)
@@ -265,14 +267,16 @@ class CoordsSimulator
 
     # [W][A][S][D] / 矢印キー: Offset 移動
     spd = 2.0
-    @sprite.collider_offset_x += spd if Input.key_pressed?(:d) || Input.key_pressed?(:right)
-    @sprite.collider_offset_x -= spd if Input.key_pressed?(:a) || Input.key_pressed?(:left)
-    @sprite.collider_offset_y += spd if Input.key_pressed?(:s) || Input.key_pressed?(:down)
-    @sprite.collider_offset_y -= spd if Input.key_pressed?(:w) || Input.key_pressed?(:up)
+    if @sprite && (col = @sprite.collider)
+      col.offset_x += spd if Input.key_pressed?(:d) || Input.key_pressed?(:right)
+      col.offset_x -= spd if Input.key_pressed?(:a) || Input.key_pressed?(:left)
+      col.offset_y += spd if Input.key_pressed?(:s) || Input.key_pressed?(:down)
+      col.offset_y -= spd if Input.key_pressed?(:w) || Input.key_pressed?(:up)
 
-    if Input.key_push?(:space)
-      @sprite.collider_offset_x = 0.0
-      @sprite.collider_offset_y = 0.0
+      if Input.key_push?(:space)
+        col.offset_x = 0.0
+        col.offset_y = 0.0
+      end
     end
 
     # [Q][E]: 回転
@@ -475,7 +479,7 @@ class CoordsSimulator
       Window.draw_text(wat_x + 8, wat_y + 6, "At (#{at_x.round(2)}, #{at_y.round(2)})", size: 13, color: [255, 160, 210, 255])
 
       # Offset 矢印 (At目標点 〜 コライダー中心)
-      if sp.collider_offset_x.abs > 0.5 || sp.collider_offset_y.abs > 0.5
+      if col.offset_x.abs > 0.5 || col.offset_y.abs > 0.5
         Window.draw_line(wat_x, wat_y, col.center_x, col.center_y, color: [200, 100, 255, 230], width: 2.0)
         Window.draw_circle(col.center_x, col.center_y, 4, color: [220, 120, 255, 255])
       end
@@ -541,16 +545,18 @@ class CoordsSimulator
     ImGui.panel("[ スケール & オフセット調整 (スライダー) ]", x: 25, y: 140, w: 430, h: 260, title_size: 15, title_color: [160, 205, 255, 255], spacing_y: 10) do
       @sprite.scale_x = ImGui.slider("Sprite Scale X", @sprite.scale_x, 0.2, 2.5, step: 0.05, unit: "x")
       @sprite.scale_y = ImGui.slider("Sprite Scale Y", @sprite.scale_y, 0.2, 2.5, step: 0.05, unit: "x")
-      @sprite.collider_offset_x = ImGui.slider("Collider Offset X", @sprite.collider_offset_x, -80.0, 80.0, step: 1.0, unit: "px")
-      @sprite.collider_offset_y = ImGui.slider("Collider Offset Y", @sprite.collider_offset_y, -80.0, 80.0, step: 1.0, unit: "px")
+      if @sprite && (col = @sprite.collider)
+        col.offset_x = ImGui.slider("Collider Offset X", col.offset_x, -80.0, 80.0, step: 1.0, unit: "px")
+        col.offset_y = ImGui.slider("Collider Offset Y", col.offset_y, -80.0, 80.0, step: 1.0, unit: "px")
+      end
     end
 
     # 左下パラメータモニター
     ImGui.panel("[ リアルタイム・パラメータ ]", x: 25, y: 415, w: 530, h: 295, title_size: 16, title_color: [160, 205, 255, 255], spacing_y: 10) do
       sp = @sprite
       col = sp ? sp.collider : nil
-      off_x = sp ? sp.collider_offset_x.round(1) : 0.0
-      off_y = sp ? sp.collider_offset_y.round(1) : 0.0
+      off_x = col ? col.offset_x.round(1) : 0.0
+      off_y = col ? col.offset_y.round(1) : 0.0
 
       ImGui.label("World Pos (x, y) : (#{sp.x.round(1)}, #{sp.y.round(1)}) [左ドラッグで移動]", size: 15, color: [255, 120, 130, 255])
       ImGui.label("Scale (X, Y)     : (#{sp.scale_x.round(2)}, #{sp.scale_y.round(2)}) [スライダーで個別調整]", size: 15, color: [140, 220, 255, 255])

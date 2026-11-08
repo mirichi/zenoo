@@ -786,55 +786,9 @@ module Zenoo
       shape.dirty_pos! if shape.respond_to?(:dirty_pos!)
     end
 
-    def collider_at
-      collider.at
-    end
-
-    def collider_at=(val)
-      col = collider
-      col.at = val if col
-      nil
-    end
-
-    def collider_offset_x
-      collider.offset_x
-    end
-
-    def collider_offset_x=(v)
-      col = collider
-      col.offset_x = v.to_f if col
-      nil
-    end
-
-    def collider_offset_y
-      collider.offset_y
-    end
-
-    def collider_offset_y=(v)
-      col = collider
-      col.offset_y = v.to_f if col
-      nil
-    end
-
-    def collider_offset
-      [collider_offset_x, collider_offset_y]
-    end
-
-    def collider_offset=(val)
-      if val.is_a?(Array)
-        self.collider_offset_x = val[0]
-        self.collider_offset_y = val[1]
-      else
-        self.collider_offset_x = val
-        self.collider_offset_y = val
-      end
-    end
-
-    # 変形（位置・回転・拡大・ピボット）と同期した Collision::Shape を取得
+    # 変形（位置・回転・拡大・ピボット）と同期した Collision::Shape を取得 (未設定時は nil)
     def collider
-      unless @collider_shape
-        @collider_shape = Collision::Rect.new(parent: self)
-      end
+      return nil unless @collider_shape
       @collider_shape.update_cache if @collider_shape.dirty?
       @collider_shape
     end
