@@ -120,9 +120,9 @@ DEMOS = {
         "menu": True
     },
     "shell_gui.html": {
-        "title": "Zenoo Extended GUI Showcase (Spinel Wasm)",
-        "heading": "ZENOO EXTENDED GUI &amp; RESIZABLE WINDOW",
-        "desc": "Pure Ruby Immediate Mode GUI System | Powered by Spinel AOT &amp; WebGL 2.0",
+        "title": "Zenoo Retained-Mode GUI Showcase (Spinel Wasm)",
+        "heading": "ZENOO RETAINED-MODE GUI &amp; RESIZABLE WINDOW",
+        "desc": "Pure Ruby Sprite-based Retained Mode UI System | Powered by Spinel AOT &amp; WebGL 2.0",
         "src": "https://github.com/mirichi/zenoo/blob/master/examples/demo_gui_widgets.rb",
         "menu": False
     },

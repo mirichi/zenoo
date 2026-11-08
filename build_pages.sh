@@ -198,7 +198,7 @@ build_item() {
 }
 
 build_game()         { build_item "Survival Shooting Game" "game" "examples/game_zenoo.rb" "examples/web/shell_game.html"; }
-build_gui()          { build_item "Immediate Mode GUI Demo" "gui" "examples/demo_gui_widgets.rb" "examples/web/shell_gui.html"; }
+build_gui()          { build_item "Retained Mode GUI Showcase Demo" "gui" "examples/demo_gui_widgets.rb" "examples/web/shell_gui.html"; }
 build_font()         { build_item "SDF Text & Font Demo" "font" "examples/demo_ttf_sdf_font.rb" "examples/web/shell_font.html"; }
 build_vector()       { build_item "Vector Graphics Demo" "vector" "examples/demo_vector_graphics.rb" "examples/web/shell.html"; }
 build_image()        { build_item "Sprite & Blend Modes Demo" "image" "examples/demo_draw_image.rb" "examples/web/shell_image.html"; }
