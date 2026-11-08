@@ -142,15 +142,15 @@ module Zenoo
         @game_block_active
       end
 
-      # ユーザーのゲームブロック実行中かつインスペクタ等のGUIがマウスを捕捉している場合はマスク
+      # ユーザーのゲームブロック実行中かつインスペクタが表示されており、インスペクタ等のGUIがマウスを捕捉している場合はマスク
       def mask_mouse_input?
-        return false unless @enabled && @game_block_active
+        return false unless @enabled && @game_block_active && Inspector.visible
         Zenoo::GUI.mouse_captured? || !Zenoo::GUI.hovered_window_id.nil?
       end
 
-      # ユーザーのゲームブロック実行中かつインスペクタ等のGUI要素（テキスト入力等）にフォーカスがある場合はマスク
+      # ユーザーのゲームブロック実行中かつインスペクタが表示されており、GUI要素（テキスト入力等）にフォーカスがある場合はマスク
       def mask_keyboard_input?
-        return false unless @enabled && @game_block_active
+        return false unless @enabled && @game_block_active && Inspector.visible
         !Zenoo::GUI.focus_id.nil?
       end
 
