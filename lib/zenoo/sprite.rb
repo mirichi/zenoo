@@ -155,10 +155,10 @@ module Zenoo
     attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :anchor, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image, :parent
     attr_accessor :blend, :shader, :uniforms, :camera
 
-    def initialize(x = 0.0, y = 0.0, image = nil, width: nil, height: nil, anchor: :top_left, pivot: :center, blend: :alpha, shader: nil, uniforms: nil, camera: true, parent: nil)
+    def initialize(x = 0.0, y = 0.0, image = nil, width: nil, height: nil, anchor: :top_left, pivot: :center, z: 0.0, blend: :alpha, shader: nil, uniforms: nil, camera: true, parent: nil)
       @x = x.to_f
       @y = y.to_f
-      @z = 0.0
+      @z = z ? z.to_f : 0.0
       @image = image
       @width = width ? width.to_f : nil
       @height = height ? height.to_f : nil
@@ -204,10 +204,23 @@ module Zenoo
       @vanished
     end
 
-    # フレーム更新 (継承先でオーバーライド。super でアニメーション・Tweenが自動更新されます)
+    # フレーム更新 (継承先でオーバーライド。super でアニメーション・Tweenおよび子スプライトが自動更新されます)
     def update
       update_animation
       update_tweens
+      update_children if @children
+    end
+
+    def update_children
+      ch = @children
+      return unless ch
+      i = 0
+      len = ch.length
+      while i < len
+        c = ch[i]
+        c.update unless c.vanished?
+        i += 1
+      end
     end
 
     # ====================================================
@@ -826,30 +839,125 @@ module Zenoo
       @collider_shape
     end
 
-    # 衝突判定
+    # 衝突判定 (自分自身または子スプライトのいずれかが other と衝突しているか)
     def collide?(other)
       return false if @vanished || other.nil?
       return other.collide?(self) if other.is_a?(Tilemap)
       return false if other.vanished?
+
+      # 1. 自分自身のコライダー判定
+      if (@collider_shape || @image) && collide_self?(other)
+        return true
+      end
+
+      # 2. 子スプライトのコライダー判定 (いずれかが当たれば true)
+      if (ch = @children)
+        i = 0
+        len = ch.length
+        while i < len
+          c = ch[i]
+          return true if !c.vanished? && c.collide?(other)
+          i += 1
+        end
+      end
+
+      false
+    end
+
+    # 自分単体 (親自身) のコライダーと other の衝突判定
+    def collide_self?(other)
       col_a = self.collider
       return false unless col_a
-      col_b = other.is_a?(Collision::Shape) ? other : (other.respond_to?(:collider) ? other.collider : nil)
-      return false unless col_b
-      Collision.check(col_a, col_b)
+
+      if other.is_a?(Collision::Shape)
+        Collision.check(col_a, other)
+      elsif other.is_a?(Sprite)
+        other.collide_any_shape?(col_a)
+      else
+        col_b = other.respond_to?(:collider) ? other.collider : nil
+        col_b ? Collision.check(col_a, col_b) : false
+      end
+    end
+
+    # 相手のシェイプ1個と自分自身または子孫コライダーのいずれかが衝突しているか (高速走査用)
+    def collide_any_shape?(shape)
+      return false if @vanished
+      return true if (@collider_shape || @image) && Collision.check(collider, shape)
+
+      if (ch = @children)
+        i = 0
+        len = ch.length
+        while i < len
+          c = ch[i]
+          return true if !c.vanished? && c.collide_any_shape?(shape)
+          i += 1
+        end
+      end
+      false
+    end
+
+    # other と衝突している自分自身および子孫スプライトの配列を取得
+    def hit_parts(other)
+      return [] if @vanished || other.nil?
+      result = []
+      collect_hit_parts(other, result)
+      result
+    end
+
+    # 衝突部位の再帰的収集ヘルパー
+    def collect_hit_parts(other, result)
+      # 1. 自分自身が衝突しているか
+      if (@collider_shape || @image) && !@vanished && collide_self?(other)
+        result << self
+      end
+
+      # 2. 子スプライトの収集
+      if (ch = @children)
+        i = 0
+        len = ch.length
+        while i < len
+          c = ch[i]
+          c.collect_hit_parts(other, result) unless c.vanished?
+          i += 1
+        end
+      end
     end
 
     def ===(other)
       collide?(other)
     end
 
-    # 衝突めり込み量・押し出しベクトルを取得 (MTV: 衝突していない場合は nil)
+    # 衝突めり込み量・押し出しベクトルを取得 (MTV: 自身または子スプライトのめり込みを検出)
     def penetration(other)
-      return nil if @vanished || other.vanished?
-      col_a = self.collider
-      return nil unless col_a
-      col_b = other.is_a?(Collision::Shape) ? other : (other.respond_to?(:collider) ? other.collider : nil)
-      return nil unless col_b
-      Collision.penetration(col_a, col_b)
+      return nil if @vanished || other.nil? || other.vanished?
+
+      # 1. 自身のめり込み
+      if (@collider_shape || @image)
+        col_a = self.collider
+        if col_a
+          col_b = other.is_a?(Collision::Shape) ? other : (other.respond_to?(:collider) ? other.collider : nil)
+          if col_b
+            hit = Collision.penetration(col_a, col_b)
+            return hit if hit
+          end
+        end
+      end
+
+      # 2. 子スプライトのめり込み
+      if (ch = @children)
+        i = 0
+        len = ch.length
+        while i < len
+          c = ch[i]
+          unless c.vanished?
+            hit = c.penetration(other)
+            return hit if hit
+          end
+          i += 1
+        end
+      end
+
+      nil
     end
 
     # 階層ツリーの最上位ルートスプライトを取得 (親がいない場合は self)
@@ -903,10 +1011,27 @@ module Zenoo
       end
     end
 
-    # 描画 (Window.draw へ委譲)
+    # 描画 (Window.draw へ委譲。子スプライトが存在する場合は再帰的に描画)
     def draw
-      return if @vanished || !@visible || !@image
+      return if @vanished || !@visible
 
+      draw_self if @image
+      draw_children if @children
+    end
+
+    def draw_children
+      ch = @children
+      return unless ch
+      i = 0
+      len = ch.length
+      while i < len
+        c = ch[i]
+        c.draw unless c.vanished?
+        i += 1
+      end
+    end
+
+    def draw_self
       anim_ox = animation_offset_x
       anim_oy = animation_offset_y
 
@@ -983,15 +1108,11 @@ module Zenoo
         len = sprites.length
         while i < len
           sp = sprites[i]
-          if sp
-            is_vanished = sp.respond_to?(:vanished?) && sp.vanished?
-            sp.draw unless is_vanished
-          end
+          sp.draw if sp && !sp.vanished?
           i += 1
         end
       else
-        is_vanished = sprites.respond_to?(:vanished?) && sprites.vanished?
-        sprites.draw unless is_vanished
+        sprites.draw if !sprites.vanished?
       end
     end
 
@@ -1003,15 +1124,11 @@ module Zenoo
         len = sprites.length
         while i < len
           sp = sprites[i]
-          if sp
-            is_vanished = sp.respond_to?(:vanished?) && sp.vanished?
-            sp.update unless is_vanished
-          end
+          sp.update if sp && !sp.vanished?
           i += 1
         end
       else
-        is_vanished = sprites.respond_to?(:vanished?) && sprites.vanished?
-        sprites.update unless is_vanished
+        sprites.update if !sprites.vanished?
       end
     end
 

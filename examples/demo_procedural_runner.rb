@@ -201,9 +201,8 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
       .call { is_slashing = false }
   end
 
-  # Sprite の Tweenable 更新
+  # Sprite の Tweenable 更新 (親を更新することで子 sword_pivot も再帰更新される)
   shoulder_sword_pivot.update
-  sword_pivot.update
 
   # 速度のスムーズ補間
   speed += (target_speed - speed) * (6.0 * dt)

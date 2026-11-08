@@ -444,10 +444,12 @@ module Zenoo
       ratio_a = inv_ma / inv_m_total
       ratio_b = inv_mb / inv_m_total
 
-      push_ax = hit.push_x * ratio_a
-      push_ay = hit.push_y * ratio_a
-      push_bx = -hit.push_x * ratio_b
-      push_by = -hit.push_y * ratio_b
+      px = hit.push_x.to_f
+      py = hit.push_y.to_f
+      push_ax = px * ratio_a
+      push_ay = py * ratio_a
+      push_bx = -px * ratio_b
+      push_by = -py * ratio_b
 
       # 法線 n (B -> A 向き), 接線 t
       nx = hit.normal_x
