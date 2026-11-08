@@ -642,6 +642,15 @@ module Zenoo
                 (angle.nil? || (angle.to_f % 360.0).abs < 0.0001)
 
       if is_flat
+        # 水平線・垂直線のピクセル境界スナップ & 極細線の消失防止
+        if hf <= 1.5
+          ay = ay.round
+          hf = [hf.round, 1.0].max
+        end
+        if wf <= 1.5
+          ax = ax.round
+          wf = [wf.round, 1.0].max
+        end
         x2 = ax + wf
         y2 = ay + hf
         cr = c_color[0].to_f; cg = c_color[1].to_f; cb = c_color[2].to_f; ca = c_color[3].to_f
@@ -1108,6 +1117,15 @@ module Zenoo
 
       bx = cx - (total_len * 0.5)
       by = cy - (w * 0.5)
+
+      # 水平線・垂直線におけるピクセル境界スナップ (サブピクセル消失・段差モアレの防止)
+      if dy.abs < 0.0001
+        w = 1.0 if w < 1.0
+        by = by.round
+      elsif dx.abs < 0.0001
+        w = 1.0 if w < 1.0
+        bx = bx.round
+      end
 
       c_color = Backend.normalize_color(actual_color)
 
