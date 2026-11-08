@@ -842,6 +842,9 @@ class Player < Sprite
     @exp = 0
     @level = 1
     @fired = false  # このフレームにメインショットを撃ったか (効果音用)
+    @input_mode = Input.gamepad_connected?(0) ? :gamepad : :mouse
+    @last_mouse_x = Input.mouse_x
+    @last_mouse_y = Input.mouse_y
     rebuild_shape
   end
 
@@ -873,11 +876,56 @@ class Player < Sprite
     end
   end
 
+  # 周囲の最も近い敵を探索 (AOT 最適化されたインデックス走査)
+  def find_nearest_enemy(enemies, max_dist = 800.0)
+    nearest = nil
+    min_dist_sq = max_dist * max_dist
+    i = 0
+    len = enemies.length
+    while i < len
+      e = enemies[i]
+      if e && !e.vanished?
+        edx = e.x - self.x
+        edy = e.y - self.y
+        d2 = edx * edx + edy * edy
+        if d2 < min_dist_sq
+          min_dist_sq = d2
+          nearest = e
+        end
+      end
+      i += 1
+    end
+    nearest
+  end
+
   def update(bullets, missiles, enemies, vfx, camera = nil)
     @fired = false
     @invincible -= 1 if @invincible > 0
     prev_x = self.x
     prev_y = self.y
+
+    # 入力デバイス (ゲームパッド vs マウス/キーボード) の自動検出
+    cur_mx = Input.mouse_x
+    cur_my = Input.mouse_y
+    mouse_moved = (cur_mx - @last_mouse_x).abs > 3.0 || (cur_my - @last_mouse_y).abs > 3.0
+    @last_mouse_x = cur_mx
+    @last_mouse_y = cur_my
+
+    if mouse_moved || Input.mouse_pressed?(:left) || Input.mouse_pressed?(:right) ||
+       Input.key_pressed?(:w) || Input.key_pressed?(:a) || Input.key_pressed?(:s) || Input.key_pressed?(:d) ||
+       Input.key_pressed?(:up) || Input.key_pressed?(:down) || Input.key_pressed?(:left) || Input.key_pressed?(:right)
+      @input_mode = :mouse
+    end
+
+    if Input.gamepad_connected?(0)
+      if Input.gamepad_axis(:left_x).abs > 0.25 || Input.gamepad_axis(:left_y).abs > 0.25 ||
+         Input.gamepad_axis(:right_x).abs > 0.25 || Input.gamepad_axis(:right_y).abs > 0.25 ||
+         Input.gamepad_button_pressed?(:a) || Input.gamepad_button_pressed?(:b) ||
+         Input.gamepad_button_pressed?(:x) || Input.gamepad_button_pressed?(:y) ||
+         Input.gamepad_button_pressed?(:rb) || Input.gamepad_button_pressed?(:lb)
+        @input_mode = :gamepad
+      end
+    end
 
     # 移動
     move_x, move_y = Input.vector
@@ -912,37 +960,23 @@ class Player < Sprite
       end
     end
 
-    # 照準
+    # 照準 (Aiming)
     rx = Input.rx
     ry = Input.ry
     if rx != 0.0 || ry != 0.0
+      # 右スティック入力時は常に手動照準 (スティック優先)
       @rotation = Math.atan2(ry, rx)
-    elsif Input.using_touch?
-      # タッチ操作時 (指1本時): 周囲に敵がいれば最寄りの敵へ自動照準、いなければ移動方向を向く
-      nearest_enemy = nil
-      min_dist_sq = 800.0 * 800.0
-      i = 0
-      len = enemies.length
-      while i < len
-        e = enemies[i]
-        if e && !e.vanished?
-          edx = e.x - self.x
-          edy = e.y - self.y
-          d2 = edx * edx + edy * edy
-          if d2 < min_dist_sq
-            min_dist_sq = d2
-            nearest_enemy = e
-          end
-        end
-        i += 1
-      end
-
+    elsif Input.using_touch? || @input_mode == :gamepad
+      # タッチ操作 または ゲームパッド操作時 (右スティック中立):
+      # 周囲に敵がいれば最寄りの敵へ自動照準、いなければ移動方向を向く
+      nearest_enemy = find_nearest_enemy(enemies, 800.0)
       if nearest_enemy
         @rotation = Math.atan2(nearest_enemy.y - self.y, nearest_enemy.x - self.x)
       elsif move_x != 0.0 || move_y != 0.0
         @rotation = Math.atan2(move_y, move_x)
       end
     else
+      # キーボード＆マウス操作時: マウスカーソル方向へ手動照準
       @rotation = Math.atan2(my - self.y, mx - self.x)
     end
     self.angle = @rotation * (180.0 / Math::PI)
