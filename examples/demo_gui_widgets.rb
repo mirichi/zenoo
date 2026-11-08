@@ -32,89 +32,104 @@ stage = UI::Stage.new
 # -------------------------------------------------------------------
 # ウィンドウ 1: コントロール & タブ切り替え (Resizable: true)
 # -------------------------------------------------------------------
-win_controls = UI::Window.new(
+win_controls = stage.window(
   "Controls & Tabs [Resizable]",
   35, 85, width: 410, height: 590,
-  resizable: true, min_width: 320, min_height: 320,
-  parent: stage
+  resizable: true, min_width: 320, min_height: 320
 )
 
-lbl_win_size = UI::Label.new(
+lbl_win_size = win_controls.label(
   "Window Size: 410 x 590 (Drag bottom-right corner)",
-  size: 12, color: Color.new(130, 195, 255),
-  parent: win_controls
+  size: 12, color: Color.new(130, 195, 255)
 )
 
-tabs = UI::Tabs.new(["Settings", "Audio & Sliders", "Tween & Sprite"], 0, height: 34, parent: win_controls)
+tabs = win_controls.tabs(["Settings", "Audio & Sliders", "Custom & Tween"], 0, height: 34)
 
 # タブ 0: チェックボックス・ラジオ・スピナー
-page_settings = UI::VBox.new(gap: 8, flex: 1, parent: win_controls) do |box|
-  UI::Label.new("=== Checkboxes ===", size: 15, color: Color.new(255, 205, 85), parent: box)
-  UI::Checkbox.new("Enable Sound Effects", true, parent: box)
-  UI::Checkbox.new("Fullscreen Mode (F11)", false, parent: box)
-  UI::Checkbox.new("VSync (60 FPS Lock)", true, parent: box)
+page_settings = win_controls.vbox(gap: 8, flex: 1) do |box|
+  box.label("=== Checkboxes ===", size: 15, color: Color.new(255, 205, 85))
+  box.checkbox("Enable Sound Effects", true)
+  box.checkbox("Fullscreen Mode (F11)", false)
+  box.checkbox("VSync (60 FPS Lock)", true)
 
-  UI::Divider.new(height: 10, parent: box)
+  box.divider(height: 10)
 
-  UI::Label.new("=== Radio Buttons (Graphics Quality) ===", size: 15, color: Color.new(255, 205, 85), parent: box)
-  UI::RadioButton.new("Low Quality (Fastest)", false, group: :quality, value: :low, parent: box)
-  UI::RadioButton.new("Medium Quality (Balanced)", true, group: :quality, value: :medium, parent: box)
-  UI::RadioButton.new("High Quality (Ultra)", false, group: :quality, value: :high, parent: box)
+  box.label("=== Radio Buttons (Graphics Quality) ===", size: 15, color: Color.new(255, 205, 85))
+  box.radio_button("Low Quality (Fastest)", false, group: :quality, value: :low)
+  box.radio_button("Medium Quality (Balanced)", true, group: :quality, value: :medium)
+  box.radio_button("High Quality (Ultra)", false, group: :quality, value: :high)
 
-  UI::Divider.new(height: 10, parent: box)
+  box.divider(height: 10)
 
-  UI::Label.new("=== Spinners / SpinBoxes ===", size: 15, color: Color.new(255, 205, 85), parent: box)
-  UI::Spinner.new("Enemy Count", 5, min: 1, max: 50, step: 1, parent: box)
-  UI::Spinner.new("Master Vol", 80, min: 0, max: 100, step: 5, parent: box)
-  UI::Spinner.new("UI Scale", 1.25, min: 0.5, max: 3.0, step: 0.25, format: "%.2fx", parent: box)
+  box.label("=== Spinners / SpinBoxes ===", size: 15, color: Color.new(255, 205, 85))
+  box.spinner("Enemy Count", 5, min: 1, max: 50, step: 1)
+  box.spinner("Master Vol", 80, min: 0, max: 100, step: 5)
+  box.spinner("UI Scale", 1.25, min: 0.5, max: 3.0, step: 0.25, format: "%.2fx")
 end
 
 # タブ 1: スライダー・プログレスバー・ドロップダウン
-page_audio = UI::VBox.new(gap: 10, flex: 1, parent: win_controls)
-page_audio.visible = false
+sl_bgm   = nil
+prog_bar = nil
+page_audio = win_controls.vbox(gap: 10, flex: 1) do |box|
+  box.visible = false
 
-UI::Label.new("=== Sliders & ProgressBar ===", size: 15, color: Color.new(255, 205, 85), parent: page_audio)
-sl_bgm = UI::Slider.new("BGM Volume", 75.0, 0.0, 100.0, step: 1.0, unit: "%", parent: page_audio)
-sl_sfx = UI::Slider.new("SFX Volume", 90.0, 0.0, 100.0, step: 1.0, unit: "%", parent: page_audio)
+  box.label("=== Sliders & ProgressBar ===", size: 15, color: Color.new(255, 205, 85))
+  sl_bgm = box.slider("BGM Volume", 75.0, 0.0, 100.0, step: 1.0, unit: "%")
+  box.slider("SFX Volume", 90.0, 0.0, 100.0, step: 1.0, unit: "%")
 
-UI::Label.new("Live Audio Level Meter:", size: 13, color: Color.new(180, 190, 210), parent: page_audio)
-prog_bar = UI::ProgressBar.new(75.0, 0.0, 100.0, height: 22, show_percentage: true, parent: page_audio)
+  box.label("Live Audio Level Meter:", size: 13, color: Color.new(180, 190, 210))
+  prog_bar = box.progress_bar(75.0, 0.0, 100.0, height: 22, show_percentage: true)
+
+  box.divider(height: 12)
+
+  box.label("=== Dropdown (Popup Overlay) ===", size: 15, color: Color.new(255, 205, 85))
+  box.label("Texture Filter Mode:", size: 13, color: Color.new(180, 190, 210))
+  dropdown_items = ["Linear Filtering", "Nearest Neighbor", "Bicubic Smooth", "CRT Retro Shader"]
+  box.dropdown(dropdown_items, 0)
+end
 
 sl_bgm.on_change do |val|
   prog_bar.value = val
 end
 
-UI::Divider.new(height: 12, parent: page_audio)
+# タブ 2: on_draw によるカスタム描画 & Tween 演出
+btn_bounce = nil
+btn_spin   = nil
+page_tween = win_controls.vbox(gap: 10, flex: 1) do |box|
+  box.visible = false
 
-UI::Label.new("=== Dropdown (Popup Overlay) ===", size: 15, color: Color.new(255, 205, 85), parent: page_audio)
-UI::Label.new("Texture Filter Mode:", size: 13, color: Color.new(180, 190, 210), parent: page_audio)
-dropdown_items = ["Linear Filtering", "Nearest Neighbor", "Bicubic Smooth", "CRT Retro Shader"]
-UI::Dropdown.new(dropdown_items, 0, parent: page_audio)
+  box.label("=== Custom on_draw & Tween ===", size: 15, color: Color.new(255, 205, 85))
 
-# タブ 2: Sprite ならではの Tween 演出 & ImageBox
-page_tween = UI::VBox.new(gap: 10, flex: 1, parent: win_controls)
-page_tween.visible = false
-
-UI::Label.new("=== Sprite & Tween Integration ===", size: 15, color: Color.new(255, 205, 85), parent: page_tween)
-UI::Label.new("Every widget is a Zenoo::Sprite!", size: 13, color: Color.new(150, 220, 180), parent: page_tween)
-
-# アイコンと説明の横並び (HBox)
-UI::HBox.new(height: 64, gap: 12, align: :center, parent: page_tween) do |row|
-  UI::ImageBox.new(badge_icon, width: 56, height: 56, bg_color: Color.new(20, 26, 38), border_color: Color.new(70, 110, 170), border_width: 1.5, radius: 8, parent: row)
-  UI::VBox.new(gap: 4, flex: 1, parent: row) do |col|
-    UI::Label.new("UI::ImageBox Widget", size: 15, color: Color::WHITE, parent: col)
-    UI::Label.new("Supports :contain, :stretch, :center", size: 12, color: Color.new(160, 175, 200), parent: col)
+  # on_draw コールバックを使ったカスタム描画ウィジェットの例
+  box.custom(height: 54, interactive: true) do |x, y, w, h, state|
+    bg_col = state == :hover ? Color.new(45, 65, 95, 240) : Color.new(30, 40, 58, 220)
+    bd_col = state == :hover ? Color.new(120, 200, 255) : Color.new(70, 100, 150)
+    Window.draw_rect(x, y, w, h, radius: 8.0, color: bg_col, border_width: 1.5, border_color: bd_col)
+    badge_col = state == :hover ? Color.new(255, 220, 80) : Color.new(100, 220, 150)
+    Window.draw_circle(x + 24.0, y + h * 0.5, 12.0, color: badge_col)
+    Window.draw_text(x + 48.0, y + 10.0, "Custom Widget (via on_draw)", size: 14, color: Color::WHITE)
+    Window.draw_text(x + 48.0, y + 28.0, "State: #{state} (Hover me!)", size: 12, color: Color.new(160, 180, 210))
   end
+
+  # アイコンと説明の横並び (HBox)
+  box.hbox(height: 60, gap: 12, align: :center) do |row|
+    row.image_box(badge_icon, width: 52, height: 52, bg_color: Color.new(20, 26, 38), border_color: Color.new(70, 110, 170), border_width: 1.5, radius: 8)
+    row.vbox(gap: 4, flex: 1) do |col|
+      col.label("UI::ImageBox Widget", size: 15, color: Color::WHITE)
+      col.label("Supports :contain, :stretch, :center", size: 12, color: Color.new(160, 175, 200))
+    end
+  end
+
+  btn_bounce = box.button("Click to Tween Bounce!", height: 38, icon: badge_icon)
+  btn_spin   = box.button("Click to Spin 360 deg!", height: 38)
 end
 
-btn_bounce = UI::Button.new("Click to Tween Bounce!", height: 42, icon: badge_icon, parent: page_tween)
 btn_bounce.on_click do |btn|
   btn.kill_tweens
   btn.scale = 0.85
   btn.tween.to(0.45, scale: 1.0, ease: :elastic_out)
 end
 
-btn_spin = UI::Button.new("Click to Spin 360 deg!", height: 42, parent: page_tween)
 btn_spin.on_click do |btn|
   btn.kill_tweens
   btn.angle = 0.0
@@ -126,17 +141,15 @@ tabs.on_change do |idx|
   page_settings.visible = (idx == 0)
   page_audio.visible    = (idx == 1)
   page_tween.visible    = (idx == 2)
-  win_controls.mark_layout_dirty!
 end
 
 # -------------------------------------------------------------------
 # ウィンドウ 2: リストボックス & スクロールビュー (Resizable: true)
 # -------------------------------------------------------------------
-win_lists = UI::Window.new(
+win_lists = stage.window(
   "Lists & ScrollView [Resizable]",
   470, 85, width: 390, height: 590,
-  resizable: true, min_width: 280, min_height: 300,
-  parent: stage
+  resizable: true, min_width: 280, min_height: 300
 )
 
 hero_items = [
@@ -150,66 +163,74 @@ hero_items = [
   "Assassin (HP: 75, ATK: 30)"
 ]
 
-UI::Label.new("=== ListBox (Scrollable with Wheel) ===", size: 15, color: Color.new(255, 205, 85), parent: win_lists)
-lbl_selected_hero = UI::Label.new("Selected: #{hero_items[0]}", size: 13, color: Color.new(100, 220, 255), parent: win_lists)
+win_lists.label("=== ListBox (Scrollable with Wheel) ===", size: 15, color: Color.new(255, 205, 85))
+lbl_selected_hero = win_lists.label("Selected: #{hero_items[0]}", size: 13, color: Color.new(100, 220, 255))
 
-listbox = UI::ListBox.new(hero_items, 0, height: 150, parent: win_lists)
+listbox = win_lists.list_box(hero_items, 0, height: 150)
 listbox.on_change do |idx|
   lbl_selected_hero.text = "Selected: #{hero_items[idx]}"
 end
 
-UI::Divider.new(height: 12, parent: win_lists)
+win_lists.divider(height: 12)
 
-UI::Label.new("=== ScrollView Container (flex: 1) ===", size: 15, color: Color.new(255, 205, 85), parent: win_lists)
-lbl_scroll_log = UI::Label.new("Click any item inside ScrollView:", size: 12, color: Color.new(170, 180, 195), parent: win_lists)
+win_lists.label("=== ScrollView Container (flex: 1) ===", size: 15, color: Color.new(255, 205, 85))
+lbl_scroll_log = win_lists.label("Click any item inside ScrollView:", size: 12, color: Color.new(170, 180, 195))
 
 # flex: 1 を指定することで、ウィンドウをリサイズした際に残りの高さを自動で埋める！
-scroll_view = UI::ScrollView.new(flex: 1, gap: 6, padding: 8, parent: win_lists)
-1.upto(14) do |idx|
-  UI::Button.new("Scroll Action Item ##{idx}", height: 34, parent: scroll_view) do
-    lbl_scroll_log.text = "Clicked: Scroll Action Item ##{idx}!"
+win_lists.scroll_view(flex: 1, gap: 6, padding: 8) do |scroller|
+  1.upto(14) do |idx|
+    scroller.button("Scroll Action Item ##{idx}", height: 34) do
+      lbl_scroll_log.text = "Clicked: Scroll Action Item ##{idx}!"
+    end
   end
 end
 
 # -------------------------------------------------------------------
 # ウィンドウ 3: テキスト入力 & フォーム (Fixed Size)
 # -------------------------------------------------------------------
-win_profile = UI::Window.new(
-  "Profile & Text Input [Fixed]",
-  885, 85, width: 355, height: 590,
-  resizable: false,
-  parent: stage
-)
-
-UI::Label.new("=== TextBox Input (IME & Clipboard) ===", size: 15, color: Color.new(255, 205, 85), parent: win_profile)
-UI::Label.new("Player Name:", size: 13, color: Color.new(180, 190, 205), parent: win_profile)
-tb_name = UI::TextBox.new("Player1", placeholder: "Enter name...", parent: win_profile)
-
-UI::Label.new("Status Message:", size: 13, color: Color.new(180, 190, 205), parent: win_profile)
-tb_status = UI::TextBox.new("Ready to adventure!", placeholder: "Enter status...", parent: win_profile)
-
-UI::Divider.new(height: 12, parent: win_profile)
-
-UI::Label.new("=== Gameplay Sliders ===", size: 15, color: Color.new(255, 205, 85), parent: win_profile)
-sl_fov   = UI::Slider.new("Camera FOV", 90.0, 60.0, 120.0, step: 1.0, unit: " deg", parent: win_profile)
-sl_speed = UI::Slider.new("Game Speed", 1.0, 0.25, 3.0, step: 0.05, unit: "x", format: "%.2f", parent: win_profile)
-
-UI::Divider.new(height: 12, parent: win_profile)
-
-UI::Label.new("=== Live Profile Summary ===", size: 14, color: Color.new(120, 225, 180), parent: win_profile)
-lbl_summary_name = UI::Label.new("Name: Player1", size: 13, color: Color::WHITE, parent: win_profile)
-lbl_summary_stat = UI::Label.new("Status: Ready to adventure!", size: 13, color: Color.new(200, 210, 225), parent: win_profile)
-lbl_summary_cfg  = UI::Label.new("FOV: 90 deg / Speed: 1.00x", size: 13, color: Color.new(140, 200, 255), parent: win_profile)
-
-# 余白を埋めるフレキシブルスペーサー
-UI::Spacer.new(8, flex: 1, parent: win_profile)
-
-# 下部ボタン行 (HBox + flex: 1 で2等分)
+tb_name   = nil
+tb_status = nil
+sl_fov    = nil
+sl_speed  = nil
+lbl_summary_name = nil
+lbl_summary_stat = nil
+lbl_summary_cfg  = nil
 btn_save  = nil
 btn_reset = nil
-UI::HBox.new(height: 38, gap: 10, parent: win_profile) do |row|
-  btn_save  = UI::Button.new("Save Profile", flex: 1, parent: row)
-  btn_reset = UI::Button.new("Reset Defaults", flex: 1, parent: row)
+
+win_profile = stage.window(
+  "Profile & Text Input [Fixed]",
+  885, 85, width: 355, height: 590,
+  resizable: false
+) do |win|
+  win.label("=== TextBox Input (IME & Clipboard) ===", size: 15, color: Color.new(255, 205, 85))
+  win.label("Player Name:", size: 13, color: Color.new(180, 190, 205))
+  tb_name = win.text_box("Player1", placeholder: "Enter name...")
+
+  win.label("Status Message:", size: 13, color: Color.new(180, 190, 205))
+  tb_status = win.text_box("Ready to adventure!", placeholder: "Enter status...")
+
+  win.divider(height: 12)
+
+  win.label("=== Gameplay Sliders ===", size: 15, color: Color.new(255, 205, 85))
+  sl_fov   = win.slider("Camera FOV", 90.0, 60.0, 120.0, step: 1.0, unit: " deg")
+  sl_speed = win.slider("Game Speed", 1.0, 0.25, 3.0, step: 0.05, unit: "x", format: "%.2f")
+
+  win.divider(height: 12)
+
+  win.label("=== Live Profile Summary ===", size: 14, color: Color.new(120, 225, 180))
+  lbl_summary_name = win.label("Name: Player1", size: 13, color: Color::WHITE)
+  lbl_summary_stat = win.label("Status: Ready to adventure!", size: 13, color: Color.new(200, 210, 225))
+  lbl_summary_cfg  = win.label("FOV: 90 deg / Speed: 1.00x", size: 13, color: Color.new(140, 200, 255))
+
+  # 余白を埋めるフレキシブルスペーサー
+  win.spacer(8, flex: 1)
+
+  # 下部ボタン行 (HBox + flex: 1 で2等分)
+  win.hbox(height: 38, gap: 10) do |row|
+    btn_save  = row.button("Save Profile", flex: 1)
+    btn_reset = row.button("Reset Defaults", flex: 1)
+  end
 end
 
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0

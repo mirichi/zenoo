@@ -28,6 +28,7 @@ module Zenoo
 
         @on_click_proc  = nil
         @on_change_proc = nil
+        @on_draw_proc   = nil
 
         self.parent = parent if parent
       end
@@ -78,6 +79,25 @@ module Zenoo
       def on_change(&block)
         @on_change_proc = block
         self
+      end
+
+      def on_draw(&block)
+        @on_draw_proc = block
+        self
+      end
+
+      # 子ウィジェットの追加 (add / <<)
+      # @param child [Widget] 追加するウィジェット
+      # @return [Widget] 追加した child 自身
+      def add(child, &block)
+        return nil unless child
+        child.parent = self
+        block.call(child) if block
+        child
+      end
+
+      def <<(child, &block)
+        add(child, &block)
       end
 
       def on_focus
@@ -225,6 +245,7 @@ module Zenoo
           reset_frame_flags
           update_layout_tree
           process_root_input
+          update_layout_tree
         end
 
         update_self
@@ -375,8 +396,16 @@ module Zenoo
       def draw
         return if @vanished || !@visible
 
-        draw_self
+        update_layout_tree unless @parent.is_a?(Widget)
+
+        if @on_draw_proc
+          @on_draw_proc.call(screen_left, screen_top, screen_width, screen_height, visual_state)
+        else
+          draw_self
+        end
+
         if @children
+          perform_layout if respond_to?(:perform_layout) && @auto_layout && @layout_dirty
           if @clip_children
             cx, cy, cw, ch = clip_bounds
             if cw > 0.0 && ch > 0.0
@@ -414,8 +443,11 @@ module Zenoo
       def visible=(v)
         old_v = @visible
         super(v)
-        if @visible != old_v && @parent.is_a?(Widget) && @parent.respond_to?(:mark_layout_dirty!)
-          @parent.mark_layout_dirty!
+        if @visible != old_v
+          mark_layout_dirty! if respond_to?(:mark_layout_dirty!)
+          if @parent.is_a?(Widget) && @parent.respond_to?(:mark_layout_dirty!)
+            @parent.mark_layout_dirty!
+          end
         end
       end
 
