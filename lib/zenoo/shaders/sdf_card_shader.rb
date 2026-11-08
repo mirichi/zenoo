@@ -120,7 +120,9 @@ module Zenoo
           // 2. 本体アンチエイリアシング
           float fw = fwidth(dist) * 0.5;
           if (fw < 0.001) fw = 0.7;
-          float body_alpha = 1.0 - smoothstep(-fw, fw, dist);
+          float min_half = min(v_half_size.x, v_half_size.y);
+          float eff_fw = min(fw, max(min_half * 0.8, 0.5));
+          float body_alpha = 1.0 - smoothstep(-eff_fw, eff_fw, dist);
 
           vec4 base_color = (v_mode == 1 || v_mode == 3) ? texture(u_texture, v_uv) * v_color : v_color;
 
@@ -128,7 +130,7 @@ module Zenoo
           vec4 shape_col = base_color;
           if (v_border_width > 0.0) {
               float border_dist = dist + v_border_width;
-              float border_alpha = 1.0 - smoothstep(-fw, fw, border_dist);
+              float border_alpha = 1.0 - smoothstep(-eff_fw, eff_fw, border_dist);
               shape_col = mix(v_border_color, base_color, border_alpha);
           }
 

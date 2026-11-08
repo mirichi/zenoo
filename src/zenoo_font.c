@@ -89,6 +89,10 @@ static void init_atlas_if_needed(void) {
 
 void zen_font_set_atlas_image(ZenImage* img) {
     if (s_atlas_image == img) return;
+    if (s_atlas_image && (s_atlas_x > 1 || s_atlas_y > 1)) {
+        // すでにグリフがアトラスにパッキングされている場合、既存のテクスチャを上書き・巻き戻ししない
+        return;
+    }
     s_atlas_image = img;
     s_atlas_x = 1;
     s_atlas_y = 1;
