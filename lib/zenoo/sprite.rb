@@ -735,33 +735,34 @@ module Zenoo
     # - :circle: 円/楕円 (radius, radius_x, radius_y, offset_x, offset_y)
     # - :point: 点 (offset_x, offset_y)
     # - :polygon: 多角形 (vertices: [[x1, y1], [x2, y2], ...])
-    # - anchor: コライダーの配置基準 (:center, :bottom_center, :pivot 等。デフォルト: :center)
+    # - at: コライダーの中心を置く Sprite 上の点 (:center, :bottom_center, :pivot 等。デフォルト: :center)
+    #       offset_x / offset_y はその点からのピクセル単位のずらし量
     def set_collider(type = :default,
                      width: nil, height: nil,
                      radius: nil, radius_x: nil, radius_y: nil,
                      offset_x: nil, offset_y: nil,
-                     anchor: :center,
+                     at: :center,
                      vertices: nil)
       ox = offset_x ? offset_x.to_f : 0.0
       oy = offset_y ? offset_y.to_f : 0.0
-      anc = anchor || :center
+      at_v = at || :center
 
       case type
       when :circle
         rx = (radius_x || radius || (width ? width.to_f * 0.5 : [self.width, self.height].min * 0.5)).to_f
         ry = (radius_y || radius || (height ? height.to_f * 0.5 : rx)).to_f
-        @collider_shape = Collision::Circle.new(0.0, 0.0, rx, ry, offset_x: ox, offset_y: oy, anchor: anc, parent: self)
+        @collider_shape = Collision::Circle.new(0.0, 0.0, rx, ry, offset_x: ox, offset_y: oy, at: at_v, parent: self)
       when :rect
         w = (width || self.width).to_f
         h = (height || self.height).to_f
         r = (radius || 0.0).to_f
-        @collider_shape = Collision::Rect.new(0.0, 0.0, w, h, radius: r, offset_x: ox, offset_y: oy, anchor: anc, parent: self)
+        @collider_shape = Collision::Rect.new(0.0, 0.0, w, h, radius: r, offset_x: ox, offset_y: oy, at: at_v, parent: self)
       when :point
-        @collider_shape = Collision::Point.new(offset_x: ox, offset_y: oy, anchor: anc, parent: self)
+        @collider_shape = Collision::Point.new(offset_x: ox, offset_y: oy, at: at_v, parent: self)
       when :polygon
-        @collider_shape = Collision::Polygon.new(vertices || [], offset_x: ox, offset_y: oy, anchor: anc, parent: self)
+        @collider_shape = Collision::Polygon.new(vertices || [], offset_x: ox, offset_y: oy, at: at_v, parent: self)
       when :default
-        @collider_shape = Collision::Rect.new(offset_x: ox, offset_y: oy, anchor: anc, parent: self)
+        @collider_shape = Collision::Rect.new(offset_x: ox, offset_y: oy, at: at_v, parent: self)
       end
       self
     end
@@ -772,13 +773,13 @@ module Zenoo
       shape.dirty_pos! if shape.respond_to?(:dirty_pos!)
     end
 
-    def collider_anchor
-      collider.anchor
+    def collider_at
+      collider.at
     end
 
-    def collider_anchor=(val)
+    def collider_at=(val)
       col = collider
-      col.anchor = val if col
+      col.at = val if col
       nil
     end
 

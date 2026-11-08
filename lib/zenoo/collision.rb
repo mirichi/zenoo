@@ -78,6 +78,7 @@ module Zenoo
     # 幾何形状の基底クラス (ポリモーフィック静的型解決用共通インターフェース)
     class Shape
       attr_reader :anchor_x, :anchor_y, :pivot_x, :pivot_y, :offset_x, :offset_y
+      attr_reader :at_x, :at_y
       attr_reader :parent
 
       def parent=(p)
@@ -86,7 +87,9 @@ module Zenoo
         dirty_geom!
       end
 
-      def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, parent: nil)
+      # anchor: 単体 Shape で自分のどの点を (x, y) に置くか (Sprite#anchor と同義)
+      # at:     親 Sprite に付けた場合、親のどの点にコライダーの中心を置くか (:center, :bottom_center, :pivot 等)
+      def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, at: :center, parent: nil)
         @parent = parent
         @x = x.to_f
         @y = y.to_f
@@ -97,14 +100,17 @@ module Zenoo
         @offset_y = offset_y.to_f
         @_support = [0.0, 0.0]
 
-        @anchor = nil
         @anchor_x = 0.5
         @anchor_y = 0.5
         @pivot_x = 0.5
         @pivot_y = 0.5
+        @at_pivot = false
+        @at_x = 0.5
+        @at_y = 0.5
 
         self.anchor = anchor || :center
         self.pivot = pivot
+        self.at = at || :center
         dirty_pos!
         dirty_geom!
       end
@@ -200,7 +206,7 @@ module Zenoo
       def world_pivot_y; @parent ? @parent.world_pivot_y : @y; end
 
       # 親 Sprite が存在する場合のワールド重心座標を1パスで算出
-      # コライダーの配置基準 (anchor: :center, :bottom_center, :pivot 等) を反映
+      # コライダー中心の配置先 (at: :center, :bottom_center, :pivot 等) を反映
       def compute_parent_center(offset_x, offset_y, cos_v, sin_v, sx, sy)
         p = @parent
         pw = p.width
@@ -211,11 +217,11 @@ module Zenoo
         wpv_x = p.world_pivot_x
         wpv_y = p.world_pivot_y
 
-        anc_x = @anchor == :pivot ? pv_x : @anchor_x
-        anc_y = @anchor == :pivot ? pv_y : @anchor_y
+        at_x = @at_pivot ? pv_x : @at_x
+        at_y = @at_pivot ? pv_y : @at_y
 
-        rel_cx = (anc_x - pv_x) * pw + offset_x
-        rel_cy = (anc_y - pv_y) * ph + offset_y
+        rel_cx = (at_x - pv_x) * pw + offset_x
+        rel_cy = (at_y - pv_y) * ph + offset_y
 
         if rel_cx.abs < 0.0001 && rel_cy.abs < 0.0001
           [wpv_x, wpv_y]
@@ -240,7 +246,6 @@ module Zenoo
 
       # アンカー (取得)
       def anchor
-        return :pivot if @anchor == :pivot
         if (@anchor_x - 0.0).abs < 0.0001 && (@anchor_y - 0.0).abs < 0.0001
           :top_left
         elsif (@anchor_x - 0.5).abs < 0.0001 && (@anchor_y - 0.5).abs < 0.0001
@@ -253,12 +258,6 @@ module Zenoo
       end
 
       def anchor=(val)
-        if val == :pivot
-          @anchor = :pivot
-          dirty_pos!
-          return
-        end
-        @anchor = nil
         ax, ay = Collision.parse_anchor(val)
         return if @anchor_x == ax && @anchor_y == ay
         @anchor_x = ax
@@ -278,6 +277,52 @@ module Zenoo
         return if @anchor_y == vf
         @anchor_y = vf
         dirty_pos!
+      end
+
+      # 親 Sprite 上のコライダー中心配置先 (取得)
+      def at
+        return :pivot if @at_pivot
+        if (@at_x - 0.5).abs < 0.0001 && (@at_y - 0.5).abs < 0.0001
+          :center
+        elsif (@at_x - 0.5).abs < 0.0001 && (@at_y - 1.0).abs < 0.0001
+          :bottom_center
+        elsif (@at_x - 0.0).abs < 0.0001 && (@at_y - 0.0).abs < 0.0001
+          :top_left
+        else
+          [@at_x, @at_y]
+        end
+      end
+
+      # 親 Sprite 上のコライダー中心配置先 (設定: :pivot は親のピボットに追従)
+      def at=(val)
+        if val == :pivot
+          return if @at_pivot
+          @at_pivot = true
+          dirty_geom!
+          return
+        end
+        ax, ay = Collision.parse_pivot(val)
+        return if !@at_pivot && @at_x == ax && @at_y == ay
+        @at_pivot = false
+        @at_x = ax
+        @at_y = ay
+        dirty_geom!
+      end
+
+      def at_x=(val)
+        vf = val.to_f
+        return if !@at_pivot && @at_x == vf
+        @at_pivot = false
+        @at_x = vf
+        dirty_geom!
+      end
+
+      def at_y=(val)
+        vf = val.to_f
+        return if !@at_pivot && @at_y == vf
+        @at_pivot = false
+        @at_y = vf
+        dirty_geom!
       end
 
       # ピボット (取得)
@@ -339,8 +384,8 @@ module Zenoo
       attr_reader :radius_x, :radius_y
       attr_reader :bounding_radius, :is_true_circle, :effective_radius
 
-      def initialize(x = 0.0, y = 0.0, radius_x = 0.0, radius_y = radius_x, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, parent: nil)
-        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
+      def initialize(x = 0.0, y = 0.0, radius_x = 0.0, radius_y = radius_x, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, at: :center, parent: nil)
+        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, at: at, parent: parent)
         @radius_x = radius_x.to_f
         @radius_y = (radius_y || radius_x).to_f
         @rotation_invariant = false
@@ -414,10 +459,10 @@ module Zenoo
           if @parent
             pw = @parent.width
             ph = @parent.height
-            anc_x = @anchor == :pivot ? @parent.pivot_x : @anchor_x
-            anc_y = @anchor == :pivot ? @parent.pivot_y : @anchor_y
-            rel_cx = (anc_x - @parent.pivot_x) * pw + @offset_x
-            rel_cy = (anc_y - @parent.pivot_y) * ph + @offset_y
+            at_x = @at_pivot ? @parent.pivot_x : @at_x
+            at_y = @at_pivot ? @parent.pivot_y : @at_y
+            rel_cx = (at_x - @parent.pivot_x) * pw + @offset_x
+            rel_cy = (at_y - @parent.pivot_y) * ph + @offset_y
           else
             rel_cx = (0.5 - @pivot_x) * w + @offset_x
             rel_cy = (0.5 - @pivot_y) * h + @offset_y
@@ -511,8 +556,8 @@ module Zenoo
 
     # 点
     class Point < Shape
-      def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, parent: nil)
-        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
+      def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, at: :center, parent: nil)
+        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, at: at, parent: parent)
         @rotation_invariant = false
         update_cache
       end
@@ -538,10 +583,10 @@ module Zenoo
           if @parent
             pw = @parent.width
             ph = @parent.height
-            anc_x = @anchor == :pivot ? @parent.pivot_x : @anchor_x
-            anc_y = @anchor == :pivot ? @parent.pivot_y : @anchor_y
-            rel_cx = (anc_x - @parent.pivot_x) * pw + @offset_x
-            rel_cy = (anc_y - @parent.pivot_y) * ph + @offset_y
+            at_x = @at_pivot ? @parent.pivot_x : @at_x
+            at_y = @at_pivot ? @parent.pivot_y : @at_y
+            rel_cx = (at_x - @parent.pivot_x) * pw + @offset_x
+            rel_cy = (at_y - @parent.pivot_y) * ph + @offset_y
           else
             rel_cx = @offset_x
             rel_cy = @offset_y
@@ -596,8 +641,8 @@ module Zenoo
       attr_reader :half_w, :half_h, :core_half_w, :core_half_h
       attr_reader :is_aabb, :is_rounded, :is_uniform, :bounding_radius, :cos, :sin
 
-      def initialize(x = 0.0, y = 0.0, width = 0.0, height = 0.0, angle: 0.0, radius: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, parent: nil)
-        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
+      def initialize(x = 0.0, y = 0.0, width = 0.0, height = 0.0, angle: 0.0, radius: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, at: :center, parent: nil)
+        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, at: at, parent: parent)
         @width = width.to_f
         @height = height.to_f
         @radius = radius.to_f
@@ -801,8 +846,8 @@ module Zenoo
     class Polygon < Shape
       attr_reader :vertices, :local_vertices, :bounding_radius
 
-      def initialize(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, parent: nil)
-        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, parent: parent)
+      def initialize(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, at: :center, parent: nil)
+        super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, at: at, parent: parent)
         @vertices = vertices.map { |v| [v[0].to_f, v[1].to_f] }
         dirty_verts!
         update_cache
