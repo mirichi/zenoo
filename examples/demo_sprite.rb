@@ -73,6 +73,7 @@ end
 # プレイヤー
 @player = Sprite.new(600, 320, @ship_img)
 @player.pivot = :center
+@player.set_collider(:rect)
 
 # ターゲット群 (Rect と Circle コライダー混在)
 @targets = []
@@ -81,6 +82,7 @@ recreate_targets = lambda do
   6.times do |i|
     s = Sprite.new(200 + (i % 3) * 350, 150 + (i / 3) * 300, @gem_img)
     s.pivot = :center
+    s.set_collider(:rect)
     s.angle = rand(0..360)
     s.scale = rand(0.9..1.3)
     @targets << s
@@ -108,8 +110,8 @@ Window.loop(1280, 720, "Zenoo - Sprite & Collision Synchronization Demo") do
   my = Input.mouse_y
 
   # プレイヤー位置をマウスへ追従 (滑らかに補間)
-  @player.x += (mx - @player.x - 40) * 0.15
-  @player.y += (my - @player.y - 40) * 0.15
+  @player.x += (mx - @player.x) * 0.15
+  @player.y += (my - @player.y) * 0.15
 
   # キー操作: 回転と拡大
   @player.angle += 3.0 if Input.key_pressed?(:e) || Input.key_pressed?(:right)
