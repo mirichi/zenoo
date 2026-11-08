@@ -19,10 +19,16 @@ module Zenoo
     @prev_captured     = false
     @requested_cursor  = nil
     @blink_time        = 0.0
+    @hit_test_point    = nil
 
     class << self
       attr_accessor :active_widget, :hovered_widget, :open_popup_widget, :blink_time
       attr_reader :focused_widget, :requested_cursor
+
+      # 点判定用の再利用 Point コライダー (GC 圧迫防止)
+      def hit_test_point
+        @hit_test_point ||= Collision::Point.new(0.0, 0.0)
+      end
 
       # テーマの設定または取得
       # - 引数なし: 現在の Theme オブジェクトを返却

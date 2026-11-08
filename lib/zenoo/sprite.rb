@@ -766,8 +766,8 @@ module Zenoo
         ry = (radius_y || radius || (height ? height.to_f * 0.5 : rx)).to_f
         @collider_shape = Collision::Circle.new(0.0, 0.0, rx, ry, offset_x: ox, offset_y: oy, at: at_v, parent: self)
       when :rect
-        w = (width || self.width).to_f
-        h = (height || self.height).to_f
+        w = width ? width.to_f : 0.0
+        h = height ? height.to_f : 0.0
         r = (radius || 0.0).to_f
         @collider_shape = Collision::Rect.new(0.0, 0.0, w, h, radius: r, offset_x: ox, offset_y: oy, at: at_v, parent: self)
       when :point
