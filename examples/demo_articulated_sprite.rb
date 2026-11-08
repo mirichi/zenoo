@@ -113,44 +113,36 @@ end
 @target_img    = create_target_image
 
 # 1. 胴体 (ルート)
-@body = Sprite.new(640, 380, @body_img, anchor: :center, pivot: :center)
+@body = Sprite.new(640, 380, @body_img, anchor: :center, pivot: :center, z: 0)
 
 # 2. 頭部 (胴体の上端に接続)
-@head = Sprite.new(0, -38, @head_img, anchor: :bottom_center, pivot: :bottom_center, parent: @body)
+@head = Sprite.new(0, -38, @head_img, anchor: :bottom_center, pivot: :bottom_center, parent: @body, z: 1)
 
 # 3. 左腕 (シールド装備腕)
 # 肩関節: 胴体左肩(-22, -18) に top_center で接続
-@arm_l1 = Sprite.new(-22, -18, @upper_arm_img, anchor: :top_center, pivot: :top_center, parent: @body)
+@arm_l1 = Sprite.new(-22, -18, @upper_arm_img, anchor: :top_center, pivot: :top_center, parent: @body, z: 2)
 # 肘関節: 上腕先端(0, 38) に接続
-@arm_l2 = Sprite.new(0, 38, @forearm_img, anchor: :top_center, pivot: :top_center, parent: @arm_l1)
+@arm_l2 = Sprite.new(0, 38, @forearm_img, anchor: :top_center, pivot: :top_center, parent: @arm_l1, z: 2)
 # シールド: 前腕下部(0, 36) に中心アンカーで接続
-@shield = Sprite.new(0, 36, @shield_img, anchor: :center, pivot: :center, parent: @arm_l2)
+@shield = Sprite.new(0, 36, @shield_img, anchor: :center, pivot: :center, parent: @arm_l2, z: 3)
 @shield.set_collider(:circle, radius: 24)
 
 # 4. 右腕 (大剣装備腕)
 # 肩関節: 胴体右肩(22, -18) に top_center で接続
-@arm_r1 = Sprite.new(22, -18, @upper_arm_img, anchor: :top_center, pivot: :top_center, parent: @body)
+@arm_r1 = Sprite.new(22, -18, @upper_arm_img, anchor: :top_center, pivot: :top_center, parent: @body, z: 2)
 # 肘関節: 上腕先端(0, 38) に接続
-@arm_r2 = Sprite.new(0, 38, @forearm_img, anchor: :top_center, pivot: :top_center, parent: @arm_r1)
+@arm_r2 = Sprite.new(0, 38, @forearm_img, anchor: :top_center, pivot: :top_center, parent: @arm_r1, z: 2)
 # 刀剣: 前腕手首(0, 36) に柄の部分(anchor: [0.5, 0.9])で接続
-@sword = Sprite.new(0, 36, @sword_img, anchor: [0.5, 0.9], pivot: [0.5, 0.9], parent: @arm_r2)
+@sword = Sprite.new(0, 36, @sword_img, anchor: [0.5, 0.9], pivot: [0.5, 0.9], parent: @arm_r2, z: 3)
 # 刀身部分に矩形コライダーを設定 (オフセットで刀身の重心に配置)
 @sword.set_collider(:rect, width: 14, height: 86, offset_y: -42)
 
-# 5. 脚部 (左右)
-@leg_l1 = Sprite.new(-16, 32, @thigh_img, anchor: :top_center, pivot: :top_center, parent: @body)
-@leg_l2 = Sprite.new(0, 42, @shin_img, anchor: :top_center, pivot: :top_center, parent: @leg_l1)
+# 5. 脚部 (左右: 胴体の奥に描画)
+@leg_l1 = Sprite.new(-16, 32, @thigh_img, anchor: :top_center, pivot: :top_center, parent: @body, z: -1)
+@leg_l2 = Sprite.new(0, 42, @shin_img, anchor: :top_center, pivot: :top_center, parent: @leg_l1, z: -1)
 
-@leg_r1 = Sprite.new(16, 32, @thigh_img, anchor: :top_center, pivot: :top_center, parent: @body)
-@leg_r2 = Sprite.new(0, 42, @shin_img, anchor: :top_center, pivot: :top_center, parent: @leg_r1)
-
-# キャラクター構成パーツの描画順 (脚/胴体奥 -> 胴体 -> 腕/武器手前)
-@character_parts = [
-  @leg_l1, @leg_l2, @leg_r1, @leg_r2,
-  @body, @head,
-  @arm_l1, @arm_l2, @shield,
-  @arm_r1, @arm_r2, @sword
-]
+@leg_r1 = Sprite.new(16, 32, @thigh_img, anchor: :top_center, pivot: :top_center, parent: @body, z: -1)
+@leg_r2 = Sprite.new(0, 42, @shin_img, anchor: :top_center, pivot: :top_center, parent: @leg_r1, z: -1)
 
 # 浮遊ターゲット群
 @targets = []
@@ -242,21 +234,20 @@ Window.loop(1280, 720, "Zenoo - Articulated Sprite & Hierarchical Collision Demo
     t.angle += 0.5
   end
 
-  # 衝突判定 (大剣 & シールド vs ターゲット群)
+  # 衝突判定 (階層スプライトの自動伝搬: 親 @body から当たった部位 hit_parts を一括判定)
   # 親がどんなに回転・拡大縮小・スイングしていても、自動でワールド同期されます！
   sword_hit_count = 0
   shield_hit_count = 0
 
   @targets.each do |target|
-    hit_by_sword  = @sword.collide?(target)
-    hit_by_shield = @shield.collide?(target)
+    parts = @body.hit_parts(target)
 
-    if hit_by_sword
+    if parts.include?(@sword)
       # 剣で斬撃中: 赤く激しく発光 & 弾き飛ばし
       target.color = [255, 60, 80, 255]
       sword_hit_count += 1
       target.push_out_of(@sword)
-    elsif hit_by_shield
+    elsif parts.include?(@shield)
       # シールドで防御中: シアンに発光
       target.color = [0, 240, 255, 255]
       shield_hit_count += 1
@@ -276,8 +267,8 @@ Window.loop(1280, 720, "Zenoo - Articulated Sprite & Hierarchical Collision Demo
   # ターゲットスプライト描画
   Sprite.draw(@targets)
 
-  # 多関節キャラの一括描画
-  Sprite.draw(@character_parts)
+  # 多関節キャラの描画 (親 @body を描画するだけで、階層下の子スプライトが自動で再帰描画される)
+  @body.draw
 
   # コライダー幾何形状の可視化デバッグ描画 (トグル [C])
   if @show_colliders

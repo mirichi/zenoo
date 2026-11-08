@@ -1303,6 +1303,26 @@ module Zenoo
       cx = shape.center_x.to_f
       min_x = cx - r
       max_x = cx + r
+
+      # 子スプライトが存在する場合、子スプライトのバウンディングも包含
+      if item.respond_to?(:children) && (ch = item.children) && !ch.empty?
+        ci = 0
+        clen = ch.length
+        while ci < clen
+          child = ch[ci]
+          if !child.vanished? && (c_shape = child.collider)
+            c_shape.update_cache if c_shape.dirty?
+            c_r = c_shape.bounding_radius.to_f
+            c_cx = c_shape.center_x.to_f
+            c_min = c_cx - c_r
+            c_max = c_cx + c_r
+            min_x = c_min if c_min < min_x
+            max_x = c_max if c_max > max_x
+          end
+          ci += 1
+        end
+      end
+
       if group_id
         [min_x, max_x, item, shape, group_id]
       else
@@ -1327,7 +1347,14 @@ module Zenoo
               item_b = arr_b[j]
               if item_b && !(item_b.respond_to?(:vanished?) && item_b.vanished?)
                 shape_b = item_b.respond_to?(:collider) ? item_b.collider : item_b
-                if shape_b && check(shape_a, shape_b)
+                is_hit = if item_a.respond_to?(:collide?)
+                           item_a.collide?(item_b)
+                         elsif item_b.respond_to?(:collide?)
+                           item_b.collide?(item_a)
+                         else
+                           shape_b && check(shape_a, shape_b)
+                         end
+                if is_hit
                   if block_given?
                     yield(item_a, item_b)
                     break if item_a.respond_to?(:vanished?) && item_a.vanished?
@@ -1389,7 +1416,14 @@ module Zenoo
               item_b = e_b[2]
               if !item_b.vanished?
                 shape_b = e_b[3]
-                if check(shape_a, shape_b)
+                is_hit = if item_a.respond_to?(:collide?)
+                           item_a.collide?(item_b)
+                         elsif item_b.respond_to?(:collide?)
+                           item_b.collide?(item_a)
+                         else
+                           shape_b && check(shape_a, shape_b)
+                         end
+                if is_hit
                   if block_given?
                     yield(item_a, item_b)
                     break if item_a.vanished?
@@ -1462,7 +1496,14 @@ module Zenoo
                 item_b = e_b[2]
                 if !item_b.vanished?
                   shape_b = e_b[3]
-                  if check(shape_a, shape_b)
+                  is_hit = if item_a.respond_to?(:collide?)
+                             item_a.collide?(item_b)
+                           elsif item_b.respond_to?(:collide?)
+                             item_b.collide?(item_a)
+                           else
+                             shape_b && check(shape_a, shape_b)
+                           end
+                  if is_hit
                     if block_given?
                       yield(item_a, item_b)
                       break if item_a.vanished?

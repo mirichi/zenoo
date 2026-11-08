@@ -206,8 +206,8 @@ Window.loop(1024, 640, "Zenoo Canvas-to-Mesh Showcase") do
   magic_root.scale_y = pulse
   # 子 Sprite は親の逆回転で回る
   magic_core.angle = -t * 65.0
+  # 親 magic_root を描画 (子 magic_core も自動で再帰描画される)
   magic_root.draw
-  magic_core.draw
 
   # ----------------------------------------------------
   # ③ 右下: 頂点変形 (deform) でぷるぷる揺れるベクター・スライム
