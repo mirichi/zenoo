@@ -4,10 +4,12 @@ require_relative 'ui/theme'
 require_relative 'ui/widget'
 require_relative 'ui/widgets'
 require_relative 'ui/containers'
+require_relative 'ui/builder'
 
 module Zenoo
   # Sprite ベースの保持モード (Retained Mode) UI システム
   module UI
+    Widget.include(Builder)
     @theme             = Theme.new
     @active_widget     = nil
     @focused_widget    = nil

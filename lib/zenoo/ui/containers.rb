@@ -37,7 +37,7 @@ module Zenoo
       attr_reader :direction, :gap, :align, :justify, :pad_left, :pad_top, :pad_right, :pad_bottom, :header_height
       attr_accessor :auto_layout
 
-      def initialize(x = 0.0, y = 0.0, width: 200.0, height: 200.0,
+      def initialize(x = 0.0, y = 0.0, width: nil, height: nil,
                      direction: :column, padding: 0.0, gap: 8.0,
                      align: :stretch, justify: :start,
                      auto_layout: true, clip: false,
@@ -49,12 +49,36 @@ module Zenoo
         @auto_layout   = auto_layout
         @header_height = 0.0
         @layout_dirty  = true
+        @explicit_width  = !width.nil?
+        @explicit_height = !height.nil?
         parse_padding(padding)
 
-        super(x, y, width: width, height: height, interactive: interactive, parent: parent, **opts)
+        w = width ? width.to_f : 200.0
+        h = height ? height.to_f : 200.0
+        super(x, y, width: w, height: h, interactive: interactive, parent: parent, **opts)
         @clip_children = clip
 
         yield(self) if block
+      end
+
+      def content_height
+        tot = @pad_top + @pad_bottom + @header_height
+        ch_list = @children
+        return tot unless ch_list
+
+        vis_count = 0
+        h_sum = 0.0
+        i = 0
+        len = ch_list.length
+        while i < len
+          c = ch_list[i]
+          if c.is_a?(Widget) && c.visible && !c.vanished?
+            vis_count += 1
+            h_sum = @direction == :column ? (h_sum + c.height) : [h_sum, c.height].max
+          end
+          i += 1
+        end
+        tot + h_sum + ((@direction == :column && vis_count > 1) ? @gap * (vis_count - 1) : 0.0)
       end
 
       def padding=(val)
@@ -210,6 +234,9 @@ module Zenoo
         while i < len
           c = ch_list[i]
           if c.is_a?(Widget) && c.visible && !c.vanished?
+            if c.is_a?(Box) && !c.instance_variable_get(:@explicit_height) && c.align_self != :stretch && @align != :stretch
+              c.height = c.content_height
+            end
             cw = c.width
             ch = c.height
             c_align = c.align_self || @align
@@ -577,8 +604,14 @@ module Zenoo
       def draw
         return if @vanished || !@visible
 
-        draw_self
+        if @on_draw_proc
+          @on_draw_proc.call(screen_left, screen_top, screen_width, screen_height, visual_state)
+        else
+          draw_self
+        end
+
         if !@collapsed && @children
+          perform_layout if @auto_layout && @layout_dirty
           if @clip_children
             cx, cy, cw, ch = clip_bounds
             if cw > 0.0 && ch > 0.0
@@ -902,8 +935,14 @@ module Zenoo
       def draw
         return if @vanished || !@visible
 
-        draw_self
+        if @on_draw_proc
+          @on_draw_proc.call(screen_left, screen_top, screen_width, screen_height, visual_state)
+        else
+          draw_self
+        end
+
         if @children
+          perform_layout if @auto_layout && @layout_dirty
           cx, cy, cw, ch = clip_bounds
           if cw > 0.0 && ch > 0.0
             prev_ox, prev_oy = Zenoo::Window.push_clip_scope(cx, cy, cw, ch, local: false, z: @z)
