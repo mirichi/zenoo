@@ -100,11 +100,11 @@ module Zenoo
       def draw_self
         th = theme
         rx = screen_left
-        ry = screen_top + screen_height * 0.5
+        ry = (screen_top + (screen_height - 1.0) * 0.5).floor
         rw = screen_width
         b_cfg = th.border_normal
         col = @line_color || (b_cfg ? b_cfg[1] : Color.new(75, 85, 105, 180))
-        Zenoo::Window.draw_line(rx, ry, rx + rw, ry, color: col, width: 1.0, camera: @camera, z: @z)
+        Zenoo::Window.draw_rect(rx, ry, rw, 1.0, color: col, camera: @camera, z: @z)
       end
     end
 
@@ -220,8 +220,18 @@ module Zenoo
         @radius       = radius
         @font_size    = font_size
 
-        super(x, y, width: width, height: height, interactive: true, **opts)
+        super(x, y, width: width, height: height, interactive: true, radius: radius, **opts)
         @on_click_proc = block if block
+        update_collider_shape
+      end
+
+      def update_collider_shape
+        r = (@radius ? @radius.to_f : (theme.corner_radius || 6.0).to_f)
+        if @collider_shape.is_a?(Collision::Rect)
+          @collider_shape.radius = r
+        else
+          set_collider(:rect, radius: r)
+        end
       end
 
       def hover_cursor_shape

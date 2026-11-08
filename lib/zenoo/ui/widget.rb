@@ -5,13 +5,13 @@ module Zenoo
     # Sprite ベースの保持モード (Retained Mode) UI ウィジェット基底クラス
     class Widget < Sprite
       attr_accessor :enabled, :interactive, :clip_children, :flex, :align_self, :id, :tooltip
-      attr_reader :hovered, :pressed, :clicked, :changed
+      attr_reader :hovered, :pressed, :clicked, :changed, :radius
 
       def initialize(x = 0.0, y = 0.0, width: 100.0, height: 32.0,
                      anchor: :top_left, pivot: :center, z: 0.0,
                      camera: false, parent: nil,
                      enabled: true, interactive: true,
-                     flex: nil, align_self: nil, id: nil, theme: nil)
+                     flex: nil, align_self: nil, id: nil, theme: nil, radius: nil)
         super(x, y, nil, width: width, height: height, anchor: anchor, pivot: pivot, z: z, camera: camera, parent: nil)
         @enabled       = enabled
         @interactive   = interactive
@@ -20,6 +20,7 @@ module Zenoo
         @align_self    = align_self
         @id            = id
         @theme         = theme
+        @radius        = radius ? radius.to_f : nil
 
         @hovered = false
         @pressed = false
@@ -31,6 +32,23 @@ module Zenoo
         @on_draw_proc   = nil
 
         self.parent = parent if parent
+        update_collider_shape if @radius && @radius > 0.0
+      end
+
+      def radius=(val)
+        vf = val ? val.to_f : nil
+        return if @radius == vf
+        @radius = vf
+        update_collider_shape
+      end
+
+      def update_collider_shape
+        r = @radius ? @radius.to_f : 0.0
+        if @collider_shape.is_a?(Collision::Rect)
+          @collider_shape.radius = r
+        elsif @collider_shape.nil? && r > 0.0
+          set_collider(:rect, radius: r)
+        end
       end
 
       def theme
@@ -154,7 +172,15 @@ module Zenoo
         return false if @vanished || !@visible || !@enabled || !@interactive
         return false unless point_in_ancestor_clips?(px, py)
 
-        if world_angle == 0.0
+        if @collider_shape
+          col = self.collider
+          return false unless col
+          pt = UI.hit_test_point
+          pt.x = px
+          pt.y = py
+          pt.dirty_pos!
+          Collision.check(col, pt)
+        elsif world_angle == 0.0
           l = screen_left
           t = screen_top
           px >= l && px <= (l + screen_width) && py >= t && py <= (t + screen_height)

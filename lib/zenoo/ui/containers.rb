@@ -34,7 +34,7 @@ module Zenoo
     # - justify: 主軸の揃え (:start, :center, :end, :space_between)
     # ==========================================================================
     class Box < Widget
-      attr_reader :direction, :gap, :align, :justify, :pad_left, :pad_top, :pad_right, :pad_bottom, :header_height
+      attr_reader :direction, :gap, :align, :justify, :pad_left, :pad_top, :pad_right, :pad_bottom, :header_height, :explicit_width, :explicit_height
       attr_accessor :auto_layout
 
       def initialize(x = 0.0, y = 0.0, width: nil, height: nil,
@@ -79,6 +79,26 @@ module Zenoo
           i += 1
         end
         tot + h_sum + ((@direction == :column && vis_count > 1) ? @gap * (vis_count - 1) : 0.0)
+      end
+
+      def content_width
+        tot = @pad_left + @pad_right
+        ch_list = @children
+        return tot unless ch_list
+
+        vis_count = 0
+        w_sum = 0.0
+        i = 0
+        len = ch_list.length
+        while i < len
+          c = ch_list[i]
+          if c.is_a?(Widget) && c.visible && !c.vanished?
+            vis_count += 1
+            w_sum = @direction == :row ? (w_sum + c.width) : [w_sum, c.width].max
+          end
+          i += 1
+        end
+        tot + w_sum + ((@direction == :row && vis_count > 1) ? @gap * (vis_count - 1) : 0.0)
       end
 
       def padding=(val)
@@ -234,8 +254,12 @@ module Zenoo
         while i < len
           c = ch_list[i]
           if c.is_a?(Widget) && c.visible && !c.vanished?
-            if c.is_a?(Box) && !c.instance_variable_get(:@explicit_height) && c.align_self != :stretch && @align != :stretch
-              c.height = c.content_height
+            if c.is_a?(Box) && c_align != :stretch
+              if is_row && !c.explicit_height
+                c.height = c.content_height
+              elsif !is_row && !c.explicit_width
+                c.width = c.content_width
+              end
             end
             cw = c.width
             ch = c.height
@@ -670,9 +694,9 @@ module Zenoo
 
         # タイトルバー境界線
         unless @collapsed
-          Zenoo::Window.draw_line(
-            wx + 1.0, wy + th_bar + 1.0,
-            wx + ww - 1.0, wy + th_bar + 1.0,
+          Zenoo::Window.draw_rect(
+            wx + 1.0, wy + th_bar,
+            ww - 2.0, 1.0,
             color: bc,
             camera: @camera,
             z: @z
