@@ -26,9 +26,9 @@ flag_mesh = Zenoo::Mesh.grid(flag_img, cols: 16, rows: 8)
 
 # 同じ flag_mesh を共有する 3 つの Sprite (それぞれ位置・角度・スケール・色調が別でも 1 ドローコールで一括描画！)
 flag_sprites = [
-  Sprite.new(60,  110, flag_mesh),
-  Sprite.new(250, 125, flag_mesh).tap { |s| s.scale_x = 0.75; s.scale_y = 0.75; s.angle = -8; s.color = [180, 255, 220] },
-  Sprite.new(250, 220, flag_mesh).tap { |s| s.scale_x = 0.75; s.scale_y = 0.75; s.angle =  8; s.color = [255, 200, 230] }
+  Sprite.new(60,  110, flag_mesh, anchor: :top_left),
+  Sprite.new(250, 125, flag_mesh, anchor: :top_left).tap { |s| s.scale_x = 0.75; s.scale_y = 0.75; s.angle = -8; s.color = [180, 255, 220] },
+  Sprite.new(250, 220, flag_mesh, anchor: :top_left).tap { |s| s.scale_x = 0.75; s.scale_y = 0.75; s.angle =  8; s.color = [255, 200, 230] }
 ]
 
 # 2. 4隅自由変形 (set_corners) 用のカードテクスチャ (160 x 120)

@@ -78,9 +78,9 @@ end
 # プリセット定義
 # ----------------------------------------------------
 ANCHOR_PRESETS = [
-  { name: ":top_left",      val: :top_left,      label: "左上 (0, 0)",    ax: 0.0, ay: 0.0 },
   { name: ":center",        val: :center,        label: "中央 (0.5, 0.5)", ax: 0.5, ay: 0.5 },
   { name: ":bottom_center", val: [0.5, 1.0],     label: "足元 (0.5, 1.0)", ax: 0.5, ay: 1.0 },
+  { name: ":top_left",      val: :top_left,      label: "左上 (0, 0)",    ax: 0.0, ay: 0.0 },
   { name: ":top_right",     val: [1.0, 0.0],     label: "右上 (1.0, 0.0)", ax: 1.0, ay: 0.0 },
   { name: ":bottom_right",  val: [1.0, 1.0],     label: "右下 (1.0, 1.0)", ax: 1.0, ay: 1.0 }
 ].freeze
