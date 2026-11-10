@@ -85,7 +85,7 @@ def create_tileset
 
     # 5: 3段石柱・下段 (柱脚・台座)
     ox = 160
-    Zenoo::Window.draw_ellipse(ox + 16, 27, 15, 5, color: [10, 12, 18, 140])
+    Zenoo::Window.draw_circle(ox + 16, 27, 15, 5, color: [10, 12, 18, 140])
     Zenoo::Window.draw_rect(ox + 5, 0, 22, 16, color: [105, 118, 142, 255])
     draw_pillar_flutes(ox, 0, 16)
     Zenoo::Window.draw_rect(ox + 3, 14, 26, 8, radius: 2, color: [120, 132, 158, 255], border_width: 1, border_color: [70, 80, 100, 255])
@@ -176,7 +176,7 @@ class IsoPlayer < Zenoo::Sprite
 
   def draw
     # 足元の影
-    Zenoo::Window.draw_ellipse(x, y - 2.0, 22.0, 9.0, color: [10, 12, 18, 140], z: -10.0)
+    Zenoo::Window.draw_circle(x, y - 2.0, 22.0, 9.0, color: [10, 12, 18, 140], z: -10.0)
     super
   end
 

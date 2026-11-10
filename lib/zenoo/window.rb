@@ -601,6 +601,25 @@ module Zenoo
     # ----------------------------------------------------
     # 描画 API 
     # ----------------------------------------------------
+
+    # SDF 角丸矩形描画 (アンチエイリアス・枠線・ドロップシャドウ・回転・画像マッピング対応)
+    #
+    # - `x` (`Numeric`): 左上X座標
+    # - `y` (`Numeric`): 左上Y座標
+    # - `w` (`Numeric`): 幅
+    # - `h` (`Numeric`): 高さ
+    # - `color:` (`Symbol, Array, Integer, Color, nil`): 塗りつぶし色 (画像指定時は乗算色。省略時は塗りつぶしなし、画像指定時は `:white`)
+    # - `radius:` (`Numeric`): 角丸の半径 (ピクセル単位)
+    # - `border_color:` (`Symbol, Array, Integer, Color, nil`): 枠線の色
+    # - `border_width:` (`Numeric, nil`): 枠線の太さ (ピクセル単位、枠線色指定時のデフォルトは `1.0`)
+    # - `shadow_blur:` (`Numeric`): ドロップシャドウ・光彩のぼかし幅
+    # - `shadow_color:` (`Symbol, Array, Integer, Color, nil`): 影の色
+    # - `angle:` (`Numeric`): 回転角度 (度数法)
+    # - `pivot:` (`Symbol, Array, nil`): 回転中心 (`:center`, `:top_left`, `[px, py]` 等)
+    # - `image:` (`Image, nil`): 矩形内に貼る画像
+    # - `blend:` (`Symbol`): ブレンドモード (`:alpha`, `:add`, `:multiply`, `:none` 等)
+    # - `camera:` (`Boolean`): カメラの座標変換を適用するか
+    # - `z:` (`Numeric`): Zオーダー (描画順、大きいほど手前)
     def self.draw_rect(x, y, w, h,
                        color: nil,
                        radius: 0.0,
@@ -614,7 +633,9 @@ module Zenoo
                        blend: :alpha,
                        camera: true,
                        z: 0.0)
-      actual_color = color || (border_color ? nil : :white)
+      return if color.nil? && border_color.nil? && image.nil? && (shadow_blur.nil? || shadow_blur.to_f <= 0.0)
+
+      actual_color = color || (image ? :white : nil)
       c_color = Backend.normalize_color(actual_color)
       b_mode = Backend.normalize_blend_mode(blend)
 
@@ -673,6 +694,23 @@ module Zenoo
         return
       end
 
+      # ピボット (pivot: :center, :top_left, :center_left 等)
+      pv = Collision.parse_pivot(pivot)
+      rot_rad = (angle ? angle.to_f : 0.0) * (Math::PI / 180.0)
+      mode = image ? 1.0 : 0.0
+
+      __enqueue_sdf_card(
+        ax, ay, wf, hf, c_color, rad,
+        border_color, border_width, shadow_blur, shadow_color, cur_zoom,
+        rot_rad, pv[0], pv[1], mode, image, b_mode, z
+      )
+    end
+
+    # SDF カードパイプラインへの共通エンキューヘルパー
+    def self.__enqueue_sdf_card(ax, ay, wf, hf, c_color, rad,
+                                border_color, border_width,
+                                shadow_blur, shadow_color, cur_zoom,
+                                rot_rad, pv_x, pv_y, mode, image, b_mode, z)
       b_width = 0.0
       b0 = 0.0; b1 = 0.0; b2 = 0.0; b3 = 0.0
       if border_color
@@ -688,20 +726,24 @@ module Zenoo
         s0 = sc[0].to_f; s1 = sc[1].to_f; s2 = sc[2].to_f; s3 = sc[3].to_f
       end
 
-      # ピボット (pivot: :center, :top_left, :center_left 等)
-      pv = Collision.parse_pivot(pivot)
-      pv_x = pv[0]
-      pv_y = pv[1]
-      rot_rad = (angle ? angle.to_f : 0.0) * (Math::PI / 180.0)
+      if image
+        tw = image.texture_width.to_f
+        th = image.texture_height.to_f
+        uv0 = tw > 0.0 ? image.x.to_f / tw : 0.0
+        uv1 = th > 0.0 ? image.y.to_f / th : 0.0
+        uv2 = tw > 0.0 ? image.width.to_f / tw : 1.0
+        uv3 = th > 0.0 ? image.height.to_f / th : 1.0
+      else
+        uv0 = 0.0; uv1 = 0.0; uv2 = 1.0; uv3 = 1.0
+      end
 
-      mode = image ? 1.0 : 0.0
       data = [
         ax, ay, wf, hf,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
         rad, b_width, s_blur, mode,
         b0, b1, b2, b3,
         s0, s1, s2, s3,
-        0.0, 0.0, 1.0, 1.0,
+        uv0, uv1, uv2, uv3,
         rot_rad, pv_x, pv_y, 0.0
       ].pack("f*")
 
@@ -716,114 +758,107 @@ module Zenoo
       )
     end
 
-    def self.draw_circle(x, y, r,
+    # SDF 円 / 楕円描画 (解析的アンチエイリアス・回転・画像マッピング・枠線・ドロップシャドウ対応)
+    # `ry` を省略するか `r` と同じ値を指定すると真円、異なる値を指定すると楕円を描画します。
+    #
+    # - `x` (`Numeric`): 中心X座標
+    # - `y` (`Numeric`): 中心Y座標
+    # - `r` (`Numeric`): 円の半径 (`ry` 指定時はX軸の半径)
+    # - `ry` (`Numeric, nil`): Y軸の半径 (省略時は `r` と同じ真円)
+    # - `color:` (`Symbol, Array, Integer, Color, nil`): 塗りつぶし色 (画像指定時は乗算色。省略時は塗りつぶしなし、画像指定時は `:white`)
+    # - `border_color:` (`Symbol, Array, Integer, Color, nil`): 枠線の色
+    # - `border_width:` (`Numeric, nil`): 枠線の太さ (ピクセル単位)
+    # - `shadow_blur:` (`Numeric`): ドロップシャドウ・光彩のぼかし幅
+    # - `shadow_color:` (`Symbol, Array, Integer, Color, nil`): 影の色
+    # - `angle:` (`Numeric`): 回転角度 (度数法)
+    # - `image:` (`Image, nil`): 円・楕円内に貼る画像
+    # - `blend:` (`Symbol`): ブレンドモード (`:alpha`, `:add`, `:multiply`, `:none` 等)
+    # - `camera:` (`Boolean`): カメラ適用有無 (デフォルト: `true`)
+    # - `z:` (`Numeric`): Zオーダー (デフォルト: `0.0`)
+    def self.draw_circle(x, y, r, ry = nil,
                         color: nil,
                         border_color: nil,
                         border_width: nil,
                         shadow_blur: 0.0,
                         shadow_color: nil,
+                        angle: 0.0,
+                        image: nil,
                         blend: :alpha,
                         camera: true,
                         z: 0.0)
-      rf = r.to_f
-      d = rf * 2.0
-      draw_rect(x.to_f - rf, y.to_f - rf, d, d,
-                radius: rf,
-                color: color,
-                border_color: border_color,
-                border_width: border_width,
-                shadow_blur: shadow_blur,
-                shadow_color: shadow_color,
-                blend: blend,
-                camera: camera,
-                z: z)
-    end
-
-    # SDF 楕円描画 (解析的アンチエイリアス・回転・枠線・影対応)
-    #
-    # cx, cy       : 楕円の中心座標
-    # rx, ry       : X軸・Y軸の半径
-    # color        : 塗りつぶし色 (シンボル、配列、Hex、Colorオブジェクト)
-    # border_color : 枠線の色
-    # border_width : 枠線の幅 (ピクセル単位)
-    # shadow_blur  : ドロップシャドウ・外光彩のぼかし幅
-    # shadow_color : 影の色
-    # angle        : 楕円の回転角度 (度数法)
-    # blend        : ブレンドモード (:alpha, :add 等)
-    # camera       : カメラ適用有無 (デフォルト: true)
-    # z            : Zオーダー (デフォルト: 0.0)
-    def self.draw_ellipse(cx, cy, rx, ry,
-                          color: nil,
-                          border_color: nil,
-                          border_width: nil,
-                          shadow_blur: 0.0,
-                          shadow_color: nil,
-                          angle: 0.0,
-                          blend: :alpha,
-                          camera: true,
-                          z: 0.0)
-      rxf = rx.to_f.abs
-      ryf = ry.to_f.abs
+      rxf = r.to_f.abs
+      ryf = ry ? ry.to_f.abs : rxf
       return if rxf <= 0.0 || ryf <= 0.0
 
-      actual_color = color || (border_color ? nil : :white)
+      if rxf == ryf
+        d = rxf * 2.0
+        draw_rect(x.to_f - rxf, y.to_f - rxf, d, d,
+                  radius: rxf,
+                  color: color,
+                  border_color: border_color,
+                  border_width: border_width,
+                  shadow_blur: shadow_blur,
+                  shadow_color: shadow_color,
+                  angle: angle,
+                  pivot: :center,
+                  image: image,
+                  blend: blend,
+                  camera: camera,
+                  z: z)
+        return
+      end
+
+      return if color.nil? && border_color.nil? && image.nil? && (shadow_blur.nil? || shadow_blur.to_f <= 0.0)
+
+      actual_color = color || (image ? :white : nil)
       c_color = Backend.normalize_color(actual_color)
       b_mode = Backend.normalize_blend_mode(blend)
 
       cam = @active_camera
       if cam && camera
         cur_zoom, cam_ox, cam_oy = cam.view
-        ax = ((cx.to_f - rxf) * cur_zoom) + cam_ox + @offset_x
-        ay = ((cy.to_f - ryf) * cur_zoom) + cam_oy + @offset_y
+        ax = ((x.to_f - rxf) * cur_zoom) + cam_ox + @offset_x
+        ay = ((y.to_f - ryf) * cur_zoom) + cam_oy + @offset_y
         wf = (rxf * 2.0) * cur_zoom
         hf = (ryf * 2.0) * cur_zoom
       else
         cur_zoom = 1.0
-        ax = (cx.to_f - rxf) + @offset_x
-        ay = (cy.to_f - ryf) + @offset_y
+        ax = (x.to_f - rxf) + @offset_x
+        ay = (y.to_f - ryf) + @offset_y
         wf = rxf * 2.0
         hf = ryf * 2.0
       end
 
-      b_width = 0.0
-      b0 = 0.0; b1 = 0.0; b2 = 0.0; b3 = 0.0
-      if border_color
-        b_width = (border_width || 1.0).to_f * cur_zoom
-        bc = Backend.normalize_color(border_color)
-        b0 = bc[0].to_f; b1 = bc[1].to_f; b2 = bc[2].to_f; b3 = bc[3].to_f
-      end
-
-      s_blur = shadow_blur.to_f * cur_zoom
-      s0 = 0.0; s1 = 0.0; s2 = 0.0; s3 = 0.0
-      if s_blur > 0.0
-        sc = Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR)
-        s0 = sc[0].to_f; s1 = sc[1].to_f; s2 = sc[2].to_f; s3 = sc[3].to_f
-      end
-
       rot_rad = (angle ? angle.to_f : 0.0) * (Math::PI / 180.0)
-      mode = 2.0 # 楕円モード (SDF)
-
-      data = [
-        ax, ay, wf, hf,
-        c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        0.0, b_width, s_blur, mode,
-        b0, b1, b2, b3,
-        s0, s1, s2, s3,
-        0.0, 0.0, 1.0, 1.0,
-        rot_rad, 0.5, 0.5, 0.0
-      ].pack("f*")
-
-      Backend.enqueue_draw(
-        Backend::Pipelines::CARD,
-        data,
-        1,
-        image: nil,
-        shader: card_shader,
-        blend: b_mode,
-        z: z
+      mode = image ? 3.0 : 2.0
+      __enqueue_sdf_card(
+        ax, ay, wf, hf, c_color, 0.0,
+        border_color, border_width, shadow_blur, shadow_color, cur_zoom,
+        rot_rad, 0.5, 0.5, mode, image, b_mode, z
       )
     end
 
+    # 画像またはメッシュを描画します
+    #
+    # - `x` (`Numeric`): 描画基準X座標
+    # - `y` (`Numeric`): 描画基準Y座標
+    # - `image` (`Image, Mesh, nil`): 描画する画像またはメッシュ (`nil` の場合は何もしない)
+    # - `width:` (`Numeric, nil`): 描画幅 (省略時は `image.width`)
+    # - `height:` (`Numeric, nil`): 描画高さ (省略時は `image.height`)
+    # - `anchor:` (`Symbol, Array`): 自身のどの点を `(x, y)` に配置するか (`:top_left`, `:center`, `:bottom_center`, `[ax, ay]` 等)
+    # - `pivot:` (`Symbol, Array`): 拡大・回転の中心位置 (`:center`, `:top_left`, `[px, py]` 等)
+    # - `color:` (`Symbol, Array, Integer, Color, nil`): 乗算カラー (ティント)
+    # - `angle:` (`Numeric`): 回転角度 (度数法)
+    # - `scale:` (`Numeric, nil`): 縦横均等の拡大率 (指定時は `scale_x`, `scale_y` より優先)
+    # - `scale_x:` (`Numeric`): X軸の拡大率 (マイナス値で左右反転)
+    # - `scale_y:` (`Numeric`): Y軸の拡大率 (マイナス値で上下反転)
+    # - `alpha:` (`Numeric`): 不透明度 (0〜255)
+    # - `blend:` (`Symbol, nil`): ブレンドモード (`:alpha`, `:add`, `:multiply`, `:none` 等)
+    # - `shader:` (`Shader, nil`): カスタムシェーダー
+    # - `uniforms:` (`Hash, nil`): シェーダーに渡す Uniform 変数ハッシュ
+    # - `image_override:` (`Image, nil`): テクスチャの上書き指定
+    # - `camera:` (`Boolean, Camera`): カメラ適用の有無、または使用する Camera インスタンス
+    # - `z:` (`Numeric`): Zオーダー (描画順)
     def self.draw(x, y, image,
                   width: nil,
                   height: nil,
@@ -997,13 +1032,15 @@ module Zenoo
 
     # 三角形描画 (GPUポリゴンラスタライズ描画)
     # 複数三角形を組み合わせたメッシュでも継ぎ目(シーム)が出ないハードウェア描画です。
-    # 頂点グラデーション (color: [c1, c2, c3]) に対応しています。
+    # 頂点グラデーション (`color: [c1, c2, c3]`) に対応しています。
     #
-    # x1, y1, x2, y2, x3, y3 : 三角形の3頂点
-    # color                  : 塗りつぶし色 または 3頂点分の色の配列 [c1, c2, c3]
-    # blend                  : ブレンドモード (:alpha, :add 等)
-    # camera                 : カメラ適用有無 (デフォルト: true)
-    # z                      : Zオーダー (デフォルト: 0.0)
+    # - `x1`, `y1` (`Numeric`): 頂点1の座標
+    # - `x2`, `y2` (`Numeric`): 頂点2の座標
+    # - `x3`, `y3` (`Numeric`): 頂点3の座標
+    # - `color:` (`Symbol, Array, Integer, Color`): 塗りつぶし色 または 3頂点分の色の配列 `[c1, c2, c3]`
+    # - `blend:` (`Symbol`): ブレンドモード (`:alpha`, `:add` 等)
+    # - `camera:` (`Boolean`): カメラ適用有無 (デフォルト: `true`)
+    # - `z:` (`Numeric`): Zオーダー (デフォルト: `0.0`)
     def self.draw_triangle(x1, y1, x2, y2, x3, y3,
                           color: :white,
                           blend: :alpha,
@@ -1056,17 +1093,18 @@ module Zenoo
 
     # SDF 線分描画 (解析的アンチエイリアス・端点形状・枠線・影対応)
     #
-    # x1, y1, x2, y2 : 始点・終点
-    # color          : 線の色
-    # width          : 線の太さ (ピクセル単位、デフォルト: 1.0)
-    # cap            : 端点形状 (:butt [平ら], :round [丸端], :square [正方形])
-    # border_color   : 枠線の色
-    # border_width   : 枠線の幅
-    # shadow_blur    : 影・光彩のぼかし幅
-    # shadow_color   : 影の色
-    # blend          : ブレンドモード (:alpha, :add 等)
-    # camera         : カメラ適用有無 (デフォルト: true)
-    # z              : Zオーダー (デフォルト: 0.0)
+    # - `x1`, `y1` (`Numeric`): 始点の座標
+    # - `x2`, `y2` (`Numeric`): 終点の座標
+    # - `color:` (`Symbol, Array, Integer, Color, nil`): 線の色
+    # - `width:` (`Numeric`): 線の太さ (ピクセル単位、デフォルト: `1.0`)
+    # - `cap:` (`Symbol`): 端点形状 (`:butt` [平ら], `:round` [丸端], `:square` [正方形])
+    # - `border_color:` (`Symbol, Array, Integer, Color, nil`): 枠線の色
+    # - `border_width:` (`Numeric, nil`): 枠線の幅
+    # - `shadow_blur:` (`Numeric`): 影・光彩のぼかし幅
+    # - `shadow_color:` (`Symbol, Array, Integer, Color, nil`): 影の色
+    # - `blend:` (`Symbol`): ブレンドモード (`:alpha`, `:add` 等)
+    # - `camera:` (`Boolean`): カメラ適用有無 (デフォルト: `true`)
+    # - `z:` (`Numeric`): Zオーダー (デフォルト: `0.0`)
     def self.draw_line(x1, y1, x2, y2,
                       color: :white,
                       width: 1.0,
@@ -1225,13 +1263,28 @@ module Zenoo
       target_font.text_height(text, size, line_spacing: line_spacing)
     end
 
-    # ----------------------------------------------------
     # 高品質 SDF テキスト描画 API (改行・アライメント対応)
-    # - align: :left (デフォルト), :center, :right
-    # - valign: :top (デフォルト), :middle / :center, :bottom, :baseline
-    # - line_spacing: 行送り倍率 (Float, デフォルトはフォントメトリクス準拠)
-    # ブロックが渡された場合は 1文字単位のカスタム装飾を実行
-    # ----------------------------------------------------
+    # ブロックが渡された場合は 1文字単位のカスタム装飾を実行します。
+    #
+    # - `x`, `y` (`Numeric`): 基準座標
+    # - `text` (`String, Object`): 描画する文字列
+    # - `font:` (`Font, nil`): フォントオブジェクト (省略時は `Font.default`)
+    # - `size:` (`Numeric`): フォントサイズ (ピクセル単位)
+    # - `color:` (`Symbol, Array, Integer, Color`): 文字色
+    # - `align:` (`Symbol`): 水平方向のアライメント (`:left`, `:center`, `:right`)
+    # - `valign:` (`Symbol`): 垂直方向のアライメント (`:top`, `:middle`, `:center`, `:bottom`, `:baseline`)
+    # - `line_spacing:` (`Numeric, nil`): 行送り倍率 (省略時はフォントメトリクス準拠)
+    # - `weight:` (`Numeric`): 文字の太さ調整 (太字補正値)
+    # - `outline_width:` (`Numeric`): 縁取りの太さ (ピクセル単位)
+    # - `outline_color:` (`Symbol, Array, Integer, Color`): 縁取りの色
+    # - `shadow_blur:` (`Numeric`): 影のぼかし幅
+    # - `shadow_color:` (`Symbol, Array, Integer, Color, nil`): 影の色
+    # - `shadow_dx:` (`Numeric`): 影のX方向オフセット
+    # - `shadow_dy:` (`Numeric`): 影のY方向オフセット
+    # - `sdf:` (`Boolean, nil`): SDF描画の強制ON/OFF (省略時は装飾の有無で自動判定)
+    # - `camera:` (`Boolean`): カメラ適用有無 (デフォルト: `true`)
+    # - `z:` (`Numeric`): Zオーダー (デフォルト: `0.0`)
+    # - `&block`: 1文字ごとの装飾を行うブロック (`|ctx|`)
     def self.draw_text(x, y, text,
                        font: nil,
                        size: 24,
@@ -1598,6 +1651,10 @@ module Zenoo
       @canvas ||= Canvas.new
     end
 
+    # ベクターパス描画 (HTML5 Canvas 2D API 互換のベクター図形描画)
+    #
+    # - `camera:` (`Boolean`): カメラ適用有無 (デフォルト: `true`)
+    # - `&block`: パス描画用の `Canvas` オブジェクトを渡すブロック (`|c|`)
     def self.draw_path(camera: true)
       c = canvas
       cam = camera ? @active_camera : nil

@@ -144,7 +144,7 @@ def create_dungeon_tileset
 
     # 7: 3段石柱・下段 (柱脚・台座)
     ox = 224
-    Zenoo::Window.draw_ellipse(ox + 16, 27, 15, 5, color: [10, 12, 18, 140])
+    Zenoo::Window.draw_circle(ox + 16, 27, 15, 5, color: [10, 12, 18, 140])
     Zenoo::Window.draw_rect(ox + 5, 0,  22, 16, color: [105, 118, 142, 255])
     draw_pillar_flutes(ox, 0, 16)
     Zenoo::Window.draw_rect(ox + 3, 14, 26, 8,  radius: 2, color: [120, 132, 158, 255], border_width: 1, border_color: [70, 80, 100, 255])
@@ -157,7 +157,7 @@ def create_dungeon_tileset
 
     # 9: 2段蒼石碑・下段 (台座)
     ox = 288
-    Zenoo::Window.draw_ellipse(ox + 16, 27, 14, 5, color: [10, 12, 18, 140])
+    Zenoo::Window.draw_circle(ox + 16, 27, 14, 5, color: [10, 12, 18, 140])
     Zenoo::Window.draw_rect(ox + 5, 0,  22, 18, color: [40, 95, 145, 255])
     Zenoo::Window.draw_line(ox + 16, 0, ox + 16, 16, width: 2, color: [160, 235, 255, 200])
     Zenoo::Window.draw_rect(ox + 2, 16, 28, 12, radius: 3, color: [78, 88, 110, 255], border_width: 1, border_color: [115, 128, 155, 255])
@@ -171,8 +171,8 @@ def create_dungeon_tileset
 
       Zenoo::Window.draw_rect(ox, 0, 32, 32, color: [18, 52, 86, 255])
       Zenoo::Window.draw_rect(ox + 1, 1, 30, 30, radius: 3, color: [24, 68, 110, 255])
-      Zenoo::Window.draw_ellipse(ox + 11 + shift_x, 10 + shift_y, 8, 4, color: [34, 92, 145, 190])
-      Zenoo::Window.draw_ellipse(ox + 21 - shift_x, 22 - shift_y, 9, 4, color: [30, 82, 132, 190])
+      Zenoo::Window.draw_circle(ox + 11 + shift_x, 10 + shift_y, 8, 4, color: [34, 92, 145, 190])
+      Zenoo::Window.draw_circle(ox + 21 - shift_x, 22 - shift_y, 9, 4, color: [30, 82, 132, 190])
 
       w1_x = ox + 5  + ((f * 4) % 10)
       w2_x = ox + 13 - ((f * 3) % 8)
@@ -200,7 +200,7 @@ def create_dungeon_tileset
       sw = sway_offsets[f]
       dp = dip_offsets[f]
 
-      Zenoo::Window.draw_ellipse(ox + 16, 29, 12, 3, color: [10, 14, 18, 130])
+      Zenoo::Window.draw_circle(ox + 16, 29, 12, 3, color: [10, 14, 18, 130])
       Zenoo::Window.draw_triangle(ox + 7  + sw, 11 + dp, ox + 6,  29, ox + 12, 29, color: [tip_back, base_dark, base_dark])
       Zenoo::Window.draw_triangle(ox + 16 + sw, 7  + dp, ox + 12, 29, ox + 19, 29, color: [tip_back, base_dark, base_dark])
       Zenoo::Window.draw_triangle(ox + 25 + sw, 12 + dp, ox + 19, 29, ox + 26, 29, color: [tip_back, base_dark, base_dark])
@@ -599,7 +599,7 @@ class SlimeEnemy < Zenoo::Sprite
     # 1. 接地ドロップシャドウ
     sw, sh, sa = shadow_metrics(@jump_z, 40.0, 30.0 * (scale_x.abs / BASE_SCALE), 11.5, 140)
     a = (sa * alpha / 255.0).to_i
-    Zenoo::Window.draw_ellipse(x, y - 3.0, sw, sh, color: [*SHADOW_COLOR_RGB, a], z: SHADOW_Z)
+    Zenoo::Window.draw_circle(x, y - 3.0, sw, sh, color: [*SHADOW_COLOR_RGB, a], z: SHADOW_Z)
 
     # 2. スライム本体
     self.z = y
@@ -873,7 +873,7 @@ class IsoPlayer < Zenoo::Sprite
     # 地上 (または高台から外れた落下中) は通常の楕円影
     if @ground_h <= 0.0 || @altitude < @ground_h || @tilemap.nil?
       rx0, ry0, sa0 = shadow_metrics(@altitude)
-      Zenoo::Window.draw_ellipse(x, sy, rx0, ry0, color: [*SHADOW_COLOR_RGB, sa0], z: SHADOW_Z)
+      Zenoo::Window.draw_circle(x, sy, rx0, ry0, color: [*SHADOW_COLOR_RGB, sa0], z: SHADOW_Z)
       return
     end
 
@@ -974,7 +974,7 @@ class IsoPlayer < Zenoo::Sprite
     return if cw <= 0.5 || ch <= 0.5
 
     prev_ox, prev_oy = Zenoo::Window.push_clip_scope(sx0, sy0, cw, ch, z: z_val)
-    Zenoo::Window.draw_ellipse(cx, cy, rx, ry, color: col, z: z_val)
+    Zenoo::Window.draw_circle(cx, cy, rx, ry, color: col, z: z_val)
     Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
   end
 
