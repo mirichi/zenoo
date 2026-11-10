@@ -64,7 +64,9 @@ module Zenoo
           v_border_width = in_param0.y;
           v_shadow_blur = shadow_blur;
           v_mode = mode;
-          v_uv = in_uv.xy + in_unit_pos * in_uv.zw;
+          // パディング領域を除外し、図形本体 (0..w, 0..h) に正確に UV をマッピング
+          vec2 uv_ratio = local_corner / vec2(max(w, 0.0001), max(h, 0.0001));
+          v_uv = in_uv.xy + uv_ratio * in_uv.zw;
       }
     GLSL
 
