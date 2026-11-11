@@ -320,10 +320,6 @@ module Zenoo
       hovered?
     end
 
-    def self.resize(w, h)
-      Native::Window.set_window_size(w.to_i, h.to_i)
-    end
-
     def self.delta_time
       Native::Window.delta_time
     end
@@ -1150,7 +1146,10 @@ module Zenoo
 
       cx = (ax1 + ax2) * 0.5
       cy = (ay1 + ay2) * 0.5
-      rot_rad = Math.atan2(dy, dx)
+
+      is_horiz = dy.abs < 0.0001
+      is_vert  = !is_horiz && dx.abs < 0.0001
+      w = 1.0 if (is_horiz || is_vert) && w < 1.0
 
       rad = 0.0
       total_len = len
@@ -1162,16 +1161,25 @@ module Zenoo
         total_len = len + w
       end
 
-      bx = cx - (total_len * 0.5)
-      by = cy - (w * 0.5)
-
-      # 水平線・垂直線におけるピクセル境界スナップ (サブピクセル消失・段差モアレの防止)
-      if dy.abs < 0.0001
-        w = 1.0 if w < 1.0
-        by = by.round
-      elsif dx.abs < 0.0001
-        w = 1.0 if w < 1.0
-        bx = bx.round
+      # 水平線・垂直線は回転誤差を避けて軸並行矩形として描画し、太さ方向をピクセル境界にスナップ
+      if is_horiz
+        bx = cx - (total_len * 0.5)
+        by = (cy - (w * 0.5)).round
+        rect_w = total_len
+        rect_h = w
+        rot_rad = 0.0
+      elsif is_vert
+        bx = (cx - (w * 0.5)).round
+        by = cy - (total_len * 0.5)
+        rect_w = w
+        rect_h = total_len
+        rot_rad = 0.0
+      else
+        bx = cx - (total_len * 0.5)
+        by = cy - (w * 0.5)
+        rect_w = total_len
+        rect_h = w
+        rot_rad = Math.atan2(dy, dx)
       end
 
       c_color = Backend.normalize_color(actual_color)
@@ -1194,7 +1202,7 @@ module Zenoo
       mode = 0.0 # 角丸矩形モード (SDF)
 
       data = [
-        bx, by, total_len, w,
+        bx, by, rect_w, rect_h,
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
         rad, b_width, s_blur, mode,
         b0, b1, b2, b3,
