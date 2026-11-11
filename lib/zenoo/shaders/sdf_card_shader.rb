@@ -114,8 +114,8 @@ module Zenoo
 
           // 1. ドロップシャドウ計算
           float shadow_alpha = 0.0;
-          if (v_shadow_blur > 0.0 && dist > 0.0) {
-              shadow_alpha = 1.0 - smoothstep(0.0, v_shadow_blur * 1.5, dist);
+          if (v_shadow_blur > 0.0) {
+              shadow_alpha = 1.0 - smoothstep(0.0, v_shadow_blur * 1.5, max(dist, 0.0));
               shadow_alpha *= v_shadow_color.a;
           }
 
@@ -138,9 +138,13 @@ module Zenoo
 
           vec4 final_shape = vec4(shape_col.rgb, shape_col.a * body_alpha);
 
-          // 4. シャドウと本体をブレンド
-          if (dist > 0.0) {
-              fragColor = vec4(v_shadow_color.rgb, shadow_alpha);
+          // 4. シャドウと本体をブレンド (本体をシャドウの上にアルファ合成)
+          if (shadow_alpha > 0.0) {
+              float out_a = final_shape.a + shadow_alpha * (1.0 - final_shape.a);
+              vec3 out_rgb = (out_a > 0.0001)
+                  ? (final_shape.rgb * final_shape.a + v_shadow_color.rgb * shadow_alpha * (1.0 - final_shape.a)) / out_a
+                  : vec3(0.0);
+              fragColor = vec4(out_rgb, out_a);
           } else {
               fragColor = final_shape;
           }
