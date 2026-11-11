@@ -1003,8 +1003,10 @@ void zen_set_window_scale(float scale) {
     update_viewport(fb_w, fb_h);
     s_in_auto_resize = 0;
 #else
-    int new_w = (int)((float)s_viewport.base_w * s_user_window_scale + 0.5f);
-    int new_h = (int)((float)s_viewport.base_h * s_user_window_scale + 0.5f);
+    float dpi = zen_get_dpi_scale();
+    float total_scale = s_user_window_scale * dpi;
+    int new_w = (int)((float)s_viewport.base_w * total_scale + 0.5f);
+    int new_h = (int)((float)s_viewport.base_h * total_scale + 0.5f);
     if (new_w > 0 && new_h > 0) {
         glfwSetWindowSize(s_window, new_w, new_h);
         int fb_w = new_w, fb_h = new_h;
