@@ -269,10 +269,10 @@ module Zenoo
           clip_offsets = Window.push_clip_scope(x, y, w, h, local: true, z: z)
           [true, clip_offsets]
         else
-          prev_ox = Window.offset_x
-          prev_oy = Window.offset_y
-          Window.offset_x = prev_ox + x.to_f
-          Window.offset_y = prev_oy + y.to_f
+          prev_ox = Window.__offset_x
+          prev_oy = Window.__offset_y
+          Window.__offset_x = prev_ox + x.to_f
+          Window.__offset_y = prev_oy + y.to_f
           [false, [prev_ox, prev_oy]]
         end
       end
@@ -283,15 +283,15 @@ module Zenoo
         if is_clip
           Window.pop_clip_scope(offsets[0], offsets[1])
         else
-          Window.offset_x = offsets[0]
-          Window.offset_y = offsets[1]
+          Window.__offset_x = offsets[0]
+          Window.__offset_y = offsets[1]
         end
         @current = @scope_stack.pop if @scope_stack.any?
       end
 
       # コンテナスコープ (panel / window 共通のローカル座標系 & スコープ退避)
       # - clip: true  => Window.clip(..., local: true, z: z) でハードウェアシザー + ローカル座標化
-      # - clip: false => Window.offset_x / offset_y のみシフトしてローカル座標化
+      # - clip: false => Window.__offset_x / __offset_y のみシフトしてローカル座標化
       def container(x, y, w, h, clip: false, z: 0.0, spacing_x: nil, spacing_y: nil)
         state = begin_container(x, y, w, h, clip: clip, z: z, spacing_x: spacing_x, spacing_y: spacing_y)
         yield

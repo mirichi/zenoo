@@ -39,8 +39,8 @@ module Zenoo
           sub_str = cur_text[0...cursor_pos] || ""
           caret_offset = f_font.text_width(sub_str, f_size)
           pad_x = 10.0
-          abs_ime_x = rx + pad_x + caret_offset + Window.offset_x
-          abs_ime_y = ry + rh + 2.0 + Window.offset_y
+          abs_ime_x = rx + pad_x + caret_offset + Window.__offset_x
+          abs_ime_y = ry + rh + 2.0 + Window.__offset_y
           Input.set_ime_position(abs_ime_x, abs_ime_y)
 
           # 2. クリップボード & 特殊キー処理 (Ctrl/Command ショートカット対応)

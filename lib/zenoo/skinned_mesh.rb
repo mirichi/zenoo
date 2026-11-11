@@ -376,9 +376,9 @@ module Zenoo
             end
       if cam
         cz, cam_ox, cam_oy = cam.view
-        view_vec = [cam_ox + Window.offset_x, cam_oy + Window.offset_y, cz, 0.0]
+        view_vec = [cam_ox + Window.__offset_x, cam_oy + Window.__offset_y, cz, 0.0]
       else
-        view_vec = [Window.offset_x, Window.offset_y, 1.0, 0.0]
+        view_vec = [Window.__offset_x, Window.__offset_y, 1.0, 0.0]
       end
 
       # 乗算カラーとアルファ

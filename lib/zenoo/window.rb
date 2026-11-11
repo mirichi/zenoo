@@ -522,19 +522,20 @@ module Zenoo
       end
     end
 
-    def self.offset_x
+    # 内部用描画座標オフセット (clip / render_to / ImGui 専用)
+    def self.__offset_x
       @offset_x
     end
 
-    def self.offset_x=(val)
+    def self.__offset_x=(val)
       @offset_x = val.to_f
     end
 
-    def self.offset_y
+    def self.__offset_y
       @offset_y
     end
 
-    def self.offset_y=(val)
+    def self.__offset_y=(val)
       @offset_y = val.to_f
     end
 

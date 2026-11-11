@@ -240,11 +240,11 @@ module Zenoo
 
       # ローカル座標系対応のマウス座標
       def gui_mouse_x
-        @mouse_x - Window.offset_x
+        @mouse_x - Window.__offset_x
       end
 
       def gui_mouse_y
-        @mouse_y - Window.offset_y
+        @mouse_y - Window.__offset_y
       end
 
       # --------------------------------------------------
