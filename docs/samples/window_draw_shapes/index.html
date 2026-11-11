@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>基本図形の描画 - Zenoo Sample</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #141518;
+      color: #d1d5db;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      padding: 24px 16px 48px;
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    .nav-bar {
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #8b92a0;
+    }
+    .nav-link {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    .nav-link:hover {
+      text-decoration: underline;
+    }
+    .separator {
+      color: #484f58;
+    }
+    .nav-category {
+      color: #8b92a0;
+      font-weight: 500;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #f0f3f6;
+    }
+    .desc {
+      font-size: 14px;
+      color: #8b92a0;
+      margin-bottom: 20px;
+    }
+    .canvas-card {
+      border: 1px solid #2d3139;
+      border-radius: 4px;
+      background: #000000;
+      margin-bottom: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+    .canvas-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      min-height: 360px;
+      position: relative;
+    }
+    canvas.emscripten {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      outline: none;
+      background-color: #000;
+    }
+    #status {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      font-size: 11px;
+      color: #8b92a0;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 2px 6px;
+      border-radius: 3px;
+      pointer-events: none;
+      font-family: ui-monospace, monospace;
+    }
+    .code-section {
+      border: 1px solid #2d3139;
+      border-radius: 4px;
+      background: #1b1c20;
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 12px;
+      background: #1b1c20;
+      border-bottom: 1px solid #2d3139;
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      color: #8b92a0;
+    }
+    .copy-btn {
+      background: #23252b;
+      border: 1px solid #363b45;
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 12px;
+      color: #c9d1d9;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .copy-btn:hover {
+      background: #2b2e36;
+      color: #ffffff;
+    }
+    .copy-btn:active {
+      background: #1f2126;
+    }
+    pre[class*="language-"] {
+      margin: 0;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.45;
+      background: #141518 !important;
+      border: none;
+      border-radius: 0;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+    code[class*="language-"] {
+      font-family: inherit;
+    }
+    #zenoo-hidden-input {
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      opacity: 0;
+      pointer-events: none;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="nav-bar">
+      <div class="breadcrumb">
+        <a href="../" class="nav-link">サンプル一覧</a>
+        <span class="separator">/</span>
+        <span class="nav-category">Window</span>
+      </div>
+    </div>
+
+    <h1>基本図形の描画</h1>
+    <p class="desc">draw_rect, draw_circle, draw_triangle で基本図形を描画する最小サンプル</p>
+
+    <div class="canvas-card">
+      <div class="canvas-container" id="canvas-container">
+        <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+        <div id="status">Loading WebAssembly...</div>
+        <input id="zenoo-hidden-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+      </div>
+    </div>
+
+    <div class="code-section">
+      <div class="code-header">
+        <span>window_draw_shapes.rb</span>
+        <button id="copy-btn" class="copy-btn" onclick="copyCode()">Copy</button>
+      </div>
+      <pre><code id="code-block" class="language-ruby"># category: Window
+# title: 基本図形の描画
+# desc: draw_rect, draw_circle, draw_triangle で基本図形を描画する最小サンプル
+
+require_relative &#x27;../lib/zenoo&#x27;
+
+Window.loop do
+  Window.draw_rect(40, 40, 100, 100, color: [80, 120, 200])
+  Window.draw_circle(240, 90, 50, color: [220, 80, 80])
+  Window.draw_triangle(360, 40, 310, 140, 410, 140, color: [80, 180, 100])
+end
+</code></pre>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-ruby.min.js"></script>
+  <script type="text/javascript">
+    function copyCode() {
+      var code = document.getElementById('code-block').innerText;
+      navigator.clipboard.writeText(code).then(function() {
+        var btn = document.getElementById('copy-btn');
+        btn.innerText = 'Copied!';
+        setTimeout(function() { btn.innerText = 'Copy'; }, 1500);
+      });
+    }
+
+    var statusElement = document.getElementById('status');
+    var canvasElement = document.getElementById('canvas');
+
+    var Module = {
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
+      canvas: canvasElement,
+      setStatus: function(text) {
+        if (!text) {
+          statusElement.style.display = 'none';
+        } else {
+          statusElement.style.display = 'block';
+          statusElement.innerText = text;
+        }
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : '');
+      }
+    };
+    Module.setStatus('Downloading...');
+
+    window.onerror = function() {
+      Module.setStatus('Error loading WebAssembly');
+    };
+
+    // マルチタッチ連携
+    function getCanvasOffset(touch) {
+      var rect = canvasElement.getBoundingClientRect();
+      var scaleX = rect.width > 0 ? (canvasElement.width / rect.width) : 1.0;
+      var scaleY = rect.height > 0 ? (canvasElement.height / rect.height) : 1.0;
+      return {
+        x: (touch.clientX - rect.left) * scaleX,
+        y: (touch.clientY - rect.top) * scaleY
+      };
+    }
+
+    function handleTouch(e, type) {
+      if (!Module._zen_push_touch) return;
+      if (e.cancelable) e.preventDefault();
+      var touches = e.changedTouches;
+      if (!touches) return;
+      for (var i = 0; i < touches.length; i++) {
+        var t = touches[i];
+        var pos = getCanvasOffset(t);
+        Module._zen_push_touch(t.identifier, type, pos.x, pos.y);
+      }
+    }
+
+    canvasElement.addEventListener('touchstart', function(e) { handleTouch(e, 0); }, { passive: false });
+    window.addEventListener('touchmove', function(e) { handleTouch(e, 1); }, { passive: false });
+    window.addEventListener('touchend', function(e) { handleTouch(e, 2); }, { passive: false });
+    window.addEventListener('touchcancel', function(e) { handleTouch(e, 3); }, { passive: false });
+
+    // IME日本語入力連携
+    var hiddenInput = document.getElementById('zenoo-hidden-input');
+    var isComposing = false;
+    window.zenooOnFocusTextInput = function(x, y) {
+      if (!hiddenInput) return;
+      if (x >= 0 && y >= 0) hiddenInput.focus();
+      else hiddenInput.blur();
+    };
+    function sendStringToZenoo(text) {
+      if (!text || !Module._zen_push_char) return;
+      for (var i = 0; i < text.length; i++) {
+        var code = text.charCodeAt(i);
+        if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length) {
+          var high = code;
+          var low = text.charCodeAt(++i);
+          code = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
+        }
+        Module._zen_push_char(code);
+      }
+    }
+    if (hiddenInput) {
+      hiddenInput.addEventListener('compositionstart', function() { isComposing = true; });
+      hiddenInput.addEventListener('compositionend', function(e) {
+        isComposing = false;
+        var text = e.data || hiddenInput.value;
+        if (text) sendStringToZenoo(text);
+        hiddenInput.value = '';
+      });
+      hiddenInput.addEventListener('input', function() {
+        if (!isComposing && hiddenInput.value.length > 0) {
+          sendStringToZenoo(hiddenInput.value);
+          hiddenInput.value = '';
+        }
+      });
+    }
+  </script>
+  <script async type="text/javascript" src="index.js"></script>
+</body>
+</html>

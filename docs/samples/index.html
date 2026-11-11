@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zenoo 基本機能サンプル集</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #141518;
+      color: #d1d5db;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      padding: 32px 20px 64px;
+    }
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .nav-bar {
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+    .nav-link {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    .nav-link:hover {
+      text-decoration: underline;
+    }
+    header {
+      border-bottom: 1px solid #2d3139;
+      padding-bottom: 16px;
+      margin-bottom: 32px;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #f0f3f6;
+      margin-bottom: 6px;
+    }
+    p.lead {
+      color: #8b92a0;
+      font-size: 14px;
+    }
+    .category-section {
+      margin-bottom: 32px;
+    }
+    h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #e1e4e8;
+      border-bottom: 1px solid #24272e;
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+    }
+    .sample-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .sample-item {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 12px;
+      padding: 7px 0;
+      border-bottom: 1px dashed #20232a;
+      font-size: 14px;
+    }
+    .sample-link {
+      color: #58a6ff;
+      text-decoration: none;
+      font-weight: 500;
+      min-width: 180px;
+    }
+    .sample-link:hover {
+      text-decoration: underline;
+    }
+    .sample-desc {
+      color: #8b92a0;
+      flex: 1;
+    }
+    .empty-note {
+      color: #6e7681;
+      font-size: 13px;
+      font-style: italic;
+    }
+    footer {
+      margin-top: 48px;
+      padding-top: 16px;
+      border-top: 1px solid #24272e;
+      font-size: 12px;
+      color: #6e7681;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="nav-bar">
+      <a href="../" class="nav-link">&larr; Zenoo ショーケース・総合デモ一覧へ</a>
+    </div>
+
+    <header>
+      <h1>Zenoo 基本機能サンプル集</h1>
+      <p class="lead">各機能を最小限のコードで実際に動かして確認できる機能別サンプルです。</p>
+    </header>
+
+    <main>
+      <section class="category-section">
+  <h2>Window</h2>
+  <ul class="sample-list">
+    <li class="sample-item">
+      <a class="sample-link" href="window_draw_shapes/index.html">基本図形の描画</a>
+      <span class="sample-desc">draw_rect, draw_circle, draw_triangle, draw_line で基本図形を描画する最小サンプル</span>
+    </li>
+    <li class="sample-item">
+      <a class="sample-link" href="window_draw_rect/index.html">draw_rect の各機能</a>
+      <span class="sample-desc">draw_rect の角丸、ボーダー、シャドウ、回転、画像埋め込みを単機能ずつ確認するサンプル</span>
+    </li>
+    <li class="sample-item">
+      <a class="sample-link" href="window_scale/index.html">解像度とスケーリング</a>
+      <span class="sample-desc">仮想解像度・Window.scale・dpi_scale・viewport_scale・scale_mode の動作を確認するサンプル</span>
+    </li>
+  </ul>
+</section>
+    </main>
+
+    <footer>
+      <span>Zenoo 2D Game Library</span>
+    </footer>
+  </div>
+</body>
+</html>

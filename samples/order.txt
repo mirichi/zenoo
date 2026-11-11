@@ -1,0 +1,5 @@
+# サンプル一覧の表示順（上から順に並びます）
+# 拡張子 (.rb) は省略可 / 未記載のサンプルは末尾にファイル名順で自動追加されます
+window_draw_shapes
+window_draw_rect
+window_scale
