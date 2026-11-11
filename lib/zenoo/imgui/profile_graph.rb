@@ -79,8 +79,8 @@ module Zenoo
             Window.draw_rect(hbx, ry + 1.0, bar_w, rh - 2.0, color: Color.new(255, 255, 255, 60))
           end
 
-          ox = Window.offset_x
-          oy = Window.offset_y
+          ox = Window.__offset_x
+          oy = Window.__offset_y
           bars_batch = []
           rect_count = 0
           bw = [bar_w - 0.5, 1.0].max

@@ -629,12 +629,12 @@ module Zenoo
       cam = Window.active_camera
       if use_cam && cam
         zoom, ox, oy = cam.view
-        ox += Window.offset_x
-        oy += Window.offset_y
+        ox += Window.__offset_x
+        oy += Window.__offset_y
       else
         zoom = 1.0
-        ox = Window.offset_x
-        oy = Window.offset_y
+        ox = Window.__offset_x
+        oy = Window.__offset_y
       end
 
       shape_id = SHAPES[@shape] || @shape.to_i

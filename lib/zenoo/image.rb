@@ -93,10 +93,10 @@ class Zenoo::Image
     Zenoo::Window.camera = nil
 
     if is_sub
-      prev_ox = Zenoo::Window.offset_x
-      prev_oy = Zenoo::Window.offset_y
-      Zenoo::Window.offset_x = target.x.to_f
-      Zenoo::Window.offset_y = target.y.to_f
+      prev_ox = Zenoo::Window.__offset_x
+      prev_oy = Zenoo::Window.__offset_y
+      Zenoo::Window.__offset_x = target.x.to_f
+      Zenoo::Window.__offset_y = target.y.to_f
       Zenoo::Backend.push_clip([target.x.to_f, target.y.to_f, target.width.to_f, target.height.to_f], 0.0)
     end
 
@@ -104,8 +104,8 @@ class Zenoo::Image
 
     if is_sub
       Zenoo::Backend.pop_clip
-      Zenoo::Window.offset_x = prev_ox
-      Zenoo::Window.offset_y = prev_oy
+      Zenoo::Window.__offset_x = prev_ox
+      Zenoo::Window.__offset_y = prev_oy
     end
     Zenoo::Window.camera = old_camera
     Zenoo::Backend.current_target = old_target
