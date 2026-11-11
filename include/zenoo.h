@@ -147,6 +147,7 @@ enum {
 int  zen_ensure_context(void); // 必要に応じて非表示ウィンドウ&GLコンテキストを先行初期化
 int  zen_init(int width, int height, const char* title);
 int  zen_init_scaled(int base_width, int base_height, const char* title, int window_width, int window_height);
+int  zen_init_scaled_ex(int base_width, int base_height, const char* title, int window_width, int window_height, float scale);
 int  zen_init_fullscreen(const char* title); // 全画面 (排他フルスクリーン) で初期化
 void zen_toggle_fullscreen(void);            // フルスクリーンとウィンドウの切り替え
 void zen_shutdown(void);
@@ -191,6 +192,9 @@ int    zen_is_window_hovered(void);                  // マウスカーソルが
 void   zen_set_scale_mode(int mode);
 int    zen_get_scale_mode(void);
 float  zen_get_scale(void);
+void   zen_set_window_scale(float scale);
+float  zen_get_window_scale(void);
+float  zen_get_dpi_scale(void);
 void   zen_set_target_fps(int fps); // 目標FPS設定 (デフォルト60fps固定。0で無制限)
 int    zen_get_target_fps(void);
 void   zen_set_vsync(int vsync);    // 1: VSync有効, 0: VSync無効

@@ -97,9 +97,10 @@ module Zenoo
     def self.loop(width = 1280, height = 720, title = "Zenoo", scale: nil, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, msaa: nil, fps: 60, &block)
       @game_time = 0.0
       self.msaa = msaa unless msaa.nil?
-      win_w = window_width ? window_width.to_i : (scale ? (width * scale).to_i : 0)
-      win_h = window_height ? window_height.to_i : (scale ? (height * scale).to_i : 0)
-      Native::Window.init(width, height, title, fullscreen, win_w, win_h, scale_mode)
+      win_w = window_width ? window_width.to_i : 0
+      win_h = window_height ? window_height.to_i : 0
+      init_scale = scale ? scale.to_f : 1.0
+      Native::Window.init(width, height, title, fullscreen, win_w, win_h, scale_mode, init_scale)
       Native::Window.scale_mode = scale_mode
       Native::Window.vsync = (vsync ? 1 : 0)
       self.target_fps = fps
@@ -233,11 +234,19 @@ module Zenoo
     end
 
     def self.scale
-      Native::Window.scale
+      Native::Window.window_scale
     end
 
     def self.scale=(val)
-      Native::Window.scale = val.to_f
+      Native::Window.window_scale = val.to_f
+    end
+
+    def self.viewport_scale
+      Native::Window.scale
+    end
+
+    def self.dpi_scale
+      Native::Window.dpi_scale
     end
 
     def self.scale_mode
