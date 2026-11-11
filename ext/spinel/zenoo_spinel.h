@@ -69,7 +69,7 @@ void sp_ZenShader_set_texture(sp_ZenShader* s, const char* name, sp_int unit, sp
 
 // Window / Input / Renderer ラッパー
 sp_int sp_zen_win_init(sp_int w, sp_int h, const char* title, sp_int fullscreen);
-sp_int sp_zen_win_init_scaled(sp_int base_w, sp_int base_h, const char* title, sp_int win_w, sp_int win_h, sp_int fullscreen);
+sp_int sp_zen_win_init_scaled(sp_int base_w, sp_int base_h, const char* title, sp_int win_w, sp_int win_h, sp_int fullscreen, double scale);
 sp_int sp_zen_win_update(void);
 void sp_zen_win_clear(uint32_t color);
 void sp_zen_win_start_wasm_loop(sp_RbVal proc_val);
@@ -89,6 +89,8 @@ void sp_zen_win_set_scale_mode(sp_int mode);
 sp_int sp_zen_win_get_scale_mode(void);
 void sp_zen_win_set_scale(double scale);
 double sp_zen_win_get_scale(void);
+double sp_zen_win_get_window_scale(void);
+double sp_zen_win_get_dpi_scale(void);
 void sp_zen_win_set_window_size(sp_int w, sp_int h);
 void sp_zen_win_set_msaa_samples(sp_int samples);
 sp_int sp_zen_win_get_msaa_samples(void);

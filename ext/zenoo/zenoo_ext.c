@@ -613,8 +613,8 @@ static VALUE scale_mode_to_sym(int mode) {
 
 static VALUE win_init(int argc, VALUE* argv, VALUE self) {
     (void)self;
-    VALUE rb_w, rb_h, rb_title, rb_fullscreen, rb_win_w, rb_win_h, rb_scale_mode;
-    rb_scan_args(argc, argv, "25", &rb_w, &rb_h, &rb_title, &rb_fullscreen, &rb_win_w, &rb_win_h, &rb_scale_mode);
+    VALUE rb_w, rb_h, rb_title, rb_fullscreen, rb_win_w, rb_win_h, rb_scale_mode, rb_scale;
+    rb_scan_args(argc, argv, "26", &rb_w, &rb_h, &rb_title, &rb_fullscreen, &rb_win_w, &rb_win_h, &rb_scale_mode, &rb_scale);
 
     int w = NUM2INT(rb_w);
     int h = NUM2INT(rb_h);
@@ -622,12 +622,13 @@ static VALUE win_init(int argc, VALUE* argv, VALUE self) {
     int fullscreen = RTEST(rb_fullscreen);
     int win_w = NIL_P(rb_win_w) ? 0 : NUM2INT(rb_win_w);
     int win_h = NIL_P(rb_win_h) ? 0 : NUM2INT(rb_win_h);
+    double init_scale = NIL_P(rb_scale) ? 1.0 : NUM2DBL(rb_scale);
 
     if (!NIL_P(rb_scale_mode)) {
         zen_set_scale_mode(parse_scale_mode(rb_scale_mode));
     }
 
-    int ok = fullscreen ? zen_init_fullscreen(title) : zen_init_scaled(w, h, title, win_w, win_h);
+    int ok = fullscreen ? zen_init_fullscreen(title) : zen_init_scaled_ex(w, h, title, win_w, win_h, (float)init_scale);
     if (!ok) {
         rb_raise(rb_eRuntimeError, "Failed to initialize Zenoo Window");
     }
@@ -652,13 +653,18 @@ static VALUE win_get_scale(VALUE self) {
 
 static VALUE win_set_scale(VALUE self, VALUE rb_scale) {
     (void)self;
-    double scale = NUM2DBL(rb_scale);
-    int base_w = 0, base_h = 0;
-    zen_get_screen_size(&base_w, &base_h);
-    if (base_w > 0 && base_h > 0 && scale > 0.0) {
-        zen_set_window_size((int)(base_w * scale), (int)(base_h * scale));
-    }
+    zen_set_window_scale((float)NUM2DBL(rb_scale));
     return rb_scale;
+}
+
+static VALUE win_get_window_scale(VALUE self) {
+    (void)self;
+    return DBL2NUM((double)zen_get_window_scale());
+}
+
+static VALUE win_get_dpi_scale(VALUE self) {
+    (void)self;
+    return DBL2NUM((double)zen_get_dpi_scale());
 }
 
 static VALUE win_set_window_size(VALUE self, VALUE rb_w, VALUE rb_h) {
@@ -1661,6 +1667,9 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "scale_mode", win_get_scale_mode, 0);
     rb_define_singleton_method(mWindow, "scale=", win_set_scale, 1);
     rb_define_singleton_method(mWindow, "scale", win_get_scale, 0);
+    rb_define_singleton_method(mWindow, "window_scale=", win_set_scale, 1);
+    rb_define_singleton_method(mWindow, "window_scale", win_get_window_scale, 0);
+    rb_define_singleton_method(mWindow, "dpi_scale", win_get_dpi_scale, 0);
     rb_define_singleton_method(mWindow, "set_window_size", win_set_window_size, 2);
     rb_define_singleton_method(mWindow, "window_size", win_get_os_window_size, 0);
     rb_define_singleton_method(mWindow, "title=", win_set_title, 1);

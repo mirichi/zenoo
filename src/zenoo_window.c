@@ -123,6 +123,8 @@ const ZenViewport* zen__viewport(void) {
 static int s_window_visible = 0;
 static GLFWmonitor* s_current_monitor = NULL;
 static int s_in_auto_resize = 0;
+static float s_user_window_scale = 1.0f;
+static int s_follow_dpi_scale = 1;
 
 // ウィンドウが現在属しているモニターを取得 (use_cursor=1 の場合はドラッグ中のマウス座標を優先)
 static GLFWmonitor* find_window_monitor(GLFWwindow* window, int use_cursor) {
@@ -202,10 +204,12 @@ static GLFWmonitor* find_window_monitor(GLFWwindow* window, int use_cursor) {
     return best_mon;
 }
 
-// 指定モニターのDPIスケールとワークエリアに合わせて最適な物理ウィンドウサイズを算出
-static void compute_auto_window_size_for_monitor(GLFWmonitor* monitor, float override_scale, int base_w, int base_h, int* out_w, int* out_h) {
-    if (!monitor) monitor = glfwGetPrimaryMonitor();
+// モニターのDPIスケールを取得
+static float get_monitor_dpi_scale(GLFWmonitor* monitor, float override_scale) {
     float scale = override_scale;
+    if (scale <= 0.0f && !monitor) {
+        monitor = s_window ? find_window_monitor(s_window, 0) : glfwGetPrimaryMonitor();
+    }
     if (scale <= 0.0f && monitor) {
         float xscale = 1.0f, yscale = 1.0f;
         glfwGetMonitorContentScale(monitor, &xscale, &yscale);
@@ -232,7 +236,21 @@ static void compute_auto_window_size_for_monitor(GLFWmonitor* monitor, float ove
         }
     }
 #endif
-    if (scale <= 0.0f) scale = 1.0f;
+    return (scale > 0.0f) ? scale : 1.0f;
+}
+
+// 指定モニターのDPIスケール・設定倍率・ワークエリアに合わせて最適な物理ウィンドウサイズを算出
+static void compute_auto_window_size_for_monitor(GLFWmonitor* monitor, float override_scale, float user_scale, int base_w, int base_h, int* out_w, int* out_h) {
+    if (!monitor) monitor = glfwGetPrimaryMonitor();
+    float dpi_scale = get_monitor_dpi_scale(monitor, override_scale);
+    float u_scale = (user_scale > 0.0f) ? user_scale : 1.0f;
+#ifdef __APPLE__
+    // macOS ではウィンドウ座標が論理ポイント単位で、OS側が Retina 倍率を自動適用する
+    float scale = u_scale;
+    (void)dpi_scale;
+#else
+    float scale = dpi_scale * u_scale;
+#endif
 
     int target_w = (int)((float)base_w * scale + 0.5f);
     int target_h = (int)((float)base_h * scale + 0.5f);
@@ -266,7 +284,7 @@ static void compute_auto_window_size_for_monitor(GLFWmonitor* monitor, float ove
 
 static void compute_auto_window_size(int base_w, int base_h, int* out_w, int* out_h) {
     GLFWmonitor* mon = s_window ? find_window_monitor(s_window, 0) : glfwGetPrimaryMonitor();
-    compute_auto_window_size_for_monitor(mon, 0.0f, base_w, base_h, out_w, out_h);
+    compute_auto_window_size_for_monitor(mon, 0.0f, s_user_window_scale, base_w, base_h, out_w, out_h);
 }
 
 // ウィンドウ位置がモニターのワークエリアからはみ出さないように補正
@@ -334,7 +352,7 @@ static void window_content_scale_callback(GLFWwindow* window, float xscale, floa
 #ifdef __EMSCRIPTEN__
     return;
 #else
-    if (!window || s_is_fullscreen || !s_window_visible || s_in_auto_resize) return;
+    if (!window || s_is_fullscreen || !s_window_visible || s_in_auto_resize || !s_follow_dpi_scale) return;
     if (s_viewport.base_w <= 0 || s_viewport.base_h <= 0) return;
 
     s_in_auto_resize = 1;
@@ -344,7 +362,7 @@ static void window_content_scale_callback(GLFWwindow* window, float xscale, floa
     glfwGetWindowPos(window, &old_x, &old_y);
 
     int new_w = old_w, new_h = old_h;
-    compute_auto_window_size_for_monitor(mon, xscale, s_viewport.base_w, s_viewport.base_h, &new_w, &new_h);
+    compute_auto_window_size_for_monitor(mon, xscale, s_user_window_scale, s_viewport.base_w, s_viewport.base_h, &new_w, &new_h);
 
     if (new_w != old_w || new_h != old_h) {
         int new_x = old_x;
@@ -605,12 +623,25 @@ int zen_ensure_context(void) {
 
 int zen_init(int width, int height, const char* title) {
     s_is_fullscreen = 0;
+    s_user_window_scale = 1.0f;
+    s_follow_dpi_scale = 1;
     return init_window(width, height, title, NULL, 0, 0, 1);
 }
 
-int zen_init_scaled(int base_width, int base_height, const char* title, int window_width, int window_height) {
+int zen_init_scaled_ex(int base_width, int base_height, const char* title, int window_width, int window_height, float scale) {
     s_is_fullscreen = 0;
+    if (window_width > 0 && window_height > 0) {
+        s_user_window_scale = 1.0f;
+        s_follow_dpi_scale = 0;
+    } else {
+        s_user_window_scale = (scale > 0.0f) ? scale : 1.0f;
+        s_follow_dpi_scale = 1;
+    }
     return init_window(base_width, base_height, title, NULL, window_width, window_height, 1);
+}
+
+int zen_init_scaled(int base_width, int base_height, const char* title, int window_width, int window_height) {
+    return zen_init_scaled_ex(base_width, base_height, title, window_width, window_height, 1.0f);
 }
 
 int zen_init_fullscreen(const char* title) {
@@ -702,7 +733,7 @@ int zen_begin_frame(void) {
 
 #ifndef __EMSCRIPTEN__
     // 1.5. 別モニターへの移動検知 (同DPIモニター間の移動やドラッグ完了時のサイズ・位置フィット補正)
-    if (s_window_visible && !s_is_fullscreen && !s_in_auto_resize && !glfwGetWindowAttrib(s_window, GLFW_ICONIFIED)) {
+    if (s_window_visible && !s_is_fullscreen && !s_in_auto_resize && s_follow_dpi_scale && !glfwGetWindowAttrib(s_window, GLFW_ICONIFIED)) {
         static int s_last_check_wx = -99999, s_last_check_wy = -99999;
         int cur_wx = 0, cur_wy = 0;
         glfwGetWindowPos(s_window, &cur_wx, &cur_wy);
@@ -719,7 +750,7 @@ int zen_begin_frame(void) {
                     s_current_monitor = cur_mon;
                     s_in_auto_resize = 1;
                     int target_w = 0, target_h = 0;
-                    compute_auto_window_size_for_monitor(cur_mon, 0.0f, s_viewport.base_w, s_viewport.base_h, &target_w, &target_h);
+                    compute_auto_window_size_for_monitor(cur_mon, 0.0f, s_user_window_scale, s_viewport.base_w, s_viewport.base_h, &target_w, &target_h);
                     int cur_w = 0, cur_h = 0;
                     glfwGetWindowSize(s_window, &cur_w, &cur_h);
                     if (abs(cur_w - target_w) > 2 || abs(cur_h - target_h) > 2) {
@@ -925,7 +956,11 @@ void zen_get_window_size(int* width, int* height) {
 
 void zen_set_window_size(int width, int height) {
     if (s_window && width > 0 && height > 0) {
+        s_follow_dpi_scale = 0;
         glfwSetWindowSize(s_window, width, height);
+        int fb_w = width, fb_h = height;
+        glfwGetFramebufferSize(s_window, &fb_w, &fb_h);
+        update_viewport(fb_w, fb_h);
     }
 }
 
@@ -940,6 +975,49 @@ int zen_get_scale_mode(void) {
 
 float zen_get_scale(void) {
     return s_viewport.scale;
+}
+
+float zen_get_dpi_scale(void) {
+    GLFWmonitor* mon = s_window ? find_window_monitor(s_window, 0) : glfwGetPrimaryMonitor();
+    return get_monitor_dpi_scale(mon, 0.0f);
+}
+
+void zen_set_window_scale(float scale) {
+    if (scale <= 0.0f) return;
+    s_user_window_scale = scale;
+    s_follow_dpi_scale = 1;
+    if (!s_window || s_is_fullscreen) return;
+    if (s_viewport.base_w <= 0 || s_viewport.base_h <= 0) return;
+
+#ifndef __EMSCRIPTEN__
+    s_in_auto_resize = 1;
+    GLFWmonitor* mon = find_window_monitor(s_window, 0);
+    int new_w = 0, new_h = 0;
+    compute_auto_window_size_for_monitor(mon, 0.0f, s_user_window_scale, s_viewport.base_w, s_viewport.base_h, &new_w, &new_h);
+    glfwSetWindowSize(s_window, new_w, new_h);
+    clamp_window_to_monitor_workarea(s_window, mon, new_w, new_h);
+    s_saved_win_w = new_w;
+    s_saved_win_h = new_h;
+    int fb_w = new_w, fb_h = new_h;
+    glfwGetFramebufferSize(s_window, &fb_w, &fb_h);
+    update_viewport(fb_w, fb_h);
+    s_in_auto_resize = 0;
+#else
+    int new_w = (int)((float)s_viewport.base_w * s_user_window_scale + 0.5f);
+    int new_h = (int)((float)s_viewport.base_h * s_user_window_scale + 0.5f);
+    if (new_w > 0 && new_h > 0) {
+        glfwSetWindowSize(s_window, new_w, new_h);
+        int fb_w = new_w, fb_h = new_h;
+        glfwGetFramebufferSize(s_window, &fb_w, &fb_h);
+        update_viewport(fb_w, fb_h);
+    }
+#endif
+}
+
+float zen_get_window_scale(void) {
+    float dpi = zen_get_dpi_scale();
+    if (dpi <= 0.0001f) dpi = 1.0f;
+    return s_viewport.scale / dpi;
 }
 
 void zen_toggle_fullscreen(void) {

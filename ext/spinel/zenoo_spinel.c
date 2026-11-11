@@ -276,12 +276,12 @@ sp_int sp_zen_win_init(sp_int w, sp_int h, const char* title, sp_int fullscreen)
     }
 }
 
-sp_int sp_zen_win_init_scaled(sp_int base_w, sp_int base_h, const char* title, sp_int win_w, sp_int win_h, sp_int fullscreen) {
+sp_int sp_zen_win_init_scaled(sp_int base_w, sp_int base_h, const char* title, sp_int win_w, sp_int win_h, sp_int fullscreen, double scale) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
     if (fullscreen) {
         return (sp_int)zen_init_fullscreen(title);
     } else {
-        return (sp_int)zen_init_scaled((int)base_w, (int)base_h, title, (int)win_w, (int)win_h);
+        return (sp_int)zen_init_scaled_ex((int)base_w, (int)base_h, title, (int)win_w, (int)win_h, (float)scale);
     }
 }
 
@@ -376,15 +376,19 @@ sp_int sp_zen_win_get_scale_mode(void) {
 }
 
 void sp_zen_win_set_scale(double scale) {
-    int base_w = 0, base_h = 0;
-    zen_get_screen_size(&base_w, &base_h);
-    if (base_w > 0 && base_h > 0 && scale > 0.0) {
-        zen_set_window_size((int)(base_w * scale), (int)(base_h * scale));
-    }
+    zen_set_window_scale((float)scale);
 }
 
 double sp_zen_win_get_scale(void) {
     return (double)zen_get_scale();
+}
+
+double sp_zen_win_get_window_scale(void) {
+    return (double)zen_get_window_scale();
+}
+
+double sp_zen_win_get_dpi_scale(void) {
+    return (double)zen_get_dpi_scale();
 }
 
 void sp_zen_win_set_window_size(sp_int w, sp_int h) {

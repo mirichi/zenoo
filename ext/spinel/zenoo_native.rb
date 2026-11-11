@@ -70,7 +70,7 @@ module Zenoo
     # ==========================================
     module Window
       native_func :raw_init, [:int, :int, :string, :int], :int, "sp_zen_win_init"
-      native_func :raw_init_scaled, [:int, :int, :string, :int, :int, :int], :int, "sp_zen_win_init_scaled"
+      native_func :raw_init_scaled, [:int, :int, :string, :int, :int, :int, :float], :int, "sp_zen_win_init_scaled"
       native_func :update, [], :bool, "sp_zen_win_update"
       native_func :clear, [:int], :nil, "sp_zen_win_clear"
       native_func :size_w, [], :int, "sp_zen_win_size_w"
@@ -81,6 +81,8 @@ module Zenoo
       native_func :raw_scale_mode, [], :int, "sp_zen_win_get_scale_mode"
       native_func :raw_set_scale, [:float], :nil, "sp_zen_win_set_scale"
       native_func :scale, [], :float, "sp_zen_win_get_scale"
+      native_func :window_scale, [], :float, "sp_zen_win_get_window_scale"
+      native_func :dpi_scale, [], :float, "sp_zen_win_get_dpi_scale"
       native_func :set_window_size, [:int, :int], :nil, "sp_zen_win_set_window_size"
       native_func :raw_set_msaa_samples, [:int], :nil, "sp_zen_win_set_msaa_samples"
       native_func :raw_get_msaa_samples, [], :int, "sp_zen_win_get_msaa_samples"
@@ -129,6 +131,10 @@ module Zenoo
         Zenoo::Native::Window.raw_set_scale(val.to_f)
       end
 
+      def self.window_scale=(val)
+        Zenoo::Native::Window.raw_set_scale(val.to_f)
+      end
+
       def self.scale_mode
         Zenoo::Native::Window.raw_scale_mode == 1 ? :integer : :fit
       end
@@ -145,10 +151,8 @@ module Zenoo
         Zenoo::Native::Window.set_window_pos_raw(x.to_i, y.to_i)
       end
 
-      def self.init(w, h, title, fullscreen = false, win_w = 0, win_h = 0, scale_mode = 0)
-        win_w = w.to_i if win_w.to_i <= 0
-        win_h = h.to_i if win_h.to_i <= 0
-        Zenoo::Native::Window.raw_init_scaled(w.to_i, h.to_i, title.to_s, win_w, win_h, fullscreen ? 1 : 0)
+      def self.init(w, h, title, fullscreen = false, win_w = 0, win_h = 0, scale_mode = 0, scale = 1.0)
+        Zenoo::Native::Window.raw_init_scaled(w.to_i, h.to_i, title.to_s, win_w.to_i, win_h.to_i, fullscreen ? 1 : 0, (scale || 1.0).to_f)
         Zenoo::Native::Window.scale_mode = scale_mode
       end
     end
