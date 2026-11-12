@@ -13,7 +13,7 @@ require_relative '../lib/zenoo'
 # ====================================================================
 
 # GUI ボタンの簡易描画 & クリック判定ヘルパー
-module UI
+module SceneUI
   def self.button(x, y, w, h, text, base_color: [59, 130, 246, 230])
     mx = Input.mouse_x
     my = Input.mouse_y
@@ -51,15 +51,15 @@ class TitleScene < Scene
     return if Scene.transitioning?
 
     # GUI ボタン配置
-    if UI.button(390, 480, 240, 46, "Play (Black Fade: 0.5s)", base_color: [37, 99, 235, 240])
+    if SceneUI.button(390, 480, 240, 46, "Play (Black Fade: 0.5s)", base_color: [37, 99, 235, 240])
       Scene.change(PlayScene.new, fade: 0.5)
     end
 
-    if UI.button(650, 480, 240, 46, "Play (White Fade: 0.5s)", base_color: [202, 138, 4, 240])
+    if SceneUI.button(650, 480, 240, 46, "Play (White Fade: 0.5s)", base_color: [202, 138, 4, 240])
       Scene.change(PlayScene.new, fade: 0.5, color: :white)
     end
 
-    if UI.button(520, 540, 240, 42, "Play (Immediate / No Fade)", base_color: [71, 85, 105, 240])
+    if SceneUI.button(520, 540, 240, 42, "Play (Immediate / No Fade)", base_color: [71, 85, 105, 240])
       Scene.change(PlayScene.new)
     end
   end
@@ -79,7 +79,7 @@ class PlayScene < Scene
     Window.clear([20, 30, 45, 255])
 
     # ボールのアニメーション
-    @x += @vx * Window.delta_time
+    @x += @vx / 60.0
     if @x > 1180.0 || @x < 100.0
       @vx = -@vx
     end
@@ -96,17 +96,17 @@ class PlayScene < Scene
 
     # GUI ボタン配置
     # 1. below: :freeze (既定) → 背景のボールがピタッと止まる
-    if UI.button(240, 500, 240, 46, "Pause (below: :freeze)", base_color: [225, 29, 72, 240])
+    if SceneUI.button(240, 500, 240, 46, "Pause (below: :freeze)", base_color: [225, 29, 72, 240])
       Scene.push(FreezePauseScene.new, below: :freeze)
     end
 
     # 2. below: :live → 背景のボールが止まらずに動き続ける！
-    if UI.button(520, 500, 240, 46, "Overlay (below: :live)", base_color: [13, 148, 136, 240])
+    if SceneUI.button(520, 500, 240, 46, "Overlay (below: :live)", base_color: [13, 148, 136, 240])
       Scene.push(LiveOverlayScene.new, below: :live)
     end
 
     # 3. ブロックによるポップアップダイアログ (below: :freeze)
-    if UI.button(800, 500, 240, 46, "Block Dialog (push { })", base_color: [124, 58, 237, 240])
+    if SceneUI.button(800, 500, 240, 46, "Block Dialog (push { })", base_color: [124, 58, 237, 240])
       Scene.push do
         Window.draw_rect(0, 0, 1280, 720, color: [0, 0, 0, 180])
         Window.draw_rect(440, 240, 400, 220, radius: 16, color: [30, 41, 59, 255], border_width: 2, border_color: :green)
@@ -114,14 +114,14 @@ class PlayScene < Scene
         Window.draw_text(640, 325, "No class definition needed!", size: 16, color: :white, align: :center)
         Window.draw_text(640, 355, "Background is frozen (:freeze)", size: 15, color: [148, 163, 184, 255], align: :center)
 
-        if UI.button(540, 395, 200, 40, "Close (Scene.pop)", base_color: [16, 185, 129, 240])
+        if SceneUI.button(540, 395, 200, 40, "Close (Scene.pop)", base_color: [16, 185, 129, 240])
           Scene.pop
         end
       end
     end
 
     # 4. タイトルへ戻るボタン
-    if UI.button(520, 580, 240, 42, "Back to Title (Fade 0.4s)", base_color: [71, 85, 105, 240])
+    if SceneUI.button(520, 580, 240, 42, "Back to Title (Fade 0.4s)", base_color: [71, 85, 105, 240])
       Scene.change(TitleScene.new, fade: 0.4)
     end
   end
@@ -142,11 +142,11 @@ class FreezePauseScene < Scene
 
     return if Scene.transitioning?
 
-    if UI.button(500, 360, 280, 44, "Resume Game (Scene.pop)", base_color: [37, 99, 235, 240])
+    if SceneUI.button(500, 360, 280, 44, "Resume Game (Scene.pop)", base_color: [37, 99, 235, 240])
       Scene.pop
     end
 
-    if UI.button(500, 420, 280, 42, "Title Scene (Scene.change)", base_color: [71, 85, 105, 240])
+    if SceneUI.button(500, 420, 280, 42, "Title Scene (Scene.change)", base_color: [71, 85, 105, 240])
       Scene.change(TitleScene.new, fade: 0.4)
     end
   end
@@ -168,11 +168,11 @@ class LiveOverlayScene < Scene
 
     return if Scene.transitioning?
 
-    if UI.button(500, 380, 280, 44, "Close Overlay (Scene.pop)", base_color: [13, 148, 136, 240])
+    if SceneUI.button(500, 380, 280, 44, "Close Overlay (Scene.pop)", base_color: [13, 148, 136, 240])
       Scene.pop
     end
 
-    if UI.button(500, 440, 280, 42, "Title Scene (Scene.change)", base_color: [71, 85, 105, 240])
+    if SceneUI.button(500, 440, 280, 42, "Title Scene (Scene.change)", base_color: [71, 85, 105, 240])
       Scene.change(TitleScene.new, fade: 0.4)
     end
   end

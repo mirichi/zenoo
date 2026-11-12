@@ -366,7 +366,7 @@ frame_count = 0
 atlas, slots = build_texture_atlas
 
 Window.loop(1280, 720, "Zenoo Texture Atlas & sub_image Showcase") do
-  dt = [Window.delta_time, 0.05].min
+  dt = 1.0 / 60.0
 
   # ギャラリーのアニメーション更新 (ゆっくり 0.4 秒周期)
   gallery_timer += dt

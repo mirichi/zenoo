@@ -122,9 +122,9 @@ tf = ENV['ZENOO_AUTO_EXIT_FRAMES'] || ENV['ZENOO_TEST_FRAMES']
 test_max = tf ? tf.to_i : 0
 frame_count = 0
 Window.loop(WINDOW_W, WINDOW_H, "Zenoo - High Quality SDF Text & Font Rendering Demo") do
-  time = Window.time
   fps = Window.fps
   frame_count += 1
+  time = frame_count / 60.0
   if frame_count <= 3 || frame_count % 60 == 0
     puts "=== [DEMO] Loop Frame #{frame_count}, Time: #{time.round(2)}, FPS: #{fps.round(1)} ==="
   end

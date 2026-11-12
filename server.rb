@@ -5,19 +5,29 @@ require 'webrick'
 # ==============================================================================
 # Zenoo ローカル開発サーバー
 # 使い方:
-#   ruby server.rb          # ポート 8088 で docs/ (全デモポータル) を配信
-#   ruby server.rb wasm     # ポート 8089 で build/wasm を配信
-#   ruby server.rb 8080     # 任意ポートで docs/ を配信
+#   ruby server.rb            # ポート 8088 で ../zenoo-pages (examples/ & samples/) を配信
+#   ruby server.rb examples   # ポート 8088 で ../zenoo-pages/examples を配信
+#   ruby server.rb samples    # ポート 8088 で ../zenoo-pages/samples を配信
+#   ruby server.rb wasm       # ポート 8089 で build/wasm を配信
+#   ruby server.rb 8080       # 任意ポートで ../zenoo-pages を配信
 # ==============================================================================
 
-target = ARGV.first&.downcase == 'wasm' ? 'wasm' : 'docs'
+pages_root = ENV.fetch('ZENOO_PAGES_DIR', '../zenoo-pages')
+target_arg = ARGV.find { |a| !a.match?(/^\d+$/) }&.downcase
+target = %w[wasm examples samples].include?(target_arg) ? target_arg : 'pages'
+
 port = if ARGV.any? { |a| a =~ /^\d+$/ }
          ARGV.find { |a| a =~ /^\d+$/ }.to_i
        else
          target == 'wasm' ? 8089 : 8088
        end
 
-dir = target == 'wasm' ? 'build/wasm' : 'docs'
+dir = case target
+      when 'wasm'     then 'build/wasm'
+      when 'examples' then File.join(pages_root, 'examples')
+      when 'samples'  then File.join(pages_root, 'samples')
+      else                 pages_root
+      end
 root = File.expand_path(dir, __dir__)
 
 mime_types = WEBrick::HTTPUtils::DefaultMimeTypes.merge(

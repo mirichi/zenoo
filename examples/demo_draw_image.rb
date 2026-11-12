@@ -92,8 +92,11 @@ end
 # ----------------------------------------------------
 # 3. メインループ
 # ----------------------------------------------------
+frame = 0
+
 Window.loop(1280, 720, "Zenoo - Window.draw_image Showcase") do
-  t = Window.time
+  frame += 1
+  t = frame / 60.0
 
   # 背景描画
   Window.clear([16, 20, 32, 255])
