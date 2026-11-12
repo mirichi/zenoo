@@ -12,7 +12,7 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'examples', 'web', 'shell_template.html')
 WEB_DIR = os.path.join(BASE_DIR, 'examples', 'web')
-DOCS_DIR = os.path.join(BASE_DIR, 'docs')
+DOCS_DIR = os.environ.get('DOCS_DIR') or os.path.join(os.path.dirname(BASE_DIR), 'zenoo-pages', 'examples')
 
 DOCS_MAP = {
     "shell.html": "vector",
