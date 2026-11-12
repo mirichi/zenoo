@@ -1,4 +1,4 @@
-# category: Image
+# category: Window
 # title: オフスクリーン描画からの拡大表示
 # desc: 160x90 の Image にオフスクリーン描画し、640x360 の画面へ 4倍拡大して描画するサンプル
 
