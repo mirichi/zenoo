@@ -3,7 +3,7 @@ set -e
 
 # ====================================================
 # Zenoo GitHub Pages 一括ビルドスクリプト
-# Game (Survival Shooting) & GUI Demo を docs/ に生成
+# Game (Survival Shooting) & GUI Demo を別リポジトリ (../zenoo-pages/examples) に生成
 # ====================================================
 
 # 1. Emscripten 環境の有効化
@@ -19,8 +19,10 @@ fi
 SPINEL_DIR="${HOME}/spinel"
 SPINEL_BIN="${SPINEL_DIR}/bin/spinel"
 
-DOCS_DIR="docs"
+PAGES_ROOT="${PAGES_ROOT:-../zenoo-pages}"
+DOCS_DIR="${PAGES_ROOT}/examples"
 CACHE_DIR="build/wasm_cache"
+TARGET="${1:-all}"
 mkdir -p "${DOCS_DIR}/game"
 mkdir -p "${DOCS_DIR}/gui"
 mkdir -p "${DOCS_DIR}/image"
@@ -50,14 +52,15 @@ mkdir -p "${CACHE_DIR}/regexp"
 
 echo "=== [1/5] Setting up GitHub Pages structure ==="
 # Jekyll 処理を無効化 (Wasmファイルの配信を確実にする)
+touch "${PAGES_ROOT}/.nojekyll"
 touch "${DOCS_DIR}/.nojekyll"
 # ポータルページを配置
 cp examples/web/portal.html "${DOCS_DIR}/index.html"
 # シェルHTMLを同期 (ターゲット指定時はそのデモのみ、未指定/all時は全体)
 if [ -n "$TARGET" ] && [ "$TARGET" != "all" ]; then
-    python3 tools/generate_shells.py "$TARGET"
+    DOCS_DIR="${DOCS_DIR}" python3 tools/generate_shells.py "$TARGET"
 else
-    python3 tools/generate_shells.py
+    DOCS_DIR="${DOCS_DIR}" python3 tools/generate_shells.py
 fi
 
 # ビルドモード判定 (サイズより速度優先)
@@ -144,8 +147,6 @@ COMMON_OBJS=(
     "${CACHE_DIR}/zenoo_spinel.o"
     "${CACHE_DIR}/libspinel_rt.a"
 )
-
-TARGET="${1:-all}"
 
 strip_always_inline() {
     python3 -c "import sys, re; p=sys.argv[1]; s=open(p, 'r', encoding='utf-8', errors='ignore').read(); s=re.sub(r'/mnt/c/Users/[^/\"\'\s]+', '/workspace', s); open(p, 'w', encoding='utf-8').write(s)" "$1"
