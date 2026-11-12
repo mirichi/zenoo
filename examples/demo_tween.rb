@@ -135,7 +135,6 @@ start_hero_combo.call
 # ------------------------------------------------------------------------------
 Window.loop(1280, 720, "Zenoo - Tween & Tweenable Animation Demo") do
 
-  t = Window.time
   mx, my = Input.mouse_pos
 
   # 各オブジェクトの更新 (Sprite#update / AnimatedBox#update 内で update_tweens が呼ばれます)

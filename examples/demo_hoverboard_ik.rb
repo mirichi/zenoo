@@ -65,7 +65,7 @@ def draw_mech_leg(thigh, calf, foot, col_main, col_accent)
 end
 
 Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Hoverboard IK Demo") do
-  dt = Window.delta_time
+  dt = 1.0 / 60.0
   hover_time += dt
 
   # ----------------------------------------------------

@@ -545,7 +545,7 @@ puts "Starting Zenoo Danmaku Demo..."
 # メインループ
 # ------------------------------------------------------------------------------
 Window.loop(WIDTH, HEIGHT, "Zenoo GPU Danmaku Storm", vsync: false) do
-  dt = Window.delta_time
+  dt = 1.0 / 60.0
   time += dt
 
   # キー [1] / [2] で弾数切り替え

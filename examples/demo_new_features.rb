@@ -68,8 +68,7 @@ Window.loop(1200, 700, title_presets[0]) do
   frame_count += 1
   break if test_max > 0 && frame_count >= test_max
 
-  t = Window.time
-  dt = Window.delta_time
+  t = frame_count / 60.0
 
   # 背景描画
   Window.draw_rect(0, 0, 1200, 700, color: Color.new(18, 22, 30))

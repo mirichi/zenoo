@@ -368,7 +368,7 @@ class CoordsSimulator
   end
 
   def update(mx, my)
-    @pulse_time += Window.delta_time
+    @pulse_time += 1.0 / 60.0
 
     # マウス判定円の座標更新
     @mouse_circle.x = mx
@@ -502,7 +502,7 @@ class CoordsSimulator
     @lbl_angle.text  = sprintf("Angle (回転角)   : %.1f deg", sp.angle)
     @lbl_offset.text = "Collider Offset  : (#{off_x}, #{off_y})"
     @lbl_shape.text  = "Collider Shape   : #{SHAPE_PRESETS[@shape_idx][:name]}"
-    @lbl_fps.text    = sprintf("dt: %.4fs | [R]でリセット", Window.delta_time)
+    @lbl_fps.text    = sprintf("FPS: %.1f | [R]でリセット", Window.fps)
   end
 
   def draw(mx, my)

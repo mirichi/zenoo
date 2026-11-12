@@ -3,7 +3,7 @@ set -e
 
 # ====================================================
 # Zenoo サンプル専用 Wasm ビルドスクリプト
-# samples/*.rb をビルドし docs/samples/<name>/ に配置
+# samples/*.rb をビルドし ../zenoo-pages/samples/<name>/ に配置
 # ====================================================
 
 # 1. Emscripten 環境の有効化
@@ -19,14 +19,16 @@ fi
 SPINEL_DIR="${HOME}/spinel"
 SPINEL_BIN="${SPINEL_DIR}/bin/spinel"
 
-DOCS_SAMPLES_DIR="docs/samples"
+PAGES_ROOT="${PAGES_ROOT:-../zenoo-pages}"
+DOCS_SAMPLES_DIR="${PAGES_ROOT}/samples"
 CACHE_DIR="build/wasm_cache"
 mkdir -p "${DOCS_SAMPLES_DIR}"
 mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
+touch "${PAGES_ROOT}/.nojekyll"
 
-# サンプル一覧目次 (docs/samples/index.html) を更新
-python3 tools/generate_sample_pages.py
+# サンプル一覧目次 (../zenoo-pages/samples/index.html) を更新
+DOCS_SAMPLES_DIR="${DOCS_SAMPLES_DIR}" python3 tools/generate_sample_pages.py
 
 # ビルドモード判定 (サイズより速度優先)
 case "${BUILD_MODE:-dev}" in

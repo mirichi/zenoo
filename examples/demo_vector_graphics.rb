@@ -5,8 +5,11 @@ require_relative '../lib/zenoo'
 # ==============================================================================
 # Zenoo Vector Graphics (NanoGL / HTML5 Canvas 2D 互換) デモ
 # ==============================================================================
+frame = 0
+
 Window.loop(1280, 720, "Zenoo - Vector Graphics Demo (HTML5 Canvas Style)", msaa: 4) do
-  t = Window.time
+  frame += 1
+  t = frame / 60.0
 
   # 1. 背景クリア
   Window.clear([20, 24, 34, 255])

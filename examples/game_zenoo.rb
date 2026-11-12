@@ -317,7 +317,7 @@ class GameParticleVfx
     @poly_emitter.used_count + @spark_emitter.used_count + @ring_emitter.used_count + @star_emitter.used_count
   end
 
-  def update(dt = Window.delta_time)
+  def update(dt = 1.0 / 60.0)
     @poly_emitter.update(dt)
     @spark_emitter.update(dt)
     @ring_emitter.update(dt)

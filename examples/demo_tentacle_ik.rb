@@ -138,7 +138,7 @@ locked_target = nil
 sim_time = 0.0
 
 Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Multi-Joint Tentacle FABRIK IK Demo") do
-  dt = Window.delta_time
+  dt = 1.0 / 60.0
   sim_time += dt
 
   # ----------------------------------------------------

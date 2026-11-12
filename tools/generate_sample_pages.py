@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Zenoo Sample Page & Index Generator
-1. docs/samples/index.html (サンプル一覧目次) の生成
+1. ../zenoo-pages/samples/index.html (サンプル一覧目次) の生成
 2. ビルドされた各サンプルの index.html へのメタデータ・Rubyコード注入
 """
 
@@ -15,7 +15,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAMPLES_DIR = os.path.join(BASE_DIR, 'samples')
 ORDER_FILE = os.path.join(SAMPLES_DIR, 'order.txt')
 INDEX_TEMPLATE = os.path.join(BASE_DIR, 'tools', 'templates', 'sample_index.html')
-DOCS_SAMPLES_DIR = os.path.join(BASE_DIR, 'docs', 'samples')
+DOCS_SAMPLES_DIR = os.environ.get('DOCS_SAMPLES_DIR') or os.path.join(os.path.dirname(BASE_DIR), 'zenoo-pages', 'samples')
 
 def parse_sample_metadata(filepath):
     filename = os.path.basename(filepath)

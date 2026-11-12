@@ -224,7 +224,7 @@ last_fps = 60.0
 # ------------------------------------------------------------------------------
 Window.loop(WIDTH, HEIGHT, "Zenoo GPU Particle Storm", vsync: false) do
 
-  dt = Window.delta_time
+  dt = 1.0 / 60.0
   time += dt
 
   # キー入力によるパーティクル数切り替え

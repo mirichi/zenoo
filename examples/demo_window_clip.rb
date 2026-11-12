@@ -16,7 +16,7 @@ Window.loop(1280, 720, "Zenoo - Hardware Clipping Demo (Window.clip)") do
   frame_count += 1
   break if test_frames > 0 && frame_count >= test_frames
 
-  t = Window.time
+  t = frame_count / 60.0
 
   # 1. 背景クリア
   Window.clear([18, 20, 28, 255])

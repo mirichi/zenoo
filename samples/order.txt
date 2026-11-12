@@ -3,3 +3,5 @@
 window_draw_shapes
 window_draw_rect
 window_scale
+window_low_res_scale
+image_offscreen_scale

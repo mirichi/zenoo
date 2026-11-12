@@ -126,10 +126,12 @@ star_skin = SkinnedMesh.new(
 
 show_bones = true
 show_weights = true
+frame = 0
 
 Window.loop(1100, 650, "Zenoo 2D SkinnedMesh & Bone Demo") do
   Window.clear([20, 24, 34, 255])
-  t = Window.time
+  frame += 1
+  t = frame / 60.0
 
   if Input.key_push?(:space)
     show_bones = !show_bones

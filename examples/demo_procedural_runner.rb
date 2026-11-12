@@ -148,7 +148,7 @@ end
 # メインループ
 # ----------------------------------------------------
 Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK") do
-  dt = Window.delta_time
+  dt = 1.0 / 60.0
 
   # --------------------------------------------------
   # 1. ユーザー入力
@@ -184,7 +184,7 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
 
   # 剣の振り下ろしトリガー（肩中心の Expo In 居合一閃 Tween）
   # マウスクリック時はGUI操作中(スライダー等)の誤爆を防止
-  mouse_attack = Input.mouse_push?(:left) && !GUI.mouse_captured?
+  mouse_attack = Input.mouse_push?(:left) && !ImGui.mouse_captured?
   if (Input.key_push?(:space) || mouse_attack) && !is_slashing
     is_slashing = true
     slash_trail.clear

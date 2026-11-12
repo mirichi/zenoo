@@ -95,7 +95,6 @@ module Zenoo
 
     # DXRuby風メインループ (scale: nil の場合はモニターのDPIスケールを自動検出)
     def self.loop(width = 1280, height = 720, title = "Zenoo", scale: nil, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, msaa: nil, fps: 60, &block)
-      @game_time = 0.0
       self.msaa = msaa unless msaa.nil?
       win_w = window_width ? window_width.to_i : 0
       win_h = window_height ? window_height.to_i : 0
@@ -118,10 +117,6 @@ module Zenoo
         end
         Native::Window.shutdown
       end
-    end
-
-    def self.__advance_time(dt = delta_time)
-      @game_time += dt.to_f
     end
 
     def self.__update_step
@@ -150,7 +145,6 @@ module Zenoo
         end
       end
 
-      __advance_time
       Audio.update(delta_time)
       Tween.__update_step(delta_time)
       Input.__begin_frame
@@ -192,15 +186,6 @@ module Zenoo
       Profiler.end_frame
       Backend.current_target = nil
       Native::Image.reset_render_target
-    end
-
-    # ゲーム内経過時間 (秒) - ポーズ中は停止し、ステップ実行と完全に同期します
-    def self.time
-      @game_time
-    end
-
-    def self.time=(val)
-      @game_time = val.to_f
     end
 
     # OSの実経過時間 (秒)
