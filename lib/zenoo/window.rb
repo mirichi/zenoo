@@ -269,28 +269,12 @@ module Zenoo
       end
     end
 
-    def self.position
-      window_position
-    end
-
-    def self.position=(pos)
-      self.window_position = pos
-    end
-
     def self.focused?
       Native::Window.focused?
     end
 
-    def self.active?
-      focused?
-    end
-
     def self.minimized?
       Native::Window.minimized?
-    end
-
-    def self.iconified?
-      minimized?
     end
 
     def self.maximized?
@@ -301,20 +285,12 @@ module Zenoo
       Native::Window.hovered?
     end
 
-    def self.mouse_in_window?
-      hovered?
-    end
-
     def self.delta_time
       Native::Window.delta_time
     end
 
     def self.fps
       @fps || 60.0
-    end
-
-    def self.fps=(val)
-      self.target_fps = val
     end
 
     def self.target_fps=(val)
@@ -344,21 +320,13 @@ module Zenoo
       Native::Window.vsync = (val ? 1 : 0)
     end
 
-    def self.msaa_samples=(val)
-      Native::Window.msaa_samples = val.to_i
-    end
-
-    def self.msaa_samples
+    def self.msaa
       Native::Window.msaa_samples
     end
 
     def self.msaa=(val)
       samples = val ? (val.is_a?(Integer) ? val : 4) : 0
-      self.msaa_samples = samples
-    end
-
-    def self.msaa?
-      msaa_samples > 0
+      Native::Window.msaa_samples = samples
     end
 
     CURSOR_SHAPES = {
@@ -371,20 +339,10 @@ module Zenoo
       resize_nwse: 6,
       resize_nesw: 7,
       resize_all: 8,
-      not_allowed: 9,
-      resize: 6,
-      window_resize: 6
+      not_allowed: 9
     }.freeze
 
-    def self.show_cursor(show = true)
-      Native::Window.show_cursor(show)
-    end
-
-    def self.hide_cursor
-      Native::Window.show_cursor(false)
-    end
-
-    def self.mouse_cursor_visible=(val)
+    def self.cursor_visible=(val)
       Native::Window.show_cursor(!!val)
     end
 
@@ -398,10 +356,6 @@ module Zenoo
       Native::Window.set_cursor(shape_id)
     end
 
-    def self.set_cursor(shape)
-      self.cursor = shape
-    end
-
     @card_shader = nil
     @default_sprite_shader = nil
     @flat_primitive_shader = nil
@@ -411,20 +365,12 @@ module Zenoo
       @default_sprite_shader ||= Shader.new(Shaders::DEFAULT_SPRITE_VERTEX, Shaders::DEFAULT_SPRITE_FRAGMENT)
     end
 
-    def self.default_quad_shader
-      default_sprite_shader
-    end
-
     def self.flat_primitive_shader
       @flat_primitive_shader ||= Shader.new(Shaders::FLAT_PRIMITIVE_VERTEX, Shaders::FLAT_PRIMITIVE_FRAGMENT)
     end
 
     def self.gradient_primitive_shader
       @gradient_primitive_shader ||= Shader.new(Shaders::GRADIENT_PRIMITIVE_VERTEX, Shaders::GRADIENT_PRIMITIVE_FRAGMENT)
-    end
-
-    def self.default_primitive_shader
-      flat_primitive_shader
     end
 
     def self.textured_primitive_shader
