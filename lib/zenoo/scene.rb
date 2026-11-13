@@ -116,7 +116,6 @@ module Zenoo
 
         # このフレームに予約された操作を適用
         fade = 0.0
-        color = :black
         needs_capture = false
         @pending.each do |op|
           if op.fade > fade

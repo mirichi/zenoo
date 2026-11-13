@@ -416,8 +416,6 @@ module Zenoo
       vax = a.vx.to_f
       vay = a.vy.to_f
       wa = a.omega.to_f
-      anga = a.angle.to_f
-      ma = a.mass.to_f
       shape_a = a.collider
 
       xb = b.x.to_f
@@ -425,8 +423,6 @@ module Zenoo
       vbx = b.vx.to_f
       vby = b.vy.to_f
       wb = b.omega.to_f
-      angb = b.angle.to_f
-      mb = b.mass.to_f
       shape_b = b.collider
 
       restitution = restitution ? restitution.to_f : [a.restitution.to_f, b.restitution.to_f].max
@@ -824,23 +820,15 @@ module Zenoo
         angle ||= auto_ang
       end
 
-      xa = a.x.to_f
-      ya = a.y.to_f
       vax = a.vx.to_f
       vay = a.vy.to_f
       wa = a.omega.to_f
       anga = a.angle.to_f
-      ma = a.mass.to_f
-      shape_a = a.collider
 
-      xb = b.x.to_f
-      yb = b.y.to_f
       vbx = b.vx.to_f
       vby = b.vy.to_f
       wb = b.omega.to_f
       angb = b.angle.to_f
-      mb = b.mass.to_f
-      shape_b = b.collider
 
       ma_f = a.mass.to_f
       mb_f = b.mass.to_f

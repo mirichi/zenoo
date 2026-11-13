@@ -329,7 +329,8 @@ module Zenoo
     # Panel (SDF カード背景 + タイトル + Flexbox レイアウトを持つコンテナ)
     # ==========================================================================
     class Panel < Box
-      attr_accessor :title, :bg_color, :border_color, :border_width, :radius, :shadow_blur, :shadow_color, :title_size, :title_color
+      attr_reader :title
+      attr_accessor :bg_color, :border_color, :border_width, :radius, :shadow_blur, :shadow_color, :title_size, :title_color
 
       def initialize(x = 0.0, y = 0.0, width: 320.0, height: 240.0,
                      title: "", padding: 14.0, gap: 8.0,

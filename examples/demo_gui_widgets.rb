@@ -198,7 +198,7 @@ lbl_summary_cfg  = nil
 btn_save  = nil
 btn_reset = nil
 
-win_profile = stage.window(
+stage.window(
   "Profile & Text Input [Fixed]",
   885, 85, width: 355, height: 590,
   resizable: false

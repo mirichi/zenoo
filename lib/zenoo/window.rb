@@ -1552,9 +1552,7 @@ module Zenoo
       s_atlas_weight = s_weight * scale_ratio
 
       p0 = [s_atlas_outline_w, s_atlas_blur, s_atlas_dx, s_atlas_dy]
-      p1 = outline_c
       p2 = s_c
-      p3 = [s_atlas_weight, 0.0, s_weight, 0.0]
       shader = sdf_font_shader
 
       metrics = target_font.metrics(f_size)

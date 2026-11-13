@@ -538,10 +538,6 @@ class CoordsSimulator
     wpv_x = tl_x + px * w
     wpv_y = tl_y + py * h
 
-    # スプライト中心 (未回転ローカル)
-    sp_cx_world = tl_x + w * 0.5
-    sp_cy_world = tl_y + h * 0.5
-
     # 2. ピボットの回転軸ガイド線 (十字点線)
     Window.draw_line(wpv_x - 120, wpv_y, wpv_x + 120, wpv_y, color: [70, 75, 95, 180], width: 1.0)
     Window.draw_line(wpv_x, wpv_y - 120, wpv_x, wpv_y + 120, color: [70, 75, 95, 180], width: 1.0)
