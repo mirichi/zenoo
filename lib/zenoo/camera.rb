@@ -39,30 +39,36 @@ module Zenoo
       @view = nil
       @view_w = nil
       @view_h = nil
+      clamp_to_bounds! if @bounds
     end
 
     def x=(v)
       @x = v.to_f
+      clamp_to_bounds!
       @view = nil
     end
 
     def y=(v)
       @y = v.to_f
+      clamp_to_bounds!
       @view = nil
     end
 
     def zoom=(v)
       @zoom = v.to_f
+      clamp_to_bounds!
       @view = nil
     end
 
     def offset_x=(v)
       @offset_x = v ? v.to_f : nil
+      clamp_to_bounds!
       @view = nil
     end
 
     def offset_y=(v)
       @offset_y = v ? v.to_f : nil
+      clamp_to_bounds!
       @view = nil
     end
 
@@ -157,16 +163,14 @@ module Zenoo
     # 描画用変換 [zoom, ox, oy] (screen = world * zoom + o)
     # パラメータ・画面サイズが変わらない限りキャッシュ済みの配列を返す
     def view
-      # offset 未指定時は画面中心に依存するため、画面サイズ変化も検知する
-      if @offset_x.nil? || @offset_y.nil?
-        t = Backend.current_target
-        w = t ? t.width : Window.width
-        h = t ? t.height : Window.height
-        if w != @view_w || h != @view_h
-          @view_w = w
-          @view_h = h
-          @view = nil
-        end
+      t = Backend.current_target
+      w = t ? t.width : Window.width
+      h = t ? t.height : Window.height
+      if w != @view_w || h != @view_h
+        @view_w = w
+        @view_h = h
+        clamp_to_bounds!
+        @view = nil
       end
       @view ||= [
         @zoom,
@@ -215,16 +219,23 @@ module Zenoo
 
     def clamp_to_bounds!
       return unless @bounds
+      t = Backend.current_target
+      w = t ? t.width.to_f : Window.width.to_f
+      h = t ? t.height.to_f : Window.height.to_f
+      return if w <= 0.0 || h <= 0.0
+
       min_x, min_y, max_x, max_y = @bounds
       z = @zoom > 0.0 ? @zoom : 1.0
-      half_w = screen_center_x / z
-      half_h = screen_center_y / z
-      low_x  = min_x + half_w
-      high_x = max_x - half_w
-      low_y  = min_y + half_h
-      high_y = max_y - half_h
-      @x = low_x <= high_x ? @x.clamp(low_x, high_x) : (min_x + max_x) * 0.5
-      @y = low_y <= high_y ? @y.clamp(low_y, high_y) : (min_y + max_y) * 0.5
+      cx = @offset_x || (w * 0.5)
+      cy = @offset_y || (h * 0.5)
+
+      low_x  = min_x + cx / z
+      high_x = max_x - (w - cx) / z
+      low_y  = min_y + cy / z
+      high_y = max_y - (h - cy) / z
+
+      @x = low_x <= high_x ? @x.clamp(low_x, high_x) : ((min_x + max_x) * 0.5 + (cx - w * 0.5) / z)
+      @y = low_y <= high_y ? @y.clamp(low_y, high_y) : ((min_y + max_y) * 0.5 + (cy - h * 0.5) / z)
     end
   end
 end

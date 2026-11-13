@@ -126,11 +126,8 @@ module Zenoo
 
           float progress = clamp(age / life, 0.0, 1.0);
 
-          // 基準原点 (local_space なら現在の u_emitter.xy を加算)
-          vec2 p0 = in_origin_vel.xy;
-          if (u_view.w > 0.5) {
-              p0 += u_emitter.xy;
-          }
+          // 基準原点 (local_space 時は u_emitter.xy = draw_x/y、非ローカル時は draw(x:, y:) の差分を加算)
+          vec2 p0 = in_origin_vel.xy + u_emitter.xy;
           vec2 v0 = in_origin_vel.zw;
           vec2 g  = u_forces.xy;
           float drag    = u_forces.z;
@@ -551,6 +548,7 @@ module Zenoo
         @expire_times[i] = -1.0
         i += 1
       end
+      @instance_buffer&.update("", offset: 0, count: 0)
       self
     end
 
@@ -589,9 +587,9 @@ module Zenoo
 
     # GPU ループモード用に全スロットを一括初期充填 (CPU転送ゼロで無限ループ再生したい場合)
     def fill_loop_pool!(count = @max_particles)
+      clear
       @loop_mode = true
       n = [[count.to_i, 1].max, @max_particles].min
-      @write_cursor = 0
       emit_batch(n, random_time_offset: true)
       self
     end
@@ -619,10 +617,15 @@ module Zenoo
 
     # 描画 (1 ドローコール)
     def draw(x: nil, y: nil, z: nil, camera: nil)
-      return self if @used_count <= 0 && !@loop_mode
+      return self if @used_count <= 0
 
-      draw_x = x ? x.to_f : @x
-      draw_y = y ? y.to_f : @y
+      if @local_space
+        off_x = x ? x.to_f : @x
+        off_y = y ? y.to_f : @y
+      else
+        off_x = x ? (x.to_f - @x) : 0.0
+        off_y = y ? (y.to_f - @y) : 0.0
+      end
       draw_z = z ? z.to_f : @z
       use_cam = camera.nil? ? @camera : camera
 
@@ -656,7 +659,7 @@ module Zenoo
       uniforms = {
         u_view:        [zoom, ox, oy, loc_flag],
         u_sim:         [@time, @loop_mode ? 1.0 : 0.0, shape_id.to_f, is_add],
-        u_emitter:     [draw_x, draw_y, @align_to_velocity ? 1.0 : 0.0, @stretch.to_f],
+        u_emitter:     [off_x, off_y, @align_to_velocity ? 1.0 : 0.0, @stretch.to_f],
         u_forces:      [@gravity_x.to_f, @gravity_y.to_f, @drag.to_f, @radial_accel.to_f],
         u_turb:        [@tangential_accel.to_f, @wobble_amp.to_f, @wobble_freq.to_f, @ring_thickness.to_f],
         u_size_fade:   [@start_size.to_f, @end_size.to_f, curve_id.to_f, @fade_in.to_f],

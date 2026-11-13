@@ -353,7 +353,10 @@ module Zenoo
       nil
     end
 
+    @mouse_consumed = false
+
     def self.mouse_pressed?(button = :left)
+      return false if @mouse_consumed
       b = resolve_mouse(button)
       if @using_touch
         if b == 0 # 左クリックのみタッチでエミュレート
@@ -372,6 +375,7 @@ module Zenoo
     end
 
     def self.mouse_push?(button = :left)
+      return false if @mouse_consumed
       b = resolve_mouse(button)
       if @using_touch
         if b == 0
@@ -386,6 +390,7 @@ module Zenoo
     end
 
     def self.mouse_release?(button = :left)
+      return false if @mouse_consumed
       b = resolve_mouse(button)
       if @using_touch
         if b == 0
@@ -401,6 +406,7 @@ module Zenoo
 
     # 現在のマウス操作（またはタッチ）を消費し、以降のUIやゲーム側のクリック反応を抑止
     def self.consume_mouse!
+      @mouse_consumed = true
       if @using_touch
         t = __mouse_emulation_touch
         t.consume! if t
@@ -563,7 +569,8 @@ module Zenoo
     # アクションマッピング API (Input Action Map)
     # ==========================================
     @actions = {}
-    @axis_state_prev = {} # { [axis, id, dir] => boolean }
+    @tracked_gamepad_mask = 1
+    @tracked_gamepad_ids = [0]
     @virtual_pad = nil
     @vpad_actions_cur = {}
     @vpad_actions_prev = {}
@@ -637,7 +644,7 @@ module Zenoo
     # @param stick [Symbol] スティック方向ショートカット (:up, :down, :left, :right)
     # @param axes [Array<Array>] アナログ軸バインド [axis_sym, direction, threshold]
     def self.define_action(name, keys: nil, gamepad: nil, mouse: nil, stick: nil, axes: nil)
-      act = (@actions[name.to_sym] ||= { keys: [], gamepad: [], mouse: [], axes: [] })
+      act = (@actions[name.to_sym] ||= { keys: [], gamepad: [], mouse: [], axes: [], axis_prev: [] })
       if keys
         Array(keys).each do |k|
           rk = resolve_key(k)
@@ -800,19 +807,7 @@ module Zenoo
       end
 
       # アナログ軸の閾値クロス判定 (今フレームで閾値を超え、前フレームでは未超過)
-      act[:axes].each do |ax_def|
-        axis_name, dir, thresh, _deadzone = ax_def
-        thresh ||= 0.5
-        val = gamepad_axis(axis_name, id)
-        cur_active = case dir
-                     when :positive then val >= thresh
-                     when :negative then val <= -thresh
-                     else val >= thresh
-                     end
-        key = [axis_name, id.to_i, dir]
-        prev_active = @axis_state_prev[key] || false
-        return true if cur_active && !prev_active
-      end
+      return true if __axis_push?(act, id)
 
       false
     end
@@ -841,20 +836,62 @@ module Zenoo
       end
 
       # アナログ軸のリリース判定
-      act[:axes].each do |ax_def|
-        axis_name, dir, thresh, _deadzone = ax_def
-        thresh ||= 0.5
-        val = gamepad_axis(axis_name, id)
-        cur_active = case dir
-                     when :positive then val >= thresh
-                     when :negative then val <= -thresh
-                     else val >= thresh
-                     end
-        key = [axis_name, id.to_i, dir]
-        prev_active = @axis_state_prev[key] || false
-        return true if !cur_active && prev_active
-      end
+      return true if __axis_release?(act, id)
 
+      false
+    end
+
+    def self.__axis_active?(ax_def, pad_id)
+      axis_name, dir, thresh, _deadzone = ax_def
+      thresh ||= 0.5
+      val = gamepad_axis(axis_name, pad_id)
+      case dir
+      when :positive then val >= thresh
+      when :negative then val <= -thresh
+      else val >= thresh
+      end
+    end
+
+    def self.__track_gamepad_id(pad_id)
+      bit = 1 << pad_id
+      if (@tracked_gamepad_mask & bit) == 0
+        @tracked_gamepad_mask |= bit
+        @tracked_gamepad_ids << pad_id
+      end
+      bit
+    end
+
+    def self.__axis_push?(act, id)
+      pad_id = id.to_i
+      return false if pad_id < 0
+      bit = __track_gamepad_id(pad_id)
+      axes = act[:axes]
+      prev_masks = (act[:axis_prev] ||= [])
+      idx = 0
+      len = axes.length
+      while idx < len
+        cur_active = __axis_active?(axes[idx], pad_id)
+        prev_active = ((prev_masks[idx] || 0) & bit) != 0
+        return true if cur_active && !prev_active
+        idx += 1
+      end
+      false
+    end
+
+    def self.__axis_release?(act, id)
+      pad_id = id.to_i
+      return false if pad_id < 0
+      bit = __track_gamepad_id(pad_id)
+      axes = act[:axes]
+      prev_masks = (act[:axis_prev] ||= [])
+      idx = 0
+      len = axes.length
+      while idx < len
+        cur_active = __axis_active?(axes[idx], pad_id)
+        prev_active = ((prev_masks[idx] || 0) & bit) != 0
+        return true if !cur_active && prev_active
+        idx += 1
+      end
       false
     end
 
@@ -924,6 +961,7 @@ module Zenoo
       @active_touches.clear
       @touches.clear
       @mouse_touch_id = nil
+      @mouse_consumed = false
       @vpad_actions_cur.clear
       @vpad_actions_prev.clear
       @vpad_rx = 0.0
@@ -934,6 +972,7 @@ module Zenoo
 
     # フレーム開始時: 終了済みTouchの除去 & Cカーネルからの生イベント反映
     def self.__begin_frame
+      @mouse_consumed = false
       @vpad_actions_cur.clear
       @vpad_rx = 0.0
       @vpad_ry = 0.0
@@ -962,6 +1001,9 @@ module Zenoo
 
           case type
           when 0 # DOWN
+            if (old_t = @active_touches.delete(tid))
+              old_t.__finish(false, tx, ty)
+            end
             t = Touch.new(tid, tx, ty)
             @active_touches[tid] = t
             @touches << t
@@ -1018,17 +1060,24 @@ module Zenoo
 
     # 毎フレーム末尾で軸状態を更新 (Window.__update_step から自動呼出し)
     def self.__update_step
+      ids = @tracked_gamepad_ids
+      id_len = ids.length
       @actions.each_value do |act|
-        act[:axes].each do |ax_def|
-          axis_name, dir, thresh, _deadzone = ax_def
-          thresh ||= 0.5
-          val = gamepad_axis(axis_name, 0)
-          cur_active = case dir
-                       when :positive then val >= thresh
-                       when :negative then val <= -thresh
-                       else val >= thresh
-                       end
-          @axis_state_prev[[axis_name, 0, dir]] = cur_active
+        axes = act[:axes]
+        prev_masks = (act[:axis_prev] ||= [])
+        idx = 0
+        len = axes.length
+        while idx < len
+          ax_def = axes[idx]
+          mask = 0
+          j = 0
+          while j < id_len
+            pid = ids[j]
+            mask |= (1 << pid) if __axis_active?(ax_def, pid)
+            j += 1
+          end
+          prev_masks[idx] = mask
+          idx += 1
         end
       end
 
