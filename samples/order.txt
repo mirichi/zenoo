@@ -6,6 +6,7 @@ window_draw_circle
 window_draw_line
 window_draw_triangle
 window_draw_text_sdf
+window_camera
 window_scale
 window_low_res_scale
 window_offscreen_scale
