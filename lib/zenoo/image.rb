@@ -40,18 +40,15 @@ class Zenoo::Image
     img.slice_tiles(xcount, ycount, tile_width: tile_width, tile_height: tile_height)
   end
 
-  # サブ画像かどうか判定
-  def sub_image?
-    x != 0 || y != 0 || width != texture_width || height != texture_height
-  end
+  if defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel"
+    # テクスチャ全体における正規化 UV 座標 [u, v, uw, vh] (CRuby版は C 拡張で定義済み)
+    def uv
+      tw = texture_width.to_f
+      th = texture_height.to_f
+      return [0.0, 0.0, 1.0, 1.0] if tw <= 0.0 || th <= 0.0
 
-  # テクスチャ全体における正規化 UV 座標 [u, v, uw, vh]
-  def uv
-    tw = texture_width.to_f
-    th = texture_height.to_f
-    return [0.0, 0.0, 1.0, 1.0] if tw <= 0.0 || th <= 0.0
-
-    [x.to_f / tw, y.to_f / th, width.to_f / tw, height.to_f / th]
+      [x.to_f / tw, y.to_f / th, width.to_f / tw, height.to_f / th]
+    end
   end
 
   # ピクセル色取得: image[x, y] -> Color

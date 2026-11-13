@@ -512,7 +512,6 @@ end
 # ------------------------------------------------------------------------------
 danmaku_shader = Shader.new(DANMAKU_VERT, DANMAKU_FRAG)
 
-target_count = 60_000
 danmaku_systems = {}
 groups_75k, count_75k = build_danmaku_system(60_000)
 mesh_75k = create_danmaku_mesh(groups_75k, danmaku_shader, nil)
@@ -523,10 +522,8 @@ groups, total_count, active_mesh = danmaku_systems[75_000]
 player_x = WIDTH * 0.5
 player_y = HEIGHT * 0.82
 player_r = 3.0          # 自機当たり判定半径 (STG定番の小さめコア)
-player_graze_r = 20.0   # かすり半径
 
 score = 0
-graze_count = 0
 hit_flash = 0.0
 bomb_radius = 0.0
 bomb_pos = [0.0, 0.0]

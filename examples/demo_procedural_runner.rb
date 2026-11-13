@@ -101,7 +101,6 @@ sword_target_l = Sprite.new(-10.0, 0.0, parent: sword_pivot) # 左手ターゲ�
 speed = 260.0               # 移動速度 (px/s)
 target_speed = 260.0
 walk_cycle = 0.0            # 歩行フェーズ角 (ラジアン)
-ground_scroll_x = 0.0       # 地面スクロールオフセット
 show_debug = false
 
 # 剣振り下ろし状態
@@ -227,9 +226,9 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
   # 3. 両足の接地・軌道 & 足首角度計算（不整地・凸凹地面対応）
   # --------------------------------------------------
   # 左足（奥: phase = Math::PI）
-  foot_lx, foot_ly, ground_l, gy_l, foot_angle_l = calc_foot_trajectory(walk_cycle, Math::PI, pelvis.x - 8.0, world_scroll_x, stride_x, swing_height, roughness)
+  foot_lx, foot_ly, _ground_l, gy_l, foot_angle_l = calc_foot_trajectory(walk_cycle, Math::PI, pelvis.x - 8.0, world_scroll_x, stride_x, swing_height, roughness)
   # 右足（手前: phase = 0.0）
-  foot_rx, foot_ry, ground_r, gy_r, foot_angle_r = calc_foot_trajectory(walk_cycle, 0.0, pelvis.x + 8.0, world_scroll_x, stride_x, swing_height, roughness)
+  foot_rx, foot_ry, _ground_r, gy_r, foot_angle_r = calc_foot_trajectory(walk_cycle, 0.0, pelvis.x + 8.0, world_scroll_x, stride_x, swing_height, roughness)
 
   # === 腰の4大挙動 ＋ 斬撃連動 ＋ 地形適応サスペンション ===
   # (A) 上下バウンド (倍周期 2θ): 1歩ごとに着地で沈み、蹴り出しで跳ねる

@@ -152,7 +152,7 @@ module Zenoo
       end
     end
 
-    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :anchor, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image, :parent
+    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image, :parent
     attr_accessor :blend, :shader, :uniforms, :camera
 
     def initialize(x = 0.0, y = 0.0, image = nil, width: nil, height: nil, anchor: :center, pivot: :center, z: 0.0, blend: :alpha, shader: nil, uniforms: nil, camera: true, parent: nil)

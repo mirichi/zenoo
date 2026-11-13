@@ -27,7 +27,6 @@ module Zenoo
 
         box_size = 20.0
         rw = @layout.resolve_width(w, box_size + 10.0 + text_w + 8.0)
-        box_y = ry + (rh - box_size) * 0.5
 
         hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ry, rw, rh)
         set_mouse_cursor(:hand) if hover || @active_id == widget_id
@@ -116,9 +115,6 @@ module Zenoo
         return selected_index if count == 0
 
         tab_w = rw / count.to_f
-        f_font = @theme.font || Font.default
-        f_size = 14
-        accent = @theme.accent_color || Color.new(80, 140, 240)
 
         new_selected = selected_index.to_i
         hover_idx = nil
@@ -179,10 +175,6 @@ module Zenoo
         # プラスボタン領域
         plus_x = ctrl_x + ctrl_w - btn_w
         plus_hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, plus_x, ry, btn_w, rh)
-
-        # 値枠領域
-        val_x = ctrl_x + btn_w + 2.0
-        val_w = ctrl_w - btn_w * 2.0 - 4.0
 
         # 入力処理
         set_mouse_cursor(:hand) if minus_hover || plus_hover
@@ -299,8 +291,6 @@ module Zenoo
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 240.0)
         item_h = 28.0
-        f_font = @theme.font || Font.default
-        f_size = 14
 
         has_label = !label.to_s.empty?
         label_h = has_label ? 22.0 : 0.0
@@ -331,7 +321,6 @@ module Zenoo
         Widgets.scroll_states[widget_id] = scroll_y
 
         new_selected = selected_index.to_i
-        accent = @theme.accent_color || Color.new(80, 140, 240)
 
         # クリップ領域内で各アイテムを描画
         Window.clip(rx + 2.0, list_y + 2.0, content_w, inner_h, local: false) do
@@ -390,8 +379,6 @@ module Zenoo
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 200.0)
         rh = h.to_f
-        f_font = @theme.font || Font.default
-        f_size = 14
 
         has_label = !label.to_s.empty?
         label_h = has_label ? 20.0 : 0.0
