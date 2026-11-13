@@ -469,8 +469,8 @@ typedef struct {
     int   is_bitmap;      // 直接ラスタライズビットマップなら 1, SDFなら 0
 } ZenGlyph;
 
-ZenFont*  zen_font_load(const char* filepath);
-ZenFont*  zen_font_load_memory(const unsigned char* data, size_t size);
+ZenFont*  zen_font_load(const char* filepath, int index);
+ZenFont*  zen_font_load_memory(const unsigned char* data, size_t size, int index);
 void      zen_font_destroy(ZenFont* font);
 int       zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* out_glyph);
 void      zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* descent, float* line_gap);

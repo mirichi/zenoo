@@ -316,7 +316,7 @@ module Zenoo
   # 8. Native::Font (Spinel native_struct)
   # ==========================================
   native_struct "Zenoo::Native::Font", "sp_ZenFont", "sp_ZenFont_free"
-  native_new [:string], "sp_ZenFont_load"
+  native_new [:string, :int], "sp_ZenFont_load"
   native_method :metrics_ascent,   [:float], :float, "sp_zen_font_metrics_ascent"
   native_method :metrics_descent,  [:float], :float, "sp_zen_font_metrics_descent"
   native_method :metrics_line_gap, [:float], :float, "sp_zen_font_metrics_line_gap"
@@ -406,8 +406,8 @@ class Zenoo::Native::Mesh
 end
 
 class Zenoo::Native::Font
-  def self.load(path)
-    new(path.to_s)
+  def self.load(path, index = 0)
+    new(path.to_s, index.to_i)
   end
 
   def self.atlas_image

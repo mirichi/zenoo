@@ -189,7 +189,7 @@ typedef struct sp_ZenFont_s {
 } sp_ZenFont;
 
 void sp_ZenFont_free(void* p);
-sp_ZenFont* sp_ZenFont_load(sp_int cls_id, const char* path);
+sp_ZenFont* sp_ZenFont_load(sp_int cls_id, const char* path, sp_int index);
 void sp_zen_font_set_atlas_image(sp_RbVal image_val);
 
 sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size);

@@ -522,11 +522,14 @@ static VALUE font_allocate(VALUE klass) {
     return TypedData_Wrap_Struct(klass, &zenoo_font_data_type, NULL);
 }
 
-static VALUE font_s_load(VALUE klass, VALUE rb_path) {
+static VALUE font_s_load(int argc, VALUE* argv, VALUE klass) {
+    VALUE rb_path, rb_index;
+    rb_scan_args(argc, argv, "11", &rb_path, &rb_index);
     const char* path = StringValueCStr(rb_path);
-    ZenFont* font = zen_font_load(path);
+    int index = NIL_P(rb_index) ? 0 : NUM2INT(rb_index);
+    ZenFont* font = zen_font_load(path, index);
     if (!font) {
-        rb_raise(rb_eRuntimeError, "Failed to load Font from file: %s", path);
+        rb_raise(rb_eRuntimeError, "Failed to load Font from file: %s (index: %d)", path, index);
     }
     return TypedData_Wrap_Struct(klass, &zenoo_font_data_type, font);
 }
@@ -1801,7 +1804,7 @@ void Init_zenoo(void) {
     // 6. Font (Zenoo::Native::Font)
     rb_cNativeFont = rb_define_class_under(rb_mNative, "Font", rb_cObject);
     rb_define_alloc_func(rb_cNativeFont, font_allocate);
-    rb_define_singleton_method(rb_cNativeFont, "load", font_s_load, 1);
+    rb_define_singleton_method(rb_cNativeFont, "load", font_s_load, -1);
     rb_define_singleton_method(rb_cNativeFont, "atlas_image", font_s_atlas_image, 0);
     rb_define_method(rb_cNativeFont, "get_glyph", font_get_glyph, 2);
     rb_define_method(rb_cNativeFont, "metrics", font_get_metrics, 1);
