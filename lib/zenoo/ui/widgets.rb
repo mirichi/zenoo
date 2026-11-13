@@ -10,7 +10,7 @@ module Zenoo
       attr_accessor :text_color, :align, :valign, :font, :outline_width, :outline_color
 
       def initialize(text = "", x = 0.0, y = 0.0, width: nil, height: nil,
-                     size: nil, color: nil, align: :left, valign: :middle,
+                     size: nil, color: nil, align: :left, valign: :center,
                      font: nil, outline_width: 0.0, outline_color: :black,
                      interactive: false, **opts)
         @text          = text.to_s
@@ -71,8 +71,8 @@ module Zenoo
              end
 
         ty = case @valign
-             when :middle, :center then ry + rh * 0.5
-             when :bottom          then ry + rh
+             when :center then ry + rh * 0.5
+             when :bottom then ry + rh
              else ry
              end
 
@@ -303,7 +303,7 @@ module Zenoo
             start_x + isz + 6.0, ry + rh * 0.5 + press_offset,
             @label,
             font: f_font, size: f_size, color: tcol,
-            align: :left, valign: :middle,
+            align: :left, valign: :center,
             camera: @camera, z: @z
           )
         elsif !@label.empty?
@@ -316,7 +316,7 @@ module Zenoo
             rx + rw * 0.5, ry + rh * 0.5 + press_offset,
             @label,
             font: f_font, size: f_size, color: tcol,
-            align: :center, valign: :middle,
+            align: :center, valign: :center,
             camera: @camera, z: @z
           )
         end
@@ -396,7 +396,7 @@ module Zenoo
             rx + box_size + 10.0, ry + rh * 0.5,
             @label,
             font: f_font, size: f_size, color: tcol,
-            align: :left, valign: :middle,
+            align: :left, valign: :center,
             camera: @camera, z: @z
           )
         end
@@ -485,7 +485,7 @@ module Zenoo
             rx + r * 2.0 + 10.0, cy,
             @label,
             font: f_font, size: f_size, color: tcol,
-            align: :left, valign: :middle,
+            align: :left, valign: :center,
             camera: @camera, z: @z
           )
         end
@@ -563,7 +563,7 @@ module Zenoo
             rx + rw * 0.5, ry + rh * 0.5,
             txt,
             font: f_font, size: f_size, color: th.text_color,
-            align: :center, valign: :middle,
+            align: :center, valign: :center,
             outline_width: 1.0, outline_color: Color.new(0, 0, 0, 180),
             camera: @camera, z: @z
           )
@@ -798,7 +798,7 @@ module Zenoo
           Zenoo::Window.draw_text(
             rx, ry + rh * 0.5, @label,
             font: f_font, size: f_size, color: th.text_color,
-            align: :left, valign: :middle, camera: @camera, z: @z
+            align: :left, valign: :center, camera: @camera, z: @z
           )
         end
 
@@ -826,7 +826,7 @@ module Zenoo
         Zenoo::Window.draw_text(
           val_x + val_w * 0.5, ry + rh * 0.5, val_str,
           font: f_font, size: f_size, color: th.text_color,
-          align: :center, valign: :middle, camera: @camera, z: @z
+          align: :center, valign: :center, camera: @camera, z: @z
         )
 
         # [-] ボタン
@@ -996,7 +996,7 @@ module Zenoo
             tx + tab_w * 0.5, ry + rh * 0.5 - 1.0,
             lbl,
             font: f_font, size: f_size, color: tcol,
-            align: :center, valign: :middle,
+            align: :center, valign: :center,
             camera: @camera, z: @z
           )
           i += 1
@@ -1305,7 +1305,7 @@ module Zenoo
           rx + 12.0, ry + rh * 0.5,
           sel_str,
           font: f_font, size: f_size, color: th.text_color,
-          align: :left, valign: :middle,
+          align: :left, valign: :center,
           camera: @camera, z: @z
         )
 
@@ -1357,7 +1357,7 @@ module Zenoo
             px + 12.0, iy + item_h * 0.5,
             @items[i],
             font: f_font, size: f_size, color: tcol,
-            align: :left, valign: :middle,
+            align: :left, valign: :center,
             camera: @camera, z: pop_z + 2.0
           )
           i += 1
@@ -1515,7 +1515,7 @@ module Zenoo
               rx + 12.0, iy + @item_height * 0.5,
               @items[i],
               font: f_font, size: f_size, color: tcol,
-              align: :left, valign: :middle,
+              align: :left, valign: :center,
               camera: @camera, z: @z
             )
           end

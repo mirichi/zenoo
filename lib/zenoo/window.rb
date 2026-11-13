@@ -1172,10 +1172,10 @@ module Zenoo
         @scale = val
       end
 
-      def reset(char, index, gx, gy, gw, gh, default_color, def_out_w, def_out_c, def_weight = 0.0)
+      def reset(char, index, gx, gy, gw, gh, default_color, def_out_w, def_out_c, def_weight = 0.0, line_index = 0)
         @char = char
         @index = index
-        @line_index = 0
+        @line_index = line_index
         @x = gx
         @y = gy
         @w = gw
@@ -1221,7 +1221,7 @@ module Zenoo
     # - `size:` (`Numeric`): フォントサイズ (ピクセル単位)
     # - `color:` (`Symbol, Array, Integer, Color`): 文字色
     # - `align:` (`Symbol`): 水平方向のアライメント (`:left`, `:center`, `:right`)
-    # - `valign:` (`Symbol`): 垂直方向のアライメント (`:top`, `:middle`, `:center`, `:bottom`, `:baseline`)
+    # - `valign:` (`Symbol`): 垂直方向のアライメント (`:top`, `:center`, `:bottom`, `:baseline`)
     # - `line_spacing:` (`Numeric, nil`): 行送り倍率 (省略時はフォントメトリクス準拠)
     # - `weight:` (`Numeric`): 文字の太さ調整 (太字補正値)
     # - `outline_width:` (`Numeric`): 縁取りの太さ (ピクセル単位)
@@ -1231,6 +1231,7 @@ module Zenoo
     # - `shadow_dx:` (`Numeric`): 影のX方向オフセット
     # - `shadow_dy:` (`Numeric`): 影のY方向オフセット
     # - `sdf:` (`Boolean, nil`): SDF描画の強制ON/OFF (省略時は装飾の有無で自動判定)
+    # - `blend:` (`Symbol`): ブレンドモード (`:alpha`, `:add` 等)
     # - `camera:` (`Boolean`): カメラ適用有無 (デフォルト: `true`)
     # - `z:` (`Numeric`): Zオーダー (デフォルト: `0.0`)
     # - `&block`: 1文字ごとの装飾を行うブロック (`|ctx|`)
@@ -1249,6 +1250,7 @@ module Zenoo
                        shadow_dx: 0.0,
                        shadow_dy: 0.0,
                        sdf: nil,
+                       blend: :alpha,
                        camera: true,
                        z: 0.0,
                        &block)
@@ -1258,6 +1260,9 @@ module Zenoo
 
       target_font = font || Font.default
       return unless target_font
+
+      font_atlas = Font.atlas_image
+      return unless font_atlas
 
       cam = @active_camera
       if cam && camera
@@ -1272,26 +1277,40 @@ module Zenoo
       end
       f_size = 24.0 if f_size <= 0.0
 
+      metrics = target_font.metrics(f_size)
+      ascent = metrics[:ascent]
+      __prepare_text_draw(f_size, color, weight, outline_width, outline_color,
+                          shadow_blur, shadow_color, shadow_dx, shadow_dy, sdf)
+
+      batch = (@text_batch ||= [])
+      batch.clear
+      @text_glyph_count = 0
+
+      vp_scale = @_txt_vp_scale
+      inv_vp_scale = @_txt_inv_vp_scale
+
       # 改行を含む複数行テキストの処理
       if str.include?("\n")
         lines = str.split("\n", -1)
         line_count = lines.length
-        metrics = target_font.metrics(f_size)
         line_h = line_spacing ? (f_size * line_spacing.to_f) : (metrics[:line_height] || (f_size * 1.2))
         total_h = f_size + (line_count - 1) * line_h
 
         cur_base_y = base_y
         case valign
-        when :middle, :center
+        when :center
           cur_base_y -= total_h * 0.5
         when :bottom
           cur_base_y -= total_h
         when :baseline
-          cur_base_y -= (metrics[:ascent] || f_size * 0.8)
+          cur_base_y -= (ascent || f_size * 0.8)
         end
 
-        lines.each_with_index do |line_text, idx|
-          line_y = cur_base_y + idx * line_h
+        char_offset = 0
+        line_idx = 0
+        while line_idx < line_count
+          line_text = lines[line_idx]
+          line_y = cur_base_y + line_idx * line_h
           line_x = base_x
           if align == :center
             line_x -= target_font.text_width(line_text, f_size) * 0.5
@@ -1299,120 +1318,115 @@ module Zenoo
             line_x -= target_font.text_width(line_text, f_size)
           end
 
+          pen_x = ((line_x + @offset_x) * vp_scale).round * inv_vp_scale
+          pen_y = ((line_y + @offset_y + ascent) * vp_scale).round * inv_vp_scale
+
           if block
-            __draw_text_custom(line_x, line_y, line_text, font, size, color,
-                               weight, outline_width, outline_color,
-                               shadow_blur, shadow_color,
-                               shadow_dx, shadow_dy, sdf, z, &block)
+            char_offset = __draw_text_line_custom(line_text, line_idx, char_offset, pen_x, pen_y, target_font, f_size, &block)
           else
-            __draw_text_simple(line_x, line_y, line_text, font, size, color,
-                               weight, outline_width, outline_color,
-                               shadow_blur, shadow_color,
-                               shadow_dx, shadow_dy, sdf, z)
+            __draw_text_line_simple(line_text, pen_x, pen_y, target_font, f_size)
+          end
+          line_idx += 1
+        end
+      else
+        # 単一行テキストの揃え位置オフセット算出 (デフォルト :left / :top 時は text_width や追加分岐をスキップ)
+        draw_x = base_x
+        if align == :center
+          draw_x -= target_font.text_width(str, f_size) * 0.5
+        elsif align == :right
+          draw_x -= target_font.text_width(str, f_size)
+        end
+
+        draw_y = base_y
+        if valign != :top
+          case valign
+          when :center
+            draw_y -= f_size * 0.5
+          when :bottom
+            draw_y -= f_size
+          when :baseline
+            draw_y -= (ascent || f_size * 0.8)
           end
         end
-        return
-      end
 
-      # 単一行テキストの揃え位置オフセット算出 (デフォルト :left / :top 時は text_width や metrics をスキップしてゼロコスト化)
-      draw_x = base_x
-      if align == :center
-        draw_x -= target_font.text_width(str, f_size) * 0.5
-      elsif align == :right
-        draw_x -= target_font.text_width(str, f_size)
-      end
+        pen_x = ((draw_x + @offset_x) * vp_scale).round * inv_vp_scale
+        pen_y = ((draw_y + @offset_y + ascent) * vp_scale).round * inv_vp_scale
 
-      draw_y = base_y
-      if valign != :top
-        case valign
-        when :middle, :center
-          draw_y -= f_size * 0.5
-        when :bottom
-          draw_y -= f_size
-        when :baseline
-          metrics = target_font.metrics(f_size)
-          draw_y -= (metrics[:ascent] || f_size * 0.8)
+        if block
+          __draw_text_line_custom(str, 0, 0, pen_x, pen_y, target_font, f_size, &block)
+        else
+          __draw_text_line_simple(str, pen_x, pen_y, target_font, f_size)
         end
       end
 
-      if block
-        __draw_text_custom(draw_x, draw_y, str, font, f_size, color,
-                           weight, outline_width, outline_color,
-                           shadow_blur, shadow_color,
-                           shadow_dx, shadow_dy, sdf, z, &block)
-      else
-        __draw_text_simple(draw_x, draw_y, str, font, f_size, color,
-                           weight, outline_width, outline_color,
-                           shadow_blur, shadow_color,
-                           shadow_dx, shadow_dy, sdf, z)
+      if @text_glyph_count > 0
+        Backend.enqueue_draw(
+          Backend::Pipelines::FONT,
+          batch.pack("f*"),
+          @text_glyph_count,
+          image: font_atlas,
+          shader: sdf_font_shader,
+          blend: Backend.normalize_blend_mode(blend),
+          z: z
+        )
       end
     end
 
-    def self.__draw_text_simple(x, y, text, font, size, color,
-                                weight, outline_width, outline_color,
-                                shadow_blur, shadow_color,
-                                shadow_dx, shadow_dy, sdf, z)
-      return if text.nil?
-
-      target_font = font || Font.default
-      return unless target_font
-
-      font_atlas = Font.atlas_image
-      return unless font_atlas
-
-      f_size = size.to_f
-      f_size = 24.0 if f_size <= 0.0
-
-      c_color = Backend.normalize_color(color)
+    def self.__prepare_text_draw(f_size, color, weight, outline_width, outline_color,
+                                 shadow_blur, shadow_color, shadow_dx, shadow_dy, sdf)
+      @_txt_color = Backend.normalize_color(color)
 
       outline_w = outline_width.to_f
-      outline_c = (outline_w > 0.0) ? Backend.normalize_color(outline_color) : ZERO_COLOR_PARAMS
+      @_txt_outline_w = outline_w
+      @_txt_outline_c = (outline_w > 0.0) ? Backend.normalize_color(outline_color) : ZERO_COLOR_PARAMS
 
       s_blur = shadow_blur.to_f
       s_dx = shadow_dx.to_f
       s_dy = shadow_dy.to_f
-      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : ZERO_COLOR_PARAMS
+      @_txt_shadow_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : ZERO_COLOR_PARAMS
 
-      effective_sdf = if sdf.nil?
-                        (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? true : nil
-                      else
-                        sdf ? true : false
-                      end
+      @_txt_effective_sdf = if sdf.nil?
+                              (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? true : nil
+                            else
+                              sdf ? true : false
+                            end
 
       scale_ratio = Font::SDF_BASE_SIZE / f_size
-      s_atlas_dx = s_dx * scale_ratio
-      s_atlas_dy = s_dy * scale_ratio
-      s_atlas_blur = s_blur * scale_ratio
-      s_atlas_outline_w = outline_w * scale_ratio
+      @_txt_scale_ratio = scale_ratio
+      @_txt_p0_0 = outline_w * scale_ratio
+      @_txt_p0_1 = s_blur * scale_ratio
+      @_txt_p0_2 = s_dx * scale_ratio
+      @_txt_p0_3 = s_dy * scale_ratio
       s_weight = weight.to_f
-      s_atlas_weight = s_weight * scale_ratio
-
-      p0_0 = s_atlas_outline_w.to_f
-      p0_1 = s_atlas_blur.to_f
-      p0_2 = s_atlas_dx.to_f
-      p0_3 = s_atlas_dy.to_f
-      p1_0 = outline_c[0].to_f; p1_1 = outline_c[1].to_f; p1_2 = outline_c[2].to_f; p1_3 = outline_c[3].to_f
-      p2_0 = s_c[0].to_f; p2_1 = s_c[1].to_f; p2_2 = s_c[2].to_f; p2_3 = s_c[3].to_f
-      shader = sdf_font_shader
-
-      metrics = target_font.metrics(f_size)
-      ascent = metrics[:ascent]
+      @_txt_weight = s_weight
+      @_txt_atlas_weight = s_weight * scale_ratio
 
       vp_scale = Backend.current_target ? 1.0 : Native::Window.scale.to_f
       vp_scale = 1.0 if vp_scale < 1.0
-      inv_vp_scale = 1.0 / vp_scale
+      @_txt_vp_scale = vp_scale
+      @_txt_inv_vp_scale = 1.0 / vp_scale
+    end
 
-      pen_x = ((x.to_f + @offset_x) * vp_scale).round * inv_vp_scale
-      pen_y = ((y.to_f + @offset_y + ascent) * vp_scale).round * inv_vp_scale
+    def self.__draw_text_line_simple(line_text, pen_x, pen_y, target_font, f_size)
+      return if line_text.empty?
 
-      batch = (@text_batch ||= [])
-      batch.clear
-      glyph_count = 0
+      batch = @text_batch
+      effective_sdf = @_txt_effective_sdf
+      vp_scale = @_txt_vp_scale
+      inv_vp_scale = @_txt_inv_vp_scale
 
+      c_color = @_txt_color
       cr = c_color[0].to_f; cg = c_color[1].to_f; cb = c_color[2].to_f; ca = c_color[3].to_f
+      p0_0 = @_txt_p0_0; p0_1 = @_txt_p0_1; p0_2 = @_txt_p0_2; p0_3 = @_txt_p0_3
+      out_c = @_txt_outline_c
+      p1_0 = out_c[0].to_f; p1_1 = out_c[1].to_f; p1_2 = out_c[2].to_f; p1_3 = out_c[3].to_f
+      shd_c = @_txt_shadow_c
+      p2_0 = shd_c[0].to_f; p2_1 = shd_c[1].to_f; p2_2 = shd_c[2].to_f; p2_3 = shd_c[3].to_f
+      s_atlas_weight = @_txt_atlas_weight
+      s_weight = @_txt_weight
 
-      str = text.is_a?(String) ? text : text.to_s
-      str.each_char do |ch|
+      glyph_count = @text_glyph_count
+      line_text.each_char do |ch|
         glyph_data = target_font.get_glyph(ch, f_size, effective_sdf, vp_scale)
         adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
 
@@ -1444,154 +1458,93 @@ module Zenoo
 
         pen_x += adv
       end
+      @text_glyph_count = glyph_count
+    end
 
-      if glyph_count > 0
-        Backend.enqueue_draw(
-          Backend::Pipelines::FONT,
-          batch.pack("f*"),
-          glyph_count,
-          image: font_atlas,
-          shader: shader,
-          z: z
-        )
+    def self.__prepare_char_ctx(ctx, target_font, ch, char_index, line_index, pen_x, pen_y, f_size)
+      glyph_data = target_font.get_glyph(ch, f_size, @_txt_effective_sdf, @_txt_vp_scale)
+      @_cur_glyph_adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
+
+      if glyph_data && glyph_data[0] # visible == true
+        _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
+        if is_bitmap == true || is_bitmap == 1
+          @_cur_is_bmp = 1.0
+          gx = (pen_x * @_txt_vp_scale).round * @_txt_inv_vp_scale + x0.to_f
+          gy = pen_y + y0.to_f
+        else
+          @_cur_is_bmp = 0.0
+          gx = (pen_x + x0).to_f
+          gy = (pen_y + y0).to_f
+        end
+        @_cur_u0 = u0.to_f
+        @_cur_v0 = v0.to_f
+        @_cur_uw = (u1 - u0).to_f
+        @_cur_vh = (v1 - v0).to_f
+        ctx.reset(ch, char_index, gx, gy, (x1 - x0).to_f, (y1 - y0).to_f,
+                  @_txt_color, @_txt_outline_w, @_txt_outline_c, @_txt_weight, line_index)
+        @_cur_glyph_visible = true
+      else
+        @_cur_glyph_visible = false
       end
     end
 
-    def self.__draw_text_custom(x, y, text, font, size, color,
-                                weight, outline_width, outline_color,
-                                shadow_blur, shadow_color,
-                                shadow_dx, shadow_dy, sdf, z,
-                                &block)
-      return if text.nil?
+    def self.__push_char_ctx(batch, ctx)
+      return false unless ctx.visible
 
-      target_font = font || Font.default
-      return unless target_font
+      cgx = ctx.x
+      cgy = ctx.y
+      cgw = ctx.w
+      cgh = ctx.h
 
-      font_atlas = Font.atlas_image
-      return unless font_atlas
+      if ctx.scale != 1.0
+        sc = ctx.scale
+        cx = cgx + cgw * 0.5
+        cy = cgy + cgh * 0.5
+        cgw *= sc
+        cgh *= sc
+        cgx = cx - cgw * 0.5
+        cgy = cy - cgh * 0.5
+      end
 
-      f_size = size.to_f
-      f_size = 24.0 if f_size <= 0.0
+      cur_color = ctx.color.equal?(@_txt_color) ? @_txt_color : Backend.normalize_color(ctx.color)
+      cur_out_w = (ctx.outline_width == @_txt_outline_w) ? @_txt_p0_0 : (ctx.outline_width.to_f * @_txt_scale_ratio)
+      cur_out_c = ctx.outline_color.equal?(@_txt_outline_c) ? @_txt_outline_c : Backend.normalize_color(ctx.outline_color)
+      if ctx.weight == @_txt_weight
+        cur_w = @_txt_weight
+        cur_atlas_w = @_txt_atlas_weight
+      else
+        cur_w = ctx.weight.to_f
+        cur_atlas_w = cur_w * @_txt_scale_ratio
+      end
+      shd_c = @_txt_shadow_c
 
-      c_color = Backend.normalize_color(color)
+      batch.push(
+        cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
+        cur_color[0].to_f, cur_color[1].to_f, cur_color[2].to_f, cur_color[3].to_f,
+        cur_out_w, @_txt_p0_1, @_txt_p0_2, @_txt_p0_3,
+        cur_out_c[0].to_f, cur_out_c[1].to_f, cur_out_c[2].to_f, cur_out_c[3].to_f,
+        shd_c[0].to_f, shd_c[1].to_f, shd_c[2].to_f, shd_c[3].to_f,
+        cur_atlas_w, @_cur_is_bmp, cur_w, 0.0,
+        @_cur_u0, @_cur_v0, @_cur_uw, @_cur_vh
+      )
+      true
+    end
 
-      outline_w = outline_width.to_f
-      outline_c = (outline_w > 0.0) ? Backend.normalize_color(outline_color) : [0.0, 0.0, 0.0, 0.0]
-
-      s_blur = shadow_blur.to_f
-      s_dx = shadow_dx.to_f
-      s_dy = shadow_dy.to_f
-      s_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : [0.0, 0.0, 0.0, 0.0]
-
-      effective_sdf = if sdf.nil?
-                        (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? true : nil
-                      else
-                        sdf ? true : false
-                      end
-
-      scale_ratio = Font::SDF_BASE_SIZE / f_size
-      s_atlas_dx = s_dx * scale_ratio
-      s_atlas_dy = s_dy * scale_ratio
-      s_atlas_blur = s_blur * scale_ratio
-      s_atlas_outline_w = outline_w * scale_ratio
-      s_weight = weight.to_f
-      s_atlas_weight = s_weight * scale_ratio
-
-      p0 = [s_atlas_outline_w, s_atlas_blur, s_atlas_dx, s_atlas_dy]
-      p2 = s_c
-      shader = sdf_font_shader
-
-      metrics = target_font.metrics(f_size)
-      ascent = metrics[:ascent]
-
-      vp_scale = Backend.current_target ? 1.0 : Native::Window.scale.to_f
-      vp_scale = 1.0 if vp_scale < 1.0
-      inv_vp_scale = 1.0 / vp_scale
-
-      pen_x = ((x.to_f + @offset_x) * vp_scale).round * inv_vp_scale
-      pen_y = ((y.to_f + @offset_y + ascent) * vp_scale).round * inv_vp_scale
-
-      str = text.to_s
-      chars = str.chars
-      len = chars.length
-      return if len == 0
-
-      batch = []
-      glyph_count = 0
+    def self.__draw_text_line_custom(line_text, line_idx, char_offset, pen_x, pen_y, target_font, f_size)
+      return char_offset if line_text.empty?
 
       ctx = @char_ctx
-      i = 0
-      while i < len
-        ch = chars[i]
-        glyph_data = target_font.get_glyph(ch, f_size, effective_sdf)
-        adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
-
-        if glyph_data && glyph_data[0] # visible == true
-          _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
-          if is_bitmap == true || is_bitmap == 1
-            is_bmp = 1.0
-            gx = (pen_x * vp_scale).round * inv_vp_scale + x0.to_f
-            gy = pen_y + y0.to_f
-          else
-            is_bmp = 0.0
-            gx = (pen_x + x0).to_f
-            gy = (pen_y + y0).to_f
-          end
-          gw = x1 - x0
-          gh = y1 - y0
-          uv = [u0, v0, u1 - u0, v1 - v0]
-
-          ctx.reset(ch, i, gx, gy, gw, gh, c_color, outline_w, outline_c, s_weight)
+      batch = @text_batch
+      line_text.each_char do |ch|
+        __prepare_char_ctx(ctx, target_font, ch, char_offset, line_idx, pen_x, pen_y, f_size)
+        if @_cur_glyph_visible
           yield(ctx)
-
-          if ctx.visible
-            cgx = ctx.x
-            cgy = ctx.y
-            cgw = ctx.w
-            cgh = ctx.h
-
-            if ctx.scale != 1.0
-              sc = ctx.scale
-              cx = cgx + cgw * 0.5
-              cy = cgy + cgh * 0.5
-              cgw *= sc
-              cgh *= sc
-              cgx = cx - cgw * 0.5
-              cgy = cy - cgh * 0.5
-            end
-
-            cur_color = (ctx.color.equal?(c_color)) ? c_color : Backend.normalize_color(ctx.color)
-            cur_p0 = (ctx.outline_width == outline_w) ? p0 : [ctx.outline_width * scale_ratio, s_atlas_blur, s_atlas_dx, s_atlas_dy]
-            cur_p1 = (ctx.outline_color.equal?(outline_c)) ? outline_c : Backend.normalize_color(ctx.outline_color)
-            cur_p3 = (ctx.weight == s_weight) ? [s_atlas_weight, is_bmp, s_weight, 0.0] : [ctx.weight * scale_ratio, is_bmp, ctx.weight.to_f, 0.0]
-
-            batch.push(
-              cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
-              cur_color[0].to_f, cur_color[1].to_f, cur_color[2].to_f, cur_color[3].to_f,
-              cur_p0[0].to_f, cur_p0[1].to_f, cur_p0[2].to_f, cur_p0[3].to_f,
-              cur_p1[0].to_f, cur_p1[1].to_f, cur_p1[2].to_f, cur_p1[3].to_f,
-              p2[0].to_f, p2[1].to_f, p2[2].to_f, p2[3].to_f,
-              cur_p3[0].to_f, cur_p3[1].to_f, cur_p3[2].to_f, cur_p3[3].to_f,
-              uv[0].to_f, uv[1].to_f, uv[2].to_f, uv[3].to_f
-            )
-            glyph_count += 1
-          end
+          @text_glyph_count += 1 if __push_char_ctx(batch, ctx)
         end
-
-        pen_x += adv
-        i += 1
+        pen_x += @_cur_glyph_adv
+        char_offset += 1
       end
-
-      if glyph_count > 0
-        Backend.enqueue_draw(
-          Backend::Pipelines::FONT,
-          batch.pack("f*"),
-          glyph_count,
-          image: font_atlas,
-          shader: shader,
-          z: z
-        )
-      end
+      char_offset
     end
 
     def self.canvas
