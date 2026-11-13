@@ -64,8 +64,10 @@ Spinel AOT コンパイラにより WebAssembly 出力に対応しており、�
 require 'zenoo'
 
 # 1280x720 仮想解像度でメインループ開始
+frame = 0
 Window.loop(1280, 720, "Zenoo Quickstart") do
-  t = Window.time
+  frame += 1
+  t = frame / 60.0
 
   # 画面クリア (デフォルトは黒クリア)
   Window.clear([15, 23, 42, 255])
@@ -123,7 +125,7 @@ end
 
 ```ruby
 # 音声ファイルの再生 (WAV, MP3, Ogg Vorbis 対応)
-bgm = Sound.load("assets/sounds/bgm.ogg")
+bgm = Sound.load("assets/sounds/sample.ogg")
 bgm.looping = true
 bgm.play
 
