@@ -1,6 +1,6 @@
 # category: Window
 # title: draw_rect の各機能
-# desc: draw_rect の角丸、ボーダー、シャドウ、回転、画像埋め込みを単機能ずつ確認するサンプル
+# desc: draw_rect の角丸、ボーダー、シャドウ、回転、画像埋め込み（拡大含む）を単機能ずつ確認するサンプル
 
 require_relative '../lib/zenoo'
 
@@ -30,6 +30,12 @@ Window.loop do
   # 4. 回転描画
   Window.draw_rect(460, 60, 100, 100, color: [80, 120, 200], angle: 30)
 
-  # 5. チェック状の Image を角丸矩形の中に描画
+  # 5. チェック状の Image を角丸矩形の中に描画 (100x100 等倍)
   Window.draw_rect(600, 60, 100, 100, radius: 20, image: checker)
+
+  # 6. 描画サイズを変えてテクスチャを拡大描画 (100x100 -> 200x200)
+  Window.draw_rect(740, 60, 200, 200, radius: 20, image: checker)
+
+  # 7. テクスチャを貼った角丸矩形を回転描画
+  Window.draw_rect(1000, 60, 100, 100, radius: 20, angle: 30, image: checker)
 end
