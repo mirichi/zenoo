@@ -1385,8 +1385,11 @@ module Zenoo
       s_dy = shadow_dy.to_f
       @_txt_shadow_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : ZERO_COLOR_PARAMS
 
+      s_weight = weight.to_f
+      @_txt_weight = s_weight
+
       @_txt_effective_sdf = if sdf.nil?
-                              (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? true : nil
+                              (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0 || s_weight != 0.0) ? true : nil
                             else
                               sdf ? true : false
                             end
@@ -1397,9 +1400,6 @@ module Zenoo
       @_txt_p0_1 = s_blur * scale_ratio
       @_txt_p0_2 = s_dx * scale_ratio
       @_txt_p0_3 = s_dy * scale_ratio
-      s_weight = weight.to_f
-      @_txt_weight = s_weight
-      @_txt_atlas_weight = s_weight * scale_ratio
 
       vp_scale = Backend.current_target ? 1.0 : Native::Window.scale.to_f
       vp_scale = 1.0 if vp_scale < 1.0
@@ -1422,7 +1422,6 @@ module Zenoo
       p1_0 = out_c[0].to_f; p1_1 = out_c[1].to_f; p1_2 = out_c[2].to_f; p1_3 = out_c[3].to_f
       shd_c = @_txt_shadow_c
       p2_0 = shd_c[0].to_f; p2_1 = shd_c[1].to_f; p2_2 = shd_c[2].to_f; p2_3 = shd_c[3].to_f
-      s_atlas_weight = @_txt_atlas_weight
       s_weight = @_txt_weight
 
       glyph_count = @text_glyph_count
@@ -1450,7 +1449,7 @@ module Zenoo
             p0_0, p0_1, p0_2, p0_3,
             p1_0, p1_1, p1_2, p1_3,
             p2_0, p2_1, p2_2, p2_3,
-            s_atlas_weight, is_bmp, s_weight, 0.0,
+            s_weight, is_bmp, s_weight, 0.0,
             u0.to_f, v0.to_f, (u1 - u0).to_f, (v1 - v0).to_f
           )
           glyph_count += 1
@@ -1509,13 +1508,7 @@ module Zenoo
       cur_color = ctx.color.equal?(@_txt_color) ? @_txt_color : Backend.normalize_color(ctx.color)
       cur_out_w = (ctx.outline_width == @_txt_outline_w) ? @_txt_p0_0 : (ctx.outline_width.to_f * @_txt_scale_ratio)
       cur_out_c = ctx.outline_color.equal?(@_txt_outline_c) ? @_txt_outline_c : Backend.normalize_color(ctx.outline_color)
-      if ctx.weight == @_txt_weight
-        cur_w = @_txt_weight
-        cur_atlas_w = @_txt_atlas_weight
-      else
-        cur_w = ctx.weight.to_f
-        cur_atlas_w = cur_w * @_txt_scale_ratio
-      end
+      cur_w = (ctx.weight == @_txt_weight) ? @_txt_weight : ctx.weight.to_f
       shd_c = @_txt_shadow_c
 
       batch.push(
@@ -1524,7 +1517,7 @@ module Zenoo
         cur_out_w, @_txt_p0_1, @_txt_p0_2, @_txt_p0_3,
         cur_out_c[0].to_f, cur_out_c[1].to_f, cur_out_c[2].to_f, cur_out_c[3].to_f,
         shd_c[0].to_f, shd_c[1].to_f, shd_c[2].to_f, shd_c[3].to_f,
-        cur_atlas_w, @_cur_is_bmp, cur_w, 0.0,
+        cur_w, @_cur_is_bmp, cur_w, 0.0,
         @_cur_u0, @_cur_v0, @_cur_uw, @_cur_vh
       )
       true

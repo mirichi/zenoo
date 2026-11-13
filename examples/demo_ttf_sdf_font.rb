@@ -67,12 +67,12 @@ def draw_sample_text_card(left_w)
   Window.draw_text(60, 492, "ニャーニャー泣いていた事だけは記憶している。", size: 17, color: [180, 200, 230], font: Font::MPLUS)
 
   # SDF による無段階ウェイト比較 (Thin .. Regular .. Bold .. Heavy)
-  Window.draw_text(60, 528, "Weight: ", size: 15, color: :cyan, font: Font::MPLUS)
-  Window.draw_text(130, 528, "Thin (-0.7)", size: 15, weight: -0.7, color: [180, 200, 230], font: Font::MPLUS)
-  Window.draw_text(230, 528, "Regular (0.0)", size: 15, weight: 0.0, color: :white, font: Font::MPLUS)
-  Window.draw_text(355, 528, "Medium (+0.5)", size: 15, weight: 0.5, color: [255, 235, 120], font: Font::MPLUS)
-  Window.draw_text(485, 528, "Bold (+1.0)", size: 15, weight: 1.0, color: [255, 180, 80], font: Font::MPLUS)
-  Window.draw_text(595, 528, "Heavy (+1.6)", size: 15, weight: 1.6, color: :yellow, font: Font::MPLUS)
+  Window.draw_text(60, 528, "Weight: ", size: 15, color: :cyan, font: Font::MPLUS, sdf: true)
+  Window.draw_text(130, 528, "Thin (-0.7)", size: 15, weight: -0.7, color: [180, 200, 230], font: Font::MPLUS, sdf: true)
+  Window.draw_text(230, 528, "Regular (0.0)", size: 15, weight: 0.0, color: :white, font: Font::MPLUS, sdf: true)
+  Window.draw_text(355, 528, "Medium (+0.5)", size: 15, weight: 0.5, color: [255, 235, 120], font: Font::MPLUS, sdf: true)
+  Window.draw_text(485, 528, "Bold (+1.0)", size: 15, weight: 1.0, color: [255, 180, 80], font: Font::MPLUS, sdf: true)
+  Window.draw_text(595, 528, "Heavy (+1.6)", size: 15, weight: 1.6, color: :yellow, font: Font::MPLUS, sdf: true)
 end
 
 def draw_wave_card(left_w, time)
