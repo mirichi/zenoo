@@ -168,15 +168,16 @@ module Zenoo
       cap_verts = []
       cap_indices = []
       @mesh_capture = { vertices: cap_verts, indices: cap_indices }
-      begin
-        yield(self) if block_given?
-        # ブロック内でパスだけ構築されて fill / stroke がまだ呼ばれていない場合は自動 fill
-        if cap_verts.empty? && @subpaths.any? { |s| s.points.size >= 3 }
-          fill
-        end
-      ensure
-        @mesh_capture = prev_capture
+      yield(self) if block_given?
+      __finalize_mesh_capture(prev_capture, cap_verts, cap_indices, explicit_w, explicit_h, img, shader, uniforms, blend)
+    end
+
+    def __finalize_mesh_capture(prev_capture, cap_verts, cap_indices, explicit_w, explicit_h, img, shader, uniforms, blend)
+      # ブロック内でパスだけ構築されて fill / stroke がまだ呼ばれていない場合は自動 fill
+      if cap_verts.empty? && @subpaths.any? { |s| s.points.size >= 3 }
+        fill
       end
+      @mesh_capture = prev_capture
 
       v_count = cap_verts.length / 8
       if v_count == 0
@@ -214,7 +215,7 @@ module Zenoo
         h = [max_y - min_y, 1.0].max
       else
         w = (explicit_w || [max_x, 1.0].max).to_f
-        h = (explicit_h || explicit_w || [max_y, 1.0].max).to_f
+        h = (explicit_h || [max_y, 1.0].max).to_f
       end
 
       inv_w = w > 0.0 ? (1.0 / w) : 0.0
@@ -228,6 +229,7 @@ module Zenoo
 
       Mesh.from_vertices(cap_verts, cap_indices, width: w, height: h, image: img, shader: shader, uniforms: uniforms, blend: blend)
     end
+    private :__finalize_mesh_capture
 
     # ----------------------------------------------------
     # 状態スタック & 座標変換
@@ -299,11 +301,7 @@ module Zenoo
 
     def line_to(x, y)
       tx, ty = @transform.apply(x.to_f, y.to_f)
-      if current_subpath.empty?
-        current_subpath.points << [tx, ty]
-      else
-        current_subpath.points << [tx, ty]
-      end
+      current_subpath.points << [tx, ty]
     end
 
     # 2次ベジエ曲線
@@ -362,12 +360,7 @@ module Zenoo
         px = cx + Math.cos(angle) * r
         py = cy + Math.sin(angle) * r
         tx, ty = @transform.apply(px, py)
-
-        if i == 0 && current_subpath.empty?
-          current_subpath.points << [tx, ty]
-        else
-          current_subpath.points << [tx, ty]
-        end
+        current_subpath.points << [tx, ty]
       end
     end
 
@@ -408,12 +401,7 @@ module Zenoo
         px = cx + (lx * cos_rot - ly * sin_rot)
         py = cy + (lx * sin_rot + ly * cos_rot)
         tx, ty = @transform.apply(px, py)
-
-        if i == 0 && current_subpath.empty?
-          current_subpath.points << [tx, ty]
-        else
-          current_subpath.points << [tx, ty]
-        end
+        current_subpath.points << [tx, ty]
       end
     end
 
@@ -1044,24 +1032,32 @@ module Zenoo
           triangles.push(plx + nlx, ply + nly, plx - nlx, ply - nly, plx + nlx + cap_ex, ply + nly + cap_ey)
           triangles.push(plx - nlx, ply - nly, plx - nlx + cap_ex, ply - nly + cap_ey, plx + nlx + cap_ex, ply + nly + cap_ey)
         elsif @line_cap == :round
-          [ [pts_work[0], -seg_dirs_x[0], -seg_dirs_y[0], seg_normals_x[0], seg_normals_y[0]],
-            [pts_work.last, seg_dirs_x.last, seg_dirs_y.last, seg_normals_x.last, seg_normals_y.last] ].each do |pt, fwd_x, fwd_y, norm_x, norm_y|
-            cpx = pt[0].to_f; cpy = pt[1].to_f
-            base_a = Math.atan2(norm_y, norm_x)
-            steps = 6
-            prev_cx = cpx + norm_x; prev_cy = cpy + norm_y
-            1.upto(steps) do |s|
-              ang = base_a + Math::PI * (s.to_f / steps)
-              cur_cx = cpx + Math.cos(ang) * half_w
-              cur_cy = cpy + Math.sin(ang) * half_w
-              triangles.push(cpx, cpy, prev_cx, prev_cy, cur_cx, cur_cy)
-              prev_cx = cur_cx; prev_cy = cur_cy
-            end
-          end
+          p0 = pts_work[0]
+          push_round_cap(triangles, p0[0].to_f, p0[1].to_f, seg_normals_x[0], seg_normals_y[0], half_w, 1.0)
+          pl = pts_work.last
+          push_round_cap(triangles, pl[0].to_f, pl[1].to_f, seg_normals_x.last, seg_normals_y.last, half_w, -1.0)
         end
       end
 
       triangles
+    end
+
+    def push_round_cap(triangles, cpx, cpy, norm_x, norm_y, half_w, dir_sign)
+      base_a = Math.atan2(norm_y, norm_x)
+      steps = 6
+      prev_cx = cpx + norm_x
+      prev_cy = cpy + norm_y
+      sweep = Math::PI * dir_sign
+      s = 1
+      while s <= steps
+        ang = base_a + sweep * (s.to_f / steps)
+        cur_cx = cpx + Math.cos(ang) * half_w
+        cur_cy = cpy + Math.sin(ang) * half_w
+        triangles.push(cpx, cpy, prev_cx, prev_cy, cur_cx, cur_cy)
+        prev_cx = cur_cx
+        prev_cy = cur_cy
+        s += 1
+      end
     end
   end
 end

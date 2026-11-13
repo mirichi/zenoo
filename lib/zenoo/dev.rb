@@ -577,19 +577,7 @@ module Zenoo
           end
         end
 
-        act[:axes].each do |ax_def|
-          axis_name, dir, thresh, _deadzone = ax_def
-          thresh ||= 0.5
-          val = gamepad_axis(axis_name, id)
-          cur_active = case dir
-                       when :positive then val >= thresh
-                       when :negative then val <= -thresh
-                       else val >= thresh
-                       end
-          key = [axis_name, id.to_i, dir]
-          prev_active = @axis_state_prev[key] || false
-          return true if cur_active && !prev_active
-        end
+        return true if __axis_push?(act, id)
 
         false
       end
@@ -618,19 +606,7 @@ module Zenoo
           end
         end
 
-        act[:axes].each do |ax_def|
-          axis_name, dir, thresh, _deadzone = ax_def
-          thresh ||= 0.5
-          val = gamepad_axis(axis_name, id)
-          cur_active = case dir
-                       when :positive then val >= thresh
-                       when :negative then val <= -thresh
-                       else val >= thresh
-                       end
-          key = [axis_name, id.to_i, dir]
-          prev_active = @axis_state_prev[key] || false
-          return true if !cur_active && prev_active
-        end
+        return true if __axis_release?(act, id)
 
         false
       end

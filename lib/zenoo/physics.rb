@@ -226,13 +226,18 @@ module Zenoo
         b_hw = col_static.half_w
         b_hh = col_static.half_h
 
-        dx = x.to_f - bcx
-        dy = y.to_f - bcy
+        ax_center = col_shape ? col_shape.center_x : x.to_f
+        ay_center = col_shape ? col_shape.center_y : y.to_f
+        dx = ax_center - bcx
+        dy = ay_center - bcy
         local_x = dx * b_cos + dy * b_sin
         local_y = -dx * b_sin + dy * b_cos
 
-        # 足場の主軸横方向からのはみ出し
-        is_overhang = local_x.abs > (b_hw + 0.5)
+        lnx = nx * b_cos + ny * b_sin
+        lny = -nx * b_sin + ny * b_cos
+
+        # 上下面接触中かつ足場の主軸横方向からのはみ出し時のみオーバーハング判定
+        is_overhang = lny.abs > lnx.abs && local_x.abs > (b_hw + 0.5)
       end
 
       if (col_shape.is_a?(Collision::Rect) || col_shape.is_a?(Collision::Polygon)) && col_shape.world_vertices
@@ -352,22 +357,24 @@ module Zenoo
           new_vy -= v_norm * ny
         end
 
-        # 面を地面と完全に平行にするアライメント
-        ground_angle = Math.atan2(nx, -ny) * RAD_TO_DEG
-        cur_ang = angle ? angle.to_f : (col_shape && col_shape.respond_to?(:angle) ? col_shape.angle.to_f : 0.0)
+        # 面を地面と完全に平行にするアライメント (矩形のみ)
+        if col_shape.is_a?(Collision::Rect)
+          ground_angle = Math.atan2(nx, -ny) * RAD_TO_DEG
+          cur_ang = angle ? angle.to_f : col_shape.angle.to_f
 
-        diff = (cur_ang - ground_angle) % 90.0
-        diff -= 90.0 if diff > 45.0
-        diff += 90.0 if diff < -45.0
+          diff = (cur_ang - ground_angle) % 90.0
+          diff -= 90.0 if diff > 45.0
+          diff += 90.0 if diff < -45.0
 
-        if diff.abs < 15.0
-          align_omega = -diff * 0.4
-          new_omega = align_omega
+          if diff.abs < 15.0
+            align_omega = -diff * 0.4
+            new_omega = align_omega
 
-          # わずかな傾き (1.2度未満) は完全に平行へスナップ
-          if diff.abs < 1.2
-            d_angle = -diff
-            new_omega = 0.0
+            # わずかな傾き (1.2度未満) は完全に平行へスナップ
+            if diff.abs < 1.2
+              d_angle = -diff
+              new_omega = 0.0
+            end
           end
         end
 
@@ -426,7 +433,12 @@ module Zenoo
       shape_b = b.collider
 
       restitution = restitution ? restitution.to_f : [a.restitution.to_f, b.restitution.to_f].max
-      friction = friction ? friction.to_f : Math.sqrt(a.friction.to_f * b.friction.to_f)
+      if friction
+        friction = friction.to_f
+      else
+        f_prod = a.friction.to_f * b.friction.to_f
+        friction = f_prod > 0.0 ? Math.sqrt(f_prod) : 0.0
+      end
 
       inv_ma = inv_mass_of(a)
       inv_mb = inv_mass_of(b)
@@ -534,12 +546,20 @@ module Zenoo
         new_wa = 0.0 if new_wa.abs < 0.4
         new_wb = 0.0 if new_wb.abs < 0.4
 
-        # 微小相対速度のデッドゾーン
+        # 微小相対速度のデッドゾーン (質量比・静的物体を考慮した運動量保存速度へスナップ)
         rel_vx = new_vax - new_vbx
         rel_vy = new_vay - new_vby
         if rel_vx.abs < 0.12 && rel_vy.abs < 0.12
-          common_vx = (new_vax + new_vbx) * 0.5
-          common_vy = (new_vay + new_vby) * 0.5
+          if inv_ma <= 0.000001
+            common_vx = new_vax
+            common_vy = new_vay
+          elsif inv_mb <= 0.000001
+            common_vx = new_vbx
+            common_vy = new_vby
+          else
+            common_vx = (new_vax * inv_mb + new_vbx * inv_ma) / inv_m_total
+            common_vy = (new_vay * inv_mb + new_vby * inv_ma) / inv_m_total
+          end
           new_vax = common_vx
           new_vay = common_vy
           new_vbx = common_vx
@@ -881,34 +901,60 @@ module Zenoo
       a.x -= dx * ratio_pos_a
       a.y -= dy * ratio_pos_a
 
-      # 3. 速度・角速度の同期 (一体剛体運動)
-      total_mass = ma_f + mb_f
-      com_x = (ma_f * a.x + mb_f * b.x) / total_mass
-      com_y = (ma_f * a.y + mb_f * b.y) / total_mass
+      # 3. 速度・角速度の同期 (一体剛体運動、静的ボディは絶対に変更しない)
+      if inv_ma <= 0.000001
+        wa_rad = wa * DEG_TO_RAD
+        ra_bx = b.x - a.x
+        ra_by = b.y - a.y
+        target_vbx = vax - wa_rad * ra_by
+        target_vby = vay + wa_rad * ra_bx
+        b.omega = wb + (wa - wb) * k_stiff
+        b.vx = vbx + (target_vbx - vbx) * k_stiff
+        b.vy = vby + (target_vby - vby) * k_stiff
+      elsif inv_mb <= 0.000001
+        wb_rad = wb * DEG_TO_RAD
+        rb_ax = a.x - b.x
+        rb_ay = a.y - b.y
+        target_vax = vbx - wb_rad * rb_ay
+        target_vay = vby + wb_rad * rb_ax
+        a.omega = wa + (wb - wa) * k_stiff
+        a.vx = vax + (target_vax - vax) * k_stiff
+        a.vy = vay + (target_vay - vay) * k_stiff
+      else
+        ma_eff = 1.0 / inv_ma
+        mb_eff = 1.0 / inv_mb
+        total_mass = ma_eff + mb_eff
+        com_x = (ma_eff * a.x + mb_eff * b.x) / total_mass
+        com_y = (ma_eff * a.y + mb_eff * b.y) / total_mass
 
-      com_vx = (ma_f * vax + mb_f * vbx) / total_mass
-      com_vy = (ma_f * vay + mb_f * vby) / total_mass
+        com_vx = (ma_eff * vax + mb_eff * vbx) / total_mass
+        com_vy = (ma_eff * vay + mb_eff * vby) / total_mass
 
-      ra_cx = a.x - com_x
-      ra_cy = a.y - com_y
-      rb_cx = b.x - com_x
-      rb_cy = b.y - com_y
+        ra_cx = a.x - com_x
+        ra_cy = a.y - com_y
+        rb_cx = b.x - com_x
+        rb_cy = b.y - com_y
 
-      total_inertia = inert_a + inert_b + ma_f * (ra_cx * ra_cx + ra_cy * ra_cy) + mb_f * (rb_cx * rb_cx + rb_cy * rb_cy)
-      if total_inertia > 0.00001
-        l_ang = (inert_a * wa + inert_b * wb) * DEG_TO_RAD
-        l_linear = (ra_cx * (ma_f * (vay - com_vy)) - ra_cy * (ma_f * (vax - com_vx))) +
-                   (rb_cx * (mb_f * (vby - com_vy)) - rb_cy * (mb_f * (vbx - com_vx)))
-        common_w_rad = (l_ang + l_linear) / total_inertia
-        common_w = common_w_rad * RAD_TO_DEG
+        total_inertia = inert_a + inert_b + ma_eff * (ra_cx * ra_cx + ra_cy * ra_cy) + mb_eff * (rb_cx * rb_cx + rb_cy * rb_cy)
+        if total_inertia > 0.00001
+          l_ang = (inert_a * wa + inert_b * wb) * DEG_TO_RAD
+          l_linear = (ra_cx * (ma_eff * (vay - com_vy)) - ra_cy * (ma_eff * (vax - com_vx))) +
+                     (rb_cx * (mb_eff * (vby - com_vy)) - rb_cy * (mb_eff * (vbx - com_vx)))
+          common_w_rad = (l_ang + l_linear) / total_inertia
+          common_w = common_w_rad * RAD_TO_DEG
 
-        a.omega = wa + (common_w - wa) * k_stiff
-        b.omega = wb + (common_w - wb) * k_stiff
+          new_wa = wa + (common_w - wa) * k_stiff
+          new_wb = wb + (common_w - wb) * k_stiff
+          new_wa_rad = new_wa * DEG_TO_RAD
+          new_wb_rad = new_wb * DEG_TO_RAD
 
-        a.vx = com_vx - (common_w_rad * ra_cy)
-        a.vy = com_vy + (common_w_rad * ra_cx)
-        b.vx = com_vx - (common_w_rad * rb_cy)
-        b.vy = com_vy + (common_w_rad * rb_cx)
+          a.omega = new_wa
+          b.omega = new_wb
+          a.vx = vax + ((com_vx - new_wa_rad * ra_cy) - vax) * k_stiff
+          a.vy = vay + ((com_vy + new_wa_rad * ra_cx) - vay) * k_stiff
+          b.vx = vbx + ((com_vx - new_wb_rad * rb_cy) - vbx) * k_stiff
+          b.vy = vby + ((com_vy + new_wb_rad * rb_cx) - vby) * k_stiff
+        end
       end
 
       true
@@ -942,14 +988,19 @@ module Zenoo
       dx = pbx - pax
       dy = pby - pay
       dist = Math.sqrt(dx * dx + dy * dy)
-      return nil if dist <= 0.000001
-
-      nx = dx / dist
-      ny = dy / dist
 
       target_len = length ? length.to_f : dist
       target_min = min ? min.to_f : target_len
       target_max = max ? max.to_f : target_len
+
+      if dist <= 0.000001
+        return true if target_min <= 0.000001
+        nx = 1.0
+        ny = 0.0
+      else
+        nx = dx / dist
+        ny = dy / dist
+      end
 
       diff = 0.0
       if dist < target_min

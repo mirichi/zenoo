@@ -58,13 +58,13 @@ module Zenoo
       else
         img = image
         w = (width || image_or_width || 64).to_f
-        if rows_arg.nil? && !cols.nil?
-          h = (height || cols_arg || w).to_f
+        if !cols.nil?
+          h = (height || cols_arg || (img ? img.height : w)).to_f
           c = cols
-          r = rows || 8
+          r = rows || rows_arg || 8
         else
           h = (height || (img ? img.height : w)).to_f
-          c = cols || cols_arg || 8
+          c = cols_arg || 8
           r = rows || rows_arg || 8
         end
       end
@@ -251,20 +251,30 @@ module Zenoo
       if width && height
         w = width.to_f
         h = height.to_f
+        off_x = 0.0
+        off_y = 0.0
       elsif img
         w = img.width.to_f
         h = img.height.to_f
+        off_x = 0.0
+        off_y = 0.0
       else
-        max_x = 1.0
-        max_y = 1.0
+        min_x = Float::INFINITY
+        min_y = Float::INFINITY
+        max_x = -Float::INFINITY
+        max_y = -Float::INFINITY
         pts.each do |pt|
           px = pt[0].to_f
           py = pt[1].to_f
+          min_x = px if px < min_x
+          min_y = py if py < min_y
           max_x = px if px > max_x
           max_y = py if py > max_y
         end
-        w = max_x
-        h = max_y
+        off_x = min_x < 0.0 ? min_x : 0.0
+        off_y = min_y < 0.0 ? min_y : 0.0
+        w = [max_x - off_x, 1.0].max
+        h = [max_y - off_y, 1.0].max
       end
 
       cr, cg, cb, ca = Backend.normalize_color(color)
@@ -278,8 +288,8 @@ module Zenoo
       pts.each_with_index do |pt, idx|
         px = pt[0].to_f
         py = pt[1].to_f
-        u_norm = pt.length >= 4 && !pt[2].nil? ? pt[2].to_f : (px * inv_w)
-        v_norm = pt.length >= 4 && !pt[3].nil? ? pt[3].to_f : (py * inv_h)
+        u_norm = pt.length >= 4 && !pt[2].nil? ? pt[2].to_f : ((px - off_x) * inv_w)
+        v_norm = pt.length >= 4 && !pt[3].nil? ? pt[3].to_f : ((py - off_y) * inv_h)
         if pt.length >= 8
           vr = pt[4].to_f
           vg = pt[5].to_f
@@ -346,18 +356,24 @@ module Zenoo
         w = (width || image.width).to_f
         h = (height || image.height).to_f
       else
-        max_x = 1.0
-        max_y = 1.0
+        min_x = Float::INFINITY
+        min_y = Float::INFINITY
+        max_x = -Float::INFINITY
+        max_y = -Float::INFINITY
         vi = 0
         while vi < verts.length
           px = verts[vi]
           py = verts[vi + 1]
+          min_x = px if px < min_x
+          min_y = py if py < min_y
           max_x = px if px > max_x
           max_y = py if py > max_y
           vi += VERTEX_STRIDE
         end
-        w = (width || max_x).to_f
-        h = (height || max_y).to_f
+        bw = verts.empty? ? 1.0 : [(min_x < 0.0 ? (max_x - min_x) : max_x), 1.0].max
+        bh = verts.empty? ? 1.0 : [(min_y < 0.0 ? (max_y - min_y) : max_y), 1.0].max
+        w = (width || bw).to_f
+        h = (height || bh).to_f
       end
 
       allocate.__send__(
@@ -498,7 +514,7 @@ module Zenoo
     def set_offset(col_or_index, arg2, arg3 = nil, arg4 = nil, du: 0.0, dv: 0.0, color: nil, alpha: nil)
       return self unless @managed && @vertices
 
-      if arg4.nil? && (!@cols || arg3.nil?)
+      if arg4.nil?
         idx = col_or_index.to_i
         dx = arg2.to_f
         dy = (arg3 || 0.0).to_f
@@ -745,7 +761,7 @@ module Zenoo
         @count = count.to_i
         @vertex_count = @count
       end
-      if @data && offset > 0 && offset + binary_data.bytesize <= @data.bytesize
+      if @data && offset >= 0 && offset + binary_data.bytesize <= @data.bytesize
         @data[offset, binary_data.bytesize] = binary_data
       elsif offset == 0
         @data = binary_data
@@ -951,8 +967,8 @@ module Zenoo
 
         unless ear_found
           # 自己交差等の縮退ケースではファン分割にフォールバック
-          avail.delete_at(1)
           tris.push(avail[0], avail[1], avail[2]) if avail.length >= 3
+          avail.delete_at(1)
         end
       end
 
@@ -1101,7 +1117,7 @@ module Zenoo
     def update(binary_data, offset: 0, count: nil)
       return self unless binary_data
       @count = count.to_i if count
-      if @data && offset > 0 && offset + binary_data.bytesize <= @data.bytesize
+      if @data && offset >= 0 && offset + binary_data.bytesize <= @data.bytesize
         @data[offset, binary_data.bytesize] = binary_data
       elsif offset == 0
         @data = binary_data

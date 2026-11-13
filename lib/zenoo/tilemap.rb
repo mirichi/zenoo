@@ -218,13 +218,30 @@ module Zenoo
       # 行列サイズの更新と、行管理バッファのリサイズ
       def refresh_size!
         @rows = @data.is_a?(Array) ? @data.size : 0
-        @cols = (@rows > 0 && @data[0].is_a?(Array)) ? @data[0].size : 0
+        max_c = 0
+        r = 0
+        while r < @rows
+          row_arr = @data[r]
+          if row_arr.is_a?(Array)
+            sz = row_arr.size
+            max_c = sz if sz > max_c
+          end
+          r += 1
+        end
+        @cols = max_c
         while @row_dirty.size < @rows
           @row_dirty << true
           @row_meshes << nil
           @row_indices << nil
           @row_anim_entries << nil
           @row_extras << nil
+        end
+        while @row_dirty.size > @rows
+          @row_dirty.pop
+          @row_meshes.pop
+          @row_indices.pop
+          @row_anim_entries.pop
+          @row_extras.pop
         end
         @all_dirty = true
         scan_cell_offsets!
@@ -297,8 +314,13 @@ module Zenoo
         cur_target = Backend.current_target
         win_w = cur_target ? cur_target.width.to_f : Window.width.to_f
         win_h = cur_target ? cur_target.height.to_f : Window.height.to_f
-        if draw_camera && Window.camera_enabled?
-          _left, top, _right, bottom = Window.camera.visible_rect(win_w, win_h)
+        cam = if draw_camera.is_a?(Camera)
+                draw_camera
+              elsif draw_camera && Window.camera_enabled?
+                Window.camera
+              end
+        if cam
+          _left, top, _right, bottom = cam.visible_rect(win_w, win_h)
         else
           top = 0.0
           bottom = win_h
@@ -308,7 +330,11 @@ module Zenoo
         # 画面外下端のマージンを「最大の root_offset / 大判高さ」分だけ広げてカリング
         max_off = @tilemap.max_root_offset
         max_off = @max_cell_offset if @max_cell_offset > max_off
-        tall_margin = [max_off, @max_tall_rows].max + 1
+        tall_from_tiles = @tilemap.max_tall_tile_rows + max_off
+        tall_margin = max_off
+        tall_margin = tall_from_tiles if tall_from_tiles > tall_margin
+        tall_margin = @max_tall_rows if @max_tall_rows > tall_margin
+        tall_margin += 1
 
         min_row = [((top - eff_draw_y) / th).floor - 1, 0].max
         max_row = [((bottom - eff_draw_y) / th).floor + tall_margin, @rows - 1].min
@@ -356,7 +382,7 @@ module Zenoo
           # 別テクスチャ画像が混ざっていた場合のフォールバック個別描画
           extras = @row_extras[r]
           if extras
-            draw_row_extras(extras, draw_x, eff_draw_y, sx, sy, tw, th, eff_color, eff_alpha, draw_camera, row_z)
+            draw_row_extras(extras, draw_x, eff_draw_y + r * th, sx, sy, tw, th, eff_color, eff_alpha, draw_camera, row_z)
           end
 
           r += 1
@@ -791,7 +817,7 @@ module Zenoo
     end
 
     attr_accessor :x, :y, :z, :scale_x, :scale_y, :camera, :alpha, :color
-    attr_reader   :tiles, :tile_width, :tile_height, :cols, :rows, :layers, :max_root_offset, :base_texture_image
+    attr_reader   :tiles, :tile_width, :tile_height, :cols, :rows, :layers, :max_root_offset, :max_tall_tile_rows, :base_texture_image
 
     # @param tiles [Array<Image>] タイル画像の配列 (Image.load_tiles または slice_tiles で生成)
     # @param tile_width [Integer, nil] タイルの標準幅 (省略時は最初のタイル画像の幅を採用)
@@ -842,6 +868,7 @@ module Zenoo
       @tile_solids = []       # タイルIDごとの通行不可フラグテーブル (@tile_solids[tile_id] = true/false)
       @tile_heights = []      # タイルIDごとの高さ(標高)テーブル (@tile_heights[tile_id] = Float)
       @max_root_offset = 0    # マップ全体で最大の根元オフセット
+      @max_tall_tile_rows = compute_max_tall_tile_rows
 
       @layers = []
       @layer_names = []
@@ -859,6 +886,7 @@ module Zenoo
         @tile_height = first_tile.height if @tile_height <= 0
       end
       @base_texture_image = build_base_texture_image(first_tile)
+      @max_tall_tile_rows = compute_max_tall_tile_rows
       invalidate_all_layers!
     end
 
@@ -968,8 +996,17 @@ module Zenoo
         @layers << layer_obj
       end
 
-      @rows = layer_obj.rows if layer_obj.rows > @rows
-      @cols = layer_obj.cols if layer_obj.cols > @cols
+      max_r = 0
+      max_c = 0
+      li = 0
+      while li < @layers.size
+        ly = @layers[li]
+        max_r = ly.rows if ly.rows > max_r
+        max_c = ly.cols if ly.cols > max_c
+        li += 1
+      end
+      @rows = max_r
+      @cols = max_c
       layer_obj
     end
 
@@ -1262,6 +1299,8 @@ module Zenoo
       return false if buf.empty?
 
       # 近いタイルから順に 2 パス押し出し (角へのめり込みも完全解消)
+      is_sprite = sprite.is_a?(Sprite)
+      return false if !is_sprite && (!col_shape.is_a?(Collision::Shape) || col_shape.parent)
       wall = prepare_wall_rect(tw, th)
       resolved_any = false
       pass = 0
@@ -1273,7 +1312,15 @@ module Zenoo
           wall.x = buf[i]
           wall.y = buf[i + 1]
           wall.update_cache
-          if sprite.push_out_of(wall, target_root: target_root)
+          if is_sprite
+            if sprite.push_out_of(wall, target_root: target_root)
+              hit_in_pass = true
+              resolved_any = true
+            end
+          elsif (hit = Collision.penetration(col_shape, wall))
+            col_shape.x += hit.push_x
+            col_shape.y += hit.push_y
+            col_shape.update_cache
             hit_in_pass = true
             resolved_any = true
           end
@@ -1336,6 +1383,26 @@ module Zenoo
     end
 
     private
+
+    def compute_max_tall_tile_rows
+      return 0 if @tile_height <= 0 || !@tiles.is_a?(Array)
+      th = @tile_height.to_f
+      max_extra = 0
+      i = 0
+      len = @tiles.size
+      while i < len
+        img = @tiles[i]
+        if img
+          ih = img.height.to_f
+          if ih > th
+            extra = ((ih - th) / th).ceil
+            max_extra = extra if extra > max_extra
+          end
+        end
+        i += 1
+      end
+      max_extra
+    end
 
     # 最初のタイルからテクスチャ全体領域を指す Image を構築
     # (slice_tiles 等で切り分けられた sub_image の親テクスチャ全体を代表画像として取得)

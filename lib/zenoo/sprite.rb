@@ -469,7 +469,7 @@ module Zenoo
       if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
         @collider_shape.dirty_size!
       else
-        @collider_shape&.dirty_pos!
+        @collider_shape&.dirty_geom!
       end
       dirty_children_pos! if @children
     end
@@ -717,7 +717,7 @@ module Zenoo
       if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
         @collider_shape.dirty_size!
       else
-        @collider_shape&.dirty_pos!
+        @collider_shape&.dirty_geom!
       end
       dirty_children_pos! if @children
     end
@@ -737,7 +737,7 @@ module Zenoo
       if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
         @collider_shape.dirty_size!
       else
-        @collider_shape&.dirty_pos!
+        @collider_shape&.dirty_geom!
       end
       dirty_children_pos! if @children
     end
@@ -782,8 +782,10 @@ module Zenoo
 
     def collider=(shape)
       @collider_shape = shape
-      shape.parent = self
-      shape.dirty_pos! if shape.respond_to?(:dirty_pos!)
+      if shape
+        shape.parent = self
+        shape.dirty_geom! if shape.respond_to?(:dirty_geom!)
+      end
     end
 
     # 変形（位置・回転・拡大・ピボット）と同期した Collision::Shape を取得 (未設定時は nil)
@@ -797,10 +799,10 @@ module Zenoo
     def collide?(other)
       return false if @vanished || other.nil?
       return other.collide?(self) if other.is_a?(Tilemap)
-      return false if other.vanished?
+      return false if other.respond_to?(:vanished?) && other.vanished?
 
       # 1. 自分自身のコライダー判定
-      if (@collider_shape || @image) && collide_self?(other)
+      if @collider_shape && collide_self?(other)
         return true
       end
 
@@ -836,7 +838,7 @@ module Zenoo
     # 相手のシェイプ1個と自分自身または子孫コライダーのいずれかが衝突しているか (高速走査用)
     def collide_any_shape?(shape)
       return false if @vanished
-      return true if (@collider_shape || @image) && Collision.check(collider, shape)
+      return true if @collider_shape && Collision.check(collider, shape)
 
       if (ch = @children)
         i = 0
@@ -852,7 +854,7 @@ module Zenoo
 
     # other と衝突している自分自身および子孫スプライトの配列を取得
     def hit_parts(other)
-      return [] if @vanished || other.nil?
+      return [] if @vanished || other.nil? || (other.respond_to?(:vanished?) && other.vanished?)
       result = []
       collect_hit_parts(other, result)
       result
@@ -861,7 +863,7 @@ module Zenoo
     # 衝突部位の再帰的収集ヘルパー
     def collect_hit_parts(other, result)
       # 1. 自分自身が衝突しているか
-      if (@collider_shape || @image) && !@vanished && collide_self?(other)
+      if @collider_shape && !@vanished && collide_self?(other)
         result << self
       end
 
@@ -883,13 +885,18 @@ module Zenoo
 
     # 衝突めり込み量・押し出しベクトルを取得 (MTV: 自身または子スプライトのめり込みを検出)
     def penetration(other)
-      return nil if @vanished || other.nil? || other.vanished?
+      return nil if @vanished || other.nil? || (other.respond_to?(:vanished?) && other.vanished?)
 
       # 1. 自身のめり込み
-      if (@collider_shape || @image)
-        col_a = self.collider
-        if col_a
-          col_b = other.is_a?(Collision::Shape) ? other : (other.respond_to?(:collider) ? other.collider : nil)
+      if (col_a = self.collider)
+        if other.is_a?(Collision::Shape)
+          hit = Collision.penetration(col_a, other)
+          return hit if hit
+        elsif other.is_a?(Sprite)
+          hit = other.penetration_against_shape(col_a)
+          return hit if hit
+        else
+          col_b = other.respond_to?(:collider) ? other.collider : nil
           if col_b
             hit = Collision.penetration(col_a, col_b)
             return hit if hit
@@ -911,6 +918,29 @@ module Zenoo
         end
       end
 
+      nil
+    end
+
+    # 相手のシェイプ1個と自分自身または子孫コライダーとのめり込みを取得 (高速走査用)
+    def penetration_against_shape(shape)
+      return nil if @vanished
+      if (col_b = self.collider)
+        hit = Collision.penetration(shape, col_b)
+        return hit if hit
+      end
+
+      if (ch = @children)
+        i = 0
+        len = ch.length
+        while i < len
+          c = ch[i]
+          unless c.vanished?
+            hit = c.penetration_against_shape(shape)
+            return hit if hit
+          end
+          i += 1
+        end
+      end
       nil
     end
 

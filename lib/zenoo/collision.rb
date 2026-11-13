@@ -489,6 +489,7 @@ module Zenoo
 
         if @dirty_pos
           @dirty_pos = false
+          @_dirty_world_verts = true
           if @parent
             cx, cy = compute_parent_center(@offset_x, @offset_y, @cos, @sin, cur_sx, cur_sy)
             @center_x = cx
@@ -606,6 +607,7 @@ module Zenoo
 
         if @dirty_pos
           @dirty_pos = false
+          @_dirty_world_verts = true
           if @parent
             cx, cy = compute_parent_center(@offset_x, @offset_y, @cos || 1.0, @sin || 0.0, cur_sx, cur_sy)
             @center_x = cx
@@ -667,7 +669,7 @@ module Zenoo
         vf = v.to_f
         return if @width == vf
         @width = vf
-        @dirty_size = true
+        dirty_size!
       end
 
       def height
@@ -682,14 +684,14 @@ module Zenoo
         vf = v.to_f
         return if @height == vf
         @height = vf
-        @dirty_size = true
+        dirty_size!
       end
 
       def radius=(v)
         vf = v.to_f
         return if @radius == vf
         @radius = vf
-        @dirty_size = true
+        dirty_size!
       end
 
       def dirty_pos!; @dirty_pos = true; @_dirty_world_verts = true; end
@@ -766,6 +768,7 @@ module Zenoo
 
         if @dirty_pos
           @dirty_pos = false
+          @_dirty_world_verts = true
           if @parent
             cx, cy = compute_parent_center(@offset_x, @offset_y, @cos, @sin, cur_sx, cur_sy)
             @center_x = cx
@@ -855,7 +858,7 @@ module Zenoo
 
       def shape_type; TYPE_POLYGON; end
 
-      def vertices=(v); @vertices = v.map { |pt| [pt[0].to_f, pt[1].to_f] }; @dirty_verts = true; end
+      def vertices=(v); @vertices = v.map { |pt| [pt[0].to_f, pt[1].to_f] }; dirty_verts!; end
 
       def dirty_pos!; @dirty_pos = true; @_dirty_world_verts = true; end
       def dirty_geom!; @dirty_angle = true; @dirty_scale = true; @dirty_pos = true; @_dirty_world_verts = true; end
@@ -875,7 +878,25 @@ module Zenoo
           sum_x = 0.0
           sum_y = 0.0
           count = @vertices.length
-          return if count == 0
+          if count == 0
+            @_local_cx = 0.0
+            @_local_cy = 0.0
+            @_bbox_w = 0.0
+            @_bbox_h = 0.0
+            @_bbox_min_x = 0.0
+            @_bbox_min_y = 0.0
+            @local_vertices = []
+            @local_vx = []
+            @local_vy = []
+            @bounding_radius = 0.0
+            @center_x = @x
+            @center_y = @y
+            @dirty_scale = false
+            @dirty_angle = false
+            @dirty_pos = false
+            @_dirty_world_verts = false
+            return
+          end
 
           min_x = @vertices[0][0]
           max_x = @vertices[0][0]
@@ -946,6 +967,7 @@ module Zenoo
 
         if @dirty_pos
           @dirty_pos = false
+          @_dirty_world_verts = true
           if @parent
             cx, cy = compute_parent_center(@offset_x, @offset_y, @cos, @sin, cur_sx, cur_sy)
             @center_x = cx
@@ -989,15 +1011,21 @@ module Zenoo
       end
 
       def support(dx, dy)
+        len = @local_vx ? @local_vx.length : 0
+        if len == 0
+          @_support[0] = @center_x
+          @_support[1] = @center_y
+          return @_support
+        end
+
         ldx = @m00 * dx + @m10 * dy
         ldy = @m01 * dx + @m11 * dy
 
-        max_dot = -1.0e30
-        best_x = 0.0
-        best_y = 0.0
+        best_x = @local_vx[0]
+        best_y = @local_vy[0]
+        max_dot = best_x * ldx + best_y * ldy
 
-        i = 0
-        len = @local_vx.length
+        i = 1
         while i < len
           vx = @local_vx[i]
           vy = @local_vy[i]
@@ -1330,6 +1358,39 @@ module Zenoo
       end
     end
 
+    def self.__vanished?(item)
+      item.respond_to?(:vanished?) && item.vanished?
+    end
+
+    def self.__check_pair(item_a, item_b, shape_a, shape_b)
+      if item_a.respond_to?(:collide?)
+        item_a.collide?(item_b)
+      elsif item_b.respond_to?(:collide?)
+        item_b.collide?(item_a)
+      else
+        shape_b && check(shape_a, shape_b)
+      end
+    end
+
+    def self.__collect_sap_entries(arr, with_max_w = false)
+      entries = []
+      max_w = 0.0
+      i = 0
+      len = arr.length
+      while i < len
+        entry = __extract_sap_entry(arr[i])
+        if entry
+          if with_max_w
+            w = entry[1] - entry[0]
+            max_w = w if w > max_w
+          end
+          entries << entry
+        end
+        i += 1
+      end
+      with_max_w ? [entries, max_w] : entries
+    end
+
     # 小規模配列用の直接総当たり判定
     def self.__check_all_direct(arr_a, arr_b, same_group)
       len_a = arr_a.length
@@ -1339,25 +1400,18 @@ module Zenoo
       i = 0
       while i < len_a
         item_a = arr_a[i]
-        if item_a && !(item_a.respond_to?(:vanished?) && item_a.vanished?)
+        if item_a && !__vanished?(item_a)
           shape_a = item_a.respond_to?(:collider) ? item_a.collider : item_a
           if shape_a
             j = same_group ? (i + 1) : 0
             while j < len_b
               item_b = arr_b[j]
-              if item_b && !(item_b.respond_to?(:vanished?) && item_b.vanished?)
+              if item_b && !item_a.equal?(item_b) && !__vanished?(item_b)
                 shape_b = item_b.respond_to?(:collider) ? item_b.collider : item_b
-                is_hit = if item_a.respond_to?(:collide?)
-                           item_a.collide?(item_b)
-                         elsif item_b.respond_to?(:collide?)
-                           item_b.collide?(item_a)
-                         else
-                           shape_b && check(shape_a, shape_b)
-                         end
-                if is_hit
+                if __check_pair(item_a, item_b, shape_a, shape_b)
                   if block_given?
                     yield(item_a, item_b)
-                    break if item_a.respond_to?(:vanished?) && item_a.vanished?
+                    break if __vanished?(item_a)
                   else
                     hits << [item_a, item_b]
                   end
@@ -1372,154 +1426,106 @@ module Zenoo
       hits
     end
 
+    def self.__check_all_sap_same(entries)
+      entries.sort_by! { |e| e[0] }
+      total = entries.length
+      hits = block_given? ? nil : []
+      i = 0
+      while i < total
+        e_a = entries[i]
+        item_a = e_a[2]
+        if !__vanished?(item_a)
+          max_a = e_a[1]
+          shape_a = e_a[3]
+          j = i + 1
+          while j < total
+            e_b = entries[j]
+            break if e_b[0] > max_a
+            item_b = e_b[2]
+            if !item_a.equal?(item_b) && !__vanished?(item_b) && __check_pair(item_a, item_b, shape_a, e_b[3])
+              if block_given?
+                yield(item_a, item_b)
+                break if __vanished?(item_a)
+              else
+                hits << [item_a, item_b]
+              end
+            end
+            j += 1
+          end
+        end
+        i += 1
+      end
+      hits
+    end
+
+    def self.__check_all_sap_diff(entries_a, entries_b, max_w_b)
+      entries_a.sort_by! { |e| e[0] }
+      entries_b.sort_by! { |e| e[0] }
+      total_a = entries_a.length
+      total_b = entries_b.length
+      hits = block_given? ? nil : []
+      start_j = 0
+      i = 0
+      while i < total_a
+        e_a = entries_a[i]
+        item_a = e_a[2]
+        if !__vanished?(item_a)
+          min_a = e_a[0]
+          max_a = e_a[1]
+          shape_a = e_a[3]
+          safe_cutoff = min_a - max_w_b
+          while start_j < total_b
+            e_b_start = entries_b[start_j]
+            if e_b_start[1] < min_a || e_b_start[0] < safe_cutoff
+              start_j += 1
+            else
+              break
+            end
+          end
+
+          j = start_j
+          while j < total_b
+            e_b = entries_b[j]
+            break if e_b[0] > max_a
+            if e_b[1] >= min_a
+              item_b = e_b[2]
+              if !item_a.equal?(item_b) && !__vanished?(item_b) && __check_pair(item_a, item_b, shape_a, e_b[3])
+                if block_given?
+                  yield(item_a, item_b)
+                  break if __vanished?(item_a)
+                else
+                  hits << [item_a, item_b]
+                end
+              end
+            end
+            j += 1
+          end
+        end
+        i += 1
+      end
+      hits
+    end
+
     # 配列・オブジェクト同士の一括衝突判定 (DXRuby 互換: ブロック省略時は衝突ペア配列を返す)
     # Sweep and Prune (X軸ソート＆スイープ) による O(N log N) 高速ブロードフェーズ
     def self.check_all(group_a, group_b = nil, &block)
       arr_a = group_a.is_a?(Array) ? group_a : [group_a]
       same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
       arr_b = same_group ? arr_a : (group_b.is_a?(Array) ? group_b : [group_b])
-      len_a = arr_a.length
-      len_b = arr_b.length
 
       # 要素数が極小 (積が64未満) の場合はオーバーヘッドを避けるため直接判定
-      if len_a * len_b < 64
+      if arr_a.length * arr_b.length < 64
         return __check_all_direct(arr_a, arr_b, same_group, &block)
       end
 
-      hits = block_given? ? nil : []
-
       if same_group
-        entries = []
-        i = 0
-        while i < len_a
-          entry = __extract_sap_entry(arr_a[i])
-          entries << entry if entry
-          i += 1
-        end
-
-        entries.sort_by! { |e| e[0] }
-        total = entries.length
-
-        i = 0
-        while i < total
-          e_a = entries[i]
-          item_a = e_a[2]
-          if !item_a.vanished?
-            max_a = e_a[1]
-            shape_a = e_a[3]
-
-            j = i + 1
-            while j < total
-              e_b = entries[j]
-              break if e_b[0] > max_a
-
-              item_b = e_b[2]
-              if !item_b.vanished?
-                shape_b = e_b[3]
-                is_hit = if item_a.respond_to?(:collide?)
-                           item_a.collide?(item_b)
-                         elsif item_b.respond_to?(:collide?)
-                           item_b.collide?(item_a)
-                         else
-                           shape_b && check(shape_a, shape_b)
-                         end
-                if is_hit
-                  if block_given?
-                    yield(item_a, item_b)
-                    break if item_a.vanished?
-                  else
-                    hits << [item_a, item_b]
-                  end
-                end
-              end
-              j += 1
-            end
-          end
-          i += 1
-        end
+        entries = __collect_sap_entries(arr_a)
+        __check_all_sap_same(entries, &block)
       else
-        entries_a = []
-        i = 0
-        while i < len_a
-          entry = __extract_sap_entry(arr_a[i])
-          entries_a << entry if entry
-          i += 1
-        end
-
-        entries_b = []
-        max_w_b = 0.0
-        i = 0
-        while i < len_b
-          entry = __extract_sap_entry(arr_b[i])
-          if entry
-            w_b = entry[1] - entry[0]
-            max_w_b = w_b if w_b > max_w_b
-            entries_b << entry
-          end
-          i += 1
-        end
-
-        entries_a.sort_by! { |e| e[0] }
-        entries_b.sort_by! { |e| e[0] }
-        total_a = entries_a.length
-        total_b = entries_b.length
-
-        start_j = 0
-        i = 0
-        while i < total_a
-          e_a = entries_a[i]
-          item_a = e_a[2]
-          if !item_a.vanished?
-            min_a = e_a[0]
-            max_a = e_a[1]
-            shape_a = e_a[3]
-
-            # 左側の切り捨て (Two Pointers): B の先頭要素が完全に A より左側にある間 start_j を進める
-            safe_cutoff = min_a - max_w_b
-            while start_j < total_b
-              e_b_start = entries_b[start_j]
-              if e_b_start[1] < min_a || e_b_start[0] < safe_cutoff
-                start_j += 1
-              else
-                break
-              end
-            end
-
-            j = start_j
-            while j < total_b
-              e_b = entries_b[j]
-              # 右側の打ち切り (Early Out)
-              break if e_b[0] > max_a
-
-              # X軸の重なり確認 (先頭に巨大キャラがいて start_j が進んでいなくても、左に外れたキャラはここで即スキップ)
-              if e_b[1] >= min_a
-                item_b = e_b[2]
-                if !item_b.vanished?
-                  shape_b = e_b[3]
-                  is_hit = if item_a.respond_to?(:collide?)
-                             item_a.collide?(item_b)
-                           elsif item_b.respond_to?(:collide?)
-                             item_b.collide?(item_a)
-                           else
-                             shape_b && check(shape_a, shape_b)
-                           end
-                  if is_hit
-                    if block_given?
-                      yield(item_a, item_b)
-                      break if item_a.vanished?
-                    else
-                      hits << [item_a, item_b]
-                    end
-                  end
-                end
-              end
-              j += 1
-            end
-          end
-          i += 1
-        end
+        entries_a = __collect_sap_entries(arr_a)
+        entries_b, max_w_b = __collect_sap_entries(arr_b, true)
+        __check_all_sap_diff(entries_a, entries_b, max_w_b, &block)
       end
-      hits
     end
 
     # ====================================================
@@ -1554,11 +1560,27 @@ module Zenoo
         end
       end
 
+      # 点 vs 真円
+      if type_a == TYPE_POINT && type_b == TYPE_CIRCLE && shape_b.is_true_circle
+        return penetration_point_circle(shape_a, shape_b, dx, dy, dist_sq)
+      elsif type_a == TYPE_CIRCLE && type_b == TYPE_POINT && shape_a.is_true_circle
+        hit = penetration_point_circle(shape_b, shape_a, -dx, -dy, dist_sq)
+        return hit ? hit.flipped : nil
+      end
+
       # 真円 vs 等倍矩形 (角丸含む)
       if type_a == TYPE_CIRCLE && type_b == TYPE_RECT && shape_a.is_true_circle && shape_b.is_uniform
         return penetration_circle_rect(shape_a, shape_b, dx, dy)
       elsif type_a == TYPE_RECT && type_b == TYPE_CIRCLE && shape_b.is_true_circle && shape_a.is_uniform
         hit = penetration_circle_rect(shape_b, shape_a, -dx, -dy)
+        return hit ? hit.flipped : nil
+      end
+
+      # 点 vs 等倍矩形 (角丸含む)
+      if type_a == TYPE_POINT && type_b == TYPE_RECT && shape_b.is_uniform
+        return penetration_point_rect(shape_a, shape_b, dx, dy)
+      elsif type_a == TYPE_RECT && type_b == TYPE_POINT && shape_a.is_uniform
+        hit = penetration_point_rect(shape_b, shape_a, -dx, -dy)
         return hit ? hit.flipped : nil
       end
 
@@ -1586,19 +1608,110 @@ module Zenoo
       i = 0
       while i < len_a
         item_a = arr_a[i]
-        shape_a = item_a.respond_to?(:collider) ? item_a.collider : item_a
-        if shape_a
-          j = same_group ? (i + 1) : 0
-          while j < len_b
-            item_b = arr_b[j]
-            shape_b = item_b.respond_to?(:collider) ? item_b.collider : item_b
-            if shape_b
-              hit = penetration(shape_a, shape_b)
+        if item_a && !__vanished?(item_a)
+          shape_a = item_a.respond_to?(:collider) ? item_a.collider : item_a
+          if shape_a
+            j = same_group ? (i + 1) : 0
+            while j < len_b
+              item_b = arr_b[j]
+              if item_b && !item_a.equal?(item_b) && !__vanished?(item_b)
+                shape_b = item_b.respond_to?(:collider) ? item_b.collider : item_b
+                if shape_b
+                  hit = penetration(shape_a, shape_b)
+                  if hit
+                    if block_given?
+                      yield(item_a, item_b, hit)
+                      break if __vanished?(item_a)
+                    else
+                      hits << [item_a, item_b, hit]
+                    end
+                  end
+                end
+              end
+              j += 1
+            end
+          end
+        end
+        i += 1
+      end
+      hits
+    end
+
+    def self.__penetration_all_sap_same(entries)
+      entries.sort_by! { |e| e[0] }
+      total = entries.length
+      hits = block_given? ? nil : []
+      i = 0
+      while i < total
+        e_a = entries[i]
+        item_a = e_a[2]
+        if !__vanished?(item_a)
+          max_a = e_a[1]
+          shape_a = e_a[3]
+          j = i + 1
+          while j < total
+            e_b = entries[j]
+            break if e_b[0] > max_a
+            item_b = e_b[2]
+            if !item_a.equal?(item_b) && !__vanished?(item_b)
+              hit = penetration(shape_a, e_b[3])
               if hit
                 if block_given?
                   yield(item_a, item_b, hit)
+                  break if __vanished?(item_a)
                 else
                   hits << [item_a, item_b, hit]
+                end
+              end
+            end
+            j += 1
+          end
+        end
+        i += 1
+      end
+      hits
+    end
+
+    def self.__penetration_all_sap_diff(entries_a, entries_b, max_w_b)
+      entries_a.sort_by! { |e| e[0] }
+      entries_b.sort_by! { |e| e[0] }
+      total_a = entries_a.length
+      total_b = entries_b.length
+      hits = block_given? ? nil : []
+      start_j = 0
+      i = 0
+      while i < total_a
+        e_a = entries_a[i]
+        item_a = e_a[2]
+        if !__vanished?(item_a)
+          min_a = e_a[0]
+          max_a = e_a[1]
+          shape_a = e_a[3]
+          safe_cutoff = min_a - max_w_b
+          while start_j < total_b
+            e_b_start = entries_b[start_j]
+            if e_b_start[1] < min_a || e_b_start[0] < safe_cutoff
+              start_j += 1
+            else
+              break
+            end
+          end
+
+          j = start_j
+          while j < total_b
+            e_b = entries_b[j]
+            break if e_b[0] > max_a
+            if e_b[1] >= min_a
+              item_b = e_b[2]
+              if !item_a.equal?(item_b) && !__vanished?(item_b)
+                hit = penetration(shape_a, e_b[3])
+                if hit
+                  if block_given?
+                    yield(item_a, item_b, hit)
+                    break if __vanished?(item_a)
+                  else
+                    hits << [item_a, item_b, hit]
+                  end
                 end
               end
             end
@@ -1617,124 +1730,19 @@ module Zenoo
       arr_a = group_a.is_a?(Array) ? group_a : [group_a]
       same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
       arr_b = same_group ? arr_a : (group_b.is_a?(Array) ? group_b : [group_b])
-      len_a = arr_a.length
-      len_b = arr_b.length
 
-      if len_a * len_b < 64
+      if arr_a.length * arr_b.length < 64
         return __penetration_all_direct(arr_a, arr_b, same_group, &block)
       end
 
-      hits = block_given? ? nil : []
-
       if same_group
-        entries = []
-        i = 0
-        while i < len_a
-          entry = __extract_sap_entry(arr_a[i])
-          entries << entry if entry
-          i += 1
-        end
-
-        entries.sort_by! { |e| e[0] }
-        total = entries.length
-
-        i = 0
-        while i < total
-          e_a = entries[i]
-          max_a = e_a[1]
-          item_a = e_a[2]
-          shape_a = e_a[3]
-
-          j = i + 1
-          while j < total
-            e_b = entries[j]
-            break if e_b[0] > max_a
-
-            item_b = e_b[2]
-            shape_b = e_b[3]
-            hit = penetration(shape_a, shape_b)
-            if hit
-              if block_given?
-                yield(item_a, item_b, hit)
-              else
-                hits << [item_a, item_b, hit]
-              end
-            end
-            j += 1
-          end
-          i += 1
-        end
+        entries = __collect_sap_entries(arr_a)
+        __penetration_all_sap_same(entries, &block)
       else
-        entries_a = []
-        i = 0
-        while i < len_a
-          entry = __extract_sap_entry(arr_a[i])
-          entries_a << entry if entry
-          i += 1
-        end
-
-        entries_b = []
-        max_w_b = 0.0
-        i = 0
-        while i < len_b
-          entry = __extract_sap_entry(arr_b[i])
-          if entry
-            w_b = entry[1] - entry[0]
-            max_w_b = w_b if w_b > max_w_b
-            entries_b << entry
-          end
-          i += 1
-        end
-
-        entries_a.sort_by! { |e| e[0] }
-        entries_b.sort_by! { |e| e[0] }
-        total_a = entries_a.length
-        total_b = entries_b.length
-
-        start_j = 0
-        i = 0
-        while i < total_a
-          e_a = entries_a[i]
-          min_a = e_a[0]
-          max_a = e_a[1]
-          item_a = e_a[2]
-          shape_a = e_a[3]
-
-          # 左側の切り捨て (Two Pointers): B の先頭要素が完全に A より左側にある間 start_j を進める
-          safe_cutoff = min_a - max_w_b
-          while start_j < total_b
-            e_b_start = entries_b[start_j]
-            if e_b_start[1] < min_a || e_b_start[0] < safe_cutoff
-              start_j += 1
-            else
-              break
-            end
-          end
-
-          j = start_j
-          while j < total_b
-            e_b = entries_b[j]
-            # 右側の打ち切り (Early Out)
-            break if e_b[0] > max_a
-
-            if e_b[1] >= min_a
-              item_b = e_b[2]
-              shape_b = e_b[3]
-              hit = penetration(shape_a, shape_b)
-              if hit
-                if block_given?
-                  yield(item_a, item_b, hit)
-                else
-                  hits << [item_a, item_b, hit]
-                end
-              end
-            end
-            j += 1
-          end
-          i += 1
-        end
+        entries_a = __collect_sap_entries(arr_a)
+        entries_b, max_w_b = __collect_sap_entries(arr_b, true)
+        __penetration_all_sap_diff(entries_a, entries_b, max_w_b, &block)
       end
-      hits
     end
 
     # 真円 vs 真円の押し出し
@@ -1785,8 +1793,36 @@ module Zenoo
       Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, cx, cy)
     end
 
+    # 点 vs 真円の押し出し
+    def self.penetration_point_circle(point, circle, dx, dy, dist_sq)
+      r = circle.effective_radius
+      return nil if dist_sq >= r * r
+
+      dist = Math.sqrt(dist_sq)
+      depth = r - dist
+      if dist > 0.000001
+        nx = -dx / dist
+        ny = -dy / dist
+      else
+        nx = -1.0
+        ny = 0.0
+      end
+
+      Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, point.center_x, point.center_y)
+    end
+
+    # 点 vs 等倍矩形 (回転・角丸対応 SDF 方式)
+    def self.penetration_point_rect(point, rect, dx, dy)
+      __penetration_point_or_circle_rect(point.center_x, point.center_y, 0.0, rect, dx, dy)
+    end
+
     # 真円 vs 矩形 (回転・角丸対応 SDF 方式)
     def self.penetration_circle_rect(circle, rect, dx, dy)
+      __penetration_point_or_circle_rect(circle.center_x, circle.center_y, circle.effective_radius, rect, dx, dy)
+    end
+
+    # 点・円 vs 矩形の共通 SDF 押し出し計算
+    def self.__penetration_point_or_circle_rect(shape_x, shape_y, shape_r, rect, dx, dy)
       ldx = dx * rect.cos + dy * rect.sin
       ldy = -dx * rect.sin + dy * rect.cos
 
@@ -1797,7 +1833,7 @@ module Zenoo
 
       cw = rect.core_half_w
       ch = rect.core_half_h
-      total_r = rect.radius + circle.effective_radius
+      total_r = rect.radius + shape_r
 
       qx = abs_x - cw
       qy = abs_y - ch
@@ -1835,9 +1871,13 @@ module Zenoo
       nx = lnx * rect.cos - lny * rect.sin
       ny = lnx * rect.sin + lny * rect.cos
 
-      # 接触点: 円の中心から法線の逆向き (矩形側) へ (円と矩形の重なり境界)
-      cx = circle.center_x - nx * (circle.effective_radius - depth * 0.5)
-      cy = circle.center_y - ny * (circle.effective_radius - depth * 0.5)
+      if shape_r > 0.0
+        cx = shape_x - nx * (shape_r - depth * 0.5)
+        cy = shape_y - ny * (shape_r - depth * 0.5)
+      else
+        cx = shape_x
+        cy = shape_y
+      end
 
       Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, cx, cy)
     end
@@ -1913,6 +1953,15 @@ module Zenoo
 
     # 多角形・楕円等を含む汎用 2D SAT 押し出し
     def self.penetration_generic_sat(shape_a, shape_b, dx, dy)
+      needs_gjk_verify =
+        (shape_a.shape_type == TYPE_RECT && shape_a.is_rounded) ||
+        (shape_b.shape_type == TYPE_RECT && shape_b.is_rounded) ||
+        (shape_a.shape_type == TYPE_CIRCLE && !shape_a.is_true_circle) ||
+        (shape_b.shape_type == TYPE_CIRCLE && !shape_b.is_true_circle)
+      if needs_gjk_verify
+        return nil unless gjk(shape_a, shape_b, dx, dy, dx * dx + dy * dy)
+      end
+
       axes = collect_sat_axes(shape_a, shape_b)
       return nil if axes.empty?
 
@@ -2001,10 +2050,10 @@ module Zenoo
     def self.project_shape(axis_x, axis_y, shape)
       if shape.shape_type == TYPE_CIRCLE && shape.is_true_circle
         project_circle(axis_x, axis_y, shape)
-      elsif (shape.shape_type == TYPE_RECT || shape.shape_type == TYPE_POLYGON) && shape.world_vertices
+      elsif ((shape.shape_type == TYPE_RECT && !shape.is_rounded) || shape.shape_type == TYPE_POLYGON) && shape.world_vertices
         project_polygon(axis_x, axis_y, shape.world_vertices)
       else
-        # 楕円などの一般的な凸形状 (サポート写像による厳密射影)
+        # 楕円・角丸矩形などの一般的な凸形状 (サポート写像による厳密射影)
         p_max = shape.support(axis_x, axis_y)
         p_max_x = p_max[0]
         p_max_y = p_max[1]
@@ -2012,6 +2061,34 @@ module Zenoo
         d_max = axis_x * p_max_x + axis_y * p_max_y
         d_min = axis_x * p_min[0] + axis_y * p_min[1]
         d_min > d_max ? [d_max, d_min] : [d_min, d_max]
+      end
+    end
+
+    def self.__rounded_rect_core_corners(rect)
+      cx = rect.center_x
+      cy = rect.center_y
+      chw = rect.core_half_w
+      chh = rect.core_half_h
+      m00 = rect.m00
+      m01 = rect.m01
+      m10 = rect.m10
+      m11 = rect.m11
+      [
+        [cx + (m00 * -chw + m01 * -chh), cy + (m10 * -chw + m11 * -chh)],
+        [cx + (m00 * chw  + m01 * -chh), cy + (m10 * chw  + m11 * -chh)],
+        [cx + (m00 * chw  + m01 * chh),  cy + (m10 * chw  + m11 * chh)],
+        [cx + (m00 * -chw + m01 * chh),  cy + (m10 * -chw + m11 * chh)]
+      ]
+    end
+
+    def self.__push_point_pair_axes(axes, pts_a, pts_b)
+      pts_a.each do |pa|
+        pts_b.each do |pb|
+          ax = pb[0] - pa[0]
+          ay = pb[1] - pa[1]
+          l = Math.sqrt(ax * ax + ay * ay)
+          axes << [ax / l, ay / l] if l > 0.000001
+        end
       end
     end
 
@@ -2045,8 +2122,17 @@ module Zenoo
         end
       end
 
-      # 頂点から中心への軸 (円・楕円とポリゴン)
-      if shape_a.shape_type == TYPE_CIRCLE && verts_b
+      # 角丸矩形の芯隅 (円弧コーナー) 向けの分離軸
+      rounded_a = shape_a.shape_type == TYPE_RECT && shape_a.is_rounded
+      rounded_b = shape_b.shape_type == TYPE_RECT && shape_b.is_rounded
+      if rounded_a || rounded_b
+        core_a = rounded_a ? __rounded_rect_core_corners(shape_a) : (verts_a || [[shape_a.center_x, shape_a.center_y]])
+        core_b = rounded_b ? __rounded_rect_core_corners(shape_b) : (verts_b || [[shape_b.center_x, shape_b.center_y]])
+        __push_point_pair_axes(axes, core_a, core_b)
+      end
+
+      # 頂点から中心への軸 (円・楕円・点とポリゴン)
+      if (shape_a.shape_type == TYPE_CIRCLE || shape_a.shape_type == TYPE_POINT) && verts_b
         verts_b.each do |v|
           vx = v[0] - shape_a.center_x
           vy = v[1] - shape_a.center_y
@@ -2054,7 +2140,7 @@ module Zenoo
           axes << [vx / l, vy / l] if l > 0.000001
         end
       end
-      if shape_b.shape_type == TYPE_CIRCLE && verts_a
+      if (shape_b.shape_type == TYPE_CIRCLE || shape_b.shape_type == TYPE_POINT) && verts_a
         verts_a.each do |v|
           vx = v[0] - shape_b.center_x
           vy = v[1] - shape_b.center_y
@@ -2084,6 +2170,7 @@ module Zenoo
     end
 
     def self.project_polygon(axis_x, axis_y, verts)
+      return [0.0, 0.0] if verts.empty?
       min = axis_x * verts[0][0] + axis_y * verts[0][1]
       max = min
       i = 1
@@ -2165,6 +2252,9 @@ module Zenoo
         @grid = {}
         @cell_pool = []
         @active_codes = []
+        @multi_set = {}
+        @seen_pairs = {}
+        @hash_pool = []
       end
 
       def prepare(cell_size, bounds = nil)
@@ -2191,6 +2281,15 @@ module Zenoo
         end
         grid.clear
         codes.clear
+        @multi_set.clear
+        unless @seen_pairs.empty?
+          hash_pool = @hash_pool
+          @seen_pairs.each_value do |sub|
+            sub.clear
+            hash_pool.push(sub)
+          end
+          @seen_pairs.clear
+        end
       end
 
       def build(group)
@@ -2198,28 +2297,42 @@ module Zenoo
         n = items.length
         inv = @inv_cell
         cs = @cell_size
+        half_cs = cs * 0.5
         grid = @grid
         pool = @cell_pool
         codes = @active_codes
+        multi_set = @multi_set
         i = 0
         while i < n
           item = items[i]
           i += 1
           next unless item
-          next if item.vanished?
+          next if item.respond_to?(:vanished?) && item.vanished?
 
-          # 高速座標・半径取得 (動的メソッド呼び出しとキャッシュ同期のオーバーヘッドをバイパス)
-          x = item.x.to_f
-          y = item.y.to_f
-          r = if item.respond_to?(:hit_radius)
-                item.hit_radius.to_f
-              elsif item.respond_to?(:radius)
-                item.radius.to_f
-              elsif (c = item.instance_variable_get(:@collider_shape))
-                c.bounding_radius.to_f
-              else
-                16.0
-              end
+          # 高速座標・半径取得
+          if item.is_a?(Shape)
+            item.update_cache if item.dirty?
+            x = item.center_x
+            y = item.center_y
+            r = item.bounding_radius
+          elsif item.respond_to?(:hit_radius)
+            x = item.x.to_f
+            y = item.y.to_f
+            r = item.hit_radius.to_f
+          elsif (c = item.instance_variable_get(:@collider_shape))
+            c.update_cache if c.dirty?
+            x = c.center_x
+            y = c.center_y
+            r = c.bounding_radius
+          elsif item.respond_to?(:radius)
+            x = item.x.to_f
+            y = item.y.to_f
+            r = item.radius.to_f
+          else
+            x = item.x.to_f
+            y = item.y.to_f
+            r = 16.0
+          end
 
           cx = (x * inv).floor + HALF_STRIDE
           cy = (y * inv).floor + HALF_STRIDE
@@ -2234,10 +2347,10 @@ module Zenoo
           end
           arr.push(item)
 
-          # セルサイズ以上の超大型オブジェクト (ボス等) のみ周囲セルにも登録
-          # (中型敵の多重登録によるペア数爆発を抑止)
+          # セル半幅を超える大型オブジェクトまたはボスは周囲セルにも登録し、重複排除対象にする
           is_boss = item.respond_to?(:is_boss) && item.is_boss
-          if is_boss || r >= cs
+          if is_boss || r > half_cs
+            multi_set[item] = true
             min_gx = ((x - r) * inv).floor + HALF_STRIDE
             max_gx = ((x + r) * inv).floor + HALF_STRIDE
             min_gy = ((y - r) * inv).floor + HALF_STRIDE
@@ -2265,12 +2378,32 @@ module Zenoo
         end
       end
 
+      def __pair_seen?(e1, e2)
+        id1 = e1.object_id
+        id2 = e2.object_id
+        if id1 > id2
+          tmp = id1
+          id1 = id2
+          id2 = tmp
+        end
+        sub = @seen_pairs[id1]
+        unless sub
+          sub = @hash_pool.pop || {}
+          @seen_pairs[id1] = sub
+        end
+        return true if sub[id2]
+        sub[id2] = true
+        false
+      end
+
       # 近傍ペア列挙 (ブロードフェーズ)
       def each_pair
         return unless block_given?
         codes_len = @active_codes.length
         c_idx = 0
         offsets = OFFSETS
+        multi_set = @multi_set
+        has_multi = !multi_set.empty?
 
         while c_idx < codes_len
           code = @active_codes[c_idx]
@@ -2285,15 +2418,18 @@ module Zenoo
           while i < c_len
             e1 = cell_enemies[i]
             i += 1
-            if !e1.vanished?
+            if !(e1.respond_to?(:vanished?) && e1.vanished?)
               j = i
               while j < c_len
                 e2 = cell_enemies[j]
                 j += 1
                 next if e1.equal?(e2)
-                if !e2.vanished?
+                if !(e2.respond_to?(:vanished?) && e2.vanished?)
+                  if has_multi && (multi_set.key?(e1) || multi_set.key?(e2))
+                    next if __pair_seen?(e1, e2)
+                  end
                   yield(e1, e2)
-                  break if e1.vanished?
+                  break if e1.respond_to?(:vanished?) && e1.vanished?
                 end
               end
             end
@@ -2312,15 +2448,18 @@ module Zenoo
             while i < c_len
               e1 = cell_enemies[i]
               i += 1
-              if !e1.vanished?
+              if !(e1.respond_to?(:vanished?) && e1.vanished?)
                 j = 0
                 while j < n_len
                   e2 = neighbor[j]
                   j += 1
                   next if e1.equal?(e2)
-                  if !e2.vanished?
+                  if !(e2.respond_to?(:vanished?) && e2.vanished?)
+                    if has_multi && (multi_set.key?(e1) || multi_set.key?(e2))
+                      next if __pair_seen?(e1, e2)
+                    end
                     yield(e1, e2)
-                    break if e1.vanished?
+                    break if e1.respond_to?(:vanished?) && e1.vanished?
                   end
                 end
               end
