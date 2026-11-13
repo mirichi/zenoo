@@ -152,13 +152,13 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Multi-Joint Tentacle FABRIK IK
   end
 
   # 触手本数の切り替え
-  if Input.key_push?(:num1) || Input.key_push?(:one)
+  if Input.key_push?(:num1) || Input.key_push?(:kp_1)
     active_count = 1
-  elsif Input.key_push?(:num2) || Input.key_push?(:two)
+  elsif Input.key_push?(:num2) || Input.key_push?(:kp_2)
     active_count = 2
-  elsif Input.key_push?(:num3) || Input.key_push?(:three)
+  elsif Input.key_push?(:num3) || Input.key_push?(:kp_3)
     active_count = 3
-  elsif Input.key_push?(:num4) || Input.key_push?(:four)
+  elsif Input.key_push?(:num4) || Input.key_push?(:kp_4)
     active_count = 4
   end
 

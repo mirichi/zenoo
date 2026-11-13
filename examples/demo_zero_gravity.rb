@@ -537,11 +537,11 @@ class ZeroGravityDemo
     @constraints.each do |c|
       case c[:type]
       when :pin
-        c[:a].constrain_pin(c[:b], pivot: c[:pivot], anchor: c[:anchor_a], other_anchor: c[:anchor_b])
+        c[:a].constrain_pin(c[:b], pivot: c[:pivot], anchor_a: c[:anchor_a], anchor_b: c[:anchor_b])
       when :weld
         c[:a].constrain_weld(c[:b], offset: c[:offset], angle: c[:angle], stiffness: 1.0)
       when :distance
-        c[:a].constrain_distance(c[:b], length: c[:length], min: c[:min], max: c[:max], anchor: c[:anchor_a], other_anchor: c[:anchor_b])
+        c[:a].constrain_distance(c[:b], length: c[:length], min: c[:min], max: c[:max], anchor_a: c[:anchor_a], anchor_b: c[:anchor_b])
       end
     end
   end

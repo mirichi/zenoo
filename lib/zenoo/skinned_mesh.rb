@@ -221,7 +221,6 @@ module Zenoo
       end
       self
     end
-    alias rebind! bind!
 
     # ボーン配置から自動で滑らかな重みマップ (Image) を生成
     def generate_auto_weight_map!(width: 64, height: 64)

@@ -51,8 +51,8 @@ class Zenoo::Image
     end
   end
 
-  # ピクセル色取得: image[x, y] -> Color
-  def [](x, y)
+  # ピクセル色取得: image.get_pixel(x, y) -> Color
+  def get_pixel(x, y)
     col = raw_get_pixel(x.to_i, y.to_i)
     r = col & 0xFF
     g = (col >> 8) & 0xFF
@@ -61,8 +61,8 @@ class Zenoo::Image
     Zenoo::Color.new(r, g, b, a)
   end
 
-  # ピクセル色設定: image[x, y] = color
-  def []=(x, y, color)
+  # ピクセル色設定: image.set_pixel(x, y, color)
+  def set_pixel(x, y, color)
     c = Zenoo::Backend.normalize_color(color)
     r = (c[0] * 255.0).round.clamp(0, 255)
     g = (c[1] * 255.0).round.clamp(0, 255)
@@ -70,9 +70,6 @@ class Zenoo::Image
     a = (c[3] * 255.0).round.clamp(0, 255)
     raw_set_pixel_rgba(x.to_i, y.to_i, r, g, b, a)
   end
-
-  alias get_pixel []
-  alias set_pixel []=
 
 
   # オフスクリーンFBO描画ブロック

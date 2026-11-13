@@ -74,12 +74,12 @@ module Zenoo
       end
       val |= FLIP_H if flip_h
       val |= FLIP_V if flip_v
-      rot = rotate.to_i
-      rot_code = if rot == 90 || rot == 1
+      rot = rotate.to_i % 360
+      rot_code = if rot == 90
                    1
-                 elsif rot == 180 || rot == 2
+                 elsif rot == 180
                    2
-                 elsif rot == 270 || rot == -90 || rot == 3
+                 elsif rot == 270
                    3
                  else
                    0
@@ -152,7 +152,7 @@ module Zenoo
       # @param name [Symbol] レイヤー名 (:ground, :walls など)
       # @param data [Array<Array<Integer, nil>>] 2次元マップ配列 (data[row][col])
       # @param z [Float] 基準深度 Z
-      # @param y_sort [Boolean] true の場合、各行の足元Y座標を自動的に Z値として描画
+      # @param y_sort [Boolean, Symbol] true の場合は足元基準で Yソート、:floor の場合はタイル上端基準で Yソート
       # @param z_offset [Float] Yソート時の微調整オフセット (キャラより少し手前/奥にする場合など)
       # @param solid [Boolean] true の場合、このレイヤーの全タイルを通行不可 (壁) として扱う
       # @param height [Float, nil] このレイヤーの基準高さ
@@ -175,8 +175,8 @@ module Zenoo
         @data = data || []
         @z = z.to_f
         @y_sort_mode = case y_sort
-                       when :floor, :top then :floor
-                       when true, :bottom then :bottom
+                       when :floor then :floor
+                       when true then :bottom
                        else nil
                        end
         @y_sort = !@y_sort_mode.nil?

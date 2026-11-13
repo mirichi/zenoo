@@ -12,34 +12,29 @@ module Zenoo
     # 衝突めり込み・押し出し結果 (MTV: Minimum Translation Vector)
     # ====================================================
     class Hit
-      attr_accessor :depth, :normal_x, :normal_y, :overlap_x, :overlap_y, :impact, :contact_x, :contact_y
+      attr_accessor :depth, :normal_x, :normal_y, :push_x, :push_y, :contact_x, :contact_y
 
-      def initialize(depth = 0.0, normal_x = 0.0, normal_y = 0.0, overlap_x = 0.0, overlap_y = 0.0, impact = 0.0, contact_x = 0.0, contact_y = 0.0)
+      def initialize(depth = 0.0, normal_x = 0.0, normal_y = 0.0, push_x = 0.0, push_y = 0.0, contact_x = 0.0, contact_y = 0.0)
         @depth = depth.to_f
         @normal_x = normal_x.to_f
         @normal_y = normal_y.to_f
-        @overlap_x = overlap_x.to_f
-        @overlap_y = overlap_y.to_f
-        @impact = impact.to_f
+        @push_x = push_x.to_f
+        @push_y = push_y.to_f
         @contact_x = contact_x.to_f
         @contact_y = contact_y.to_f
       end
 
-      # a を押し戻す移動量 (overlap_x, overlap_y)
-      def push_x; @overlap_x; end
-      def push_y; @overlap_y; end
-
-      # b を押し戻す移動量 (-overlap_x, -overlap_y)
-      def push_b_x; -@overlap_x; end
-      def push_b_y; -@overlap_y; end
+      # b を押し戻す移動量 (-push_x, -push_y)
+      def push_b_x; -@push_x; end
+      def push_b_y; -@push_y; end
 
       # 向き反転 (a と b を入れ替えた結果)
       def flipped
-        Hit.new(@depth, -@normal_x, -@normal_y, -@overlap_x, -@overlap_y, @impact, @contact_x, @contact_y)
+        Hit.new(@depth, -@normal_x, -@normal_y, -@push_x, -@push_y, @contact_x, @contact_y)
       end
 
       def inspect
-        "#<Zenoo::Collision::Hit depth=#{@depth.round(3)} normal=[#{@normal_x.round(3)}, #{@normal_y.round(3)}] contact=[#{@contact_x.round(2)}, #{@contact_y.round(2)}] overlap=[#{@overlap_x.round(3)}, #{@overlap_y.round(3)}]>"
+        "#<Zenoo::Collision::Hit depth=#{@depth.round(3)} normal=[#{@normal_x.round(3)}, #{@normal_y.round(3)}] contact=[#{@contact_x.round(2)}, #{@contact_y.round(2)}] push=[#{@push_x.round(3)}, #{@push_y.round(3)}]>"
       end
     end
 
@@ -52,15 +47,15 @@ module Zenoo
 
     # 幾何アライメント定義定数
     ALIGN_MAP = {
-      top_left: [0.0, 0.0],      north_west: [0.0, 0.0],
-      top_center: [0.5, 0.0],    north: [0.5, 0.0],
-      top_right: [1.0, 0.0],     north_east: [1.0, 0.0],
-      center_left: [0.0, 0.5],   west: [0.0, 0.5],
-      center: [0.5, 0.5],
-      center_right: [1.0, 0.5],  east: [1.0, 0.5],
-      bottom_left: [0.0, 1.0],   south_west: [0.0, 1.0],
-      bottom_center: [0.5, 1.0], south: [0.5, 1.0],
-      bottom_right: [1.0, 1.0],  south_east: [1.0, 1.0]
+      top_left:      [0.0, 0.0],
+      top_center:    [0.5, 0.0],
+      top_right:     [1.0, 0.0],
+      center_left:   [0.0, 0.5],
+      center:        [0.5, 0.5],
+      center_right:  [1.0, 0.5],
+      bottom_left:   [0.0, 1.0],
+      bottom_center: [0.5, 1.0],
+      bottom_right:  [1.0, 1.0]
     }.freeze
 
     # アンカー解釈共通ヘルパー
@@ -1764,7 +1759,7 @@ module Zenoo
       cx = a.center_x - nx * (a.effective_radius - depth * 0.5)
       cy = a.center_y - ny * (a.effective_radius - depth * 0.5)
 
-      Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, cx, cy)
+      Hit.new(depth, nx, ny, nx * depth, ny * depth, cx, cy)
     end
 
     # AABB vs AABB の押し出し
@@ -1790,7 +1785,7 @@ module Zenoo
         cx = (x_min + x_max) * 0.5
         cy = a.center_y - ny * (a.half_h - depth * 0.5)
       end
-      Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, cx, cy)
+      Hit.new(depth, nx, ny, nx * depth, ny * depth, cx, cy)
     end
 
     # 点 vs 真円の押し出し
@@ -1808,7 +1803,7 @@ module Zenoo
         ny = 0.0
       end
 
-      Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, point.center_x, point.center_y)
+      Hit.new(depth, nx, ny, nx * depth, ny * depth, point.center_x, point.center_y)
     end
 
     # 点 vs 等倍矩形 (回転・角丸対応 SDF 方式)
@@ -1879,7 +1874,7 @@ module Zenoo
         cy = shape_y
       end
 
-      Hit.new(depth, nx, ny, nx * depth, ny * depth, 0.0, cx, cy)
+      Hit.new(depth, nx, ny, nx * depth, ny * depth, cx, cy)
     end
 
     # OBB vs OBB の 4軸 SAT 押し出し
@@ -1948,7 +1943,7 @@ module Zenoo
       # 接触点 (面 vs 頂点を正確に判定して真の接触点を導出)
       cx, cy = calculate_contact_point(a, b, best_nx, best_ny, min_overlap)
 
-      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, 0.0, cx, cy)
+      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, cx, cy)
     end
 
     # 多角形・楕円等を含む汎用 2D SAT 押し出し
@@ -1998,7 +1993,7 @@ module Zenoo
       # 接触点 (面 vs 頂点を正確に判定して真の接触点を導出)
       cx, cy = calculate_contact_point(shape_a, shape_b, best_nx, best_ny, min_overlap)
 
-      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, 0.0, cx, cy)
+      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, cx, cy)
     end
 
     # 接触点導出 (法線コーン摂動により、どちらが「面 (Reference)」でどちらが「角 (Incident)」かを幾何学的に判定)
@@ -2257,7 +2252,7 @@ module Zenoo
         @hash_pool = []
       end
 
-      def prepare(cell_size, bounds = nil)
+      def prepare(cell_size)
         clear if @active_codes.length > 0
         cs = (cell_size || 64.0).to_f
         cs = 8.0 if cs < 8.0
@@ -2506,9 +2501,9 @@ module Zenoo
 
     # 空間ハッシュによる近傍ペア列挙 (ブロードフェーズ)
     # ensure を使用せず、Clang 最適化を阻害しないシーケンシャル実行
-    def self.each_pair_spatial(group, cell_size: 64.0, bounds: nil, &block)
+    def self.each_pair_spatial(group, cell_size: 64.0, &block)
       ws = @spatial_workspace
-      ws.prepare(cell_size, bounds)
+      ws.prepare(cell_size)
       ws.build(group)
       res = ws.each_pair(&block)
       ws.clear
@@ -2516,9 +2511,9 @@ module Zenoo
     end
 
     # 空間ハッシュによる一括衝突判定 (ナローフェーズ幾何チェック込み)
-    def self.check_spatial(group, cell_size: 64.0, bounds: nil, &block)
+    def self.check_spatial(group, cell_size: 64.0, &block)
       ws = @spatial_workspace
-      ws.prepare(cell_size, bounds)
+      ws.prepare(cell_size)
       ws.build(group)
       res = ws.each_collision(&block)
       ws.clear
@@ -2526,9 +2521,9 @@ module Zenoo
     end
 
     # 空間ハッシュによる一括めり込み量 (MTV) 判定
-    def self.penetration_spatial(group, cell_size: 64.0, bounds: nil, &block)
+    def self.penetration_spatial(group, cell_size: 64.0, &block)
       ws = @spatial_workspace
-      ws.prepare(cell_size, bounds)
+      ws.prepare(cell_size)
       ws.build(group)
       res = ws.each_penetration(&block)
       ws.clear

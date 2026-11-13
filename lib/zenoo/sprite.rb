@@ -30,22 +30,8 @@ module Zenoo
       def add(name, images, wait: 4, loop: true, offset_x: 0.0, offset_y: 0.0)
         imgs = images.is_a?(Array) ? images : [images]
 
-        # offset_x / offset_y に統一 (数値または配列)
-        # 後方互換のため offset: [x, y] が指定された場合はフォールバックとして採用
-        ox = if offset_x && offset_x != 0.0 && offset_x != 0
-          offset_x
-        else
-          offset_x || 0.0
-        end
-
-        oy = if offset_y && offset_y != 0.0 && offset_y != 0
-          offset_y
-        else
-          offset_y || 0.0
-        end
-
-        final_ox = ox.is_a?(Array) ? ox.map(&:to_f) : ox.to_f
-        final_oy = oy.is_a?(Array) ? oy.map(&:to_f) : oy.to_f
+        final_ox = offset_x.is_a?(Array) ? offset_x.map(&:to_f) : (offset_x || 0.0).to_f
+        final_oy = offset_y.is_a?(Array) ? offset_y.map(&:to_f) : (offset_y || 0.0).to_f
 
         @animations[name.to_sym] = {
           images: imgs,
@@ -971,11 +957,11 @@ module Zenoo
         if hit
           if target_root && @parent
             r = root
-            r.x += hit.overlap_x
-            r.y += hit.overlap_y
+            r.x += hit.push_x
+            r.y += hit.push_y
           elsif (p = @parent)
-            ox = hit.overlap_x
-            oy = hit.overlap_y
+            ox = hit.push_x
+            oy = hit.push_y
             p_cos = p.world_cos
             p_sin = p.world_sin
             p_sx = p.world_scale_x
@@ -985,8 +971,8 @@ module Zenoo
             self.x += (p_sx.abs > 0.0001 ? rx / p_sx : rx)
             self.y += (p_sy.abs > 0.0001 ? ry / p_sy : ry)
           else
-            self.x += hit.overlap_x
-            self.y += hit.overlap_y
+            self.x += hit.push_x
+            self.y += hit.push_y
           end
           hit
         else
@@ -1154,18 +1140,18 @@ module Zenoo
     end
 
     # 空間ハッシュによる近傍ペア列挙 (ブロードフェーズ / 大量オブジェクト総当たり用)
-    def self.each_pair_spatial(sprites, cell_size: 64.0, bounds: nil, &block)
-      Collision.each_pair_spatial(sprites, cell_size: cell_size, bounds: bounds, &block)
+    def self.each_pair_spatial(sprites, cell_size: 64.0, &block)
+      Collision.each_pair_spatial(sprites, cell_size: cell_size, &block)
     end
 
     # 空間ハッシュによる一括衝突判定
-    def self.check_spatial(sprites, cell_size: 64.0, bounds: nil, &block)
-      Collision.check_spatial(sprites, cell_size: cell_size, bounds: bounds, &block)
+    def self.check_spatial(sprites, cell_size: 64.0, &block)
+      Collision.check_spatial(sprites, cell_size: cell_size, &block)
     end
 
     # 空間ハッシュによる一括めり込み量 (MTV) 判定
-    def self.penetration_spatial(sprites, cell_size: 64.0, bounds: nil, &block)
-      Collision.penetration_spatial(sprites, cell_size: cell_size, bounds: bounds, &block)
+    def self.penetration_spatial(sprites, cell_size: 64.0, &block)
+      Collision.penetration_spatial(sprites, cell_size: cell_size, &block)
     end
   end
 end

@@ -445,11 +445,6 @@ module Zenoo
         super
       end
 
-      def mouse_down?(button = :left)
-        return false if Zenoo::Dev.mask_mouse_input?
-        super
-      end
-
       def mouse_push?(button = :left)
         return false if Zenoo::Dev.mask_mouse_input?
         super
@@ -478,11 +473,6 @@ module Zenoo
 
       # キーボード
       def key_pressed?(key)
-        return false if Zenoo::Dev.mask_keyboard_input?
-        super
-      end
-
-      def key_down?(key)
         return false if Zenoo::Dev.mask_keyboard_input?
         super
       end
@@ -547,10 +537,6 @@ module Zenoo
         end
 
         false
-      end
-
-      def action_down?(name, id = 0)
-        action_pressed?(name, id)
       end
 
       def action_push?(name, id = 0)

@@ -207,11 +207,17 @@ module Zenoo
     }
 
     def self.resolve_key(key)
-      KEY_MAP[key] || (key.respond_to?(:to_i) ? key.to_i : 0)
+      return key if key.is_a?(Integer)
+      code = KEY_MAP[key]
+      return code if code
+      raise ArgumentError, "Unknown key: #{key.inspect}"
     end
 
     def self.resolve_mouse(button)
-      MOUSE_MAP[button] || (button.respond_to?(:to_i) ? button.to_i : 0)
+      return button if button.is_a?(Integer)
+      code = MOUSE_MAP[button]
+      return code if code
+      raise ArgumentError, "Unknown mouse button: #{button.inspect}"
     end
 
     # 押されている状態 (持続)
@@ -227,10 +233,6 @@ module Zenoo
       else
         Native::Input.key_pressed?(resolve_key(key))
       end
-    end
-
-    def self.key_down?(key)
-      key_pressed?(key)
     end
 
     # 押した瞬間 (トリガー)
@@ -370,10 +372,6 @@ module Zenoo
       end
     end
 
-    def self.mouse_down?(button = :left)
-      mouse_pressed?(button)
-    end
-
     def self.mouse_push?(button = :left)
       return false if @mouse_consumed
       b = resolve_mouse(button)
@@ -459,12 +457,12 @@ module Zenoo
       when :dpad_down, :down then 13
       when :dpad_left, :left then 14
       else
-        btn.respond_to?(:to_i) ? btn.to_i : 0
+        raise ArgumentError, "Unknown gamepad button: #{btn.inspect}"
       end
     end
 
     def self.resolve_gamepad_axis(axis)
-      return axis.to_i if axis.is_a?(Integer)
+      return axis if axis.is_a?(Integer)
       case axis
       when :lx, :left_x then 0
       when :ly, :left_y then 1
@@ -473,7 +471,7 @@ module Zenoo
       when :lt, :left_trigger, :l2 then 4
       when :rt, :right_trigger, :r2 then 5
       else
-        axis.respond_to?(:to_i) ? axis.to_i : 0
+        raise ArgumentError, "Unknown gamepad axis: #{axis.inspect}"
       end
     end
 
@@ -487,10 +485,6 @@ module Zenoo
 
     def self.gamepad_button_pressed?(button, id = 0)
       Native::Input.gamepad_button_pressed?(id.to_i, resolve_gamepad_button(button))
-    end
-
-    def self.gamepad_button_down?(button, id = 0)
-      gamepad_button_pressed?(button, id)
     end
 
     def self.gamepad_button_push?(button, id = 0)
@@ -777,10 +771,6 @@ module Zenoo
       false
     end
 
-    def self.action_down?(name, id = 0)
-      action_pressed?(name, id)
-    end
-
     # アクションが押された瞬間か (トリガー)
     def self.action_push?(name, id = 0)
       sym = name.to_sym
@@ -906,7 +896,7 @@ module Zenoo
     # 2次元移動ベクトル [dx, dy]
     # 4方向のアクションからベクトルを算出し、長さを 1.0 にクランプ (斜め移動速度超過を防止)
     # 引数省略時はデフォルトで (:left, :right, :up, :down) を使用
-    def self.vector(negative_x = :left, positive_x = :right, negative_y = :up, positive_y = :down, id: 0)
+    def self.vector(negative_x = :left, positive_x = :right, negative_y = :up, positive_y = :down, id = 0)
       dx = axis(negative_x, positive_x, id)
       dy = axis(negative_y, positive_y, id)
 
