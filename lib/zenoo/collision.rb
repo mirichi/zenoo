@@ -637,6 +637,7 @@ module Zenoo
       attr_reader :radius
       attr_reader :half_w, :half_h, :core_half_w, :core_half_h
       attr_reader :is_aabb, :is_rounded, :is_uniform, :bounding_radius, :cos, :sin
+      attr_reader :m00, :m01, :m10, :m11
 
       def initialize(x = 0.0, y = 0.0, width = 0.0, height = 0.0, angle: 0.0, radius: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, at: :center, parent: nil)
         super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, at: at, parent: parent)

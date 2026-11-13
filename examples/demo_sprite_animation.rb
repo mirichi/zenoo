@@ -1146,6 +1146,8 @@ class DemoScene < Zenoo::Scene
     @camera = Zenoo::Camera.new(
       x: @player.x,
       y: @player.y - 20.0,
+      width: VIRTUAL_WIDTH,
+      height: VIRTUAL_HEIGHT,
       offset_x: VIRTUAL_WIDTH / 2.0,
       offset_y: VIRTUAL_HEIGHT / 2.0,
       target: @player,
