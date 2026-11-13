@@ -4,13 +4,14 @@ module Zenoo
   class Font
     SDF_BASE_SIZE = 64.0
 
-    attr_reader :path, :native
+    attr_reader :path, :index, :native
 
 
-    # TTF / OTF / TTC ファイルパスから初期化
-    def initialize(path)
+    # TTF / OTF / TTC ファイルパスから初期化 (index: TTCコレクション内のフォント番号)
+    def initialize(path, index: 0)
       @path = path
-      @native = Native::Font.load(path)
+      @index = index.to_i
+      @native = Native::Font.load(path, @index)
       @metrics_cache = {}
       @advance_cache = {}
       @glyph_cache = {}

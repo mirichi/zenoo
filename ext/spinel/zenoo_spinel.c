@@ -719,8 +719,8 @@ void sp_ZenFont_free(void* p) {
     }
 }
 
-sp_ZenFont* sp_ZenFont_load(sp_int cls_id, const char* path) {
-    ZenFont* font = zen_font_load(path);
+sp_ZenFont* sp_ZenFont_load(sp_int cls_id, const char* path, sp_int index) {
+    ZenFont* font = zen_font_load(path, (int)index);
     if (!font) return NULL;
 
     sp_ZenFont* s = (sp_ZenFont*)sp_gc_alloc(sizeof(sp_ZenFont), sp_ZenFont_free, NULL);

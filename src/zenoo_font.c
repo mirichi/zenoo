@@ -203,8 +203,8 @@ static void enhance_bitmap_glyph(unsigned char* pixels, int w, int h, float pixe
 }
 
 // フォント読み込み (メモリ)
-ZenFont* zen_font_load_memory(const unsigned char* data, size_t size) {
-    if (!data || size == 0) return NULL;
+ZenFont* zen_font_load_memory(const unsigned char* data, size_t size, int index) {
+    if (!data || size == 0 || index < 0) return NULL;
 
     ZenFont* font = (ZenFont*)calloc(1, sizeof(ZenFont));
     if (!font) return NULL;
@@ -218,12 +218,10 @@ ZenFont* zen_font_load_memory(const unsigned char* data, size_t size) {
     memcpy(font->data, data, size);
     font->data_size = size;
 
-    // TTC (フォントコレクション) の場合は最初のフォント (index 0) を使用
-    int offset = stbtt_GetFontOffsetForIndex(font->data, 0);
-    if (offset < 0) offset = 0;
-
-    if (!stbtt_InitFont(&font->info, font->data, offset)) {
-        fprintf(stderr, "[Zenoo Font] Failed to initialize font with stb_truetype\n");
+    // TTC (フォントコレクション) の場合は指定インデックスのフォントオフセットを取得
+    int offset = stbtt_GetFontOffsetForIndex(font->data, index);
+    if (offset < 0 || !stbtt_InitFont(&font->info, font->data, offset)) {
+        fprintf(stderr, "[Zenoo Font] Failed to initialize font (index=%d) with stb_truetype\n", index);
         free(font->data);
         free(font);
         return NULL;
@@ -239,7 +237,7 @@ ZenFont* zen_font_load_memory(const unsigned char* data, size_t size) {
 }
 
 // フォント読み込み (ファイルパス)
-ZenFont* zen_font_load(const char* filepath) {
+ZenFont* zen_font_load(const char* filepath, int index) {
     if (!filepath) {
         return NULL;
     }
@@ -271,7 +269,7 @@ ZenFont* zen_font_load(const char* filepath) {
     }
     fclose(f);
 
-    ZenFont* font = zen_font_load_memory(buffer, (size_t)size);
+    ZenFont* font = zen_font_load_memory(buffer, (size_t)size, index);
     free(buffer);
     return font;
 }
