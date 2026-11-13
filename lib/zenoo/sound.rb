@@ -523,7 +523,6 @@ module Zenoo
     def loop_start_sample
       @native.loop_start_pcm
     end
-    alias loop_start_pcm loop_start_sample
 
     def loop_start_sample=(pcm)
       val = pcm.to_i
@@ -534,12 +533,10 @@ module Zenoo
       end
       val
     end
-    alias loop_start_pcm= loop_start_sample=
 
     def loop_end_sample
       @native.loop_end_pcm
     end
-    alias loop_end_pcm loop_end_sample
 
     def loop_end_sample=(pcm)
       val = pcm.to_i
@@ -550,7 +547,6 @@ module Zenoo
       end
       val
     end
-    alias loop_end_pcm= loop_end_sample=
 
     def has_loop_points?
       @native.has_loop_points?

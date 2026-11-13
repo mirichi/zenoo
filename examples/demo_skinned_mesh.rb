@@ -61,7 +61,7 @@ arm_weight_img = Image.new(240, 16)
   s = t * t * (3.0 - 2.0 * t)
   c = (s * 255).round
   16.times do |y|
-    arm_weight_img[x, y] = [c, c, c, 255]
+    arm_weight_img.set_pixel(x, y, [c, c, c, 255])
   end
 end
 arm_weight_img.sync

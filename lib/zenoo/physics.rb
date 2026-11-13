@@ -165,10 +165,10 @@ module Zenoo
     # 即時物理応答計算 (動的オブジェクト vs 静的地形/壁)
     # ====================================================
     # @param hit [Zenoo::Collision::Hit] 衝突判定結果
-    # @param a [PhysicsSprite, Sprite, Hash, Object] 動的オブジェクト
-    # @param b [Sprite, Collision::Shape, Hash, Object, nil] 静的障害物オブジェクト
-    # @param restitution [Float, nil] 反発係数 (省略時は a のプロパティまたは 0.3)
-    # @param friction [Float, nil] 摩擦係数 (省略時は a のプロパティまたは 0.5)
+    # @param a [PhysicsSprite] 動的オブジェクト
+    # @param b [PhysicsSprite, Sprite, Collision::Shape, nil] 静的障害物オブジェクト
+    # @param restitution [Float, nil] 反発係数 (省略時は a.restitution)
+    # @param friction [Float, nil] 摩擦係数 (省略時は a.friction)
     # @param bounce_threshold [Float] 微小衝突時の反発カット閾値 (ジッター防止)
     # @return [Zenoo::Physics::Response] 反映すべき新値
     def self.resolve_static(hit, a, b = nil, restitution: nil, friction: nil, bounce_threshold: 0.5)
@@ -409,10 +409,10 @@ module Zenoo
     # 2体衝突即時物理応答計算 (動的オブジェクト vs 動的オブジェクト)
     # ====================================================
     # @param hit [Zenoo::Collision::Hit] 衝突判定結果
-    # @param a [Hash, Object] 物体Aのパラメータまたはオブジェクト ({ x:, y:, vx:, vy:, omega:, mass:, shape:, ... })
-    # @param b [Hash, Object] 物体Bのパラメータまたはオブジェクト
-    # @param restitution [Float] 反発係数 (0.0〜1.0)
-    # @param friction [Float] 摩擦係数 (0.0〜1.0)
+    # @param a [PhysicsSprite] 物体A (x, y, vx, vy, omega, mass, inertia, restitution, friction, collider 等を保持)
+    # @param b [PhysicsSprite] 物体B
+    # @param restitution [Float, nil] 反発係数 (0.0〜1.0、省略時は A/B の最大値)
+    # @param friction [Float, nil] 摩擦係数 (0.0〜1.0、省略時は A/B の幾何平均)
     # @param bounce_threshold [Float] 微小衝突時の反発カット閾値
     # @return [Zenoo::Physics::PairResponse] 物体Aと物体Bそれぞれの反映新値を含む結果
     def self.resolve(hit, a, b, restitution: nil, friction: nil, bounce_threshold: 0.5)
@@ -690,10 +690,6 @@ module Zenoo
       body.omega = (omega * k_damp) + (d_angle * 0.5)
 
       true
-    end
-
-    def self.constrain_mouse(body, mx, my, anchor: nil, stiffness: 0.3, damping: 0.85)
-      constrain_point(body, mx, my, anchor: anchor, stiffness: stiffness, damping: damping)
     end
 
     # 2. ピン結合・回転ジョイント (Revolute / Pin Joint)
@@ -1138,18 +1134,14 @@ module Zenoo
     # 拘束ショートカット
     # ====================================================
 
-    # 目標点 / マウスへの引っ張り拘束
+    # 目標点への引っ張り拘束
     def constrain_point(tx, ty, anchor: nil, **kwargs)
       Physics.constrain_point(self, tx, ty, anchor: anchor, **kwargs)
     end
 
-    def constrain_mouse(mx, my, **kwargs)
-      Physics.constrain_mouse(self, mx, my, **kwargs)
-    end
-
     # 相手物体（または固定点）とのピン結合
-    def constrain_pin(other = nil, pivot: nil, anchor: nil, other_anchor: nil)
-      Physics.constrain_pin(self, other, pivot: pivot, anchor_a: anchor, anchor_b: other_anchor)
+    def constrain_pin(other = nil, pivot: nil, anchor_a: nil, anchor_b: nil)
+      Physics.constrain_pin(self, other, pivot: pivot, anchor_a: anchor_a, anchor_b: anchor_b)
     end
 
     # 相手物体との完全固定 (溶接 / リジッド結合)
@@ -1158,12 +1150,8 @@ module Zenoo
     end
 
     # 相手物体との距離拘束 (ロッド / ロープ)
-    def constrain_distance(other, length: nil, min: nil, max: nil, anchor: nil, other_anchor: nil)
-      Physics.constrain_distance(self, other, length: length, min: min, max: max, anchor_a: anchor, anchor_b: other_anchor)
+    def constrain_distance(other, length: nil, min: nil, max: nil, anchor_a: nil, anchor_b: nil)
+      Physics.constrain_distance(self, other, length: length, min: min, max: max, anchor_a: anchor_a, anchor_b: anchor_b)
     end
-  end
-
-  module Physics
-    Sprite = Zenoo::PhysicsSprite
   end
 end

@@ -157,9 +157,9 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
   end
 
   # 速度操作
-  if Input.key_down?(:d) || Input.key_down?(:right)
+  if Input.key_pressed?(:d) || Input.key_pressed?(:right)
     target_speed = [target_speed + 350.0 * dt, 550.0].min
-  elsif Input.key_down?(:a) || Input.key_down?(:left)
+  elsif Input.key_pressed?(:a) || Input.key_pressed?(:left)
     target_speed = [target_speed - 350.0 * dt, -180.0].max
   else
     # キーを離したときの自然減速 / 通常速度維持
@@ -167,16 +167,16 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
   end
 
   # プリセット速度キー
-  target_speed = 0.0 if Input.key_push?(:num0) || Input.key_push?(:k0)
-  target_speed = 120.0 if Input.key_push?(:num1) || Input.key_push?(:k1)
-  target_speed = 280.0 if Input.key_push?(:num2) || Input.key_push?(:k2)
-  target_speed = 520.0 if Input.key_push?(:num3) || Input.key_push?(:k3)
+  target_speed = 0.0 if Input.key_push?(:num0) || Input.key_push?(:kp_0)
+  target_speed = 120.0 if Input.key_push?(:num1) || Input.key_push?(:kp_1)
+  target_speed = 280.0 if Input.key_push?(:num2) || Input.key_push?(:kp_2)
+  target_speed = 520.0 if Input.key_push?(:num3) || Input.key_push?(:kp_3)
 
   # 腰の高さ調整（スクワット・姿勢変更）
-  if Input.key_down?(:w) || Input.key_down?(:up)
+  if Input.key_pressed?(:w) || Input.key_pressed?(:up)
     base_hip_y -= 80.0 * dt
   end
-  if Input.key_down?(:s) || Input.key_down?(:down)
+  if Input.key_pressed?(:s) || Input.key_pressed?(:down)
     base_hip_y += 80.0 * dt
   end
   base_hip_y = base_hip_y.clamp(280.0, 410.0)

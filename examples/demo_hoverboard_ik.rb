@@ -79,18 +79,18 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Hoverboard IK Demo") do
   end
 
   # 腰の高さ変更（スクワット）
-  if Input.key_down?(:w) || Input.key_down?(:up)
+  if Input.key_pressed?(:w) || Input.key_pressed?(:up)
     hip_target_y -= 120.0 * dt
   end
-  if Input.key_down?(:s) || Input.key_down?(:down)
+  if Input.key_pressed?(:s) || Input.key_pressed?(:down)
     hip_target_y += 120.0 * dt
   end
   hip_target_y = hip_target_y.clamp(140.0, 310.0)
 
   # ボードの手動チルト
-  if Input.key_down?(:a) || Input.key_down?(:left)
+  if Input.key_pressed?(:a) || Input.key_pressed?(:left)
     tilt_manual -= 60.0 * dt
-  elsif Input.key_down?(:d) || Input.key_down?(:right)
+  elsif Input.key_pressed?(:d) || Input.key_pressed?(:right)
     tilt_manual += 60.0 * dt
   else
     tilt_manual *= (1.0 - 5.0 * dt).clamp(0.0, 1.0)
@@ -105,7 +105,7 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Hoverboard IK Demo") do
     target_b_ang = Math.sin(hover_time * 1.8) * 12.0 + tilt_manual
 
     # マウスドラッグで引っ張り操作も可能
-    if Input.mouse_down?(:left)
+    if Input.mouse_pressed?(:left)
       target_bx = Input.mouse_x.to_f
       target_by = Input.mouse_y.to_f
     end

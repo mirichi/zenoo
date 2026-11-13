@@ -10,7 +10,7 @@ cam = Camera.new(x: player[0], y: player[1], target: player, smooth_speed: 0.8, 
 Window.loop do
   player[0] = (player[0] + Input.x * 8.0).clamp(20.0, 1980.0)
   player[1] = (player[1] + Input.y * 8.0).clamp(20.0, 1180.0)
-  cam.zoom = (cam.zoom + (Input.key_down?(:z) ? 0.02 : (Input.key_down?(:x) ? -0.02 : 0.0))).clamp(0.5, 2.5)
+  cam.zoom = (cam.zoom + (Input.key_pressed?(:z) ? 0.02 : (Input.key_pressed?(:x) ? -0.02 : 0.0))).clamp(0.5, 2.5)
   cam.shake(15, 0.3) if Input.key_push?(:space) || Input.mouse_push?(:left)
   cam.update
 

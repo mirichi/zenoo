@@ -126,8 +126,8 @@ module Zenoo
     end
 
     def initialize
-      @fill_style = [1.0, 1.0, 1.0, 1.0]
-      @stroke_style = [1.0, 1.0, 1.0, 1.0]
+      @fill_style = [255, 255, 255, 255]
+      @stroke_style = [255, 255, 255, 255]
       @line_width = 1.0
       @line_cap = :butt     # :butt, :round, :square
       @line_join = :miter   # :miter, :bevel, :round

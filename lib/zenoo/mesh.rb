@@ -45,29 +45,20 @@ module Zenoo
 
     # 格子分割メッシュを生成
     # 例:
-    #   Mesh.grid(image, 8, 8)
     #   Mesh.grid(image, cols: 16, rows: 8)
     #   Mesh.grid(200, 100, cols: 8, rows: 4) # 画像なしメッシュ
-    def self.grid(image_or_width, cols_arg = nil, rows_arg = nil, cols: nil, rows: nil, width: nil, height: nil, image: nil, color: :white, shader: nil, uniforms: nil, blend: :alpha)
+    def self.grid(image_or_width, height_arg = nil, cols: 8, rows: 8, width: nil, height: nil, image: nil, color: :white, shader: nil, uniforms: nil, blend: :alpha)
       if image_or_width.is_a?(Image)
         img = image_or_width
         w = (width || img.width).to_f
         h = (height || img.height).to_f
-        c = cols || cols_arg || 8
-        r = rows || rows_arg || 8
       else
         img = image
         w = (width || image_or_width || 64).to_f
-        if !cols.nil?
-          h = (height || cols_arg || (img ? img.height : w)).to_f
-          c = cols
-          r = rows || rows_arg || 8
-        else
-          h = (height || (img ? img.height : w)).to_f
-          c = cols_arg || 8
-          r = rows || rows_arg || 8
-        end
+        h = (height || height_arg || (img ? img.height : w)).to_f
       end
+      c = cols || 8
+      r = rows || 8
 
       cr, cg, cb, ca = Backend.normalize_color(color)
       nx = [c.to_i, 1].max
@@ -125,18 +116,18 @@ module Zenoo
     end
 
     # 4頂点クアッドメッシュを生成 (4隅の自由変形・疑似パース用)
-    def self.quad(image_or_width, height: nil, image: nil, color: :white, shader: nil, uniforms: nil, blend: :alpha)
-      grid(image_or_width, 1, 1, height: height, image: image, color: color, shader: shader, uniforms: uniforms, blend: blend)
+    def self.quad(image_or_width, height_arg = nil, width: nil, height: nil, image: nil, color: :white, shader: nil, uniforms: nil, blend: :alpha)
+      grid(image_or_width, height_arg, cols: 1, rows: 1, width: width, height: height, image: image, color: color, shader: shader, uniforms: uniforms, blend: blend)
     end
 
     # 放射・リング（円形・扇形・ドーナツ）分割メッシュを生成
     # - slices: 円周方向の分割数 (デフォルト: 24)
     # - rings:  半径方向の分割数 (デフォルト: 2)
-    # - inner_radius: 内径比率 (0.0 なら中心まで埋まった円、0.0 < r < 1.0 ならドーナツ型、> 1.0 ならピクセル半径として解釈)
+    # - inner_radius: 内径比率 (0.0 なら中心まで埋まった円、0.0 < r < 1.0 ならドーナツ型)
     # - start_angle, end_angle: 扇形の開始・終了角度 (度数法、デフォルト: 0.0 .. 360.0)
     # - uv_mode: :planar (画像のXYそのまま切り抜き) または :polar (円周=U, 半径=V で帯状テクスチャを円形に巻く)
-    def self.ring(image_or_radius, slices_arg = nil, rings_arg = nil,
-                  slices: nil, rings: nil,
+    def self.ring(image_or_radius,
+                  slices: 24, rings: 2,
                   inner_radius: 0.0, start_angle: 0.0, end_angle: 360.0,
                   uv_mode: :planar, width: nil, height: nil, image: nil, color: :white,
                   shader: nil, uniforms: nil, blend: :alpha)
@@ -152,8 +143,8 @@ module Zenoo
       end
 
       cr, cg, cb, ca = Backend.normalize_color(color)
-      nx = [slices || slices_arg || 24, 3].max.to_i
-      ny = [rings || rings_arg || 2, 1].max.to_i
+      nx = [slices || 24, 3].max.to_i
+      ny = [rings || 2, 1].max.to_i
       inv_nx = 1.0 / nx.to_f
       inv_ny = 1.0 / ny.to_f
 
@@ -162,10 +153,7 @@ module Zenoo
       rx = w * 0.5
       ry = h * 0.5
 
-      in_r = inner_radius.to_f
-      # inner_radius が 1.0 より大きい場合はピクセル指定として比率に変換
-      min_half = [rx, ry].min
-      in_ratio = (in_r > 1.0 && min_half > 0.0) ? (in_r / min_half).clamp(0.0, 1.0) : in_r.clamp(0.0, 1.0)
+      in_ratio = inner_radius.to_f.clamp(0.0, 1.0)
 
       ang0 = start_angle.to_f * (Math::PI / 180.0)
       ang1 = end_angle.to_f * (Math::PI / 180.0)
@@ -235,15 +223,15 @@ module Zenoo
     end
 
     # 多角形メッシュを生成 (頂点リストから自動三角形分割)
-    # - points: [[x, y], ...], [[x, y, u, v, alpha], ...], または [[x, y, u, v, r, g, b, a], ...]
+    # - points: [[x, y], ...], [[x, y, u, v, alpha(0..255)], ...], [[x, y, u, v, color], ...], または [[x, y, u, v, r, g, b, alpha], ...] (色・アルファは 0〜255)
     # - indices: 省略時は耳刈り法 (Ear Clipping) で凹多角形も含め自動三角形分割
-    def self.polygon(image_or_points, points_arg = nil, points: nil, indices: nil, width: nil, height: nil, image: nil, color: :white, shader: nil, uniforms: nil, blend: :alpha)
+    def self.polygon(image_or_points, points = nil, indices: nil, width: nil, height: nil, image: nil, color: :white, shader: nil, uniforms: nil, blend: :alpha)
       if image_or_points.is_a?(Image)
         img = image_or_points
-        pts = points || points_arg || []
+        pts = points || []
       else
         img = image
-        pts = image_or_points.is_a?(Array) ? image_or_points : (points || points_arg || [])
+        pts = image_or_points.is_a?(Array) ? image_or_points : (points || [])
       end
 
       raise ArgumentError, "Mesh.polygon requires at least 3 vertices" if pts.length < 3
@@ -291,12 +279,12 @@ module Zenoo
         u_norm = pt.length >= 4 && !pt[2].nil? ? pt[2].to_f : ((px - off_x) * inv_w)
         v_norm = pt.length >= 4 && !pt[3].nil? ? pt[3].to_f : ((py - off_y) * inv_h)
         if pt.length >= 8
-          vr = pt[4].to_f
-          vg = pt[5].to_f
-          vb = pt[6].to_f
+          vr = (pt[4].to_f * INV_255).clamp(0.0, 1.0)
+          vg = (pt[5].to_f * INV_255).clamp(0.0, 1.0)
+          vb = (pt[6].to_f * INV_255).clamp(0.0, 1.0)
           va = normalize_alpha_val(pt[7])
         elsif pt.length >= 5 && !pt[4].nil?
-          if pt[4].is_a?(Array) || pt[4].is_a?(Symbol) || pt[4].is_a?(String)
+          if pt[4].is_a?(Color) || pt[4].is_a?(Array) || pt[4].is_a?(Symbol) || pt[4].is_a?(String)
             vr, vg, vb, va = Backend.normalize_color(pt[4])
           else
             vr = cr
@@ -509,8 +497,8 @@ module Zenoo
     end
 
     # 初期座標 (base_x, base_y) からの相対オフセット (dx, dy) で頂点を移動
-    # - 格子指定: mesh.set_offset(col, row, dx, dy, alpha: 1.0)
-    # - 通し番号: mesh.set_offset(index, dx, dy, alpha: 1.0)
+    # - 格子指定: mesh.set_offset(col, row, dx, dy, alpha: 255)
+    # - 通し番号: mesh.set_offset(index, dx, dy, alpha: 255)
     def set_offset(col_or_index, arg2, arg3 = nil, arg4 = nil, du: 0.0, dv: 0.0, color: nil, alpha: nil)
       return self unless @managed && @vertices
 
@@ -554,7 +542,7 @@ module Zenoo
       set_vertex(idx, x, y, u, v, alpha, color: color)
     end
 
-    # 格子点 (col, row) または通し番号 (index) の現在の頂点情報 [x, y, u, v, alpha, r, g, b] を取得
+    # 格子点 (col, row) または通し番号 (index) の現在の頂点情報 [x, y, u, v, r, g, b, alpha] を取得 (色・アルファは 0〜255)
     def get_point(col, row = nil)
       return nil unless @managed && @vertices
       if row.nil?
@@ -566,7 +554,6 @@ module Zenoo
         get_vertex(idx)
       end
     end
-    alias [] get_point
 
     # 通し番号 (index) の頂点を直接設定
     def set_vertex(index, x, y, u = nil, v = nil, alpha = nil, color: nil)
@@ -591,7 +578,7 @@ module Zenoo
       self
     end
 
-    # 通し番号 (index) の頂点情報 [x, y, u, v, alpha, r, g, b] を取得 (色・アルファは 0〜255)
+    # 通し番号 (index) の頂点情報 [x, y, u, v, r, g, b, alpha] を取得 (色・アルファは 0〜255)
     def get_vertex(index)
       return nil unless @managed && @vertices
       idx = index.to_i
@@ -602,10 +589,10 @@ module Zenoo
         @vertices[vi + 1],
         @vertices[vi + 2],
         @vertices[vi + 3],
-        @vertices[vi + 7] * 255.0,
         @vertices[vi + 4] * 255.0,
         @vertices[vi + 5] * 255.0,
-        @vertices[vi + 6] * 255.0
+        @vertices[vi + 6] * 255.0,
+        @vertices[vi + 7] * 255.0
       ]
     end
 
@@ -752,7 +739,6 @@ module Zenoo
       @dirty = true
       self
     end
-    alias reset_deform! reset!
 
     # 低レベル互換: パック済みバイナリによる部分/全体更新
     def update(binary_data, offset: 0, count: nil)
