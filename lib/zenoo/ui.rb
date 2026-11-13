@@ -113,7 +113,7 @@ module Zenoo
         end
 
         # マウスボタンが離されたらドラッグ状態を解除
-        if @active_widget && !Input.mouse_pressed?(:left)
+        if @active_widget && !Input.__raw_mouse_pressed?(:left)
           w = @active_widget
           @active_widget = nil
           w.on_pointer_up(Input.mouse_x.to_f, Input.mouse_y.to_f, false)

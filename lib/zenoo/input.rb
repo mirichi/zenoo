@@ -359,6 +359,11 @@ module Zenoo
 
     def self.mouse_pressed?(button = :left)
       return false if @mouse_consumed
+      __raw_mouse_pressed?(button)
+    end
+
+    # consume_mouse! による抑止前の物理マウス（またはタッチエミュレーション）押下状態
+    def self.__raw_mouse_pressed?(button = :left)
       b = resolve_mouse(button)
       if @using_touch
         if b == 0 # 左クリックのみタッチでエミュレート

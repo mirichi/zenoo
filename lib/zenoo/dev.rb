@@ -445,6 +445,11 @@ module Zenoo
         super
       end
 
+      def __raw_mouse_pressed?(button = :left)
+        return false if Zenoo::Dev.mask_mouse_input?
+        super
+      end
+
       def mouse_push?(button = :left)
         return false if Zenoo::Dev.mask_mouse_input?
         super

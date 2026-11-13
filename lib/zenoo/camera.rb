@@ -11,17 +11,20 @@ module Zenoo
   class Camera
     attr_reader :x, :y, :zoom
     attr_reader :offset_x, :offset_y
+    attr_reader :width, :height
     attr_accessor :smooth_speed
     attr_reader :shake_x, :shake_y, :shake_intensity
     attr_reader :bounds
     attr_accessor :target_offset_x, :target_offset_y
 
-    def initialize(x: 0.0, y: 0.0, zoom: 1.0, offset_x: nil, offset_y: nil, target: nil, smooth_speed: 0.0, bounds: nil, target_offset_x: 0.0, target_offset_y: 0.0)
+    def initialize(x: 0.0, y: 0.0, zoom: 1.0, offset_x: nil, offset_y: nil, width: nil, height: nil, target: nil, smooth_speed: 0.0, bounds: nil, target_offset_x: 0.0, target_offset_y: 0.0)
       @x = x.to_f
       @y = y.to_f
       @zoom = zoom.to_f
       @offset_x = offset_x ? offset_x.to_f : nil
       @offset_y = offset_y ? offset_y.to_f : nil
+      @width = width ? width.to_f : nil
+      @height = height ? height.to_f : nil
       @target = target
       @smooth_speed = smooth_speed.to_f # 0.0 で即時追従、>0 で補間追従 (Lerp)
       @bounds = bounds ? bounds.map(&:to_f) : nil # [min_x, min_y, max_x, max_y]
@@ -68,6 +71,18 @@ module Zenoo
 
     def offset_y=(v)
       @offset_y = v ? v.to_f : nil
+      clamp_to_bounds!
+      @view = nil
+    end
+
+    def width=(v)
+      @width = v ? v.to_f : nil
+      clamp_to_bounds!
+      @view = nil
+    end
+
+    def height=(v)
+      @height = v ? v.to_f : nil
       clamp_to_bounds!
       @view = nil
     end
@@ -150,22 +165,19 @@ module Zenoo
     # カメラのスクリーン中心座標
     def screen_center_x
       return @offset_x if @offset_x
-      t = Backend.current_target
-      (t ? t.width.to_f : Window.width.to_f) * 0.5
+      target_width * 0.5
     end
 
     def screen_center_y
       return @offset_y if @offset_y
-      t = Backend.current_target
-      (t ? t.height.to_f : Window.height.to_f) * 0.5
+      target_height * 0.5
     end
 
     # 描画用変換 [zoom, ox, oy] (screen = world * zoom + o)
     # パラメータ・画面サイズが変わらない限りキャッシュ済みの配列を返す
     def view
-      t = Backend.current_target
-      w = t ? t.width : Window.width
-      h = t ? t.height : Window.height
+      w = target_width
+      h = target_height
       if w != @view_w || h != @view_h
         @view_w = w
         @view_h = h
@@ -204,7 +216,7 @@ module Zenoo
 
     # 画面矩形 (0, 0)-(w, h) に映るワールド範囲 [left, top, right, bottom]
     # カリング用。負のズームによる反転も正規化する
-    def visible_rect(w = Window.width, h = Window.height)
+    def visible_rect(w = target_width, h = target_height)
       z, ox, oy = view
       x1 = -ox / z
       y1 = -oy / z
@@ -217,11 +229,22 @@ module Zenoo
 
     private
 
+    def target_width
+      return @width if @width
+      t = Backend.current_target
+      t ? t.width.to_f : Window.width.to_f
+    end
+
+    def target_height
+      return @height if @height
+      t = Backend.current_target
+      t ? t.height.to_f : Window.height.to_f
+    end
+
     def clamp_to_bounds!
       return unless @bounds
-      t = Backend.current_target
-      w = t ? t.width.to_f : Window.width.to_f
-      h = t ? t.height.to_f : Window.height.to_f
+      w = target_width
+      h = target_height
       return if w <= 0.0 || h <= 0.0
 
       min_x, min_y, max_x, max_y = @bounds
