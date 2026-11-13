@@ -206,6 +206,12 @@ static GLFWmonitor* find_window_monitor(GLFWwindow* window, int use_cursor) {
 
 // モニターのDPIスケールを取得
 static float get_monitor_dpi_scale(GLFWmonitor* monitor, float override_scale) {
+#ifdef __EMSCRIPTEN__
+    (void)monitor;
+    (void)override_scale;
+    // Web版ではCSSピクセル単位でブラウザが自動スケーリングするため、常に 1.0 とする
+    return 1.0f;
+#else
     float scale = override_scale;
     if (scale <= 0.0f && !monitor) {
         monitor = s_window ? find_window_monitor(s_window, 0) : glfwGetPrimaryMonitor();
@@ -237,6 +243,7 @@ static float get_monitor_dpi_scale(GLFWmonitor* monitor, float override_scale) {
     }
 #endif
     return (scale > 0.0f) ? scale : 1.0f;
+#endif
 }
 
 // 指定モニターのDPIスケール・設定倍率・ワークエリアに合わせて最適な物理ウィンドウサイズを算出
