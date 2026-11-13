@@ -2,6 +2,9 @@
 # 拡張子 (.rb) は省略可 / 未記載のサンプルは末尾にファイル名順で自動追加されます
 window_draw_shapes
 window_draw_rect
+window_draw_circle
+window_draw_line
+window_draw_triangle
 window_draw_text_sdf
 window_scale
 window_low_res_scale
