@@ -1,8 +1,8 @@
 diff --git a/lib/sp_fiber.c b/lib/sp_fiber.c
-index 3a29cc4db..fa60ac004 100644
+index 1495a1b81..4193dd405 100644
 --- a/lib/sp_fiber.c
 +++ b/lib/sp_fiber.c
-@@ -578,6 +578,10 @@ static void sp_main_stack_entry(void) {
+@@ -593,6 +593,10 @@ static void sp_main_stack_entry(void) {
     any size, down to the floor -- run it where we are: a program must not fail
     to start because it could not reserve a big stack. */
  void sp_main_stack_run(void (*body)(void)) {
@@ -10,10 +10,10 @@ index 3a29cc4db..fa60ac004 100644
 +  body();
 +  return;
 +#else
-   size_t guard = sp_fiber_guard();
-   size_t want = sp_main_stack_bytes();
-   char *base = MAP_FAILED;
-@@ -606,6 +610,7 @@ void sp_main_stack_run(void (*body)(void)) {
+   /* STDOUT on a terminal is written through, as CRuby's is (its FMODE_TTY):
+      what a write call wrote is on the terminal when the call returns, though
+      STDOUT.sync answers false. stdio's line buffering kept a partial line
+@@ -630,6 +634,7 @@ void sp_main_stack_run(void (*body)(void)) {
    sp_thread_stack_lo = 0; sp_thread_stack_hi = 0;
    munmap(sp_main_stack_base, sp_main_stack_map);
    sp_main_stack_base = 0; sp_main_stack_map = 0;

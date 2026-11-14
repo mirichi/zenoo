@@ -171,7 +171,7 @@ WSL2 または Linux 環境で以下を実行します：
 | **`max`** / `o3` | `BUILD_MODE=max ./build_pages.sh game` | `-O3` | **最高実行速度**。重い計算を極限まで最適化 |
 
 > **Note (Spinel 向けパッチについて)**:
-> ブラウザ上でのメモリ肥大化防止、Fiber スタックオーバーフロー回避、およびクラスエイリアス / `native_struct` 連携の正常化のため、Spinel にパッチを適用しています。詳細は `patches/README.md` を参照してください。
+> ブラウザ (Emscripten) 上でのメモリ肥大化防止および Fiber スタックスイッチ回避のため、Spinel のランタイム (`lib/sp_slab.c`, `lib/sp_fiber.c`) に最小限のパッチを適用しています。詳細は `patches/README.md` を参照してください。
 
 ### 任意の Ruby スクリプトを単体 Wasm ビルド
 
@@ -297,8 +297,7 @@ zenoo/
 ├── patches/                   # 外部依存 (Spinel 等) 向けパッチ
 │   ├── README.md              # パッチ概要・適用手順
 │   ├── 0001-fix-sp_slab-emscripten-wasm-memory.patch # Wasm メモリ肥大化対策
-│   ├── 0002-fix-sp_fiber-emscripten-stack.patch      # Fiber スタック確保パッチ
-│   └── 0003-fix-avoid-qualifying-own-native-struct-and-alias.patch # クラスエイリアス & native_struct 連携修正
+│   └── 0002-fix-sp_fiber-emscripten-stack.patch      # Fiber スタック確保パッチ
 ├── server.rb                  # 統合開発サーバー (docs / wasm 切り替え対応)
 ├── build_pages.sh             # GitHub Pages 全デモ一括ビルドスクリプト
 ├── build_wasm.sh              # 単体 Wasm ビルドスクリプト
