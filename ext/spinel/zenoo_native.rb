@@ -82,8 +82,8 @@ module Zenoo
       native_func :size_h, [], :int, "sp_zen_win_size_h"                  # 論理（仮想）解像度の高さ (px)
       native_func :os_size_w, [], :int, "sp_zen_win_os_size_w"            # OS 実ウィンドウのクライアント幅 (px)
       native_func :os_size_h, [], :int, "sp_zen_win_os_size_h"            # OS 実ウィンドウのクライアント高さ (px)
-      native_func :raw_scale_mode=, [:int], :nil, "sp_zen_win_set_scale_mode" # 内部用: スケールモード設定 (0: fit, 1: integer)
-      native_func :raw_scale_mode, [], :int, "sp_zen_win_get_scale_mode"      # 内部用: スケールモード取得 (0: fit, 1: integer)
+      native_func :raw_scale_mode=, [:int], :nil, "sp_zen_win_set_scale_mode" # 内部用: スケールモード設定 (0: fit, 1: integer, 2: resize)
+      native_func :raw_scale_mode, [], :int, "sp_zen_win_get_scale_mode"      # 内部用: スケールモード取得 (0: fit, 1: integer, 2: resize)
       native_func :raw_set_scale, [:float], :nil, "sp_zen_win_set_scale"      # 内部用: ウィンドウ倍率設定
       native_func :scale, [], :float, "sp_zen_win_get_scale"                  # 現在の表示倍率
       native_func :window_scale, [], :float, "sp_zen_win_get_window_scale"    # ウィンドウ拡大倍率
@@ -100,6 +100,9 @@ module Zenoo
       native_func :minimized?, [], :bool, "sp_zen_win_is_minimized"       # 最小化されているか
       native_func :maximized?, [], :bool, "sp_zen_win_is_maximized"       # 最大化されているか
       native_func :hovered?, [], :bool, "sp_zen_win_is_hovered"           # マウスカーソルがウィンドウ上にあるか
+      native_func :resizing?, [], :bool, "sp_zen_win_is_resizing"         # ウィンドウの移動またはリサイズをドラッグ中か
+      native_func :raw_set_live_resize, [:int], :nil, "sp_zen_win_set_live_resize" # 内部用: リサイズ・移動中のライブ更新切替
+      native_func :live_resize, [], :bool, "sp_zen_win_get_live_resize"  # リサイズ・移動中のライブ更新が有効か
       native_func :vsync=, [:int], :nil, "sp_zen_win_vsync_set"           # VSync 設定 (1: 有効, 0: 無効)
       native_func :target_fps=, [:int], :nil, "sp_zen_win_target_fps_set" # 目標 FPS 設定 (0 以下で無制限)
       native_func :delta_time, [], :float, "sp_zen_win_delta_time"        # 前フレームからの経過時間（秒）
@@ -107,6 +110,7 @@ module Zenoo
       native_func :shutdown, [], :nil, "sp_zen_win_shutdown"              # ウィンドウ・GL コンテキストの終了処理
       native_func :ensure_context, [], :bool, "sp_zen_win_ensure_context" # ヘッドレス環境等で GL コンテキストが準備済みか確認／確保
       native_func :wasm?, [], :bool, "sp_zen_win_is_wasm"                 # Emscripten (Wasm) 環境で動作中か
+      native_func :set_frame_callback, [:any], :nil, "sp_zen_win_set_frame_callback" # フレーム更新コールバック登録(ステップ用 Proc)
       native_func :start_wasm_loop, [:any], :nil, "sp_zen_win_start_wasm_loop" # Wasm 用 `requestAnimationFrame` ループ開始(ステップ用 Proc)
       native_func :raw_show_cursor, [:int], :nil, "sp_zen_win_show_cursor" # 内部用: カーソル表示切替 (1: 表示, 0: 非表示)
       native_func :raw_set_cursor, [:int], :nil, "sp_zen_win_set_cursor"   # 内部用: カーソル形状 ID 設定
@@ -144,10 +148,16 @@ module Zenoo
 
       # ウィンドウリサイズ時のスケーリングモードを設定する
       #
-      # - `val` (`Symbol | Integer`): `:integer`（または `1`）で整数倍スケーリング、それ以外は `:fit`（`0`）
+      # - `val` (`Symbol | Integer`): `:resize`（`2`）で論理解像度追従、`:integer`（`1`）で整数倍スケーリング、それ以外は `:fit`（`0`）
       # - 戻り値: `nil`
       def self.scale_mode=(val)
-        mode = (val == :integer || val == 1) ? 1 : 0
+        mode = if val == :resize || val == 2
+                 2
+               elsif val == :integer || val == 1
+                 1
+               else
+                 0
+               end
         Zenoo::Native::Window.raw_scale_mode = mode
       end
 
@@ -169,9 +179,16 @@ module Zenoo
 
       # 現在のスケーリングモードをシンボルで返す
       #
-      # - 戻り値: `Symbol`（`:integer` または `:fit`）
+      # - 戻り値: `Symbol`（`:fit`、`:integer`、または `:resize`）
       def self.scale_mode
-        Zenoo::Native::Window.raw_scale_mode == 1 ? :integer : :fit
+        m = Zenoo::Native::Window.raw_scale_mode
+        if m == 2
+          :resize
+        elsif m == 1
+          :integer
+        else
+          :fit
+        end
       end
 
       # OS 実ウィンドウのクライアントサイズ `[width, height]` を返す
@@ -197,6 +214,14 @@ module Zenoo
         Zenoo::Native::Window.set_window_pos_raw(x.to_i, y.to_i)
       end
 
+      # ウィンドウの移動・リサイズドラッグ中のライブ更新を切り替える
+      #
+      # - `val` (`Boolean`): `true` で有効、`false` で無効
+      # - 戻り値: `nil`
+      def self.live_resize=(val)
+        Zenoo::Native::Window.raw_set_live_resize(val ? 1 : 0)
+      end
+
       # 論理解像度・実ウィンドウサイズ・スケールモードを指定してウィンドウを初期化する
       #
       # - `w` (`Integer`): 論理（仮想）解像度の幅
@@ -205,7 +230,7 @@ module Zenoo
       # - `fullscreen` (`Boolean`): フルスクリーン起動するか（デフォルト `false`）
       # - `win_w` (`Integer`): 実ウィンドウ幅（`0` で自動計算）
       # - `win_h` (`Integer`): 実ウィンドウ高さ（`0` で自動計算）
-      # - `scale_mode` (`Symbol | Integer`): スケーリングモード（`:fit` / `:integer`）
+      # - `scale_mode` (`Symbol | Integer`): スケーリングモード（`:fit` / `:integer` / `:resize`）
       # - `scale` (`Float`): 初期倍率（デフォルト `1.0`）
       # - 戻り値: `nil`
       def self.init(w, h, title, fullscreen = false, win_w = 0, win_h = 0, scale_mode = 0, scale = 1.0)

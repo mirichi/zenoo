@@ -8,6 +8,8 @@ static VALUE rb_cNativeShader;
 static VALUE rb_cNativeMesh;
 static VALUE rb_cNativeFont;
 static VALUE rb_cNativeSound;
+static VALUE s_frame_callback_proc = Qnil;
+static int   s_pending_jump_tag = 0;
 
 
 // ==========================================
@@ -602,6 +604,7 @@ static VALUE font_s_atlas_image(VALUE klass) {
 static int parse_scale_mode(VALUE val) {
     if (SYMBOL_P(val)) {
         ID id = SYM2ID(val);
+        if (id == rb_intern("resize")) return ZEN_SCALE_RESIZE;
         if (id == rb_intern("integer")) return ZEN_SCALE_INTEGER;
         if (id == rb_intern("fit")) return ZEN_SCALE_FIT;
     } else if (FIXNUM_P(val)) {
@@ -611,7 +614,9 @@ static int parse_scale_mode(VALUE val) {
 }
 
 static VALUE scale_mode_to_sym(int mode) {
-    return (mode == ZEN_SCALE_INTEGER) ? ID2SYM(rb_intern("integer")) : ID2SYM(rb_intern("fit"));
+    if (mode == ZEN_SCALE_RESIZE) return ID2SYM(rb_intern("resize"));
+    if (mode == ZEN_SCALE_INTEGER) return ID2SYM(rb_intern("integer"));
+    return ID2SYM(rb_intern("fit"));
 }
 
 static VALUE win_init(int argc, VALUE* argv, VALUE self) {
@@ -740,6 +745,48 @@ static VALUE win_is_hovered(VALUE self) {
     return zen_is_window_hovered() ? Qtrue : Qfalse;
 }
 
+static VALUE win_is_resizing(VALUE self) {
+    (void)self;
+    return zen_is_resizing() ? Qtrue : Qfalse;
+}
+
+static VALUE win_set_live_resize(VALUE self, VALUE rb_val) {
+    (void)self;
+    zen_set_live_resize(RTEST(rb_val) ? 1 : 0);
+    return rb_val;
+}
+
+static VALUE win_get_live_resize(VALUE self) {
+    (void)self;
+    return zen_get_live_resize() ? Qtrue : Qfalse;
+}
+
+static VALUE call_frame_proc_protected(VALUE proc) {
+    return rb_funcall(proc, rb_intern("call"), 0);
+}
+
+static void cruby_frame_callback_wrapper(void) {
+    if (NIL_P(s_frame_callback_proc) || s_pending_jump_tag != 0) return;
+    int state = 0;
+    rb_protect(call_frame_proc_protected, s_frame_callback_proc, &state);
+    if (state != 0) {
+        s_pending_jump_tag = state;
+        zen_set_frame_callback(NULL);
+    }
+}
+
+static VALUE win_set_frame_callback(VALUE self, VALUE rb_proc) {
+    (void)self;
+    if (NIL_P(rb_proc)) {
+        s_frame_callback_proc = Qnil;
+        zen_set_frame_callback(NULL);
+    } else {
+        s_frame_callback_proc = rb_proc;
+        zen_set_frame_callback(cruby_frame_callback_wrapper);
+    }
+    return Qnil;
+}
+
 static VALUE win_show_cursor(VALUE self, VALUE rb_show) {
     (void)self;
     zen_window_show_cursor(RTEST(rb_show) ? 1 : 0);
@@ -767,7 +814,14 @@ static VALUE input_set_clipboard(VALUE self, VALUE rb_text) {
 
 static VALUE win_update(VALUE self) {
     (void)self;
-    return zen_update() ? Qtrue : Qfalse;
+    s_pending_jump_tag = 0;
+    int res = zen_update();
+    if (s_pending_jump_tag != 0) {
+        int tag = s_pending_jump_tag;
+        s_pending_jump_tag = 0;
+        rb_jump_tag(tag);
+    }
+    return res ? Qtrue : Qfalse;
 }
 
 static VALUE win_clear(VALUE self, VALUE rb_color) {
@@ -1651,6 +1705,7 @@ static VALUE browser_s_safe_area_bottom(VALUE klass) {
 void Init_zenoo(void) {
     // GCトリガーコールバック登録 (テクスチャ不足時に rb_gc() をキック)
     zen_set_gc_trigger_callback(rb_zenoo_gc_hook);
+    rb_gc_register_address(&s_frame_callback_proc);
 
     rb_mZenoo = rb_define_module("Zenoo");
     rb_define_const(rb_mZenoo, "VERSION", rb_str_new_cstr(ZENOO_VERSION));
@@ -1683,6 +1738,10 @@ void Init_zenoo(void) {
     rb_define_singleton_method(mWindow, "minimized?", win_is_minimized, 0);
     rb_define_singleton_method(mWindow, "maximized?", win_is_maximized, 0);
     rb_define_singleton_method(mWindow, "hovered?", win_is_hovered, 0);
+    rb_define_singleton_method(mWindow, "resizing?", win_is_resizing, 0);
+    rb_define_singleton_method(mWindow, "live_resize=", win_set_live_resize, 1);
+    rb_define_singleton_method(mWindow, "live_resize", win_get_live_resize, 0);
+    rb_define_singleton_method(mWindow, "set_frame_callback", win_set_frame_callback, 1);
     rb_define_singleton_method(mWindow, "msaa_samples=", win_set_msaa_samples, 1);
     rb_define_singleton_method(mWindow, "msaa_samples", win_get_msaa_samples, 0);
     rb_define_singleton_method(mWindow, "vsync=", win_set_vsync, 1);

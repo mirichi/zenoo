@@ -125,7 +125,7 @@ module Zenoo
     # - `height` (`Integer`): 論理（仮想）解像度の高さ（デフォルト: 720）
     # - `title` (`String`): ウィンドウタイトル文字列（デフォルト: `"Zenoo"`）
     # - `scale:` (`Numeric`, `nil`): 初期ウィンドウ拡大率（`nil` の場合は環境に応じて 1.0 等で自動初期化）
-    # - `scale_mode:` (`Symbol`): ウィンドウリサイズ時のスケーリング方式（`:fit`, `:fill`, `:stretch`, `:pixel`, `:crop` 等、デフォルト: `:fit`）
+    # - `scale_mode:` (`Symbol`): ウィンドウリサイズ時のスケーリング方式（`:fit`, `:integer`, `:resize`、デフォルト: `:fit`）
     # - `window_width:` (`Integer`, `nil`): 実ウィンドウ幅を直接指定（`nil` の場合は `width * scale`）
     # - `window_height:` (`Integer`, `nil`): 実ウィンドウ高さを直接指定（`nil` の場合は `height * scale`）
     # - `fullscreen:` (`Boolean`): フルスクリーン起動するかどうか（デフォルト: `false`）
@@ -151,9 +151,13 @@ module Zenoo
         @step_proc = proc { __step_frame }
         Native::Window.start_wasm_loop(@step_proc)
       else
+        @step_proc = proc { __step_frame }
+        Native::Window.set_frame_callback(@step_proc)
         while Native::Window.update
           __step_frame
         end
+        Native::Window.set_frame_callback(nil)
+        @step_proc = nil
         Native::Window.shutdown
       end
     end
@@ -304,7 +308,7 @@ module Zenoo
       Native::Window.dpi_scale
     end
 
-    # 現在のスケーリングモード（`:fit`, `:fill`, `:stretch`, `:pixel`, `:crop` 等）を返します。
+    # 現在のスケーリングモード（`:fit`, `:integer`, `:resize`）を返します。
     #
     # - 戻り値: `Symbol`
     def self.scale_mode
@@ -313,7 +317,7 @@ module Zenoo
 
     # ウィンドウリサイズ時のスケーリングモードを設定します。
     #
-    # - `val` (`Symbol`): スケーリングモード（`:fit`, `:fill`, `:stretch`, `:pixel`, `:crop` 等）
+    # - `val` (`Symbol`): スケーリングモード（`:fit`, `:integer`, `:resize`）
     def self.scale_mode=(val)
       Native::Window.scale_mode = val
     end
@@ -389,6 +393,28 @@ module Zenoo
     # - 戻り値: `Boolean`
     def self.hovered?
       Native::Window.hovered?
+    end
+
+    # OS 上でウィンドウの移動またはリサイズをドラッグ中かどうかを返します（Windows 等）。
+    #
+    # - 戻り値: `Boolean`
+    def self.resizing?
+      Native::Window.resizing?
+    end
+
+    # ウィンドウの移動・リサイズドラッグ中も `Window.loop` を実行し続けるかどうかを返します（デフォルト: `true`）。
+    #
+    # - 戻り値: `Boolean`
+    def self.live_resize
+      Native::Window.live_resize
+    end
+
+    # ウィンドウの移動・リサイズドラッグ中も `Window.loop` を実行し続けるかどうかを設定します（デフォルト: `true`）。
+    # 主に Windows のモーダルループ中に `Window.loop` のブロックを継続実行するかを切り替えます。
+    #
+    # - `val` (`Boolean`): `true` でドラッグ中も実行継続、`false` で一時停止
+    def self.live_resize=(val)
+      Native::Window.live_resize = !!val
     end
 
     # 直前フレームからの経過時間（秒単位）を返します。

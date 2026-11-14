@@ -27,6 +27,12 @@ void makecontext(ucontext_t *uc, void (*func)(void), int argc, ...) { (void)uc; 
 int swapcontext(ucontext_t *oucp, const ucontext_t *ucp) { (void)oucp; (void)ucp; errno = ENOSYS; return -1; }
 #endif
 #include "zenoo_internal.h"
+#ifdef _WIN32
+#ifndef GLFW_EXPOSE_NATIVE_WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32
+#endif
+#include <GLFW/glfw3native.h>
+#endif
 
 #ifdef _WIN32
 // NVIDIA Optimus: GeForce dGPU を優先して有効化
@@ -42,7 +48,10 @@ __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 static GLFWwindow* s_window = NULL;
 static char s_window_title[256] = "Zenoo";
 static ZenViewport s_viewport = { 1280, 720, 1280, 720, 0, 0, 1280, 720, 1.0f };
+static int s_initial_base_w = 1280;
+static int s_initial_base_h = 720;
 static int s_scale_mode = ZEN_SCALE_FIT;
+static float s_active_dpi_scale = 0.0f;
 static int s_is_fullscreen = 0;
 static int s_saved_win_x = 100, s_saved_win_y = 100;
 static int s_saved_win_w = 960, s_saved_win_h = 540;
@@ -74,6 +83,17 @@ static int    s_vsync = 0;               // デフォルト 0 (ソフトウェ�
 static int    s_window_msaa_samples = 0; // ウィンドウ直接描画のMSAA (デフォルト 0: 完全無効・最高速、必要な場合のみ明示指定)
 static int    s_created_msaa_samples = 0;
 
+// ライブ更新 (移動・リサイズドラッグ中のフレーム継続) 状態
+static int          s_live_resize = 1;
+static int          s_in_sizemove = 0;
+static int          s_in_live_resize_tick = 0;
+static int          s_last_drawn_fb_w = 0;
+static int          s_last_drawn_fb_h = 0;
+static zen_frame_fn s_step_callback = NULL;
+
+static int  begin_frame_internal(int poll_events);
+static void end_frame_internal(int post_wait);
+
 // ------------------------------------------
 // 内部: ビューポート計算
 // ------------------------------------------
@@ -83,6 +103,23 @@ static void update_viewport(int fb_w, int fb_h) {
     if (fb_h <= 0) fb_h = 1;
     vp->fb_w = fb_w;
     vp->fb_h = fb_h;
+
+    if (s_scale_mode == ZEN_SCALE_RESIZE) {
+        if (s_active_dpi_scale <= 0.0f) {
+            s_active_dpi_scale = zen_get_dpi_scale();
+        }
+        float dpi = (s_active_dpi_scale > 0.0001f) ? s_active_dpi_scale : 1.0f;
+        int base_w = (int)((float)fb_w / dpi);
+        int base_h = (int)((float)fb_h / dpi);
+        vp->base_w = (base_w < 1) ? 1 : base_w;
+        vp->base_h = (base_h < 1) ? 1 : base_h;
+        vp->scale = dpi;
+        vp->w = (int)((float)vp->base_w * dpi + 0.5f);
+        vp->h = (int)((float)vp->base_h * dpi + 0.5f);
+        vp->x = 0;
+        vp->y = fb_h - vp->h;
+        return;
+    }
 
     if (vp->base_w <= 0 || vp->base_h <= 0) return;
 
@@ -107,9 +144,19 @@ static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "[Zenoo/GLFW Error %d]: %s\n", error, description);
 }
 
+#ifdef _WIN32
+static void run_live_resize_frame(void);
+#endif
+
 static void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void)window;
     update_viewport(width, height);
+#ifdef _WIN32
+    if (s_in_sizemove && s_live_resize && s_step_callback && width > 0 && height > 0 &&
+        (width != s_last_drawn_fb_w || height != s_last_drawn_fb_h)) {
+        run_live_resize_frame();
+    }
+#endif
 }
 
 GLFWwindow* zen__window(void) {
@@ -359,7 +406,17 @@ static void window_content_scale_callback(GLFWwindow* window, float xscale, floa
 #ifdef __EMSCRIPTEN__
     return;
 #else
-    if (!window || s_is_fullscreen || !s_window_visible || s_in_auto_resize || !s_follow_dpi_scale) return;
+    if (!window) return;
+    s_active_dpi_scale = (xscale > 0.0f) ? xscale : 0.0f;
+
+    if (s_scale_mode == ZEN_SCALE_RESIZE) {
+        int fb_w = 0, fb_h = 0;
+        glfwGetFramebufferSize(window, &fb_w, &fb_h);
+        update_viewport(fb_w, fb_h);
+        return;
+    }
+
+    if (s_is_fullscreen || !s_window_visible || s_in_auto_resize || !s_follow_dpi_scale) return;
     if (s_viewport.base_w <= 0 || s_viewport.base_h <= 0) return;
 
     s_in_auto_resize = 1;
@@ -405,6 +462,161 @@ static void window_content_scale_callback(GLFWwindow* window, float xscale, floa
 #endif
 }
 
+#ifdef _WIN32
+#define ZEN_RESIZE_TIMER_ID 0x5A454E01u
+static WNDPROC s_prev_wndproc = NULL;
+static HWND    s_subclassed_hwnd = NULL;
+
+static UINT get_live_resize_timer_interval(void) {
+    int fps = (s_target_fps > 0) ? s_target_fps : 60;
+    UINT interval = (UINT)(1000 / fps);
+    return (interval < 1) ? 1 : interval;
+}
+
+static void start_live_resize_timer(HWND hwnd) {
+    if (!hwnd) return;
+    SetTimer(hwnd, ZEN_RESIZE_TIMER_ID, get_live_resize_timer_interval(), NULL);
+}
+
+static void stop_live_resize_timer(HWND hwnd) {
+    if (!hwnd) return;
+    KillTimer(hwnd, ZEN_RESIZE_TIMER_ID);
+}
+
+static void run_live_resize_frame(void) {
+    if (!s_window || s_in_live_resize_tick || s_frame_open) return;
+    if (!s_live_resize || !s_step_callback) return;
+
+    s_in_live_resize_tick = 1;
+    if (begin_frame_internal(0)) {
+        s_step_callback();
+        end_frame_internal(0);
+    } else if (s_subclassed_hwnd) {
+        stop_live_resize_timer(s_subclassed_hwnd);
+    }
+    if (!s_step_callback && s_subclassed_hwnd) {
+        stop_live_resize_timer(s_subclassed_hwnd);
+        SendMessageW(s_subclassed_hwnd, WM_CANCELMODE, 0, 0);
+    }
+    s_in_live_resize_tick = 0;
+}
+
+static void maybe_run_live_resize_frame(int from_timer) {
+    if (!s_window || !s_in_sizemove || s_in_live_resize_tick || s_frame_open) return;
+    if (!s_live_resize || !s_step_callback) return;
+
+    int fps = (s_target_fps > 0) ? s_target_fps : 60;
+    double target_dt = 1.0 / (double)fps;
+    double elapsed = glfwGetTime() - s_frame_start_time;
+    double min_dt = from_timer ? (target_dt * 0.8) : target_dt;
+    if (elapsed < min_dt) return;
+
+    run_live_resize_frame();
+}
+
+static LRESULT CALLBACK zen_win32_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_ENTERSIZEMOVE:
+        s_in_sizemove = 1;
+        if (s_live_resize && s_step_callback) {
+            start_live_resize_timer(hwnd);
+        }
+        break;
+    case WM_EXITSIZEMOVE:
+        stop_live_resize_timer(hwnd);
+        s_in_sizemove = 0;
+        break;
+    case WM_TIMER:
+        if (wParam == ZEN_RESIZE_TIMER_ID) {
+            maybe_run_live_resize_frame(1);
+            return 0;
+        }
+        break;
+    case WM_ERASEBKGND:
+        if (s_window) {
+            return 1;
+        }
+        break;
+    case WM_NCCALCSIZE:
+        if (wParam == TRUE && s_in_sizemove && s_live_resize) {
+            LRESULT res = s_prev_wndproc ? CallWindowProcW(s_prev_wndproc, hwnd, msg, wParam, lParam)
+                                         : DefWindowProcW(hwnd, msg, wParam, lParam);
+            return (res == 0) ? WVR_REDRAW : res;
+        }
+        break;
+    case WM_WINDOWPOSCHANGED:
+        if (s_in_sizemove && s_live_resize && s_step_callback) {
+            LRESULT res = s_prev_wndproc ? CallWindowProcW(s_prev_wndproc, hwnd, msg, wParam, lParam)
+                                         : DefWindowProcW(hwnd, msg, wParam, lParam);
+            const WINDOWPOS* wp = (const WINDOWPOS*)lParam;
+            int fb_w = 0, fb_h = 0;
+            if (s_window) glfwGetFramebufferSize(s_window, &fb_w, &fb_h);
+            if (wp && !(wp->flags & SWP_NOSIZE)) {
+                if (fb_w > 0 && fb_h > 0 && (fb_w != s_last_drawn_fb_w || fb_h != s_last_drawn_fb_h)) {
+                    run_live_resize_frame();
+                }
+            } else {
+                maybe_run_live_resize_frame(0);
+            }
+            return res;
+        }
+        break;
+    case WM_NCDESTROY:
+        stop_live_resize_timer(hwnd);
+        s_in_sizemove = 0;
+        if (s_prev_wndproc) {
+            WNDPROC prev = s_prev_wndproc;
+            s_prev_wndproc = NULL;
+            s_subclassed_hwnd = NULL;
+            SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)prev);
+            return CallWindowProcW(prev, hwnd, msg, wParam, lParam);
+        }
+        break;
+    default:
+        break;
+    }
+    return s_prev_wndproc ? CallWindowProcW(s_prev_wndproc, hwnd, msg, wParam, lParam)
+                          : DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static void install_win32_sizemove_hook(GLFWwindow* win) {
+    if (!win) return;
+    HWND hwnd = glfwGetWin32Window(win);
+    if (!hwnd || hwnd == s_subclassed_hwnd) return;
+    if (s_subclassed_hwnd && s_prev_wndproc) {
+        stop_live_resize_timer(s_subclassed_hwnd);
+        SetWindowLongPtrW(s_subclassed_hwnd, GWLP_WNDPROC, (LONG_PTR)s_prev_wndproc);
+    }
+    s_subclassed_hwnd = hwnd;
+    s_prev_wndproc = (WNDPROC)SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)zen_win32_wndproc);
+    s_in_sizemove = 0;
+}
+
+static void uninstall_win32_sizemove_hook(void) {
+    if (s_subclassed_hwnd) {
+        stop_live_resize_timer(s_subclassed_hwnd);
+        if (s_prev_wndproc) {
+            SetWindowLongPtrW(s_subclassed_hwnd, GWLP_WNDPROC, (LONG_PTR)s_prev_wndproc);
+        }
+    }
+    s_subclassed_hwnd = NULL;
+    s_prev_wndproc = NULL;
+    s_in_sizemove = 0;
+}
+
+static void sync_live_resize_timer(void) {
+    if (!s_subclassed_hwnd || !s_in_sizemove) return;
+    if (s_live_resize && s_step_callback) {
+        start_live_resize_timer(s_subclassed_hwnd);
+    } else {
+        stop_live_resize_timer(s_subclassed_hwnd);
+    }
+}
+#else
+static void sync_live_resize_timer(void) {
+}
+#endif
+
 // ------------------------------------------
 // 初期化 & 終了
 // ------------------------------------------
@@ -413,8 +625,11 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
         // すでにウィンドウ(コンテキスト)が存在する場合:
         // Window.loop(..., msaa: 4) 等で MSAA サンプル数が後から変更された場合は、
         // OpenGL オブジェクト (VBO/IBO/Texture/Shader) を共有したまま MSAA 対応ウィンドウへ再生成する
+        s_initial_base_w = width;
+        s_initial_base_h = height;
         s_viewport.base_w = width;
         s_viewport.base_h = height;
+        s_active_dpi_scale = 0.0f;
 
         int create_w = win_width;
         int create_h = win_height;
@@ -449,6 +664,10 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
                 glfwSetWindowContentScaleCallback(s_window, window_content_scale_callback);
                 zen__input_install(s_window);
                 zen__gfx_on_context_recreated();
+#ifdef _WIN32
+                uninstall_win32_sizemove_hook();
+                install_win32_sizemove_hook(s_window);
+#endif
                 glfwDestroyWindow(old_win);
             }
         } else if (title && strlen(title) > 0) {
@@ -482,6 +701,9 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
             if (!monitor) {
                 center_window_on_monitor(s_window, create_w, create_h);
                 s_current_monitor = find_window_monitor(s_window, 0);
+                s_active_dpi_scale = get_monitor_dpi_scale(s_current_monitor, 0.0f);
+                glfwGetFramebufferSize(s_window, &fb_w, &fb_h);
+                update_viewport(fb_w, fb_h);
             }
             glfwShowWindow(s_window);
             glfwFocusWindow(s_window);
@@ -532,8 +754,11 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     }
     s_created_msaa_samples = s_window_msaa_samples;
 
+    s_initial_base_w = width;
+    s_initial_base_h = height;
     s_viewport.base_w = width;
     s_viewport.base_h = height;
+    s_active_dpi_scale = 0.0f;
 
     int create_w = win_width;
     int create_h = win_height;
@@ -581,6 +806,9 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
         if (!monitor) {
             center_window_on_monitor(s_window, create_w, create_h);
             s_current_monitor = find_window_monitor(s_window, 0);
+            s_active_dpi_scale = get_monitor_dpi_scale(s_current_monitor, 0.0f);
+            glfwGetFramebufferSize(s_window, &fb_w, &fb_h);
+            update_viewport(fb_w, fb_h);
         }
         glfwShowWindow(s_window);
         glfwFocusWindow(s_window);
@@ -596,6 +824,9 @@ static int init_window(int width, int height, const char* title, GLFWmonitor* mo
     glfwSetWindowContentScaleCallback(s_window, window_content_scale_callback);
 #endif
     zen__input_install(s_window);
+#ifdef _WIN32
+    install_win32_sizemove_hook(s_window);
+#endif
 
 #ifndef __EMSCRIPTEN__
     // GLAD のロード
@@ -671,6 +902,9 @@ void zen_shutdown(void) {
         }
     }
     if (s_window) {
+#ifdef _WIN32
+        uninstall_win32_sizemove_hook();
+#endif
         glfwDestroyWindow(s_window);
         s_window = NULL;
     }
@@ -680,6 +914,7 @@ void zen_shutdown(void) {
     s_created_msaa_samples = 0;
     s_current_monitor = NULL;
     s_in_auto_resize = 0;
+    s_active_dpi_scale = 0.0f;
 #ifdef __EMSCRIPTEN__
     if (s_clipboard_buf) {
         free(s_clipboard_buf);
@@ -732,15 +967,17 @@ static void wait_for_target_fps(void) {
 }
 #endif
 
-int zen_begin_frame(void) {
+static int begin_frame_internal(int poll_events) {
     if (!s_window) return 0;
 
-    // 1. OSイベント取得 (キー/マウスのコールバックはここで発火する)
-    glfwPollEvents();
+    if (poll_events) {
+        // 1. OSイベント取得 (キー/マウスのコールバックはここで発火する)
+        glfwPollEvents();
+    }
 
 #ifndef __EMSCRIPTEN__
     // 1.5. 別モニターへの移動検知 (同DPIモニター間の移動やドラッグ完了時のサイズ・位置フィット補正)
-    if (s_window_visible && !s_is_fullscreen && !s_in_auto_resize && s_follow_dpi_scale && !glfwGetWindowAttrib(s_window, GLFW_ICONIFIED)) {
+    if (poll_events && s_window_visible && !s_is_fullscreen && !s_in_auto_resize && !s_in_sizemove && s_follow_dpi_scale && !glfwGetWindowAttrib(s_window, GLFW_ICONIFIED)) {
         static int s_last_check_wx = -99999, s_last_check_wy = -99999;
         int cur_wx = 0, cur_wy = 0;
         glfwGetWindowPos(s_window, &cur_wx, &cur_wy);
@@ -755,20 +992,23 @@ int zen_begin_frame(void) {
                 GLFWmonitor* cur_mon = find_window_monitor(s_window, 0);
                 if (cur_mon && cur_mon != s_current_monitor) {
                     s_current_monitor = cur_mon;
-                    s_in_auto_resize = 1;
-                    int target_w = 0, target_h = 0;
-                    compute_auto_window_size_for_monitor(cur_mon, 0.0f, s_user_window_scale, s_viewport.base_w, s_viewport.base_h, &target_w, &target_h);
-                    int cur_w = 0, cur_h = 0;
-                    glfwGetWindowSize(s_window, &cur_w, &cur_h);
-                    if (abs(cur_w - target_w) > 2 || abs(cur_h - target_h) > 2) {
-                        glfwSetWindowSize(s_window, target_w, target_h);
-                        cur_w = target_w;
-                        cur_h = target_h;
+                    s_active_dpi_scale = get_monitor_dpi_scale(cur_mon, 0.0f);
+                    if (s_scale_mode != ZEN_SCALE_RESIZE) {
+                        s_in_auto_resize = 1;
+                        int target_w = 0, target_h = 0;
+                        compute_auto_window_size_for_monitor(cur_mon, 0.0f, s_user_window_scale, s_viewport.base_w, s_viewport.base_h, &target_w, &target_h);
+                        int cur_w = 0, cur_h = 0;
+                        glfwGetWindowSize(s_window, &cur_w, &cur_h);
+                        if (abs(cur_w - target_w) > 2 || abs(cur_h - target_h) > 2) {
+                            glfwSetWindowSize(s_window, target_w, target_h);
+                            cur_w = target_w;
+                            cur_h = target_h;
+                        }
+                        clamp_window_to_monitor_workarea(s_window, cur_mon, cur_w, cur_h);
+                        s_saved_win_w = cur_w;
+                        s_saved_win_h = cur_h;
+                        s_in_auto_resize = 0;
                     }
-                    clamp_window_to_monitor_workarea(s_window, cur_mon, cur_w, cur_h);
-                    s_saved_win_w = cur_w;
-                    s_saved_win_h = cur_h;
-                    s_in_auto_resize = 0;
                 }
             }
         }
@@ -804,24 +1044,41 @@ int zen_begin_frame(void) {
     return 1;
 }
 
-void zen_end_frame(void) {
+static void end_frame_internal(int post_wait) {
     if (!s_window || !s_frame_open) return;
     s_frame_open = 0;
 
     // 1. 画面へ表示
     glfwSwapBuffers(s_window);
+    if (s_in_sizemove) {
+        glFinish();
+    }
+    s_last_drawn_fb_w = s_viewport.fb_w;
+    s_last_drawn_fb_h = s_viewport.fb_h;
 
     // 2. このフレームで参照されたワンショット入力 (push/release/文字) をクリア
     //    クリアをフレーム末尾で行うことで、次の begin_frame までに届いた入力を取りこぼさない
     zen__input_end_frame();
 
 #ifndef __EMSCRIPTEN__
-    // 3. SwapBuffersの直後に即座にOSイベントをポーリング (DWMのキュー詰まりを根絶)
-    glfwPollEvents();
+    if (post_wait) {
+        // 3. SwapBuffersの直後に即座にOSイベントをポーリング (DWMのキュー詰まりを根絶)
+        glfwPollEvents();
 
-    // 4. 目標FPSまで精密待機 (Wasm は requestAnimationFrame 側で間引く)
-    wait_for_target_fps();
+        // 4. 目標FPSまで精密待機 (Wasm は requestAnimationFrame 側で間引く)
+        wait_for_target_fps();
+    }
+#else
+    (void)post_wait;
 #endif
+}
+
+int zen_begin_frame(void) {
+    return begin_frame_internal(1);
+}
+
+void zen_end_frame(void) {
+    end_frame_internal(1);
 }
 
 int zen_update(void) {
@@ -878,12 +1135,32 @@ void zen_run_loop(zen_frame_fn fn) {
 }
 #else
 void zen_run_loop(zen_frame_fn fn) {
+    s_step_callback = fn;
     while (zen_begin_frame()) {
         if (fn) fn();
         zen_end_frame();
     }
+    s_step_callback = NULL;
 }
 #endif
+
+void zen_set_frame_callback(zen_frame_fn fn) {
+    s_step_callback = fn;
+    sync_live_resize_timer();
+}
+
+void zen_set_live_resize(int enabled) {
+    s_live_resize = enabled ? 1 : 0;
+    sync_live_resize_timer();
+}
+
+int zen_get_live_resize(void) {
+    return s_live_resize;
+}
+
+int zen_is_resizing(void) {
+    return s_in_sizemove;
+}
 
 // ------------------------------------------
 // 時間 & フレームレート
@@ -898,6 +1175,7 @@ float zen_get_delta_time(void) {
 
 void zen_set_target_fps(int fps) {
     s_target_fps = fps;
+    sync_live_resize_timer();
 }
 
 int zen_get_target_fps(void) {
@@ -973,6 +1251,10 @@ void zen_set_window_size(int width, int height) {
 
 void zen_set_scale_mode(int mode) {
     s_scale_mode = mode;
+    if (s_scale_mode != ZEN_SCALE_RESIZE && s_initial_base_w > 0 && s_initial_base_h > 0) {
+        s_viewport.base_w = s_initial_base_w;
+        s_viewport.base_h = s_initial_base_h;
+    }
     update_viewport(s_viewport.fb_w, s_viewport.fb_h);
 }
 

@@ -133,6 +133,7 @@ enum ZenMouseButton {
 enum {
     ZEN_SCALE_FIT     = 0, // アスペクト比維持の最大化 (余白黒帯)
     ZEN_SCALE_INTEGER = 1, // 整数倍スケーリング (ドット絵用、余白黒帯)
+    ZEN_SCALE_RESIZE  = 2, // ウィンドウリサイズに論理解像度を追従 (DPI独立)
 };
 
 // テクスチャフィルタ
@@ -173,7 +174,13 @@ void zen_clear(uint32_t color);  // 現在の描画先 (画面のゲーム領域
 // Wasm      : requestAnimationFrame に登録して即座に戻る。
 typedef void (*zen_frame_fn)(void);
 void zen_run_loop(zen_frame_fn fn);
+void zen_set_frame_callback(zen_frame_fn fn);
 int  zen_is_wasm(void);
+
+// ウィンドウ移動・リサイズ中のライブ更新制御
+void zen_set_live_resize(int enabled);
+int  zen_get_live_resize(void);
+int  zen_is_resizing(void);
 
 // 時間 & ウィンドウ情報 & フレームレート制御 & スケーリング
 double zen_get_time(void);

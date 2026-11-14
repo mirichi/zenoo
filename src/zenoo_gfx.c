@@ -188,11 +188,20 @@ void zen_clear(uint32_t color) {
         glClear(GL_COLOR_BUFFER_BIT);
     } else {
         const ZenViewport* vp = zen__viewport();
+        if (zen_get_scale_mode() == ZEN_SCALE_RESIZE) {
+            glViewport(0, 0, vp->fb_w, vp->fb_h);
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(0, 0, vp->fb_w, vp->fb_h);
+            glClearColor(clr[0], clr[1], clr[2], clr[3]);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
         glViewport(vp->x, vp->y, vp->w, vp->h);
         glEnable(GL_SCISSOR_TEST);
         glScissor(vp->x, vp->y, vp->w, vp->h);
-        glClearColor(clr[0], clr[1], clr[2], clr[3]);
-        glClear(GL_COLOR_BUFFER_BIT);
+        if (zen_get_scale_mode() != ZEN_SCALE_RESIZE) {
+            glClearColor(clr[0], clr[1], clr[2], clr[3]);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
     }
 }
 

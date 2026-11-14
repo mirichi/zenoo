@@ -304,6 +304,16 @@ static void spinel_wasm_step_wrapper(void) {
     }
 }
 
+void sp_zen_win_set_frame_callback(sp_RbVal proc_val) {
+    if (proc_val.tag == SP_TAG_OBJ && proc_val.v.p) {
+        s_wasm_step_proc = (sp_Proc*)proc_val.v.p;
+        zen_set_frame_callback(spinel_wasm_step_wrapper);
+    } else {
+        s_wasm_step_proc = NULL;
+        zen_set_frame_callback(NULL);
+    }
+}
+
 void sp_zen_win_start_wasm_loop(sp_RbVal proc_val) {
     if (proc_val.tag == SP_TAG_OBJ && proc_val.v.p) {
         s_wasm_step_proc = (sp_Proc*)proc_val.v.p;
@@ -441,6 +451,18 @@ sp_bool sp_zen_win_is_maximized(void) {
 
 sp_bool sp_zen_win_is_hovered(void) {
     return zen_is_window_hovered() ? true : false;
+}
+
+sp_bool sp_zen_win_is_resizing(void) {
+    return zen_is_resizing() ? true : false;
+}
+
+void sp_zen_win_set_live_resize(sp_int enabled) {
+    zen_set_live_resize((int)enabled);
+}
+
+sp_bool sp_zen_win_get_live_resize(void) {
+    return zen_get_live_resize() ? true : false;
 }
 
 void sp_zen_win_show_cursor(sp_int show) {

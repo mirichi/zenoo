@@ -73,6 +73,7 @@ sp_int sp_zen_win_init_scaled(sp_int base_w, sp_int base_h, const char* title, s
 sp_int sp_zen_win_update(void);
 void sp_zen_win_clear(uint32_t color);
 void sp_zen_win_start_wasm_loop(sp_RbVal proc_val);
+void sp_zen_win_set_frame_callback(sp_RbVal proc_val);
 sp_bool sp_zen_win_is_wasm(void);
 void sp_zen_win_shutdown(void);
 sp_int sp_zen_win_ensure_context(void);
@@ -103,6 +104,9 @@ sp_bool sp_zen_win_is_focused(void);
 sp_bool sp_zen_win_is_minimized(void);
 sp_bool sp_zen_win_is_maximized(void);
 sp_bool sp_zen_win_is_hovered(void);
+sp_bool sp_zen_win_is_resizing(void);
+void sp_zen_win_set_live_resize(sp_int enabled);
+sp_bool sp_zen_win_get_live_resize(void);
 void sp_zen_win_show_cursor(sp_int show);
 void sp_zen_win_set_cursor(sp_int shape);
 
