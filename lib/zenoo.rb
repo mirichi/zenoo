@@ -1,7 +1,7 @@
 # ====================================================
 # Zenoo バインダのロード
 # ====================================================
-if defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel"
+if RUBY_ENGINE == "spinel"
   # Spinel AOT 環境
   require_relative '../ext/spinel/zenoo_native'
 else
@@ -83,7 +83,7 @@ Scene         = Zenoo::Scene
 # ====================================================
 # CRuby 専用 開発支援モジュール (Spinel 静的走査回避)
 # ====================================================
-if !(defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel")
+if RUBY_ENGINE != "spinel"
   begin
     send(:require_relative, 'zenoo/dev')
   rescue LoadError

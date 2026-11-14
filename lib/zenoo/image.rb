@@ -40,7 +40,7 @@ class Zenoo::Image
     img.slice_tiles(xcount, ycount, tile_width: tile_width, tile_height: tile_height)
   end
 
-  if defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel"
+  if RUBY_ENGINE == "spinel"
     # テクスチャ全体における正規化 UV 座標 [u, v, uw, vh] (CRuby版は C 拡張で定義済み)
     def uv
       tw = texture_width.to_f
@@ -132,7 +132,7 @@ class Zenoo::Image
     self
   end
 
-  if defined?(RUBY_ENGINE) && RUBY_ENGINE == "spinel"
+  if RUBY_ENGINE == "spinel"
     def texture_filter
       raw_texture_filter == 0 ? :nearest : :linear
     end
