@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 module Zenoo
+  # 2D スプライトを表す基本ゲームオブジェクトクラス。
+  # 画像・座標・回転・拡大縮小・親子階層・スプライトシートアニメーション・コライダー衝突判定・`Tweenable` アニメーションを統合します。
   class Sprite
     include Tweenable
 
@@ -141,6 +143,21 @@ module Zenoo
     attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image, :parent
     attr_accessor :blend, :shader, :uniforms, :camera
 
+    # 新しい `Sprite` インスタンスを初期化します。
+    #
+    # - `x` (`Numeric`): 初期 X 座標（デフォルト: 0.0）
+    # - `y` (`Numeric`): 初期 Y 座標（デフォルト: 0.0）
+    # - `image` (`Image`, `nil`): 表示する画像（省略時は `nil`）
+    # - `width:` (`Numeric`, `nil`): 明示的な描画幅（`nil` の場合は `image.width` を使用）
+    # - `height:` (`Numeric`, `nil`): 明示的な描画高さ（`nil` の場合は `image.height` を使用）
+    # - `anchor:` (`Symbol`, `Array<Numeric>`): 自分自身のどの点を `(x, y)` に配置するか（`:top_left`, `:center`, `:bottom_center` 等、デフォルト: `:center`）
+    # - `pivot:` (`Symbol`, `Array<Numeric>`): 回転・拡大縮小の中心点（`:center`, `:bottom_center` 等、デフォルト: `:center`）
+    # - `z:` (`Numeric`): 描画 Z オーダー（大きいほど手前、デフォルト: 0.0）
+    # - `blend:` (`Symbol`): ブレンドモード（`:alpha`, `:add`, `:sub`, `:mul` 等、デフォルト: `:alpha`）
+    # - `shader:` (`Shader`, `nil`): カスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーへ渡す uniform 変数ハッシュ
+    # - `camera:` (`Boolean`, `Camera`): カメラ変換を適用するか（デフォルト: `true`）
+    # - `parent:` (`Sprite`, `nil`): 親スプライト（指定時は親の座標・回転・拡大率に追従する階層スプライトになります）
     def initialize(x = 0.0, y = 0.0, image = nil, width: nil, height: nil, anchor: :center, pivot: :center, z: 0.0, blend: :alpha, shader: nil, uniforms: nil, camera: true, parent: nil)
       @x = x.to_f
       @y = y.to_f
@@ -181,11 +198,15 @@ module Zenoo
     end
 
     # ライフサイクル管理 (消滅)
+    # スプライトに消滅フラグを立て、実行中の全 Tween を停止します（`Sprite.clean` で配列から一括除去されます）。
     def vanish
       @vanished = true
       kill_tweens
     end
 
+    # `vanish` によって消滅済みとしてマークされているかどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def vanished?
       @vanished
     end
@@ -197,6 +218,7 @@ module Zenoo
       update_children if @children
     end
 
+    # 紐づいている子スプライト群の `update` を順次呼び出します（通常 `Sprite#update` 内から自動実行されます）。
     def update_children
       ch = @children
       return unless ch
@@ -214,23 +236,29 @@ module Zenoo
     # ====================================================
 
     # アニメーションを登録
-    # @param name [Symbol, String] アニメーション名
-    # @param images [Array<Image>, Image] 画像配列
-    # @param wait [Integer, Array<Integer>] 1コマあたりの表示フレーム数 (配列でコマごと指定可、足りない場合は最後の値を使用)
-    # @param loop [Boolean] ループ再生するかどうか (デフォルト: true)
-    # @param offset_x [Numeric, Array<Numeric>] 描画位置オフセット X (コマごと配列指定可、足りない場合は最後の値を使用)
-    # @param offset_y [Numeric, Array<Numeric>] 描画位置オフセット Y (コマごと配列指定可、足りない場合は最後の値を使用)
+    #
+    # - `name` (`Symbol`, `String`): アニメーション名
+    # - `images` (`Array<Image>`, `Image`): 画像配列
+    # - `wait:` (`Integer`, `Array<Integer>`): 1コマあたりの表示フレーム数（配列でコマごと指定可、足りない場合は最後の値を使用、デフォルト: 4）
+    # - `loop:` (`Boolean`): ループ再生するかどうか（デフォルト: `true`）
+    # - `offset_x:` (`Numeric`, `Array<Numeric>`): 描画位置オフセット X（コマごと配列指定可、デフォルト: 0.0）
+    # - `offset_y:` (`Numeric`, `Array<Numeric>`): 描画位置オフセット Y（コマごと配列指定可、デフォルト: 0.0）
+    # - 戻り値: `Sprite` (`self`)
     def add_animation(name, images, wait: 4, loop: true, offset_x: 0.0, offset_y: 0.0)
       animator.add(name, images, wait: wait, loop: loop, offset_x: offset_x, offset_y: offset_y)
       self
     end
 
     # 現在のアニメーションの描画オフセット X
+    #
+    # - 戻り値: `Float`
     def animation_offset_x
       @animator ? @animator.offset_x : 0.0
     end
 
     # 現在のアニメーションの描画オフセット Y
+    #
+    # - 戻り値: `Float`
     def animation_offset_y
       @animator ? @animator.offset_y : 0.0
     end
@@ -238,26 +266,35 @@ module Zenoo
     # アニメーションを再生
     # 同一アニメーション再生中の場合は巻き戻さず継続します。
     # 異なるアニメーションに切り替わった場合、または reset: true の場合は先頭から再生します。
-    # @param name [Symbol, String] 再生するアニメーション名
-    # @param reset [Boolean] 同名アニメーションであっても強制的に先頭から巻き戻すか (デフォルト: false)
-    # @param keep_frame [Boolean] 切り替え時に現在のコマ番号と経過フレーム数を引き継ぐか (4方向歩行の向き変更等用、デフォルト: false)
+    #
+    # - `name` (`Symbol`, `String`): 再生するアニメーション名
+    # - `reset:` (`Boolean`): 同名アニメーションであっても強制的に先頭から巻き戻すか（デフォルト: `false`）
+    # - `keep_frame:` (`Boolean`): 切り替え時に現在のコマ番号と経過フレーム数を引き継ぐか（デフォルト: `false`）
+    # - 戻り値: `Sprite` (`self`)
     def play(name, reset: false, keep_frame: false)
       animator.play(self, name, reset: reset, keep_frame: keep_frame)
       self
     end
 
     # アニメーションを停止し、アニメーション状態を解除
+    #
+    # - 戻り値: `Sprite` (`self`)
     def stop_animation
       @animator&.stop
       self
     end
 
     # 現在再生中のアニメーション名 (再生されていない場合は nil)
+    #
+    # - 戻り値: `Symbol`, `nil`
     def animation
       @animator&.current_name
     end
 
     # アニメーションが再生中かどうか判定 (name を指定した場合はそのアニメーションか判定)
+    #
+    # - `name` (`Symbol`, `String`, `nil`): 確認したいアニメーション名（省略時は何らかのアニメーションが再生中かを判定）
+    # - 戻り値: `Boolean`
     def playing?(name = nil)
       return false unless @animator
       if name
@@ -268,11 +305,15 @@ module Zenoo
     end
 
     # loop: false のアニメーションが最後のコマまで再生完了したかどうか
+    #
+    # - 戻り値: `Boolean`
     def animation_finished?
       @animator ? @animator.finished : false
     end
 
     # 現在のコマ番号 (0 オリジン)
+    #
+    # - 戻り値: `Integer`
     def animation_frame_index
       @animator ? @animator.frame_index : 0
     end
@@ -291,6 +332,9 @@ module Zenoo
 
     public
 
+    # X 座標を設定し、ワールド変換およびコライダー位置のキャッシュを無効化します。
+    #
+    # - `v` (`Numeric`): 新しい X 座標（親がある場合は親からの相対座標）
     def x=(v)
       vf = v.to_f
       return if @x == vf
@@ -300,6 +344,9 @@ module Zenoo
       dirty_children_pos! if @children
     end
 
+    # Y 座標を設定し、ワールド変換およびコライダー位置のキャッシュを無効化します。
+    #
+    # - `v` (`Numeric`): 新しい Y 座標（親がある場合は親からの相対座標）
     def y=(v)
       vf = v.to_f
       return if @y == vf
@@ -309,10 +356,16 @@ module Zenoo
       dirty_children_pos! if @children
     end
 
+    # 描画 Z オーダーを設定します（大きい値ほど手前に描画されます）。
+    #
+    # - `v` (`Numeric`): 深度値 Z
     def z=(v)
       @z = v.to_f
     end
 
+    # 回転角度（度数法・時計回り）を設定します。
+    #
+    # - `v` (`Numeric`): 回転角度（度）
     def angle=(v)
       vf = v.to_f
       return if @angle == vf
@@ -322,6 +375,9 @@ module Zenoo
       dirty_children_geom! if @children
     end
 
+    # 横方向の拡大倍率を設定します。
+    #
+    # - `v` (`Numeric`): X スケール倍率（`1.0` が等倍、負値で左右反転）
     def scale_x=(v)
       vf = v.to_f
       return if @scale_x == vf
@@ -331,6 +387,9 @@ module Zenoo
       dirty_children_geom! if @children
     end
 
+    # 縦方向の拡大倍率を設定します。
+    #
+    # - `v` (`Numeric`): Y スケール倍率（`1.0` が等倍、負値で上下反転）
     def scale_y=(v)
       vf = v.to_f
       return if @scale_y == vf
@@ -340,10 +399,16 @@ module Zenoo
       dirty_children_geom! if @children
     end
 
+    # 現在の横方向拡大倍率 (`scale_x`) を返します。
+    #
+    # - 戻り値: `Float`
     def scale
       @scale_x
     end
 
+    # 横・縦両方の拡大倍率を一括設定します。
+    #
+    # - `v` (`Numeric`): 拡大倍率（`scale_x = scale_y = v`）
     def scale=(v)
       s = v.to_f
       return if @scale_x == s && @scale_y == s
@@ -354,6 +419,9 @@ module Zenoo
       dirty_children_geom! if @children
     end
 
+    # 回転・拡大縮小の中心点（ピボット）を設定します。
+    #
+    # - `v` (`Symbol`, `Array<Numeric>`): `:center`, `:top_left`, `:bottom_center` 等、または正規化座標 `[px, py]`
     def pivot=(v)
       return if @pivot == v
       @pivot = v
@@ -365,14 +433,23 @@ module Zenoo
       dirty_children_pos! if @children
     end
 
+    # ピボットの正規化 X 座標（`0.0` = 左端 〜 `1.0` = 右端）を返します。
+    #
+    # - 戻り値: `Float`
     def pivot_x
       @pivot_x || 0.5
     end
 
+    # ピボットの正規化 Y 座標（`0.0` = 上端 〜 `1.0` = 下端）を返します。
+    #
+    # - 戻り値: `Float`
     def pivot_y
       @pivot_y || 0.5
     end
 
+    # ピボットの正規化 X 座標を設定します。
+    #
+    # - `v` (`Numeric`): 正規化 X 座標（`0.0 〜 1.0`）
     def pivot_x=(v)
       vf = v.to_f
       return if @pivot_x == vf
@@ -383,6 +460,9 @@ module Zenoo
       dirty_children_pos! if @children
     end
 
+    # ピボットの正規化 Y 座標を設定します。
+    #
+    # - `v` (`Numeric`): 正規化 Y 座標（`0.0 〜 1.0`）
     def pivot_y=(v)
       vf = v.to_f
       return if @pivot_y == vf
@@ -393,6 +473,9 @@ module Zenoo
       dirty_children_pos! if @children
     end
 
+    # 現在設定されているアンカー（座標 `(x, y)` に配置する自身上の基準点）を返します。
+    #
+    # - 戻り値: `Symbol`, `Array<Float>`
     def anchor
       @anchor || if (@anchor_x - 0.0).abs < 0.0001 && (@anchor_y - 0.0).abs < 0.0001
         :top_left
@@ -403,6 +486,9 @@ module Zenoo
       end
     end
 
+    # 座標 `(x, y)` に配置する自身上の基準点（アンカー）を設定します。
+    #
+    # - `v` (`Symbol`, `Array<Numeric>`): `:top_left`, `:center`, `:bottom_center` 等、または正規化座標 `[ax, ay]`
     def anchor=(v)
       return if @anchor == v
       @anchor = v
@@ -414,6 +500,9 @@ module Zenoo
       dirty_children_pos! if @children
     end
 
+    # アンカーの正規化 X 座標を設定します（`0.0` = 左端 〜 `1.0` = 右端）。
+    #
+    # - `v` (`Numeric`): 正規化 X 座標
     def anchor_x=(v)
       vf = v.to_f
       return if @anchor_x == vf
@@ -424,6 +513,9 @@ module Zenoo
       dirty_children_pos! if @children
     end
 
+    # アンカーの正規化 Y 座標を設定します（`0.0` = 上端 〜 `1.0` = 下端）。
+    #
+    # - `v` (`Numeric`): 正規化 Y 座標
     def anchor_y=(v)
       vf = v.to_f
       return if @anchor_y == vf
@@ -434,10 +526,24 @@ module Zenoo
       dirty_children_pos! if @children
     end
 
+    # 不透明度（`0 〜 255`）を設定します。
+    #
+    # - `v` (`Numeric`): 不透明度（`0` = 完全透明 〜 `255` = 完全不透明）
     def alpha=(v); @alpha = v; end
+
+    # 乗算カラー（ティント色）を設定します。
+    #
+    # - `v` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 色指定（`nil` で無着色）
     def color=(v); @color = v; end
+
+    # 表示・非表示を設定します。
+    #
+    # - `v` (`Boolean`): `true` で描画、`false` で非表示
     def visible=(v); @visible = !!v; end
 
+    # 表示する画像を変更し、サイズ変化があればコライダーと子スプライトのキャッシュを自動更新します。
+    #
+    # - `v` (`Image`, `nil`): 新しい画像オブジェクト
     def image=(v)
       return if @image.equal?(v)
       old_img = @image
@@ -463,6 +569,9 @@ module Zenoo
     # ====================================================
     # 親子階層・ワールド変換 (単体時はファストパスでゼロオーバーヘッド)
     # ====================================================
+    # 親スプライトを設定または解除します（循環参照は無視されます）。
+    #
+    # - `new_parent` (`Sprite`, `nil`): 新しい親スプライト（`nil` でルートに分離）
     def parent=(new_parent)
       return if @parent.equal?(new_parent)
       return if new_parent.equal?(self)
@@ -482,15 +591,26 @@ module Zenoo
       dirty_world_geom!
     end
 
+    # このスプライトに直接紐づく子スプライトの配列を返します。
+    #
+    # - 戻り値: `Array<Sprite>`
     def children
       @children ||= []
     end
 
+    # 子スプライトを追加します（`child.parent = self` と同等）。
+    #
+    # - `child` (`Sprite`, `nil`): 追加する子スプライト
+    # - 戻り値: `Sprite` (`self`)
     def add_child(child)
       child.parent = self if child
       self
     end
 
+    # 指定した子スプライトを親子関係から切り離します。
+    #
+    # - `child` (`Sprite`, `nil`): 切り離す子スプライト
+    # - 戻り値: `Sprite` (`self`)
     def remove_child(child)
       child.parent = nil if child && child.parent.equal?(self)
       self
@@ -607,6 +727,9 @@ module Zenoo
       end
     end
 
+    # 親の変換をすべて合成したワールド空間での X 座標を返します。
+    #
+    # - 戻り値: `Float`
     def world_x
       if @parent
         update_world_transform if world_dirty?
@@ -616,6 +739,9 @@ module Zenoo
       end
     end
 
+    # 親の変換をすべて合成したワールド空間での Y 座標を返します。
+    #
+    # - 戻り値: `Float`
     def world_y
       if @parent
         update_world_transform if world_dirty?
@@ -625,6 +751,9 @@ module Zenoo
       end
     end
 
+    # ワールド空間でのピボット（回転・拡大中心）X 座標を返します。
+    #
+    # - 戻り値: `Float`
     def world_pivot_x
       if @parent
         update_world_transform if world_dirty?
@@ -634,6 +763,9 @@ module Zenoo
       end
     end
 
+    # ワールド空間でのピボット（回転・拡大中心）Y 座標を返します。
+    #
+    # - 戻り値: `Float`
     def world_pivot_y
       if @parent
         update_world_transform if world_dirty?
@@ -643,6 +775,9 @@ module Zenoo
       end
     end
 
+    # 親の角度を合算したワールド空間での回転角（度）を返します。
+    #
+    # - 戻り値: `Float`
     def world_angle
       if @parent
         update_world_transform if world_dirty?
@@ -652,6 +787,9 @@ module Zenoo
       end
     end
 
+    # 親の倍率を乗算したワールド空間での X スケール倍率を返します。
+    #
+    # - 戻り値: `Float`
     def world_scale_x
       if @parent
         update_world_transform if world_dirty?
@@ -661,6 +799,9 @@ module Zenoo
       end
     end
 
+    # 親の倍率を乗算したワールド空間での Y スケール倍率を返します。
+    #
+    # - 戻り値: `Float`
     def world_scale_y
       if @parent
         update_world_transform if world_dirty?
@@ -670,6 +811,9 @@ module Zenoo
       end
     end
 
+    # ワールド回転角の余弦値 (`cos`) を返します。
+    #
+    # - 戻り値: `Float`
     def world_cos
       if @parent || @children
         update_world_transform if world_dirty?
@@ -679,6 +823,9 @@ module Zenoo
       end
     end
 
+    # ワールド回転角の正弦値 (`sin`) を返します。
+    #
+    # - 戻り値: `Float`
     def world_sin
       if @parent || @children
         update_world_transform if world_dirty?
@@ -688,10 +835,16 @@ module Zenoo
       end
     end
 
+    # スプライトの論理幅（ピクセル単位。明示指定または `image.width`）を返します。
+    #
+    # - 戻り値: `Float`
     def width
       @width || (@image ? @image.width.to_f : 0.0)
     end
 
+    # スプライトの描画幅を明示設定します（`nil` で `image.width` に戻す）。
+    #
+    # - `v` (`Numeric`, `nil`): 幅（ピクセル単位）
     def width=(v)
       vf = v ? v.to_f : nil
       return if @width == vf
@@ -708,10 +861,16 @@ module Zenoo
       dirty_children_pos! if @children
     end
 
+    # スプライトの論理高さ（ピクセル単位。明示指定または `image.height`）を返します。
+    #
+    # - 戻り値: `Float`
     def height
       @height || (@image ? @image.height.to_f : 0.0)
     end
 
+    # スプライトの描画高さを明示設定します（`nil` で `image.height` に戻す）。
+    #
+    # - `v` (`Numeric`, `nil`): 高さ（ピクセル単位）
     def height=(v)
       vf = v ? v.to_f : nil
       return if @height == vf
@@ -736,6 +895,18 @@ module Zenoo
     # - :polygon: 多角形 (vertices: [[x1, y1], [x2, y2], ...])
     # - at: コライダーの中心を置く Sprite 上の点 (:center, :bottom_center, :pivot 等。デフォルト: :center)
     #       offset_x / offset_y はその点からのピクセル単位のずらし量
+    #
+    # - `type` (`Symbol`): コライダー形状（`:default`, `:rect`, `:circle`, `:point`, `:polygon`）
+    # - `width:` (`Numeric`, `nil`): `:rect` 等の幅（ピクセル単位）
+    # - `height:` (`Numeric`, `nil`): `:rect` 等の高さ（ピクセル単位）
+    # - `radius:` (`Numeric`, `nil`): `:circle` の半径または `:rect` の角丸半径
+    # - `radius_x:` (`Numeric`, `nil`): `:circle` 楕円時の X 半径
+    # - `radius_y:` (`Numeric`, `nil`): `:circle` 楕円時の Y 半径
+    # - `offset_x:` (`Numeric`, `nil`): `at:` 基準点からの X ずらし量（px）
+    # - `offset_y:` (`Numeric`, `nil`): `at:` 基準点からの Y ずらし量（px）
+    # - `at:` (`Symbol`, `Array<Numeric>`): 親スプライト上の配置基準点（デフォルト: `:center`）
+    # - `vertices:` (`Array<Array<Numeric>>`, `nil`): `:polygon` 時の頂点配列
+    # - 戻り値: `Sprite` (`self`)
     def set_collider(type = :default,
                      width: nil, height: nil,
                      radius: nil, radius_x: nil, radius_y: nil,
@@ -766,6 +937,9 @@ module Zenoo
       self
     end
 
+    # 任意の `Collision::Shape` インスタンスをこのスプライトのコライダーとして直接設定します。
+    #
+    # - `shape` (`Collision::Shape`, `nil`): 設定するコライダー図形（`nil` で解除）
     def collider=(shape)
       @collider_shape = shape
       if shape
@@ -775,6 +949,8 @@ module Zenoo
     end
 
     # 変形（位置・回転・拡大・ピボット）と同期した Collision::Shape を取得 (未設定時は nil)
+    #
+    # - 戻り値: `Collision::Shape`, `nil`
     def collider
       return nil unless @collider_shape
       @collider_shape.update_cache if @collider_shape.dirty?
@@ -782,6 +958,9 @@ module Zenoo
     end
 
     # 衝突判定 (自分自身または子スプライトのいずれかが other と衝突しているか)
+    #
+    # - `other` (`Sprite`, `Collision::Shape`, `Tilemap`, `nil`): 判定対象
+    # - 戻り値: `Boolean`
     def collide?(other)
       return false if @vanished || other.nil?
       return other.collide?(self) if other.is_a?(Tilemap)
@@ -839,6 +1018,9 @@ module Zenoo
     end
 
     # other と衝突している自分自身および子孫スプライトの配列を取得
+    #
+    # - `other` (`Sprite`, `Collision::Shape`, `Tilemap`, `nil`): 判定対象
+    # - 戻り値: `Array<Sprite>` 衝突中の部位スプライト配列
     def hit_parts(other)
       return [] if @vanished || other.nil? || (other.respond_to?(:vanished?) && other.vanished?)
       result = []
@@ -865,11 +1047,18 @@ module Zenoo
       end
     end
 
+    # `collide?(other)` の演算子版（`case` 文での判定等に利用可能）。
+    #
+    # - `other` (`Sprite`, `Collision::Shape`, `Tilemap`, `nil`): 判定対象
+    # - 戻り値: `Boolean`
     def ===(other)
       collide?(other)
     end
 
     # 衝突めり込み量・押し出しベクトルを取得 (MTV: 自身または子スプライトのめり込みを検出)
+    #
+    # - `other` (`Sprite`, `Collision::Shape`, `nil`): 判定対象
+    # - 戻り値: `Collision::HitResult`, `nil` 衝突している場合は押し出しベクトル情報、非衝突時は `nil`
     def penetration(other)
       return nil if @vanished || other.nil? || (other.respond_to?(:vanished?) && other.vanished?)
 
@@ -931,6 +1120,8 @@ module Zenoo
     end
 
     # 階層ツリーの最上位ルートスプライトを取得 (親がいない場合は self)
+    #
+    # - 戻り値: `Sprite`
     def root
       cur = self
       while (p = cur.parent)
@@ -942,6 +1133,10 @@ module Zenoo
     # other から自動的にめり込み解消 (位置を直接更新)
     # other が配列の場合は各オブジェクトに対して順次押し出しを行う
     # target_root: true の場合、子パーツが衝突しても関節が外れないようルート親（キャラクター全体）を押し出します
+    #
+    # - `other` (`Sprite`, `Collision::Shape`, `Tilemap`, `Array`, `nil`): 押し出し元の障害物
+    # - `target_root:` (`Boolean`): 子パーツ衝突時にルート親全体を移動させるか（デフォルト: `true`）
+    # - 戻り値: `Collision::HitResult`, `Array<Collision::HitResult>`, `Boolean`, `nil`
     def push_out_of(other, target_root: true)
       return nil if @vanished || other.nil?
       return other.resolve_collision(self, target_root: target_root) if other.is_a?(Tilemap)
@@ -1071,6 +1266,8 @@ module Zenoo
     end
 
     # 単一または配列スプライトの一括描画 (DXRuby互換)
+    #
+    # - `sprites` (`Sprite`, `Array<Sprite>`, `nil`): 描画するスプライトまたはその配列（`vanished?` な要素はスキップ）
     def self.draw(sprites = nil)
       return unless sprites
       case sprites
@@ -1088,6 +1285,8 @@ module Zenoo
     end
 
     # 単一または配列スプライトの一括フレーム更新 (DXRuby互換)
+    #
+    # - `sprites` (`Sprite`, `Array<Sprite>`, `nil`): 更新するスプライトまたはその配列（`vanished?` な要素はスキップ）
     def self.update(sprites = nil)
       return unless sprites
       case sprites
@@ -1105,6 +1304,9 @@ module Zenoo
     end
 
     # 配列から消滅済み (vanished?) スプライトを一括除去 (インプレース・ゼロアロケーション)
+    #
+    # - `sprites` (`Array<Sprite>`, `nil`): 整理対象のスプライト配列
+    # - 戻り値: `Array<Sprite>`, `nil`
     def self.clean(sprites = nil)
       return sprites unless sprites.is_a?(Array)
 
@@ -1132,26 +1334,46 @@ module Zenoo
     end
 
     # スプライト同士・配列同士の一括衝突判定 (DXRuby互換)
+    #
+    # - `group_a` (`Sprite`, `Array<Sprite>`): 判定対象グループ A
+    # - `group_b` (`Sprite`, `Array<Sprite>`, `nil`): 判定対象グループ B（省略時は `group_a` 内のペア同士を総当たり判定）
+    # - `&block`: 衝突ペアが見つかるたびに `|a, b|` で呼ばれるブロック（省略時は衝突ペア配列を返却）
     def self.check(group_a, group_b = nil, &block)
       Collision.check_all(group_a, group_b, &block)
     end
 
     # スプライト同士・配列同士の一括めり込み量 (MTV) 判定
+    #
+    # - `group_a` (`Sprite`, `Array<Sprite>`): 判定対象グループ A
+    # - `group_b` (`Sprite`, `Array<Sprite>`, `nil`): 判定対象グループ B（省略時は `group_a` 内の自己判定）
+    # - `&block`: 衝突ごとに `|a, b, hit|` で呼ばれるブロック
     def self.penetration(group_a, group_b = nil, &block)
       Collision.penetration_all(group_a, group_b, &block)
     end
 
     # 空間ハッシュによる近傍ペア列挙 (ブロードフェーズ / 大量オブジェクト総当たり用)
+    #
+    # - `sprites` (`Array<Sprite>`): 対象スプライト配列
+    # - `cell_size:` (`Float`): 空間ハッシュの格子サイズ（px、デフォルト: 64.0）
+    # - `&block`: 近傍候補ペアごとに `|a, b|` で呼ばれるブロック
     def self.each_pair_spatial(sprites, cell_size: 64.0, &block)
       Collision.each_pair_spatial(sprites, cell_size: cell_size, &block)
     end
 
     # 空間ハッシュによる一括衝突判定
+    #
+    # - `sprites` (`Array<Sprite>`): 対象スプライト配列
+    # - `cell_size:` (`Float`): 空間ハッシュの格子サイズ（px、デフォルト: 64.0）
+    # - `&block`: 衝突ペアごとに `|a, b|` で呼ばれるブロック
     def self.check_spatial(sprites, cell_size: 64.0, &block)
       Collision.check_spatial(sprites, cell_size: cell_size, &block)
     end
 
     # 空間ハッシュによる一括めり込み量 (MTV) 判定
+    #
+    # - `sprites` (`Array<Sprite>`): 対象スプライト配列
+    # - `cell_size:` (`Float`): 空間ハッシュの格子サイズ（px、デフォルト: 64.0）
+    # - `&block`: 衝突ごとに `|a, b, hit|` で呼ばれるブロック
     def self.penetration_spatial(sprites, cell_size: 64.0, &block)
       Collision.penetration_spatial(sprites, cell_size: cell_size, &block)
     end

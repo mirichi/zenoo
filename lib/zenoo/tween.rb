@@ -26,15 +26,26 @@ module Zenoo
       attr_reader :active_tweens, :custom_accessors
 
       # カスタムプロパティ用の Getter / Setter を Proc で登録
-      # @param name [Symbol, String] プロパティ名
-      # @param getter [Proc] ->(target) { target.foo }
-      # @param setter [Proc] ->(target, val) { target.foo = val }
+      #
+      # - `name` (`Symbol`, `String`): プロパティ名
+      # - `getter:` (`Proc`, `nil`): `->(target) { target.foo }`
+      # - `setter:` (`Proc`, `nil`): `->(target, val) { target.foo = val }`
       def register_property(name, getter: nil, setter: nil)
         @custom_accessors[name.to_sym] = [getter, setter]
       end
 
       # 対象オブジェクトのプロパティをアニメーション開始 (クラスメソッドは target 必須)
       # 例: Tween.to(player, 1.0, x: 400, y: 300, ease: :quad_out)
+      #
+      # - `target` (`Object`): アニメーション対象オブジェクト（`x`, `y`, `angle`, `scale`, `alpha` 等を持つオブジェクト）
+      # - `duration` (`Numeric`): 補間にかける時間（秒）
+      # - `ease:` (`Symbol`, `Array`): イージング種別（デフォルト: `:linear`）
+      # - `delay:` (`Numeric`): 開始前の待機時間（秒、デフォルト: 0.0）
+      # - `from:` (`Hash`, `nil`): 開始値を明示指定するハッシュ（省略時は開始時の現在値を自動取得）
+      # - `steps:` (`Integer`, `nil`): `:step` イージング使用時の段階分割数
+      # - `round:` (`Boolean`, `nil`): `true` の場合は補間結果を整数に丸める
+      # - `**props`: 目標値となるプロパティ名と値のペア（例: `x: 400, alpha: 255`）
+      # - 戻り値: `Tween` メソッドチェーン用のインスタンス
       def to(target, duration, ease: :linear, delay: 0.0, from: nil, steps: nil, round: nil, **props)
         tween = new(target)
         tween.to(duration, ease: ease, delay: delay, from: from, steps: steps, round: round, **props)
@@ -44,6 +55,10 @@ module Zenoo
 
       # 待機から始まるチェーンを作成
       # 例: Tween.delay(player, 0.5).to(1.0, x: 400)
+      #
+      # - `target` (`Object`, `nil`): 後続チェーンの対象オブジェクト
+      # - `duration` (`Numeric`): 待機時間（秒）
+      # - 戻り値: `Tween`
       def delay(target, duration)
         tween = new(target)
         tween.delay(duration)
@@ -52,6 +67,10 @@ module Zenoo
       end
 
       # 即座（または遅延後）にブロックを実行するステップから始まるチェーンを作成
+      #
+      # - `target` (`Object`, `nil`): 後続チェーンの対象オブジェクト（省略可）
+      # - `&block`: 実行する処理ブロック
+      # - 戻り値: `Tween`
       def call(target = nil, &block)
         tween = new(target)
         tween.call(&block)
@@ -61,6 +80,16 @@ module Zenoo
 
       # 数値範囲を補間してブロックへ渡す（直接描画やカスタム値更新用）
       # 例: Tween.value(from: 0.0, to: 1.0, duration: 0.5) { |v| alpha = v }
+      #
+      # - `from:` (`Numeric`): 開始数値
+      # - `to:` (`Numeric`): 終了数値
+      # - `duration:` (`Numeric`): 補間時間（秒、デフォルト: 0.0）
+      # - `ease:` (`Symbol`, `Array`): イージング種別（デフォルト: `:linear`）
+      # - `delay:` (`Numeric`): 開始前待機時間（秒、デフォルト: 0.0）
+      # - `steps:` (`Integer`, `nil`): `:step` イージング使用時の分割数
+      # - `round:` (`Boolean`, `nil`): 整数丸め有無（`nil` 時は `from`・`to` が共に `Integer` なら自動で丸める）
+      # - `&block`: 補間された現在値 `|val|` を受け取るブロック
+      # - 戻り値: `Tween`
       def value(from:, to:, duration: 0.0, ease: :linear, delay: 0.0, steps: nil, round: nil, &block)
         tween = new(nil)
         tween.value(from: from, to: to, duration: duration, ease: ease, delay: delay, steps: steps, round: round, &block)
@@ -69,6 +98,8 @@ module Zenoo
       end
 
       # 対象オブジェクトに関わる全ての Tween を破棄・中断
+      #
+      # - `target` (`Object`, `nil`): 停止対象のオブジェクト
       def kill(target)
         return if target.nil?
         target.kill_tweens if target.respond_to?(:kill_tweens)
@@ -77,6 +108,9 @@ module Zenoo
         end
       end
 
+      # 指定ターゲット、または全グローバル Tween を停止します（`target` 指定時は `Tween.kill`、省略時は `Tween.clear` と同等）。
+      #
+      # - `target` (`Object`, `nil`): 停止対象オブジェクト（`nil` で全クリア）
       def stop_all(target = nil)
         if target
           kill(target)
@@ -92,6 +126,8 @@ module Zenoo
       end
 
       # 対象オブジェクトの全 Tween を最終状態にスキップして完了
+      #
+      # - `target` (`Object`, `nil`): 対象オブジェクト（省略時はグローバル管理下の全 Tween を完了）
       def finish_all(target = nil)
         if target
           target.finish_tweens if target.respond_to?(:finish_tweens)
@@ -104,25 +140,34 @@ module Zenoo
       end
 
       # 全 Tween の一時停止 / 再開
+      #
+      # グローバル管理下のアクティブな全 Tween を一時停止します。
       def pause_all
         @active_tweens.each(&:pause)
       end
 
+      # 一時停止中のグローバル管理下の全 Tween を再開します。
       def resume_all
         @active_tweens.each(&:resume)
       end
 
       # 現在アクティブな Tween 数
+      #
+      # - 戻り値: `Integer`
       def count
         @active_tweens.size
       end
 
       # マネージャに登録
+      #
+      # - `tween` (`Tween`): グローバル自動更新対象に加える `Tween`
       def register(tween)
         @active_tweens << tween unless @active_tweens.include?(tween)
       end
 
       # マネージャから解除
+      #
+      # - `tween` (`Tween`): グローバル自動更新対象から外す `Tween`
       def unregister(tween)
         @active_tweens.delete(tween)
       end
@@ -195,6 +240,9 @@ module Zenoo
     # ------------------------------------------------------------------
     attr_reader :target
 
+    # Tween インスタンスを初期化します（通常は `Tween.to` または `sprite.tween` から生成します）。
+    #
+    # - `target` (`Object`, `nil`): プロパティを操作する対象オブジェクト
     def initialize(target = nil)
       @target = target
       @steps = []
@@ -212,6 +260,15 @@ module Zenoo
 
     # チェーンの次のステップとしてプロパティ変更を追加 (インスタンスメソッドには target を渡さない)
     # 例: tween.to(1.0, x: 400, y: 300, ease: :quad_out)
+    #
+    # - `duration` (`Numeric`): 補間にかける時間（秒）
+    # - `ease:` (`Symbol`, `Array`): イージング種別（デフォルト: `:linear`）
+    # - `delay:` (`Numeric`): このステップの前に挿入する待機時間（秒、デフォルト: 0.0）
+    # - `from:` (`Hash`, `nil`): 開始値を明示指定するハッシュ
+    # - `steps:` (`Integer`, `nil`): `:step` イージング時の分割数
+    # - `round:` (`Boolean`, `nil`): 補間結果を整数に丸めるかどうか
+    # - `**props`: 目標値となるプロパティ名と値のペア
+    # - 戻り値: `Tween` (`self`)
     def to(duration, ease: :linear, delay: 0.0, from: nil, steps: nil, round: nil, **props)
       self.delay(delay) if delay && delay > 0
 
@@ -228,6 +285,9 @@ module Zenoo
     end
 
     # チェーンの次のステップとして待機時間を追加
+    #
+    # - `duration` (`Numeric`): 待機時間（秒）
+    # - 戻り値: `Tween` (`self`)
     def delay(duration)
       @steps << {
         type: :delay,
@@ -237,6 +297,9 @@ module Zenoo
     end
 
     # チェーンの次のステップとしてブロック実行を追加
+    #
+    # - `&block`: ステップ到達時に実行されるブロック（引数を取る場合は `self` が渡されます）
+    # - 戻り値: `Tween` (`self`)
     def call(&block)
       @steps << {
         type: :call,
@@ -246,6 +309,16 @@ module Zenoo
     end
 
     # 数値補間ステップを追加 (カスタム値更新用)
+    #
+    # - `from:` (`Numeric`): 開始数値
+    # - `to:` (`Numeric`): 終了数値
+    # - `duration:` (`Numeric`): 補間時間（秒、デフォルト: 0.0）
+    # - `ease:` (`Symbol`, `Array`): イージング種別（デフォルト: `:linear`）
+    # - `delay:` (`Numeric`): このステップの前に挿入する待機時間（秒、デフォルト: 0.0）
+    # - `steps:` (`Integer`, `nil`): `:step` イージング時の分割数
+    # - `round:` (`Boolean`, `nil`): 整数丸め有無
+    # - `&block`: 補間値 `|val|` を受け取るブロック
+    # - 戻り値: `Tween` (`self`)
     def value(from:, to:, duration: 0.0, ease: :linear, delay: 0.0, steps: nil, round: nil, &block)
       self.delay(delay) if delay && delay > 0
       @steps << {
@@ -262,6 +335,9 @@ module Zenoo
     end
 
     # 繰り返し回数を指定 (count = true または :infinite で無限ループ)
+    #
+    # - `count` (`Integer`, `Boolean`, `Symbol`): 繰り返し回数（`true` または `:infinite` で無限ループ）
+    # - 戻り値: `Tween` (`self`)
     def repeat(count = true)
       @loop_mode = (count == true || count == :infinite) ? :infinite : count.to_i
       @initial_loop = @loop_mode
@@ -269,6 +345,9 @@ module Zenoo
     end
 
     # 順再生と逆再生を交互に行う
+    #
+    # - `count` (`Integer`, `Boolean`, `Symbol`): 往復回数（`true` または `:infinite` で無限往復、デフォルト: `true`）
+    # - 戻り値: `Tween` (`self`)
     def yoyo(count = true)
       @yoyo = true
       repeat(count)
@@ -276,33 +355,51 @@ module Zenoo
     end
 
     # 全工程完了時のコールバック
+    #
+    # - `&block`: 完了時に呼び出されるブロック（`self` を引数に渡します）
+    # - 戻り値: `Tween` (`self`)
     def on_complete(&block)
       @on_complete = block
       self
     end
 
     # 制御メソッド
+    #
+    # この Tween を直ちに停止・完了状態とし、マネージャから登録解除します。
+    #
+    # - 戻り値: `Tween` (`self`)
     def stop
       @completed = true
       Tween.unregister(self)
       self
     end
 
+    # `stop` の別名（この Tween を直ちに中断して登録解除します）。
+    #
+    # - 戻り値: `Tween` (`self`)
     def kill
       stop
     end
 
+    # この Tween の進行を一時停止します。
+    #
+    # - 戻り値: `Tween` (`self`)
     def pause
       @paused = true
       self
     end
 
+    # 一時停止していた Tween の進行を再開します。
+    #
+    # - 戻り値: `Tween` (`self`)
     def resume
       @paused = false
       self
     end
 
     # 全ステップを瞬時に最終状態にして完了
+    #
+    # - 戻り値: `Tween` (`self`), `nil`
     def finish
       return if @completed
 
@@ -329,19 +426,31 @@ module Zenoo
       self
     end
 
+    # Tween がすべてのステップを完了（または停止）したかどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def completed?
       @completed
     end
 
+    # Tween が現在実行中（未完了かつ非ポーズ中）かどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def active?
       !@completed && !@paused
     end
 
+    # Tween が現在一時停止中かどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def paused?
       @paused
     end
 
     # この Tween が指定したターゲットに関与しているか判定
+    #
+    # - `target` (`Object`): 比較対象オブジェクト
+    # - 戻り値: `Boolean`
     def involves_target?(target)
       @target.equal?(target)
     end
@@ -570,6 +679,8 @@ module Zenoo
   # ====================================================================
   module Tweenable
     # 対象オブジェクトのアクティブな Tween 配列 (遅延初期化)
+    #
+    # - 戻り値: `Array<Tween>`
     def tweens
       @tweens ||= []
     end
@@ -578,6 +689,8 @@ module Zenoo
     # ※ グローバルマネージャ (Zenoo::Tween) には登録されず、このオブジェクトの更新に同期します
     # 例: sprite.tween.to(0.5, x: 200, ease: :quad_out)
     #     sprite.tween.delay(0.2).to(0.3, alpha: 0.0).call { sprite.vanish }
+    #
+    # - 戻り値: `Tween`
     def tween
       t = Tween.new(self)
       tweens << t
@@ -585,6 +698,8 @@ module Zenoo
     end
 
     # このオブジェクトに紐づく全ての Tween を即時停止・破棄
+    #
+    # - 戻り値: `self`
     def kill_tweens
       return self unless @tweens
       @tweens.each(&:stop)
@@ -593,6 +708,8 @@ module Zenoo
     end
 
     # このオブジェクトに紐づく全ての Tween を即時完了
+    #
+    # - 戻り値: `self`
     def finish_tweens
       return self unless @tweens
       @tweens.each(&:finish)
@@ -601,6 +718,8 @@ module Zenoo
     end
 
     # このオブジェクトに紐づく全ての Tween を一時停止
+    #
+    # - 戻り値: `self`
     def pause_tweens
       return self unless @tweens
       @tweens.each(&:pause)
@@ -608,6 +727,8 @@ module Zenoo
     end
 
     # このオブジェクトに紐づく全ての Tween を再開
+    #
+    # - 戻り値: `self`
     def resume_tweens
       return self unless @tweens
       @tweens.each(&:resume)
@@ -615,12 +736,15 @@ module Zenoo
     end
 
     # 現在アクティブな Tween 数
+    #
+    # - 戻り値: `Integer`
     def tween_count
       @tweens ? @tweens.size : 0
     end
 
     # Tween のフレーム更新処理 (Sprite#update から自動で呼ばれます)
-    # @param dt [Float, nil] 経過時間 (秒)。省略時は Window.delta_time を使用
+    #
+    # - `dt` (`Float`, `nil`): 経過時間（秒）。省略時は `Window.delta_time` を使用
     def update_tweens(dt = nil)
       return if @tweens.nil? || @tweens.empty?
 

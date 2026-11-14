@@ -10,6 +10,20 @@ module Zenoo
   class Bone < Sprite
     attr_accessor :name, :length
 
+    # 2D ボーン（関節ノード）を生成する
+    #
+    # - `x` (`Float`): 親からの相対 X オフセット（またはワールド X 座標）
+    # - `y` (`Float`): 親からの相対 Y オフセット（またはワールド Y 座標）
+    # - `angle:` (`Float`): 初期回転角（度数法）
+    # - `length:` (`Float`): ボーンの長さ（ピクセル）
+    # - `name:` (`Symbol`, `String`, `nil`): 識別名
+    # - `parent:` (`Sprite`, `Bone`, `nil`): 親ノード
+    # - `scale_x:` (`Float`): X 方向倍率
+    # - `scale_y:` (`Float`): Y 方向倍率
+    # - `width:` (`Float`, `nil`): 明示的な幅
+    # - `height:` (`Float`, `nil`): 明示的な高さ
+    # - `anchor:` (`Symbol`, `Array<Float>`): 配置アンカー（デフォルト: `:top_left`）
+    # - `pivot:` (`Symbol`, `Array<Float>`): 回転・スケール支点（デフォルト: `:top_left`）
     def initialize(x = 0.0, y = 0.0, angle: 0.0, length: 0.0, name: nil, parent: nil,
                    scale_x: 1.0, scale_y: 1.0, width: nil, height: nil,
                    anchor: :top_left, pivot: :top_left)
@@ -22,6 +36,8 @@ module Zenoo
     end
 
     # 親ボーンの回転分を自動相殺してワールド角度（度数法）を直接設定します
+    #
+    # - `deg` (`Float`): 目標ワールド角度（度数法）
     def world_angle=(deg)
       if @parent
         self.angle = deg.to_f - @parent.world_angle
@@ -31,6 +47,8 @@ module Zenoo
     end
 
     # ボーン先端のワールド座標 (length が設定されている場合、または子ボーンがある場合)
+    #
+    # - 戻り値: `Array<Float>`（`[x, y]`）
     def tip_world_pos
       wx = world_pivot_x
       wy = world_pivot_y
@@ -45,6 +63,9 @@ module Zenoo
       end
     end
 
+    # ボーン先端のワールド X 座標を返す
+    #
+    # - 戻り値: `Float`
     def tip_world_x
       wx = world_pivot_x
       if @length > 0.0001
@@ -56,6 +77,9 @@ module Zenoo
       end
     end
 
+    # ボーン先端のワールド Y 座標を返す
+    #
+    # - 戻り値: `Float`
     def tip_world_y
       wy = world_pivot_y
       if @length > 0.0001
@@ -72,10 +96,14 @@ module Zenoo
     # ====================================================================
 
     # 親ノードから直列につながるボーン配列を一括生成します
-    # - parent: 起点となる親 Bone / Sprite (または nil)
-    # - lengths: 各ボーンの長さの配列 (例: [85.0, 85.0, 30.0])
-    # - x, y: 先頭ボーンの初期オフセット座標
-    # - angle: 先頭ボーンの初期角度
+    #
+    # - `parent` (`Bone`, `Sprite`, `nil`): 起点となる親ノード
+    # - `lengths` (`Array<Float>`): 各ボーンの長さ配列（例: `[85.0, 85.0, 30.0]`）
+    # - `x:` (`Float`): 先頭ボーンの初期 X オフセット
+    # - `y:` (`Float`): 先頭ボーンの初期 Y オフセット
+    # - `angle:` (`Float`): 先頭ボーンの初期角度（度数法）
+    # - `name_prefix:` (`String`, `nil`): ボーン名プレフィックス（`prefix_0`, `prefix_1`, ... を設定）
+    # - 戻り値: `Array<Zenoo::Bone>`
     def self.chain(parent, lengths, x: 0.0, y: 0.0, angle: 0.0, name_prefix: nil)
       bones = []
       cur_parent = parent
@@ -102,11 +130,15 @@ module Zenoo
     # ====================================================================
 
     # 2ボーンIKの角度（度数法）を余弦定理で算出します
-    # 戻り値: [upper_world_deg, lower_local_deg]
-    # - x0, y0: 根元（肩・股関節）のワールド座標
-    # - tx, ty: 目標（手首・足首）のワールド座標
-    # - len1, len2: 第1ボーン（上腕・太もも）と第2ボーン（前腕・すね）の長さ
-    # - bend: 関節の曲がる向き (+1.0 または -1.0)
+    #
+    # - `x0` (`Float`): 根元（肩・股関節）のワールド X 座標
+    # - `y0` (`Float`): 根元のワールド Y 座標
+    # - `tx` (`Float`): 目標（手首・足首）のワールド X 座標
+    # - `ty` (`Float`): 目標のワールド Y 座標
+    # - `len1` (`Float`): 第1ボーン（上腕・太もも）の長さ
+    # - `len2` (`Float`): 第2ボーン（前腕・すね）の長さ
+    # - `bend:` (`Float`): 関節の曲がる向き（`+1.0` または `-1.0`）
+    # - 戻り値: `Array<Float>`（`[upper_world_deg, lower_local_deg]`）
     def self.calc_two_bone(x0, y0, tx, ty, len1, len2, bend: 1.0)
       dx = tx.to_f - x0.to_f
       dy = ty.to_f - y0.to_f
@@ -134,12 +166,15 @@ module Zenoo
     end
 
     # 2つのボーン (upper, lower) に対して2ボーンIKを計算し、回転角を直接適用します
-    # - upper: 第1ボーン（太もも・上腕）
-    # - lower: 第2ボーン（すね・前腕）
-    # - tx, ty: 目標ワールド座標
-    # - bend: 関節の曲がる向き (+1.0: 膝・前曲がり, -1.0: 肘・後ろ曲がり)
-    # - tip_bone: 先端の第3ボーン（足首・手首など、省略可）
-    # - tip_angle: tip_bone を維持したいワールド角度（地面やボードの傾斜角など、省略可）
+    #
+    # - `upper` (`Bone`): 第1ボーン（太もも・上腕）
+    # - `lower` (`Bone`): 第2ボーン（すね・前腕）
+    # - `tx` (`Float`): 目標ワールド X 座標
+    # - `ty` (`Float`): 目標ワールド Y 座標
+    # - `bend:` (`Float`): 関節の曲がる向き（`+1.0`: 膝・前曲がり, `-1.0`: 肘・後ろ曲がり）
+    # - `tip_bone:` (`Bone`, `nil`): 先端の第3ボーン（足首・手首等）
+    # - `tip_angle:` (`Float`, `nil`): `tip_bone` に維持したいワールド角度（度数法）
+    # - 戻り値: `Array<Float>`（`[upper_world_deg, lower_local_deg]`）
     def self.solve_two_bone(upper, lower, tx, ty, bend: 1.0, tip_bone: nil, tip_angle: nil)
       x0 = upper.world_pivot_x
       y0 = upper.world_pivot_y
@@ -157,15 +192,26 @@ module Zenoo
     end
 
     # 自身を第1ボーン、lower を第2ボーンとして2ボーンIKを解決します
+    #
+    # - `lower` (`Bone`): 第2ボーン
+    # - `tx` (`Float`): 目標ワールド X 座標
+    # - `ty` (`Float`): 目標ワールド Y 座標
+    # - `bend:` (`Float`): 関節の曲がる向き（`+1.0` または `-1.0`）
+    # - `tip_bone:` (`Bone`, `nil`): 先端の第3ボーン
+    # - `tip_angle:` (`Float`, `nil`): 先端ボーンのワールド角度（度数法）
+    # - 戻り値: `Array<Float>`（`[upper_world_deg, lower_local_deg]`）
     def solve_two_bone(lower, tx, ty, bend: 1.0, tip_bone: nil, tip_angle: nil)
       Bone.solve_two_bone(self, lower, tx, ty, bend: bend, tip_bone: tip_bone, tip_angle: tip_angle)
     end
 
     # 多関節ボーン配列に対して FABRIK (Forward And Backward Reaching IK) を実行し、
     # 各ボーンの回転角度を一括更新します（触手・尻尾・多関節アーム等）
-    # - bones: 直列に並んだ Bone の配列
-    # - tx, ty: 先端が目指す目標ワールド座標
-    # - iterations: 反復計算回数（デフォルト: 4）
+    #
+    # - `bones` (`Array<Bone>`): 直列に並んだ `Bone` 配列
+    # - `tx` (`Float`): 先端が目指す目標ワールド X 座標
+    # - `ty` (`Float`): 先端が目指す目標ワールド Y 座標
+    # - `iterations:` (`Integer`): 反復計算回数（デフォルト: 4）
+    # - 戻り値: `Array<Bone>`（`bones`）
     def self.solve_fabrik(bones, tx, ty, iterations: 4)
       n = bones.length
       return if n == 0
@@ -266,6 +312,18 @@ module Zenoo
     # 2足キャラクターの左右の足先ターゲット (tx1, ty1), (tx2, ty2) に対して、
     # 膝が伸びきらない (max_reach) かつ潰れすぎない (min_reach) ための
     # 理想の腰座標と骨盤の傾き [hip_x, hip_y, hip_angle] を算出します
+    #
+    # - `base_x` (`Float`): 基準となる腰 X 座標
+    # - `base_y` (`Float`): 基準となる腰 Y 座標
+    # - `tx1` (`Float`): 左足ターゲット X 座標
+    # - `ty1` (`Float`): 左足ターゲット Y 座標
+    # - `tx2` (`Float`): 右足ターゲット X 座標
+    # - `ty2` (`Float`): 右足ターゲット Y 座標
+    # - `hip_spacing:` (`Float`): 左右股関節の片側オフセット幅
+    # - `max_reach:` (`Float`): 脚の最大リーチ長
+    # - `min_reach:` (`Float`): 脚の最小リーチ長
+    # - `tilt_ratio:` (`Float`): 地面傾斜に対する骨盤の傾き追従率
+    # - 戻り値: `Array<Float>`（`[hip_x, hip_y, hip_angle]`）
     def self.calc_pelvis(base_x, base_y, tx1, ty1, tx2, ty2,
                          hip_spacing: 16.0, max_reach: 145.0, min_reach: 50.0, tilt_ratio: 0.65)
       mid_foot_x = (tx1 + tx2) * 0.5
@@ -318,10 +376,11 @@ module Zenoo
 
     # フットスライド（足滑り）を起こさないプロシージャル歩行の1歩分の足先オフセットを算出します
     # サイクル前半 (0..π) は地面と完全一致する等速直線移動、後半 (π..2π) は上空へ弧を描いて前方へ復帰します
-    # - phase: 歩行フェーズ角（ラジアン）
-    # - stride: 振り幅（片道ストライド半径 px）
-    # - lift: 足を上げる高さ (px)
-    # 戻り値: [offset_x, offset_y, grounded] (grounded は接地中なら true)
+    #
+    # - `phase` (`Float`): 歩行フェーズ角（ラジアン）
+    # - `stride:` (`Float`): 振り幅（片道ストライド半径、ピクセル）
+    # - `lift:` (`Float`): 足を上げる高さ（ピクセル）
+    # - 戻り値: `Array`（`[offset_x, offset_y, grounded]`、`grounded` は接地中 `true`）
     def self.step_offset(phase, stride: 50.0, lift: 25.0)
       u = (phase.to_f / (2.0 * Math::PI)) % 1.0
       u += 1.0 if u < 0.0
@@ -345,6 +404,17 @@ module Zenoo
     # ====================================================================
 
     # 単体ボーンをSDF丸端カプセル（＋オプションのコア発光ライン＆関節サークル）として描画します
+    #
+    # - `width:` (`Float`): カプセル外側の太さ（ピクセル）
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 外側カラー
+    # - `core_width:` (`Float`): 中心発光ラインの太さ（`0.0` で非表示）
+    # - `core_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 中心発光ラインの色
+    # - `joint_radius:` (`Float`): 根元関節サークルの半径（`0.0` で非表示）
+    # - `joint_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 関節サークルの色
+    # - `joint_border_width:` (`Float`): 関節サークルの枠線幅
+    # - `joint_border_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 関節サークルの枠線色
+    # - `camera:` (`Boolean`, `Camera`): カメラ変換の追従有無
+    # - `z:` (`Float`): 描画深度 Z
     def draw_capsule(width: 12.0, color: :white, core_width: 0.0, core_color: nil,
                      joint_radius: 0.0, joint_color: nil, joint_border_width: 2.0, joint_border_color: nil,
                      camera: true, z: 0.0)
@@ -367,6 +437,19 @@ module Zenoo
 
     # ボーン配列（チェーン）を根元から先端へ向けて太さが変化するカプセル列として一括描画します
     # メカの腕・脚から、有機的な触手・尻尾まで幅広く表現できます
+    #
+    # - `bones` (`Array<Bone>`): 描画するボーン配列
+    # - `width:` (`Float`, `nil`): 全ボーン共通の固定幅（指定時は `start_width`/`end_width` を上書き）
+    # - `start_width:` (`Float`): 根元ボーンの幅
+    # - `end_width:` (`Float`): 先端ボーンの幅
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 外側カラー
+    # - `core_ratio:` (`Float`): 幅に対する中心発光ライン幅の比率
+    # - `core_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 中心発光ラインの色
+    # - `joint_radius:` (`Float`, `nil`): 関節サークルの半径（省略時は `joint_color` 指定時に太さ比で自動決定）
+    # - `joint_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 関節サークルの色
+    # - `joint_border_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 関節サークルの枠線色
+    # - `camera:` (`Boolean`, `Camera`): カメラ変換の追従有無
+    # - `z:` (`Float`): 描画深度 Z
     def self.draw_chain(bones, width: nil, start_width: 16.0, end_width: 8.0,
                         color: :white, core_ratio: 0.0, core_color: nil,
                         joint_radius: nil, joint_color: nil, joint_border_color: nil,
@@ -407,6 +490,14 @@ module Zenoo
     end
 
     # ボーンおよび子ボーン階層のデバッグ可視化描画
+    #
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): ボーン線分の色
+    # - `joint_color:` (`Color`, `Symbol`, `Array<Integer>`): 関節点の色
+    # - `width:` (`Float`): ボーン線分の太さ
+    # - `joint_radius:` (`Float`): 関節点の半径
+    # - `recursive:` (`Boolean`): 子ボーンも再帰的に描画するか
+    # - `camera:` (`Boolean`, `Camera`): カメラ変換の追従有無
+    # - `z:` (`Float`): 描画深度 Z
     def draw_debug(color: :cyan, joint_color: :yellow, width: 3.0, joint_radius: 5.0, recursive: true, camera: true, z: 1000.0)
       wx = world_pivot_x
       wy = world_pivot_y
@@ -439,6 +530,10 @@ module Zenoo
       Window.draw_circle(wx, wy, joint_radius, color: joint_color, border_color: :black, border_width: 1.5, camera: camera, z: z + 0.02)
     end
 
+    # ボーン配列または単体ボーンをデバッグ可視化描画する
+    #
+    # - `bones` (`Array<Bone>`, `Bone`): 描画対象のボーン配列またはボーン
+    # - `kwargs` (`Hash`): `Bone#draw_debug` へ渡す描画オプション
     def self.draw_debug(bones, **kwargs)
       if bones.is_a?(Array)
         i = 0

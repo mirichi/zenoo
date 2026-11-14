@@ -8,14 +8,15 @@ module Zenoo
 
     class << self
       # 単音トーン生成
-      # @param frequency [Numeric] 周波数 (Hz, 例: 440)
-      # @param duration [Numeric] 長さ (秒, デフォルト: 0.5)
-      # @param type [Symbol] 波形種別 (:sine, :square, :triangle, :sawtooth)
-      # @param volume [Numeric] 音量 (0.0 .. 1.0)
-      # @param attack [Numeric] アタック時間 (秒, クリックノイズ防止)
-      # @param release [Numeric] リリース時間 (秒, クリックノイズ防止)
-      # @param sample_rate [Integer] サンプリングレート (Hz)
-      # @return [Sound] 生成された Sound インスタンス
+      #
+      # - `frequency` (`Numeric`): 周波数（Hz、例: `440`）
+      # - `duration` (`Numeric`): 長さ（秒、デフォルト: `0.5`）
+      # - `type:` (`Symbol`): 波形種別（`:sine`, `:square`, `:triangle`, `:sawtooth`）
+      # - `volume:` (`Numeric`): 音量（`0.0〜1.0`）
+      # - `attack:` (`Numeric`): アタック時間（秒、クリックノイズ防止）
+      # - `release:` (`Numeric`): リリース時間（秒、クリックノイズ防止）
+      # - `sample_rate:` (`Integer`): サンプリングレート（Hz）
+      # - 戻り値: `Zenoo::Sound`
       def tone(frequency, duration = 0.5, type: :sine, volume: 1.0, attack: 0.005, release: 0.01, sample_rate: 44100)
         total_frames = (duration * sample_rate).to_i
         return Sound.from_pcm([], sample_rate: sample_rate) if total_frames <= 0
@@ -51,12 +52,16 @@ module Zenoo
       end
 
       # 周波数スイープ (ピッチベンド、レーザー音、ジャンプ音など)
-      # @param freq_start [Numeric] 開始周波数 (Hz)
-      # @param freq_end [Numeric] 終了周波数 (Hz)
-      # @param duration [Numeric] 長さ (秒)
-      # @param type [Symbol] 波形種別 (:sine, :square, :triangle, :sawtooth)
-      # @param volume [Numeric] 音量 (0.0 .. 1.0)
-      # @return [Sound] 生成された Sound インスタンス
+      #
+      # - `freq_start` (`Numeric`): 開始周波数（Hz）
+      # - `freq_end` (`Numeric`): 終了周波数（Hz）
+      # - `duration` (`Numeric`): 長さ（秒）
+      # - `type:` (`Symbol`): 波形種別（`:sine`, `:square`, `:triangle`, `:sawtooth`）
+      # - `volume:` (`Numeric`): 音量（`0.0〜1.0`）
+      # - `attack:` (`Numeric`): アタック時間（秒）
+      # - `release:` (`Numeric`): リリース時間（秒）
+      # - `sample_rate:` (`Integer`): サンプリングレート（Hz）
+      # - 戻り値: `Zenoo::Sound`
       def sweep(freq_start, freq_end, duration = 0.5, type: :sine, volume: 1.0, attack: 0.005, release: 0.01, sample_rate: 44100)
         total_frames = (duration * sample_rate).to_i
         return Sound.from_pcm([], sample_rate: sample_rate) if total_frames <= 0
@@ -93,11 +98,13 @@ module Zenoo
       end
 
       # ホワイトノイズ生成 (爆発音、打楽器、摩擦音など)
-      # @param duration [Numeric] 長さ (秒)
-      # @param volume [Numeric] 音量 (0.0 .. 1.0)
-      # @param attack [Numeric] アタック時間 (秒)
-      # @param release [Numeric] リリース時間 (秒, 長めにすると爆発音風)
-      # @return [Sound] 生成された Sound インスタンス
+      #
+      # - `duration` (`Numeric`): 長さ（秒）
+      # - `volume:` (`Numeric`): 音量（`0.0〜1.0`）
+      # - `attack:` (`Numeric`): アタック時間（秒）
+      # - `release:` (`Numeric`): リリース時間（秒、長めにすると爆発音風）
+      # - `sample_rate:` (`Integer`): サンプリングレート（Hz）
+      # - 戻り値: `Zenoo::Sound`
       def noise(duration = 0.5, volume: 1.0, attack: 0.002, release: 0.1, sample_rate: 44100)
         total_frames = (duration * sample_rate).to_i
         return Sound.from_pcm([], sample_rate: sample_rate) if total_frames <= 0
@@ -129,11 +136,11 @@ module Zenoo
       end
 
       # 任意の数式ブロックからサウンドを生成
-      # @param duration [Numeric] 長さ (秒)
-      # @param sample_rate [Integer] サンプリングレート (Hz)
-      # @yieldparam t [Float] 現在の経過時間 (秒)
-      # @yieldreturn [Float] -1.0 .. 1.0 のサンプル値
-      # @return [Sound] 生成された Sound インスタンス
+      #
+      # - `duration` (`Numeric`): 長さ（秒）
+      # - `sample_rate:` (`Integer`): サンプリングレート（Hz）
+      # - ブロック引数 (`t`): 現在の経過時間（秒、ブロックから `-1.0〜1.0` のサンプル値を返す）
+      # - 戻り値: `Zenoo::Sound`
       def create(duration, sample_rate: 44100)
         total_frames = (duration * sample_rate).to_i
         return Sound.from_pcm([], sample_rate: sample_rate) if total_frames <= 0
@@ -151,6 +158,26 @@ module Zenoo
 
       # 統合シンセサイザー (PCM配列生成)
       # エディタ (tools/sound_generator.rb) 互換のパラメータ群から [-1.0 .. 1.0] の Float サンプル配列を生成
+      #
+      # - `wave:` (`Symbol`, `Integer`): 波形種別（`:square`, `:sawtooth`, `:sine`, `:triangle`, `:noise`）
+      # - `freq:` (`Float`): 初期周波数（Hz）
+      # - `min_freq:` (`Float`): 最低周波数下限（Hz）
+      # - `slide:` (`Float`): 周波数スライド量（Hz/秒）
+      # - `slide_accel:` (`Float`): 周波数スライド加速度
+      # - `duty:` (`Float`): 矩形波デューティ比（`0.05〜0.95`）
+      # - `duty_sweep:` (`Float`): デューティ比の変化速度
+      # - `vib_depth:` (`Float`): ビブラートの深さ（Hz）
+      # - `vib_speed:` (`Float`): ビブラートの速さ（Hz）
+      # - `attack:` (`Float`): アタック時間（秒）
+      # - `sustain:` (`Float`): サステイン時間（秒）
+      # - `punch:` (`Float`): サステイン中の音量パンチ強調量
+      # - `decay:` (`Float`): ディケイ時間（秒）
+      # - `arp_mod:` (`Float`): アルペジオ周波数倍率
+      # - `arp_time:` (`Float`): アルペジオ切替時刻（秒）
+      # - `lpf_cutoff:` (`Float`): ローパスフィルタのカットオフ周波数（Hz）
+      # - `volume:` (`Float`): 出力音量（`0.0〜1.0`）
+      # - `sample_rate:` (`Integer`): サンプリングレート（Hz）
+      # - 戻り値: `Array<Float>`
       def synthesize_pcm(
         wave: :square,
         freq: 440.0,
@@ -286,6 +313,9 @@ module Zenoo
 
       # 統合シンセサイザー (Sound インスタンス生成)
       # synthesize_pcm で生成された波形から直接 Sound インスタンスを生成
+      #
+      # - 引数: `synthesize_pcm` と同一のシンセサイズパラメータを受け取る
+      # - 戻り値: `Zenoo::Sound`
       def synthesize(
         wave: :square,
         freq: 440.0,

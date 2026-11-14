@@ -4,6 +4,7 @@ require_relative 'color'
 require_relative 'window'
 
 module Zenoo
+  # HTML5 Canvas 2D 風のベクターパス・グラデーション描画およびメッシュ生成クラス
   class Canvas
     attr_accessor :fill_style, :stroke_style, :line_width, :line_cap, :line_join, :miter_limit, :global_alpha
 
@@ -87,9 +88,16 @@ module Zenoo
       end
     end
 
+    # 線形グラデーション定義クラス
     class LinearGradient
       attr_reader :x0, :y0, :x1, :y1, :stops
 
+      # 線形グラデーションを生成する
+      #
+      # - `x0` (`Numeric`): 始点 X 座標
+      # - `y0` (`Numeric`): 始点 Y 座標
+      # - `x1` (`Numeric`): 終点 X 座標
+      # - `y1` (`Numeric`): 終点 Y 座標
       def initialize(x0, y0, x1, y1)
         @x0 = x0.to_f
         @y0 = y0.to_f
@@ -98,6 +106,11 @@ module Zenoo
         @stops = []
       end
 
+      # グラデーションに色停止点（カラーストップ）を追加する
+      #
+      # - `offset` (`Float`): 停止位置（`0.0`〜`1.0`）
+      # - `color` (`Color`, `Symbol`, `Array<Integer>`): 停止点の色
+      # - 戻り値: `self`
       def add_color_stop(offset, color)
         @stops << [offset.to_f, color]
         @stops.sort_by! { |s| s[0] }
@@ -105,9 +118,18 @@ module Zenoo
       end
     end
 
+    # 円形（放射）グラデーション定義クラス
     class RadialGradient
       attr_reader :x0, :y0, :r0, :x1, :y1, :r1, :stops
 
+      # 円形（放射）グラデーションを生成する
+      #
+      # - `x0` (`Numeric`): 開始円の中心 X 座標
+      # - `y0` (`Numeric`): 開始円の中心 Y 座標
+      # - `r0` (`Numeric`): 開始円の半径
+      # - `x1` (`Numeric`): 終了円の中心 X 座標（省略時は `x0`）
+      # - `y1` (`Numeric`): 終了円の中心 Y 座標（省略時は `y0`）
+      # - `r1` (`Numeric`): 終了円の半径（省略時は `r0`）
       def initialize(x0, y0, r0, x1 = x0, y1 = y0, r1 = r0)
         @x0 = x0.to_f
         @y0 = y0.to_f
@@ -118,6 +140,11 @@ module Zenoo
         @stops = []
       end
 
+      # グラデーションに色停止点（カラーストップ）を追加する
+      #
+      # - `offset` (`Float`): 停止位置（`0.0`〜`1.0`）
+      # - `color` (`Color`, `Symbol`, `Array<Integer>`): 停止点の色
+      # - 戻り値: `self`
       def add_color_stop(offset, color)
         @stops << [offset.to_f, color]
         @stops.sort_by! { |s| s[0] }
@@ -125,6 +152,7 @@ module Zenoo
       end
     end
 
+    # ベクター描画用の Canvas インスタンスを生成する
     def initialize
       @fill_style = [255, 255, 255, 255]
       @stroke_style = [255, 255, 255, 255]
@@ -147,12 +175,34 @@ module Zenoo
     #     c.fill_circle(50, 50, 40, :orange)
     #     c.stroke_circle(50, 50, 40, :white, 4)
     #   end
+    #
+    # - `width_or_image` (`Numeric`, `Image`, `nil`): 幅または基準 `Image`
+    # - `height_arg` (`Numeric`, `nil`): 高さ
+    # - `width:` (`Numeric`, `nil`): メッシュ幅の明示指定
+    # - `height:` (`Numeric`, `nil`): メッシュ高さの明示指定
+    # - `image:` (`Image`, `nil`): 貼り付けるテクスチャ
+    # - `shader:` (`Shader`, `nil`): 適用するカスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーへ渡すユニフォーム変数
+    # - `blend:` (`Symbol`): ブレンドモード（`:alpha`, `:add` 等）
+    # - ブロック引数 (`canvas`): 生成された `Canvas` インスタンス
+    # - 戻り値: `Zenoo::Mesh`
     def self.to_mesh(width_or_image = nil, height_arg = nil, width: nil, height: nil, image: nil, shader: nil, uniforms: nil, blend: :alpha, &block)
       new.to_mesh(width_or_image, height_arg, width: width, height: height, image: image, shader: shader, uniforms: uniforms, blend: blend, &block)
     end
 
     # 現在の Canvas またはブロック内の描画命令 (fill / stroke / fill_rect 等) をキャプチャし、
     # Sprite や Window.draw にそのまま渡せる Zenoo::Mesh (8 floats/頂点) を生成して返します。
+    #
+    # - `width_or_image` (`Numeric`, `Image`, `nil`): 幅または基準 `Image`
+    # - `height_arg` (`Numeric`, `nil`): 高さ
+    # - `width:` (`Numeric`, `nil`): メッシュ幅の明示指定
+    # - `height:` (`Numeric`, `nil`): メッシュ高さの明示指定
+    # - `image:` (`Image`, `nil`): 貼り付けるテクスチャ
+    # - `shader:` (`Shader`, `nil`): 適用するカスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーへ渡すユニフォーム変数
+    # - `blend:` (`Symbol`): ブレンドモード（`:alpha`, `:add` 等）
+    # - ブロック引数 (`canvas`): 描画を行う `Canvas` インスタンス（`self`）
+    # - 戻り値: `Zenoo::Mesh`
     def to_mesh(width_or_image = nil, height_arg = nil, width: nil, height: nil, image: nil, shader: nil, uniforms: nil, blend: :alpha)
       if width_or_image.is_a?(Image)
         img = width_or_image
@@ -234,6 +284,7 @@ module Zenoo
     # ----------------------------------------------------
     # 状態スタック & 座標変換
     # ----------------------------------------------------
+    # 現在のスタイルおよび座標変換行列をスタックに保存する
     def save
       @state_stack.push({
         fill_style: @fill_style.dup,
@@ -247,6 +298,7 @@ module Zenoo
       })
     end
 
+    # スタックから最後に保存したスタイルおよび座標変換行列を復元する
     def restore
       return if @state_stack.empty?
       state = @state_stack.pop
@@ -260,18 +312,30 @@ module Zenoo
       @transform = state[:transform]
     end
 
+    # 現在の座標変換行列を `(dx, dy)` だけ平行移動する
+    #
+    # - `dx` (`Numeric`): X 方向の移動量
+    # - `dy` (`Numeric`): Y 方向の移動量
     def translate(dx, dy)
       @transform.translate(dx.to_f, dy.to_f)
     end
 
+    # 現在の座標変換行列を `(sx, sy)` で拡大縮小する
+    #
+    # - `sx` (`Numeric`): X 方向の倍率
+    # - `sy` (`Numeric`): Y 方向の倍率（省略時は `sx` と同じ）
     def scale(sx, sy = sx)
       @transform.scale(sx.to_f, sy.to_f)
     end
 
+    # 現在の座標変換行列を回転する
+    #
+    # - `angle_rad` (`Numeric`): 回転角（ラジアン）
     def rotate(angle_rad)
       @transform.rotate(angle_rad.to_f)
     end
 
+    # 座標変換行列を単位行列へリセットする
     def reset_transform
       @transform = Transform.new
     end
@@ -279,15 +343,21 @@ module Zenoo
     # ----------------------------------------------------
     # パス構築 API
     # ----------------------------------------------------
+    # 現在のサブパス一覧を破棄して新しいパスを開始する
     def begin_path
       @subpaths = [SubPath.new]
     end
 
+    # 現在のサブパスの終点と始点を閉じた輪郭としてマークする
     def close_path
       return if current_subpath.empty?
       current_subpath.closed = true
     end
 
+    # 新しいサブパスを開始し、開始点を `(x, y)` へ移動する
+    #
+    # - `x` (`Numeric`): 移動先 X 座標
+    # - `y` (`Numeric`): 移動先 Y 座標
     def move_to(x, y)
       tx, ty = @transform.apply(x.to_f, y.to_f)
       if current_subpath.empty?
@@ -299,12 +369,24 @@ module Zenoo
       end
     end
 
+    # 現在の終点から `(x, y)` まで直線の辺を追加する
+    #
+    # - `x` (`Numeric`): 終点 X 座標
+    # - `y` (`Numeric`): 終点 Y 座標
     def line_to(x, y)
       tx, ty = @transform.apply(x.to_f, y.to_f)
       current_subpath.points << [tx, ty]
     end
 
     # 2次ベジエ曲線
+    #
+    # 制御点 `(cpx, cpy)` を通る 2 次ベジエ曲線を終点 `(x, y)` まで追加する
+    #
+    # - `cpx` (`Numeric`): 制御点 X 座標
+    # - `cpy` (`Numeric`): 制御点 Y 座標
+    # - `x` (`Numeric`): 終点 X 座標
+    # - `y` (`Numeric`): 終点 Y 座標
+    # - `steps` (`Integer`): 曲線近似の分割数（デフォルト: 16）
     def quadratic_curve_to(cpx, cpy, x, y, steps = 16)
       last = current_point
       p0x, p0y = last ? last : @transform.apply(0, 0)
@@ -321,6 +403,16 @@ module Zenoo
     end
 
     # 3次ベジエ曲線
+    #
+    # 2つの制御点 `(cp1x, cp1y)`, `(cp2x, cp2y)` を持つ 3 次ベジエ曲線を追加する
+    #
+    # - `cp1x` (`Numeric`): 第1制御点 X 座標
+    # - `cp1y` (`Numeric`): 第1制御点 Y 座標
+    # - `cp2x` (`Numeric`): 第2制御点 X 座標
+    # - `cp2y` (`Numeric`): 第2制御点 Y 座標
+    # - `x` (`Numeric`): 終点 X 座標
+    # - `y` (`Numeric`): 終点 Y 座標
+    # - `steps` (`Integer`): 曲線近似の分割数（デフォルト: 24）
     def bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y, steps = 24)
       last = current_point
       p0x, p0y = last ? last : @transform.apply(0, 0)
@@ -338,6 +430,15 @@ module Zenoo
     end
 
     # 円弧
+    #
+    # 中心 `(cx, cy)`・半径 `radius` の円弧パスを追加する
+    #
+    # - `cx` (`Numeric`): 中心 X 座標
+    # - `cy` (`Numeric`): 中心 Y 座標
+    # - `radius` (`Numeric`): 円の半径
+    # - `start_angle` (`Numeric`): 開始角（ラジアン）
+    # - `end_angle` (`Numeric`): 終了角（ラジアン）
+    # - `counterclockwise` (`Boolean`): 反時計回りにする場合 `true`
     def arc(cx, cy, radius, start_angle, end_angle, counterclockwise = false)
       r = radius.to_f.abs
       return if r <= 0.0
@@ -365,12 +466,27 @@ module Zenoo
     end
 
     # 円
+    #
+    # 中心 `(cx, cy)`・半径 `radius` の閉じた円パスを追加する
+    #
+    # - `cx` (`Numeric`): 中心 X 座標
+    # - `cy` (`Numeric`): 中心 Y 座標
+    # - `radius` (`Numeric`): 半径
     def circle(cx, cy, radius)
       arc(cx, cy, radius, 0, Math::PI * 2)
       close_path
     end
 
     # 楕円パス (HTML5 Canvas 2D 互換)
+    #
+    # - `cx` (`Numeric`): 中心 X 座標
+    # - `cy` (`Numeric`): 中心 Y 座標
+    # - `rx` (`Numeric`): X 半径
+    # - `ry` (`Numeric`): Y 半径
+    # - `rotation` (`Numeric`): 回転角（ラジアン）
+    # - `start_angle` (`Numeric`): 開始角（ラジアン）
+    # - `end_angle` (`Numeric`): 終了角（ラジアン）
+    # - `counterclockwise` (`Boolean`): 反時計回りの場合 `true`
     def ellipse(cx, cy, rx, ry, rotation = 0.0, start_angle = 0.0, end_angle = Math::PI * 2, counterclockwise = false)
       rx = rx.to_f.abs
       ry = ry.to_f.abs
@@ -406,6 +522,11 @@ module Zenoo
     end
 
     # 矩形パス
+    #
+    # - `x` (`Numeric`): 左上 X 座標
+    # - `y` (`Numeric`): 左上 Y 座標
+    # - `w` (`Numeric`): 幅
+    # - `h` (`Numeric`): 高さ
     def rect(x, y, w, h)
       move_to(x, y)
       line_to(x + w, y)
@@ -415,6 +536,12 @@ module Zenoo
     end
 
     # 角丸矩形パス
+    #
+    # - `x` (`Numeric`): 左上 X 座標
+    # - `y` (`Numeric`): 左上 Y 座標
+    # - `w` (`Numeric`): 幅
+    # - `h` (`Numeric`): 高さ
+    # - `radius` (`Numeric`): 角丸の半径
     def round_rect(x, y, w, h, radius)
       r = [[radius.to_f, w.abs / 2.0].min, h.abs / 2.0].min
       if r <= 0.0
@@ -437,12 +564,28 @@ module Zenoo
     # ----------------------------------------------------
     # グラデーション生成 API
     # ----------------------------------------------------
+    # 線形グラデーションを生成して返す
+    #
+    # - `x0` (`Numeric`): 始点 X 座標
+    # - `y0` (`Numeric`): 始点 Y 座標
+    # - `x1` (`Numeric`): 終点 X 座標
+    # - `y1` (`Numeric`): 終点 Y 座標
+    # - 戻り値: `Zenoo::Canvas::LinearGradient`
     def create_linear_gradient(x0, y0, x1, y1)
       tx0, ty0 = @transform.apply(x0.to_f, y0.to_f)
       tx1, ty1 = @transform.apply(x1.to_f, y1.to_f)
       LinearGradient.new(tx0, ty0, tx1, ty1)
     end
 
+    # 円形（放射）グラデーションを生成して返す
+    #
+    # - `x0` (`Numeric`): 開始円の中心 X 座標
+    # - `y0` (`Numeric`): 開始円の中心 Y 座標
+    # - `r0` (`Numeric`): 開始円の半径
+    # - `x1` (`Numeric`): 終了円の中心 X 座標（省略時は `x0`）
+    # - `y1` (`Numeric`): 終了円の中心 Y 座標（省略時は `y0`）
+    # - `r1` (`Numeric`): 終了円の半径（省略時は `r0`）
+    # - 戻り値: `Zenoo::Canvas::RadialGradient`
     def create_radial_gradient(x0, y0, r0, x1 = x0, y1 = y0, r1 = r0)
       tx0, ty0 = @transform.apply(x0.to_f, y0.to_f)
       tx1, ty1 = @transform.apply(x1.to_f, y1.to_f)
@@ -453,6 +596,9 @@ module Zenoo
     # ----------------------------------------------------
     # 描画 API (fill / stroke)
     # ----------------------------------------------------
+    # 構築済みの全サブパスを塗りつぶす（`to_mesh` 内では頂点をキャプチャ）
+    #
+    # - `style` (`Color`, `Symbol`, `Array<Integer>`, `LinearGradient`, `RadialGradient`, `nil`): 塗りつぶし色またはグラデーション（省略時は `fill_style`）
     def fill(style = nil)
       active_style = style || @fill_style
       coords = []
@@ -468,6 +614,10 @@ module Zenoo
       render_triangles_with_style(coords, active_style)
     end
 
+    # 構築済みの全サブパスの輪郭線を描画する（`to_mesh` 内では頂点をキャプチャ）
+    #
+    # - `style` (`Color`, `Symbol`, `Array<Integer>`, `LinearGradient`, `RadialGradient`, `nil`): 線色またはグラデーション（省略時は `stroke_style`）
+    # - `width` (`Numeric`, `nil`): 線の太さ（省略時は `line_width`）
     def stroke(style = nil, width = nil)
       active_style = style || @stroke_style
       w = (width || @line_width).to_f
@@ -694,6 +844,13 @@ module Zenoo
     # ----------------------------------------------------
     # 即時描画ショートハンド
     # ----------------------------------------------------
+    # 指定位置に塗りつぶし矩形を即時描画する
+    #
+    # - `x` (`Numeric`): 左上 X 座標
+    # - `y` (`Numeric`): 左上 Y 座標
+    # - `w` (`Numeric`): 幅
+    # - `h` (`Numeric`): 高さ
+    # - `style` (`Color`, `Symbol`, `Array<Integer>`, `LinearGradient`, `RadialGradient`, `nil`): 塗りつぶしスタイル
     def fill_rect(x, y, w, h, style = nil)
       save
       begin_path
@@ -702,6 +859,14 @@ module Zenoo
       restore
     end
 
+    # 指定位置に矩形の枠線を即時描画する
+    #
+    # - `x` (`Numeric`): 左上 X 座標
+    # - `y` (`Numeric`): 左上 Y 座標
+    # - `w` (`Numeric`): 幅
+    # - `h` (`Numeric`): 高さ
+    # - `style` (`Color`, `Symbol`, `Array<Integer>`, `LinearGradient`, `RadialGradient`, `nil`): 線スタイル
+    # - `width` (`Numeric`, `nil`): 線の太さ
     def stroke_rect(x, y, w, h, style = nil, width = nil)
       save
       begin_path
@@ -710,6 +875,12 @@ module Zenoo
       restore
     end
 
+    # 指定中心・半径の塗りつぶし円を即時描画する
+    #
+    # - `cx` (`Numeric`): 中心 X 座標
+    # - `cy` (`Numeric`): 中心 Y 座標
+    # - `radius` (`Numeric`): 半径
+    # - `style` (`Color`, `Symbol`, `Array<Integer>`, `LinearGradient`, `RadialGradient`, `nil`): 塗りつぶしスタイル
     def fill_circle(cx, cy, radius, style = nil)
       save
       begin_path
@@ -718,6 +889,13 @@ module Zenoo
       restore
     end
 
+    # 指定中心・半径の円枠線を即時描画する
+    #
+    # - `cx` (`Numeric`): 中心 X 座標
+    # - `cy` (`Numeric`): 中心 Y 座標
+    # - `radius` (`Numeric`): 半径
+    # - `style` (`Color`, `Symbol`, `Array<Integer>`, `LinearGradient`, `RadialGradient`, `nil`): 線スタイル
+    # - `width` (`Numeric`, `nil`): 線の太さ
     def stroke_circle(cx, cy, radius, style = nil, width = nil)
       save
       begin_path

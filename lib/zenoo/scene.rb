@@ -60,22 +60,37 @@ module Zenoo
 
     class << self
       # 全シーンを破棄して scene へ切り替え
+      #
+      # - `scene` (`Scene`, `nil`): 遷移先のシーンインスタンス（省略時は `&block` から無名シーンを生成）
+      # - `fade:` (`Numeric`): フェード遷移に要する合計秒数（0.0 以下で即座に切り替え、デフォルト: 0.0）
+      # - `color:` (`Color`, `Symbol`, `Array<Integer>`): フェード幕の色（デフォルト: `:black`）
+      # - `&block`: `scene` を省略した場合に使用する更新・描画ブロック
       def change(scene = nil, fade: 0.0, color: :black, &block)
         __request(:change, scene || Scene.new(&block), :freeze, fade, color)
       end
 
       # 現在のシーンの上に scene を重ねる
       # below: :freeze (下は止めて表示) / :live (下も動かす) / :hide (下は描画しない)
+      #
+      # - `scene` (`Scene`, `nil`): 重ねるシーンインスタンス（省略時は `&block` から無名シーンを生成）
+      # - `below:` (`Symbol`): 下層シーンの振る舞い（`:freeze` = 止めて表示、`:live` = 下も更新・描画、`:hide` = 隠す、デフォルト: `:freeze`）
+      # - `fade:` (`Numeric`): フェード遷移の合計秒数（デフォルト: 0.0）
+      # - `color:` (`Color`, `Symbol`, `Array<Integer>`): フェード幕の色（デフォルト: `:black`）
+      # - `&block`: `scene` を省略した場合に使用する更新・描画ブロック
       def push(scene = nil, below: :freeze, fade: 0.0, color: :black, &block)
         __request(:push, scene || Scene.new(&block), below, fade, color)
       end
 
       # 一番上のシーンを閉じる
+      #
+      # - `fade:` (`Numeric`): フェード遷移の合計秒数（デフォルト: 0.0）
+      # - `color:` (`Color`, `Symbol`, `Array<Integer>`): フェード幕の色（デフォルト: `:black`）
       def pop(fade: 0.0, color: :black)
         __request(:pop, nil, :freeze, fade, color)
       end
 
       # 1 フレーム分の実行 (Window.loop の中で毎フレーム呼ぶ)
+      # スタック上の現在シーンの実行、`below:` に応じた下層シーンの再生／更新、フェード演出、予約済み遷移の適用を行います。
       def call
         # ループ開始前に予約された最初のシーンなどを反映
         __apply(@pending) if @stack.empty? && !@pending.empty? && @fade_state == :none
@@ -143,31 +158,45 @@ module Zenoo
       end
 
       # 一番上のシーン
+      #
+      # - 戻り値: `Scene`, `nil`
       def current
         @stack.last
       end
 
       # 現在のシーンの経過フレーム数 (初回の call で 1。ブロックシーン内でもそのまま参照可能)
+      #
+      # - 戻り値: `Integer`
       def frames
         top = @stack.last
         top ? top.frames : 0
       end
 
       # 現在のシーンの経過秒数
+      #
+      # - 戻り値: `Float`
       def elapsed
         top = @stack.last
         top ? top.elapsed : 0.0
       end
 
+      # 現在スタックに積まれているシーンの数を返します。
+      #
+      # - 戻り値: `Integer`
       def size
         @stack.length
       end
 
+      # シーンスタックが空かどうかを返します。
+      #
+      # - 戻り値: `Boolean`
       def empty?
         @stack.empty?
       end
 
       # フェード演出中か
+      #
+      # - 戻り値: `Boolean` フェードアウトまたはフェードイン中なら `true`
       def transitioning?
         @fade_state != :none
       end
@@ -249,6 +278,8 @@ module Zenoo
     # ------------------------------------------------------------------
 
     # ブロックを渡すとクラスを作らずにシーンになる: Scene.new { ... }
+    #
+    # - `&block`: サブクラス化せずに利用する場合の毎フレーム実行処理
     def initialize(&block)
       @scene_block = block
     end
@@ -259,21 +290,33 @@ module Zenoo
     end
 
     # 任意フック (必要なものだけ上書き)
+    #
+    # スタックに積まれた直後に 1 回呼ばれます。
     def enter; end   # スタックに積まれた時
+
+    # スタックから外された直後に 1 回呼ばれます。
     def leave; end   # スタックから外された時
+
+    # 上に積まれていた別シーンが `pop` され、再び最前面に戻った時に呼ばれます。
     def resume; end  # 上のシーンが閉じて、再び一番上になった時
 
     # このシーンが動いた累計フレーム数 (初回の call で 1。覆われている間は増えない)
+    #
+    # - 戻り値: `Integer`
     def frames
       @scene_frames || 0
     end
 
     # このシーンが動いた累計秒数
+    #
+    # - 戻り値: `Float`
     def elapsed
       @scene_elapsed || 0.0
     end
 
     # このシーンが現在スタックの最前面にあるか (上に別シーンが積まれていないか)
+    #
+    # - 戻り値: `Boolean`
     def active?
       Scene.current == self
     end

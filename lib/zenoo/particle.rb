@@ -352,6 +352,9 @@ module Zenoo
     GLSL
 
     @default_shader = nil
+    # パーティクル描画用の標準 GLSL シェーダーを返す
+    #
+    # - 戻り値: `Zenoo::Shader`
     def self.default_shader
       @default_shader ||= Shader.new(PARTICLE_VERTEX_SHADER, PARTICLE_FRAGMENT_SHADER)
     end
@@ -389,6 +392,12 @@ module Zenoo
     attr_accessor :blend
     attr_accessor :image, :anim_frames
 
+    # GPU パーティクルエミッターを生成する
+    #
+    # - `x` (`Float`): エミッター基準 X 座標
+    # - `y` (`Float`): エミッター基準 Y 座標
+    # - `max_particles:` (`Integer`): リングバッファの最大同時パーティクル数（最小 16）
+    # - `opts` (`Hash`): 各種パラメータ（`emission_rate:`, `lifetime:`, `speed:`, `start_color:`, `shape:`, `blend:` 等）の初期設定
     def initialize(x = 0.0, y = 0.0, max_particles: 4000, **opts)
       @x = x.to_f
       @y = y.to_f
@@ -402,6 +411,9 @@ module Zenoo
       init_gpu_buffer
     end
 
+    # エミッターの各種パラメータと状態（経過時間・放出カウント）を初期値にリセットする
+    #
+    # - 戻り値: `self`
     def reset_defaults
       @local_space        = false
       @camera             = true
@@ -465,6 +477,9 @@ module Zenoo
     end
 
     # ハッシュによる一括設定
+    #
+    # - `opts` (`Hash`): 各属性名（例: `emission_rate:`, `start_color:`, `blend:`）と値のペア
+    # - 戻り値: `self`
     def configure(**opts)
       opts.each do |k, v|
         setter = :"#{k}="
@@ -474,6 +489,8 @@ module Zenoo
     end
 
     # 設定を Hash としてエクスポート
+    #
+    # - 戻り値: `Hash`（色は `[r, g, b, alpha]` の `0〜255` 配列）
     def to_h
       {
         local_space:        @local_space,
@@ -522,6 +539,8 @@ module Zenoo
     end
 
     # 現在生存中のパーティクル数 (概算または正確カウント)
+    #
+    # - 戻り値: `Integer`
     def alive_count
       return @max_particles if @loop_mode
       return 0 if @used_count <= 0 || @time >= @max_expire_time
@@ -537,6 +556,8 @@ module Zenoo
     end
 
     # 全パーティクルの消去
+    #
+    # - 戻り値: `self`
     def clear
       @time = 0.0
       @emit_accumulator = 0.0
@@ -554,6 +575,17 @@ module Zenoo
 
     # ワンショット一斉放出 (Burst)
     # x, y, color, speed, size, angle, spread, lifetime を一時オーバーライドして放出可能
+    #
+    # - `count` (`Integer`): 一斉に生成するパーティクル数（省略時は `burst_count`）
+    # - `x:` (`Float`, `nil`): 放出基準 X 座標の一時上書き
+    # - `y:` (`Float`, `nil`): 放出基準 Y 座標の一時上書き
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): パーティクル個別の色上書き（`[r, g, b, alpha]` は `0〜255`）
+    # - `speed:` (`Float`, `nil`): 初速の一時上書き
+    # - `size:` (`Float`, `nil`): サイズの一時上書き
+    # - `angle:` (`Float`, `nil`): 放出中心角（度数法）の一時上書き
+    # - `spread:` (`Float`, `nil`): 拡散角（度数法）の一時上書き
+    # - `lifetime:` (`Float`, `nil`): 寿命（秒）の一時上書き
+    # - 戻り値: `self`
     def burst(count = @burst_count, x: nil, y: nil, color: nil, speed: nil, size: nil, angle: nil, spread: nil, lifetime: nil)
       n = count.to_i
       return self if n <= 0
@@ -586,6 +618,9 @@ module Zenoo
     end
 
     # GPU ループモード用に全スロットを一括初期充填 (CPU転送ゼロで無限ループ再生したい場合)
+    #
+    # - `count` (`Integer`): 充填するパーティクル数（省略時は `max_particles`）
+    # - 戻り値: `self`
     def fill_loop_pool!(count = @max_particles)
       clear
       @loop_mode = true
@@ -595,6 +630,9 @@ module Zenoo
     end
 
     # 毎フレーム更新 (新規発生分のみリングバッファへ glBufferSubData 転送)
+    #
+    # - `dt` (`Float`): 経過時間（秒、省略時は `Window.delta_time`）
+    # - 戻り値: `self`
     def update(dt = Window.delta_time)
       @time += dt.to_f
 
@@ -616,6 +654,12 @@ module Zenoo
     end
 
     # 描画 (1 ドローコール)
+    #
+    # - `x:` (`Float`, `nil`): 描画位置 X の一時指定
+    # - `y:` (`Float`, `nil`): 描画位置 Y の一時指定
+    # - `z:` (`Float`, `nil`): 描画深度 Z の一時指定
+    # - `camera:` (`Boolean`, `nil`): カメラ追従有無の一時指定
+    # - 戻り値: `self`
     def draw(x: nil, y: nil, z: nil, camera: nil)
       return self if @used_count <= 0
 
@@ -812,6 +856,12 @@ module Zenoo
     attr_reader :emitters
     attr_accessor :x, :y, :z, :camera
 
+    # 複数エミッターを束ねるパーティクルシステムを生成する
+    #
+    # - `x` (`Float`): システム基準 X 座標
+    # - `y` (`Float`): システム基準 Y 座標
+    # - `max_particles:` (`Integer`): 初期エミッターを同時生成する場合の最大パーティクル数
+    # - `opts` (`Hash`): 初期エミッター設定（指定時のみ1つ目のエミッターを自動追加）
     def initialize(x = 0.0, y = 0.0, max_particles: 4000, **opts)
       @x = x.to_f
       @y = y.to_f
@@ -824,24 +874,44 @@ module Zenoo
       end
     end
 
+    # 新しいエミッターレイヤーを追加する
+    #
+    # - `max_particles:` (`Integer`): エミッターの最大パーティクル数
+    # - `opts` (`Hash`): `ParticleEmitter.new` に渡す設定オプション
+    # - 戻り値: `Zenoo::ParticleEmitter`
     def add_emitter(max_particles: 4000, **opts)
       em = ParticleEmitter.new(@x, @y, max_particles: max_particles, **opts)
       @emitters << em
       em
     end
 
+    # 指定インデックスのエミッターを削除する（最低 1 つは残る）
+    #
+    # - `index` (`Integer`): 削除対象インデックス
     def remove_emitter(index)
       @emitters.delete_at(index) if @emitters.length > 1
     end
 
+    # 指定インデックスのエミッターを取得する
+    #
+    # - `index` (`Integer`): エミッター番号
+    # - 戻り値: `Zenoo::ParticleEmitter` | `nil`
     def [](index)
       @emitters[index]
     end
 
+    # 先頭（プライマリ）のエミッターを返す（未作成時は自動生成）
+    #
+    # - 戻り値: `Zenoo::ParticleEmitter`
     def primary
       @emitters[0] ||= ParticleEmitter.new(@x, @y)
     end
 
+    # システムおよび配下の全エミッターを指定座標 `(nx, ny)` へ移動する
+    #
+    # - `nx` (`Float`): 移動先 X 座標
+    # - `ny` (`Float`): 移動先 Y 座標
+    # - 戻り値: `self`
     def move_to(nx, ny)
       @x = nx.to_f
       @y = ny.to_f
@@ -855,6 +925,12 @@ module Zenoo
       self
     end
 
+    # 配下の全エミッターを一斉バースト放出させる
+    #
+    # - `count` (`Integer`, `nil`): 放出数（省略時は各エミッターの `burst_count`）
+    # - `x:` (`Float`, `nil`): 放出先 X 座標（省略時はシステム座標）
+    # - `y:` (`Float`, `nil`): 放出先 Y 座標（省略時はシステム座標）
+    # - 戻り値: `self`
     def burst(count = nil, x: nil, y: nil)
       bx = x ? x.to_f : @x
       by = y ? y.to_f : @y
@@ -868,11 +944,17 @@ module Zenoo
       self
     end
 
+    # 配下の全エミッターのパーティクルを消去する
+    #
+    # - 戻り値: `self`
     def clear
       @emitters.each(&:clear)
       self
     end
 
+    # 配下の全エミッターの合計生存パーティクル数を返す
+    #
+    # - 戻り値: `Integer`
     def alive_count
       total = 0
       i = 0
@@ -884,6 +966,9 @@ module Zenoo
       total
     end
 
+    # 配下の全エミッターの合計最大パーティクル数を返す
+    #
+    # - 戻り値: `Integer`
     def max_particles
       total = 0
       i = 0
@@ -895,6 +980,10 @@ module Zenoo
       total
     end
 
+    # 配下の全エミッターの座標を同期して更新する
+    #
+    # - `dt` (`Float`): 経過時間（秒、省略時は `Window.delta_time`）
+    # - 戻り値: `self`
     def update(dt = Window.delta_time)
       i = 0
       len = @emitters.length
@@ -908,6 +997,13 @@ module Zenoo
       self
     end
 
+    # 配下の全エミッターを Z オフセット付きで順に描画する
+    #
+    # - `x:` (`Float`, `nil`): 描画位置 X の一時指定
+    # - `y:` (`Float`, `nil`): 描画位置 Y の一時指定
+    # - `z:` (`Float`, `nil`): 基準描画深度 Z の一時指定
+    # - `camera:` (`Boolean`, `nil`): カメラ追従有無の一時指定
+    # - 戻り値: `self`
     def draw(x: nil, y: nil, z: nil, camera: nil)
       dx = x ? x.to_f : @x
       dy = y ? y.to_f : @y
@@ -930,12 +1026,22 @@ module Zenoo
       :fire, :explosion, :sparks, :magic_galaxy, :charge_aura, :blizzard, :star_fountain, :cyber_portal
     ].freeze
 
+    # 組み込みプリセットからマルチレイヤー `ParticleSystem` を生成する
+    #
+    # - `name` (`Symbol`): プリセット名（`:fire`, `:explosion`, `:sparks`, `:magic_galaxy`, `:charge_aura`, `:blizzard`, `:star_fountain`, `:cyber_portal`）
+    # - `x` (`Float`): 配置 X 座標
+    # - `y` (`Float`): 配置 Y 座標
+    # - 戻り値: `Zenoo::ParticleSystem`
     def self.preset(name, x = 640.0, y = 360.0)
       ps = new(x, y)
       ps.apply_preset(name)
       ps
     end
 
+    # 指定名の組み込みプリセット設定を自身へ適用する
+    #
+    # - `name` (`Symbol`, `String`): プリセット名（`PRESET_NAMES` 参照）
+    # - 戻り値: `self`
     def apply_preset(name)
       @emitters.clear
       case name.to_sym

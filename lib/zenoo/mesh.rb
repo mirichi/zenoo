@@ -22,6 +22,9 @@ module Zenoo
       attr_accessor :base_x, :base_y, :base_u, :base_v, :base_r, :base_g, :base_b, :base_alpha
       attr_accessor :x, :y, :u, :v, :r, :g, :b, :alpha
 
+      # 頂点カラー（RGBA `0〜255`）を一括設定する
+      #
+      # - `val` (`Color`, `Symbol`, `Array<Integer>`): 色指定
       def color=(val)
         c = Backend.normalize_color(val)
         @r     = c[0] * 255.0
@@ -30,6 +33,9 @@ module Zenoo
         @alpha = c[3] * 255.0
       end
 
+      # 現在の頂点カラーを `[r, g, b, alpha]`（`0〜255`）で返す
+      #
+      # - 戻り値: `Array<Float>`
       def color
         [@r, @g, @b, @alpha]
       end
@@ -47,6 +53,19 @@ module Zenoo
     # 例:
     #   Mesh.grid(image, cols: 16, rows: 8)
     #   Mesh.grid(200, 100, cols: 8, rows: 4) # 画像なしメッシュ
+    #
+    # - `image_or_width` (`Image`, `Numeric`): 貼り付ける `Image` またはメッシュ幅（画像なしの場合）
+    # - `height_arg` (`Numeric`, `nil`): 画像なしメッシュの高さ
+    # - `cols:` (`Integer`): 横分割数
+    # - `rows:` (`Integer`): 縦分割数
+    # - `width:` (`Numeric`, `nil`): メッシュ幅の上書き
+    # - `height:` (`Numeric`, `nil`): メッシュ高さの上書き
+    # - `image:` (`Image`, `nil`): テクスチャ画像（幅・高さ指定時のオプション）
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 初期頂点カラー
+    # - `shader:` (`Shader`, `nil`): 適用するカスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーへ渡すユニフォーム変数
+    # - `blend:` (`Symbol`): ブレンドモード（`:alpha`, `:add` 等）
+    # - 戻り値: `Zenoo::Mesh`
     def self.grid(image_or_width, height_arg = nil, cols: 8, rows: 8, width: nil, height: nil, image: nil, color: :white, shader: nil, uniforms: nil, blend: :alpha)
       if image_or_width.is_a?(Image)
         img = image_or_width
@@ -116,16 +135,38 @@ module Zenoo
     end
 
     # 4頂点クアッドメッシュを生成 (4隅の自由変形・疑似パース用)
+    #
+    # - `image_or_width` (`Image`, `Numeric`): 貼り付ける `Image` またはメッシュ幅
+    # - `height_arg` (`Numeric`, `nil`): 画像なしメッシュの高さ
+    # - `width:` (`Numeric`, `nil`): 幅の上書き
+    # - `height:` (`Numeric`, `nil`): 高さの上書き
+    # - `image:` (`Image`, `nil`): テクスチャ画像
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 初期頂点カラー
+    # - `shader:` (`Shader`, `nil`): カスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム
+    # - `blend:` (`Symbol`): ブレンドモード
+    # - 戻り値: `Zenoo::Mesh`
     def self.quad(image_or_width, height_arg = nil, width: nil, height: nil, image: nil, color: :white, shader: nil, uniforms: nil, blend: :alpha)
       grid(image_or_width, height_arg, cols: 1, rows: 1, width: width, height: height, image: image, color: color, shader: shader, uniforms: uniforms, blend: blend)
     end
 
     # 放射・リング（円形・扇形・ドーナツ）分割メッシュを生成
-    # - slices: 円周方向の分割数 (デフォルト: 24)
-    # - rings:  半径方向の分割数 (デフォルト: 2)
-    # - inner_radius: 内径比率 (0.0 なら中心まで埋まった円、0.0 < r < 1.0 ならドーナツ型)
-    # - start_angle, end_angle: 扇形の開始・終了角度 (度数法、デフォルト: 0.0 .. 360.0)
-    # - uv_mode: :planar (画像のXYそのまま切り抜き) または :polar (円周=U, 半径=V で帯状テクスチャを円形に巻く)
+    #
+    # - `image_or_radius` (`Image`, `Numeric`): 貼り付ける `Image` または外径半径（ピクセル）
+    # - `slices:` (`Integer`): 円周方向の分割数（デフォルト: `24`）
+    # - `rings:` (`Integer`): 半径方向の分割数（デフォルト: `2`）
+    # - `inner_radius:` (`Float`): 内径比率（`0.0` なら中心まで埋まった円、`0.0 < r < 1.0` ならドーナツ型）
+    # - `start_angle:` (`Float`): 扇形の開始角度（度数法）
+    # - `end_angle:` (`Float`): 扇形の終了角度（度数法）
+    # - `uv_mode:` (`Symbol`): `:planar`（画像そのまま切り抜き）または `:polar`（円周=`U`, 半径=`V` で帯状テクスチャを円形に巻く）
+    # - `width:` (`Numeric`, `nil`): 横幅の上書き
+    # - `height:` (`Numeric`, `nil`): 縦幅の上書き
+    # - `image:` (`Image`, `nil`): テクスチャ画像
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 初期頂点カラー
+    # - `shader:` (`Shader`, `nil`): カスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム
+    # - `blend:` (`Symbol`): ブレンドモード
+    # - 戻り値: `Zenoo::Mesh`
     def self.ring(image_or_radius,
                   slices: 24, rings: 2,
                   inner_radius: 0.0, start_angle: 0.0, end_angle: 360.0,
@@ -223,8 +264,18 @@ module Zenoo
     end
 
     # 多角形メッシュを生成 (頂点リストから自動三角形分割)
-    # - points: [[x, y], ...], [[x, y, u, v, alpha(0..255)], ...], [[x, y, u, v, color], ...], または [[x, y, u, v, r, g, b, alpha], ...] (色・アルファは 0〜255)
-    # - indices: 省略時は耳刈り法 (Ear Clipping) で凹多角形も含め自動三角形分割
+    #
+    # - `image_or_points` (`Image`, `Array`): `Image` または頂点リスト（`[[x, y], ...]` / `[[x, y, u, v, alpha(0..255)], ...]` / `[[x, y, u, v, color], ...]` / `[[x, y, u, v, r, g, b, alpha], ...]`、色・アルファは `0〜255`）
+    # - `points` (`Array`, `nil`): 第1引数に `Image` を渡した場合の頂点リスト
+    # - `indices:` (`Array<Integer>`, `nil`): インデックス配列（省略時は耳刈り法で凹多角形を含め自動三角形分割）
+    # - `width:` (`Numeric`, `nil`): 幅の上書き
+    # - `height:` (`Numeric`, `nil`): 高さの上書き
+    # - `image:` (`Image`, `nil`): テクスチャ画像
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 頂点色が未指定な頂点に使う基本カラー
+    # - `shader:` (`Shader`, `nil`): カスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム
+    # - `blend:` (`Symbol`): ブレンドモード
+    # - 戻り値: `Zenoo::Mesh`
     def self.polygon(image_or_points, points = nil, indices: nil, width: nil, height: nil, image: nil, color: :white, shader: nil, uniforms: nil, blend: :alpha)
       if image_or_points.is_a?(Image)
         img = image_or_points
@@ -327,11 +378,34 @@ module Zenoo
     #     c.stroke_circle(50, 50, 40, :white, 4)
     #   end
     #   sprite = Zenoo::Sprite.new(200, 200, mesh)
+    #
+    # - `width_or_image` (`Numeric`, `Image`, `nil`): 幅または基準 `Image`
+    # - `height_arg` (`Numeric`, `nil`): 高さ
+    # - `width:` (`Numeric`, `nil`): メッシュ幅の明示指定
+    # - `height:` (`Numeric`, `nil`): メッシュ高さの明示指定
+    # - `image:` (`Image`, `nil`): 貼り付けるテクスチャ
+    # - `shader:` (`Shader`, `nil`): カスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム
+    # - `blend:` (`Symbol`): ブレンドモード
+    # - ブロック引数 (`canvas`): 描画命令を記録する `Canvas` インスタンス
+    # - 戻り値: `Zenoo::Mesh`
     def self.canvas(width_or_image = nil, height_arg = nil, width: nil, height: nil, image: nil, shader: nil, uniforms: nil, blend: :alpha, &block)
       Canvas.to_mesh(width_or_image, height_arg, width: width, height: height, image: image, shader: shader, uniforms: uniforms, blend: blend, &block)
     end
 
     # 8-float 頂点配列 [x, y, u, v, r, g, b, a, ...] とインデックス配列から管理メッシュを直接構築
+    #
+    # - `vertices` (`Array<Float>`): `[x, y, u, v, r, g, b, a, ...]` のフラット配列（内部色値 `0.0〜1.0`）
+    # - `indices` (`Array<Integer>`, `nil`): インデックス配列（省略時は連番 `0...v_count`）
+    # - `width:` (`Numeric`, `nil`): 幅
+    # - `height:` (`Numeric`, `nil`): 高さ
+    # - `cols:` (`Integer`, `nil`): グリッド横分割数（管理用）
+    # - `rows:` (`Integer`, `nil`): グリッド縦分割数（管理用）
+    # - `image:` (`Image`, `nil`): テクスチャ画像
+    # - `shader:` (`Shader`, `nil`): カスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム
+    # - `blend:` (`Symbol`): ブレンドモード
+    # - 戻り値: `Zenoo::Mesh`
     def self.from_vertices(vertices, indices = nil, width: nil, height: nil, cols: nil, rows: nil, image: nil, shader: nil, uniforms: nil, blend: :alpha)
       verts = vertices.map(&:to_f)
       v_count = verts.length / VERTEX_STRIDE
@@ -376,6 +450,20 @@ module Zenoo
     # ------------------------------------------------------------------
     # - Mesh.new(image, cols: 8, rows: 8) のように Image を第1引数に渡した場合は Mesh.grid として動作
     # - Mesh.new(data: ..., count: ..., pipeline: ...) の場合は生バイナリ VBO メッシュとして動作
+    #
+    # - `image_or_nil` (`Image`, `nil`): 第1引数に `Image` を渡した場合は格子メッシュとして生成
+    # - `cols:` (`Integer`): 格子メッシュ時の横分割数
+    # - `rows:` (`Integer`): 格子メッシュ時の縦分割数
+    # - `data:` (`String`, `nil`): 低レベル頂点バイナリ列
+    # - `indices:` (`String`, `Array<Integer>`, `nil`): インデックスバイナリまたは配列
+    # - `count:` (`Integer`): 頂点数
+    # - `pipeline:` (`Symbol`, `Backend::Pipeline`): 描画パイプライン（`:triangles`, `:lines`, `:points`, `:sprite` 等）
+    # - `image:` (`Image`, `nil`): テクスチャ画像
+    # - `shader:` (`Shader`, `nil`): カスタムシェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム
+    # - `blend:` (`Symbol`): ブレンドモード
+    # - `width:` (`Numeric`, `nil`): 幅
+    # - `height:` (`Numeric`, `nil`): 高さ
     def initialize(image_or_nil = nil,
                    cols: 8,
                    rows: 8,
@@ -439,6 +527,9 @@ module Zenoo
     # ------------------------------------------------------------------
 
     # ブロックによる全頂点一括変形 (GC アロケーションゼロ)
+    #
+    # - ブロック引数 (`v`): 各頂点に対応する `VertexCursor`（`v.x`, `v.y`, `v.r`, `v.g`, `v.b`, `v.alpha`（`0〜255`）等を書き換え可能）
+    # - 戻り値: `self`
     def deform
       return self unless @managed && @vertices && block_given?
 
@@ -499,6 +590,16 @@ module Zenoo
     # 初期座標 (base_x, base_y) からの相対オフセット (dx, dy) で頂点を移動
     # - 格子指定: mesh.set_offset(col, row, dx, dy, alpha: 255)
     # - 通し番号: mesh.set_offset(index, dx, dy, alpha: 255)
+    #
+    # - `col_or_index` (`Integer`): 格子列番号または頂点通し番号
+    # - `arg2` (`Numeric`, `Integer`): 格子行番号または `dx`
+    # - `arg3` (`Numeric`, `nil`): `dy` または `dx`
+    # - `arg4` (`Numeric`, `nil`): 格子指定時の `dy`
+    # - `du:` (`Float`): UV の U オフセット差分
+    # - `dv:` (`Float`): UV の V オフセット差分
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 頂点カラーの上書き
+    # - `alpha:` (`Integer`, `Float`, `nil`): 頂点不透明度の上書き（`0〜255`）
+    # - 戻り値: `self`
     def set_offset(col_or_index, arg2, arg3 = nil, arg4 = nil, du: 0.0, dv: 0.0, color: nil, alpha: nil)
       return self unless @managed && @vertices
 
@@ -534,6 +635,16 @@ module Zenoo
     end
 
     # 格子点 (col, row) のピクセル座標 (x, y) を直接設定
+    #
+    # - `col` (`Integer`): 列番号
+    # - `row` (`Integer`): 行番号
+    # - `x` (`Numeric`, `nil`): 新しい X 座標
+    # - `y` (`Numeric`, `nil`): 新しい Y 座標
+    # - `u:` (`Float`, `nil`): U 座標の上書き
+    # - `v:` (`Float`, `nil`): V 座標の上書き
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 頂点カラー
+    # - `alpha:` (`Integer`, `Float`, `nil`): 不透明度（`0〜255`）
+    # - 戻り値: `self`
     def set_point(col, row, x, y, u: nil, v: nil, color: nil, alpha: nil)
       return self unless @managed && @vertices
       c = col.to_i
@@ -543,6 +654,10 @@ module Zenoo
     end
 
     # 格子点 (col, row) または通し番号 (index) の現在の頂点情報 [x, y, u, v, r, g, b, alpha] を取得 (色・アルファは 0〜255)
+    #
+    # - `col` (`Integer`): 列番号（`row` 省略時は頂点通し番号）
+    # - `row` (`Integer`, `nil`): 行番号
+    # - 戻り値: `Array<Float>` | `nil`（`[x, y, u, v, r, g, b, alpha]`）
     def get_point(col, row = nil)
       return nil unless @managed && @vertices
       if row.nil?
@@ -556,6 +671,15 @@ module Zenoo
     end
 
     # 通し番号 (index) の頂点を直接設定
+    #
+    # - `index` (`Integer`): 頂点通し番号
+    # - `x` (`Numeric`, `nil`): X 座標
+    # - `y` (`Numeric`, `nil`): Y 座標
+    # - `u` (`Float`, `nil`): U 座標
+    # - `v` (`Float`, `nil`): V 座標
+    # - `alpha` (`Integer`, `Float`, `nil`): 不透明度（`0〜255`）
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 頂点カラー
+    # - 戻り値: `self`
     def set_vertex(index, x, y, u = nil, v = nil, alpha = nil, color: nil)
       return self unless @managed && @vertices
       idx = index.to_i
@@ -579,6 +703,9 @@ module Zenoo
     end
 
     # 通し番号 (index) の頂点情報 [x, y, u, v, r, g, b, alpha] を取得 (色・アルファは 0〜255)
+    #
+    # - `index` (`Integer`): 頂点通し番号
+    # - 戻り値: `Array<Float>` | `nil`（`[x, y, u, v, r, g, b, alpha]`）
     def get_vertex(index)
       return nil unless @managed && @vertices
       idx = index.to_i
@@ -600,6 +727,11 @@ module Zenoo
     # DXRuby の draw_morph のような自由変形・台形パース表現が 1 行で行えます。
     # 8引数 (x0, y0, x1, y1, x2, y2, x3, y3) または 4配列 ([x0, y0], [x1, y1], [x2, y2], [x3, y3]) の両方に対応。
     # 格子分割された Mesh.grid(img, 8, 8) 等に対して呼ぶと、対角線の折れ歪みが出ない綺麗な自由変形になります。
+    #
+    # - `args` (`Numeric`, `Array<Numeric>`): 8つの座標引数または4つの `[x, y]` 配列
+    # - `alphas:` (`Array<Integer>`, `nil`): 4隅の不透明度配列 `[a0, a1, a2, a3]`（各 `0〜255`）
+    # - `colors:` (`Array`, `nil`): 4隅の色配列 `[c0, c1, c2, c3]`
+    # - 戻り値: `self`
     def set_corners(*args, alphas: nil, colors: nil)
       return self unless @managed && @vertices
 
@@ -661,9 +793,14 @@ module Zenoo
     end
 
     # 中心線の点列 [[x0, y0], [x1, y1], ...] に沿って帯状（リボン・軌跡・触手）に頂点を配置
-    # - width: リボンの太さ（ピクセル単位、または各節の太さの配列）
-    # - fade: true の場合、先頭 (alpha=255) から末端 (alpha=0) へ自動的に透明度を減衰
-    # - taper: true の場合、末端に向かって太さを徐々に細くする
+    #
+    # - `points` (`Array<Array<Float>>`): 中心線の点列 `[[x0, y0], [x1, y1], ...]`（2点以上）
+    # - `width:` (`Float`, `Array<Float>`): リボンの太さ（ピクセル、または各節の太さの配列）
+    # - `fade:` (`Boolean`): `true` の場合、先頭から末端へ `start_alpha` → `end_alpha` で透明度を減衰
+    # - `taper:` (`Boolean`): `true` の場合、末端に向かって太さを徐々に細くする
+    # - `start_alpha:` (`Float`, `Integer`): 先頭の不透明度（`0〜255`）
+    # - `end_alpha:` (`Float`, `Integer`): 末端の不透明度（`0〜255`）
+    # - 戻り値: `self`
     def set_ribbon(points, width: 24.0, fade: false, taper: false, start_alpha: 255.0, end_alpha: 0.0)
       return self unless @managed && @vertices && @cols && @rows
       return self if points.nil? || points.length < 2
@@ -728,6 +865,8 @@ module Zenoo
     end
 
     # すべての頂点を生成時の初期状態にリセット
+    #
+    # - 戻り値: `self`
     def reset!
       return self unless @managed && @vertices && @base_vertices
       i = 0
@@ -741,6 +880,11 @@ module Zenoo
     end
 
     # 低レベル互換: パック済みバイナリによる部分/全体更新
+    #
+    # - `binary_data` (`String`): `pack("f*")` 等で生成した頂点バイナリ列
+    # - `offset:` (`Integer`): 書き込み先バイトオフセット
+    # - `count:` (`Integer`, `nil`): 更新後の有効頂点数
+    # - 戻り値: `self`
     def update(binary_data, offset: 0, count: nil)
       return self unless binary_data
       if count
@@ -761,6 +905,10 @@ module Zenoo
     end
 
     # 低レベル互換: パック済みバイナリまたは配列によるインデックスバッファ更新
+    #
+    # - `indices_data` (`String`, `Array<Integer>`): パック済みインデックス列または整数配列
+    # - `count:` (`Integer`, `nil`): インデックス数
+    # - 戻り値: `self`
     def update_indices(indices_data, count: nil)
       return self unless indices_data
       if indices_data.is_a?(String)
@@ -851,6 +999,23 @@ module Zenoo
     end
 
     # 単体描画 (Window.draw と完全に同じ仕組みで描画)
+    #
+    # - `x` (`Float`, `nil`): 描画 X 座標（省略時は `0.0`）
+    # - `y` (`Float`, `nil`): 描画 Y 座標（省略時は `0.0`）
+    # - `anchor:` (`Symbol`, `Array<Float>`): 配置アンカー
+    # - `pivot:` (`Symbol`, `Array<Float>`): 回転・スケール支点
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 乗算カラー
+    # - `angle:` (`Float`): 回転角度（度数法）
+    # - `scale:` (`Float`, `nil`): 等倍拡大率
+    # - `scale_x:` (`Float`): X 方向倍率
+    # - `scale_y:` (`Float`): Y 方向倍率
+    # - `alpha:` (`Integer`): 不透明度（`0 〜 255`）
+    # - `blend:` (`Symbol`, `nil`): ブレンドモードの上書き
+    # - `shader:` (`Shader`, `nil`): シェーダーの上書き
+    # - `image:` (`Image`, `nil`): テクスチャ画像の上書き
+    # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム
+    # - `camera:` (`Boolean`, `Camera`): カメラ追従有無
+    # - `z:` (`Float`): 描画深度 Z
     def draw(x = nil, y = nil,
              anchor: :top_left,
              pivot: :center,
@@ -1075,6 +1240,16 @@ module Zenoo
     attr_accessor :image, :mesh, :shader, :uniforms, :blend
     attr_reader   :layout, :count, :data, :native_buffer
 
+    # インスタンスバッファを生成する
+    #
+    # - `data:` (`String`): パック済みのインスタンス属性バイナリデータ
+    # - `count:` (`Integer`): インスタンス数
+    # - `layout:` (`Array<Integer>`, `Backend::Pipeline`, `String`): 頂点レイアウト定義
+    # - `image:` (`Image`, `nil`): テクスチャ画像
+    # - `mesh:` (`Mesh`, `nil`): ベース形状メッシュ（省略時は4頂点ビルボード）
+    # - `shader:` (`Shader`, `nil`): インスタンス描画用シェーダー
+    # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム
+    # - `blend:` (`Symbol`): ブレンドモード
     def initialize(data:, count:, layout:, image: nil, mesh: nil, shader: nil, uniforms: nil, blend: :alpha)
       @data = data
       @count = count.to_i
@@ -1100,6 +1275,12 @@ module Zenoo
       end
     end
 
+    # インスタンスバッファの内容を部分または全体更新する
+    #
+    # - `binary_data` (`String`): 更新するバイナリデータ
+    # - `offset:` (`Integer`): 書き込み先バイトオフセット
+    # - `count:` (`Integer`, `nil`): 有効インスタンス数の上書き
+    # - 戻り値: `self`
     def update(binary_data, offset: 0, count: nil)
       return self unless binary_data
       @count = count.to_i if count
@@ -1112,10 +1293,21 @@ module Zenoo
       self
     end
 
+    # 動的バッファに昇格しているかを返す
+    #
+    # - 戻り値: `Boolean`
     def dynamic?
       @native_buffer ? @native_buffer.dynamic? : false
     end
 
+    # インスタンス群を一括描画する
+    #
+    # - `z:` (`Float`): 描画深度 Z
+    # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム（設定済み値にマージ）
+    # - `shader:` (`Shader`, `nil`): シェーダーの上書き
+    # - `image:` (`Image`, `nil`): テクスチャ画像の上書き
+    # - `mesh:` (`Mesh`, `nil`): ベース形状メッシュの上書き
+    # - `blend:` (`Symbol`, `nil`): ブレンドモードの上書き
     def draw(z: 0.0, uniforms: nil, shader: nil, image: nil, mesh: nil, blend: nil)
       return unless @native_buffer && @count > 0
 

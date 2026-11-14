@@ -15,6 +15,12 @@ module Zenoo
     # ------------------------------------------------------------------
     # :linear, :quad_in, :out_quad, :bounce_out, :elastic_in_out などを柔軟に解釈
     # :step の場合は steps 引数（または [:step, 4] などの配列形式）で分割数を指定可能
+    # 対応種別: `:linear`, `:step`, `:quad_*`, `:cubic_*`, `:quart_*`, `:quint_*`, `:sine_*`, `:expo_*`, `:circ_*`, `:back_*`, `:elastic_*`, `:bounce_*`（`*_in`, `*_out`, `*_in_out` および `in_*`, `out_*`, `in_out_*` 両表記対応）
+    #
+    # - `type` (`Symbol`, `Array`, `nil`): イージング種別シンボル（例: `:quad_out`）、または `[:step, 分割数]`
+    # - `t` (`Float`): 正規化された経過進捗率（`0.0 〜 1.0`）
+    # - `steps` (`Integer`): `:step` 指定時の段階分割数（デフォルト: 1）
+    # - 戻り値: `Float` 補間係数（通常 `0.0 〜 1.0`、`:back_*` / `:elastic_*` では一時的に範囲外になる場合あり）
     def calc(type, t, steps = 1)
       return 1.0 if t >= 1.0
       return 0.0 if t <= 0.0
@@ -178,6 +184,10 @@ module Zenoo
       end
     end
 
+    # バウンスアウト曲線の基準計算（`bounce_in` / `bounce_out` / `bounce_in_out` の内部共通関数）
+    #
+    # - `t` (`Float`): 経過進捗率（`0.0 〜 1.0`）
+    # - 戻り値: `Float`
     def calc_bounce_out(t)
       if t < (1.0 / 2.75)
         7.5625 * t * t

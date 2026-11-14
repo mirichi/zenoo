@@ -15,7 +15,16 @@ module Zenoo
       # ----------------------------------------------------
       # 1. チェックボックス (Checkbox)
       # ----------------------------------------------------
-      # クリックで checked の真偽値をトグルし、新しい Boolean を返却
+      # チェックボックスを描画し、クリックでトグルした真偽値を返す
+      #
+      # - `label` (`String`): 横に表示するラベル文字列（`id` 未指定時は識別 ID としても使用）
+      # - `checked` (`Boolean`): 現在のチェック状態
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動計算）
+      # - `h` (`Float`): 高さ（デフォルト `28.0`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - 戻り値: `Boolean`（トグル後のチェック状態）
       def checkbox(label, checked, x: nil, y: nil, w: nil, h: 28.0, id: "")
         widget_id = id.to_s.empty? ? label.to_s : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -58,7 +67,16 @@ module Zenoo
       # ----------------------------------------------------
       # 2. ラジオボタン (Radio Button)
       # ----------------------------------------------------
-      # クリックされた瞬間に true を返却
+      # ラジオボタンを描画し、クリックされた瞬間のみ `true` を返す
+      #
+      # - `label` (`String`): 横に表示するラベル文字列（`id` 未指定時は識別 ID としても使用）
+      # - `active` (`Boolean`): 現在選択されている状態か
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動計算）
+      # - `h` (`Float`): 高さ（デフォルト `28.0`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - 戻り値: `Boolean`（このフレームでクリックされた場合 `true`）
       def radio(label, active, x: nil, y: nil, w: nil, h: 28.0, id: "")
         widget_id = id.to_s.empty? ? label.to_s : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -102,9 +120,16 @@ module Zenoo
       # ----------------------------------------------------
       # 3. タブバー (Tabs / Tab Bar)
       # ----------------------------------------------------
-      # labels: タブタイトル配列 (例: ["General", "Audio", "Video"])
-      # selected_index: 現在選択中のインデックス (0..)
-      # 返り値: 更新された選択インデックス
+      # タブバーを描画し、クリック操作を反映した選択インデックスを返す
+      #
+      # - `labels` (`Array<String>`): タブタイトル配列（例: `["General", "Audio", "Video"]`）
+      # - `selected_index` (`Integer`): 現在選択中のタブインデックス（`0..`）
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `300.0`）
+      # - `h` (`Float`): 高さ（デフォルト `36.0`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - 戻り値: `Integer`（更新後の選択インデックス）
       def tabs(labels, selected_index, x: nil, y: nil, w: nil, h: 36.0, id: "")
         widget_id = id.to_s.empty? ? "tabs_#{labels.join('_')}" : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -146,7 +171,20 @@ module Zenoo
       # ----------------------------------------------------
       # 4. スピンボタン (Spinner / SpinBox)
       # ----------------------------------------------------
-      # [-] [ 数値表示 ] [+] スタイルのステップ数値変更コントロール
+      # `[−] [数値表示] [+]` スタイルのステップ数値変更スピンボタンを描画し、更新後の値を返す
+      #
+      # - `label` (`String`): 左側に表示するラベル文字列（`id` 未指定時は識別 ID としても使用）
+      # - `value` (`Numeric`): 現在の数値（`Float` を渡すと小数演算、`Integer` を渡すと整数演算）
+      # - `min` (`Numeric | nil`): 最小値（`nil` で下限なし）
+      # - `max` (`Numeric | nil`): 最大値（`nil` で上限なし）
+      # - `step` (`Numeric`): `[−]`/`[+]` ボタン 1 クリックあたりの増減量（デフォルト `1`）
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `220.0`）
+      # - `h` (`Float`): 高さ（デフォルト `36.0`）
+      # - `format` (`String | nil`): 値表示の `sprintf` 書式（省略時は `Float` なら `"%.2f"`、`Integer` なら `"%d"`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - 戻り値: `Numeric`（更新後の値）
       def spinner(label, value, min: nil, max: nil, step: 1, x: nil, y: nil, w: nil, h: 36.0, format: nil, id: "")
         widget_id = id.to_s.empty? ? label.to_s : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -209,10 +247,17 @@ module Zenoo
       # ----------------------------------------------------
       # 5. スクロールバー (ScrollBar)
       # ----------------------------------------------------
-      # value: 現在のスクロール位置 (0.0 .. max_scroll)
-      # total_size: コンテンツ全体の長さ
-      # view_size: 表示領域の長さ
-      # 返り値: 更新されたスクロール位置 (Float)
+      # 縦スクロールバーを描画し、ドラッグ／ホイール操作を反映したスクロール位置を返す
+      #
+      # - `value` (`Float`): 現在のスクロール位置（`0.0..max_scroll`）
+      # - `total_size` (`Float`): コンテンツ全体の高さ
+      # - `view_size` (`Float`): 表示領域の高さ
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float`): 幅（デフォルト `14.0`）
+      # - `h` (`Float`): 高さ（デフォルト `150.0`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - 戻り値: `Float`（更新されたスクロール位置）
       def scrollbar(value, total_size, view_size, x: nil, y: nil, w: 14.0, h: 150.0, id: "")
         widget_id = id.to_s.empty? ? "scrollbar_#{x}_#{y}" : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -282,9 +327,17 @@ module Zenoo
       # ----------------------------------------------------
       # 6. リストボックス (ListBox)
       # ----------------------------------------------------
-      # items: 選択肢文字列の配列
-      # selected_index: 現在選択中のインデックス
-      # 返り値: 更新された selected_index
+      # スクロール対応のリストボックスを描画し、クリック選択を反映した選択インデックスを返す
+      #
+      # - `label` (`String`): 上部に表示するラベル文字列（`id` 未指定時は識別 ID としても使用）
+      # - `selected_index` (`Integer`): 現在選択中のインデックス
+      # - `items` (`Array<String>`): 選択肢文字列の配列
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `240.0`）
+      # - `h` (`Float | nil`): リスト枠の高さ（省略時は項目数に応じて自動計算、最大 `140.0`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - 戻り値: `Integer`（更新された選択インデックス）
       def listbox(label, selected_index, items, x: nil, y: nil, w: nil, h: nil, id: "")
         widget_id = id.to_s.empty? ? (label.to_s.empty? ? "listbox_#{items.length}" : label.to_s) : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -370,9 +423,17 @@ module Zenoo
       # ----------------------------------------------------
       # 7. ドロップダウンリスト (Dropdown / ComboBox)
       # ----------------------------------------------------
-      # items: 選択肢配列
-      # selected_index: 現在選択中のインデックス
-      # 返り値: 更新された selected_index
+      # ドロップダウンリスト（コンボボックス）を描画し、更新された選択インデックスを返す
+      #
+      # - `label` (`String`): 上部に表示するラベル文字列（`id` 未指定時は識別 ID としても使用）
+      # - `selected_index` (`Integer`): 現在選択中のインデックス
+      # - `items` (`Array<String>`): 選択肢の文字列配列
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `200.0`）
+      # - `h` (`Float`): コントロール本体の高さ（デフォルト `36.0`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - 戻り値: `Integer`（更新された選択インデックス）
       def dropdown(label, selected_index, items, x: nil, y: nil, w: nil, h: 36.0, id: "")
         widget_id = id.to_s.empty? ? (label.to_s.empty? ? "dropdown_#{items.length}" : label.to_s) : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -458,8 +519,16 @@ module Zenoo
       # ----------------------------------------------------
       # 8. スクロールビュー (Scroll View コンテナブロック)
       # ----------------------------------------------------
-      # 内部でブロックを実行し、コンテンツが枠高さ h を超える場合に
-      # スクロールバーで領域内をスクロール可能にするコンテナ
+      # ブロック内のウィジェットを縦スクロール可能なクリップ領域内にレイアウトして描画する
+      #
+      # - `title_or_id` (`String | Symbol`): スクロール状態の保持に使用する識別 ID
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `300.0`）
+      # - `h` (`Float | nil`): 枠高さ（省略時はコンテナの残り高さへ自動フィット、または `200.0`）
+      # - `content_h` (`Float | nil`): 最小コンテンツ高さの明示指定（省略時は内部要素から自動計測）
+      # - `&block`: スクロール領域内に描画するウィジェット構築ブロック
+      # - 戻り値: `Float | nil`
       def scroll_view(title_or_id, x: nil, y: nil, w: nil, h: nil, content_h: nil, &block)
         widget_id = title_or_id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -542,10 +611,20 @@ module Zenoo
       # ----------------------------------------------------
       # 10. テーブル / リストビュー (Table / ListView)
       # ----------------------------------------------------
-      # columns: カラム定義の配列 (文字列, [名前, 幅], { name:, width: } など)
-      # rows: 2次元配列 (行データの配列)
-      # selected_index: 選択中の行インデックス (Integer または nil)
-      # 返り値: 更新された selected_index
+      # スクロール・カラム幅指定・行選択・カスタム描画に対応したテーブル（リストビュー）を描画する
+      #
+      # - `label` (`String`): 上部に表示するラベル文字列（`id` 未指定時は識別 ID としても使用）
+      # - `columns` (`Array`): カラム定義の配列（文字列、`[名前, 幅]`、または `{ name:, width: }`）
+      # - `rows` (`Array<Array>`): 行データの 2 次元配列
+      # - `selected_index` (`Integer | nil`): 選択中の行インデックス（デフォルト `nil`）
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `280.0`）
+      # - `h` (`Float | nil`): 全体の高さ（省略時は行数に応じて自動計算、最大 `180.0`）
+      # - `item_height` (`Float`): 1 行あたりの高さ（デフォルト `20.0`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - `&block`: 行カスタム描画用ブロック（指定時は `(row, row_index, selected, hovered, x, y, w, row_h)` を渡す）
+      # - 戻り値: `Integer | nil`（更新された選択行インデックス）
       def table(label, columns, rows, selected_index = nil, x: nil, y: nil, w: nil, h: nil, item_height: 20.0, id: "", &block)
         widget_id = id.to_s.empty? ? (label.to_s.empty? ? "table_#{columns.length}_#{rows.length}" : label.to_s) : id.to_s
         rx = x ? x.to_f : @layout.cursor_x

@@ -65,6 +65,13 @@ module Zenoo
     #   H = Tilemap.tile(10, flip_h: true)             # 10番タイルを左右反転
     #   R = Tilemap.tile(15, rotate: 90)               # 15番タイルを時計回りに90度回転
     #   P = Tilemap.tile(20, root_offset: 2)           # 20番タイルは2行下が根元
+    #
+    # - `tile_id` (`Integer`, `nil`): 元となるタイル番号（0 〜 65535、`nil` または負値で `nil` を返却）
+    # - `flip_h:` (`Boolean`): 左右反転フラグ（デフォルト: `false`）
+    # - `flip_v:` (`Boolean`): 上下反転フラグ（デフォルト: `false`）
+    # - `rotate:` (`Integer`): 時計回り回転角（度数法: `0`, `90`, `180`, `270`、デフォルト: `0`）
+    # - `root_offset:` (`Integer`, `nil`): このマスから何行下を根元 Z 基準にするか（0 〜 254、`nil` 時は `set_tile` の設定に従う）
+    # - 戻り値: `Integer`, `nil` パック済みセル整数値
     def self.tile(tile_id, flip_h: false, flip_v: false, rotate: 0, root_offset: nil)
       return nil if tile_id.nil? || tile_id < 0
       val = tile_id.to_i & ID_MASK
@@ -95,6 +102,11 @@ module Zenoo
       attr_reader   :id, :frames, :weights, :total_frames
       attr_accessor :current_frame, :timer, :changed
 
+      # アニメーションタイル定義を初期化します。
+      #
+      # - `id` (`Integer`): 代表タイル ID
+      # - `frames:` (`Array<Integer>`): アニメーション各コマのタイル ID 配列
+      # - `wait:` (`Integer`, `Array<Integer>`): 1コマあたりの表示フレーム数（配列でコマごと指定可、デフォルト: 10）
       def initialize(id, frames:, wait: 10)
         @id = id.to_i
         @frames = frames.map(&:to_i)
@@ -148,18 +160,20 @@ module Zenoo
       attr_reader   :name, :tilemap, :rows, :cols
       attr_accessor :z, :y_sort, :z_offset, :solid, :height, :visible, :alpha, :color, :blend
 
-      # @param tilemap [Tilemap] 親の Tilemap インスタンス
-      # @param name [Symbol] レイヤー名 (:ground, :walls など)
-      # @param data [Array<Array<Integer, nil>>] 2次元マップ配列 (data[row][col])
-      # @param z [Float] 基準深度 Z
-      # @param y_sort [Boolean, Symbol] true の場合は足元基準で Yソート、:floor の場合はタイル上端基準で Yソート
-      # @param z_offset [Float] Yソート時の微調整オフセット (キャラより少し手前/奥にする場合など)
-      # @param solid [Boolean] true の場合、このレイヤーの全タイルを通行不可 (壁) として扱う
-      # @param height [Float, nil] このレイヤーの基準高さ
-      # @param visible [Boolean] 表示 / 非表示
-      # @param alpha [Integer] 不透明度 (0..255)
-      # @param color [Symbol, Array] 乗算カラー
-      # @param blend [Symbol] ブレンドモード (:alpha, :add 等)
+      # レイヤーを初期化
+      #
+      # - `tilemap` (`Tilemap`): 親の Tilemap インスタンス
+      # - `name` (`Symbol`): レイヤー名（`:ground`, `:walls` など）
+      # - `data` (`Array<Array<Integer, nil>>`): 2次元マップ配列 `data[row][col]`
+      # - `z:` (`Float`): 基準深度 Z（デフォルト: 0.0）
+      # - `y_sort:` (`Boolean`, `Symbol`): `true` の場合は足元基準で Y ソート、`:floor` の場合はタイル上端基準で Y ソート（デフォルト: `false`）
+      # - `z_offset:` (`Float`): Y ソート時の微調整オフセット（デフォルト: 0.0）
+      # - `solid:` (`Boolean`): `true` の場合、このレイヤーの全タイルを通行不可（壁）として扱う（デフォルト: `false`）
+      # - `height:` (`Float`, `nil`): このレイヤーの基準高さ
+      # - `visible:` (`Boolean`): 表示 / 非表示（デフォルト: `true`）
+      # - `alpha:` (`Integer`): 不透明度（`0 〜 255`、デフォルト: 255）
+      # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 乗算カラー（デフォルト: `:white`）
+      # - `blend:` (`Symbol`): ブレンドモード（`:alpha`, `:add` 等、デフォルト: `:alpha`）
       def initialize(tilemap, name, data,
                      z: 0.0,
                      y_sort: false,
@@ -205,11 +219,15 @@ module Zenoo
       end
 
       # 2次元マップ配列を取得
+      #
+      # - 戻り値: `Array<Array<Integer, nil>>`
       def data
         @data
       end
 
       # 2次元マップ配列を差し替え
+      #
+      # - `new_data` (`Array<Array<Integer, nil>>`, `nil`): 新しい 2次元マップ配列
       def data=(new_data)
         @data = new_data || []
         refresh_size!
@@ -253,6 +271,10 @@ module Zenoo
       end
 
       # 指定したマス (col, row) の生のセル整数値 (ビットフラグ込み) を取得
+      #
+      # - `col` (`Integer`): 列インデックス（0 始まり）
+      # - `row` (`Integer`): 行インデックス（0 始まり）
+      # - 戻り値: `Integer`, `nil`
       def raw_at(col, row)
         return nil if row < 0 || row >= @rows || col < 0 || col >= @cols
         row_data = @data[row]
@@ -260,6 +282,10 @@ module Zenoo
       end
 
       # 指定したマス (col, row) の純粋なタイルID (0..65535) を取得
+      #
+      # - `col` (`Integer`): 列インデックス（0 始まり）
+      # - `row` (`Integer`): 行インデックス（0 始まり）
+      # - 戻り値: `Integer`, `nil`
       def [](col, row)
         raw = raw_at(col, row)
         (raw && raw >= 0) ? (raw & ID_MASK) : nil
@@ -267,6 +293,10 @@ module Zenoo
 
       # 指定したマス (col, row) にタイルID (または Tilemap.tile で作成したセル値) を設定
       # タイルが変更された行と、オフセット先 (帰属する行) の Mesh のみが Dirty 化されます。
+      #
+      # - `col` (`Integer`): 列インデックス
+      # - `row` (`Integer`): 行インデックス
+      # - `val` (`Integer`, `nil`): 設定するタイル ID または `Tilemap.tile` の戻り値（`nil` で空白）
       def []=(col, row, val)
         return if row < 0 || row >= @rows || col < 0 || col >= @cols
         row_data = @data[row]
@@ -283,6 +313,11 @@ module Zenoo
 
       # レイヤーの描画処理
       # 画面内に映っている行 (min_row..max_row) の Mesh のみを描画します (視錐台カリング)。
+      #
+      # - `x:` (`Numeric`, `nil`): 描画原点 X 座標の上書き（省略時は `tilemap.x`）
+      # - `y:` (`Numeric`, `nil`): 描画原点 Y 座標の上書き（省略時は `tilemap.y`）
+      # - `z:` (`Numeric`, `nil`): 基準 Z オーダーの上書き（省略時は `tilemap.z + layer.z`）
+      # - `camera:` (`Boolean`, `Camera`, `nil`): カメラ適用の有無または特定 `Camera`（省略時は `tilemap.camera`）
       def draw(x: nil, y: nil, z: nil, camera: nil)
         return unless @visible
         tw_base = @tilemap.tile_width.to_f
@@ -784,8 +819,22 @@ module Zenoo
     # ==========================================================================
 
     # 単一レイヤーのタイルマップを 2次元配列から即座に生成するファクトリメソッド
-    # @param data [Array<Array<Integer, nil>>] 2次元マップ配列
-    # @param tiles [Array<Image>] タイル画像の配列
+    #
+    # - `data` (`Array<Array<Integer, nil>>`): 2次元マップ配列
+    # - `tiles` (`Array<Image>`): タイル画像の配列
+    # - `tile_width:` (`Integer`, `nil`): タイルの基準幅（省略時は先頭タイルの幅）
+    # - `tile_height:` (`Integer`, `nil`): タイルの基準高さ（省略時は先頭タイルの高さ）
+    # - `x:` (`Numeric`): マップ原点 X 座標（デフォルト: 0.0）
+    # - `y:` (`Numeric`): マップ原点 Y 座標（デフォルト: 0.0）
+    # - `z:` (`Numeric`): マップ基準 Z オーダー（デフォルト: 0.0）
+    # - `y_sort:` (`Boolean`, `Symbol`): 行単位の Y ソート有効化（`true` = 下端基準、`:floor` = 上端基準、デフォルト: `false`）
+    # - `solid:` (`Boolean`): レイヤー全体を通行不可として扱うか（デフォルト: `false`）
+    # - `scale_x:` (`Numeric`): 横拡大倍率（デフォルト: 1.0）
+    # - `scale_y:` (`Numeric`): 縦拡大倍率（デフォルト: 1.0）
+    # - `camera:` (`Boolean`, `Camera`): カメラ追従有無（デフォルト: `true`）
+    # - `alpha:` (`Integer`): 不透明度（`0 〜 255`、デフォルト: 255）
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 乗算カラー（デフォルト: `:white`）
+    # - 戻り値: `Tilemap`
     def self.from_array(data, tiles,
                         tile_width: nil,
                         tile_height: nil,
@@ -819,19 +868,21 @@ module Zenoo
     attr_accessor :x, :y, :z, :scale_x, :scale_y, :camera, :alpha, :color
     attr_reader   :tiles, :tile_width, :tile_height, :cols, :rows, :layers, :max_root_offset, :max_tall_tile_rows, :base_texture_image
 
-    # @param tiles [Array<Image>] タイル画像の配列 (Image.load_tiles または slice_tiles で生成)
-    # @param tile_width [Integer, nil] タイルの標準幅 (省略時は最初のタイル画像の幅を採用)
-    # @param tile_height [Integer, nil] タイルの標準高さ (省略時は最初のタイル画像の高さを採用)
-    # @param cols [Integer] マップ列数
-    # @param rows [Integer] マップ行数
-    # @param x [Float] マップ基準ワールドX座標
-    # @param y [Float] マップ基準ワールドY座標
-    # @param z [Float] マップ基準深度Z
-    # @param scale_x [Float] 水平拡大率
-    # @param scale_y [Float] 垂直拡大率
-    # @param camera [Boolean] カメラ変換の追従有無
-    # @param alpha [Integer] 不透明度 (0..255)
-    # @param color [Symbol, Array] 乗算カラー
+    # タイルマップを初期化
+    #
+    # - `tiles` (`Array<Image>`): タイル画像の配列（`Image.load_tiles` または `slice_tiles` で生成）
+    # - `tile_width:` (`Integer`, `nil`): タイルの標準幅（省略時は最初のタイル画像の幅を採用）
+    # - `tile_height:` (`Integer`, `nil`): タイルの標準高さ（省略時は最初のタイル画像の高さを採用）
+    # - `cols:` (`Integer`): マップ列数（デフォルト: 0）
+    # - `rows:` (`Integer`): マップ行数（デフォルト: 0）
+    # - `x:` (`Float`): マップ基準ワールド X 座標（デフォルト: 0.0）
+    # - `y:` (`Float`): マップ基準ワールド Y 座標（デフォルト: 0.0）
+    # - `z:` (`Float`): マップ基準深度 Z（デフォルト: 0.0）
+    # - `scale_x:` (`Float`): 水平拡大率（デフォルト: 1.0）
+    # - `scale_y:` (`Float`): 垂直拡大率（デフォルト: 1.0）
+    # - `camera:` (`Boolean`, `Camera`): カメラ変換の追従有無（デフォルト: `true`）
+    # - `alpha:` (`Integer`): 不透明度（`0 〜 255`、デフォルト: 255）
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 乗算カラー（デフォルト: `:white`）
     def initialize(tiles,
                    tile_width: nil,
                    tile_height: nil,
@@ -891,10 +942,12 @@ module Zenoo
     end
 
     # タイル番号に対する属性 (根元オフセット・通行不可フラグ・高さ) を設定
-    # @param tile_id [Integer] タイルID
-    # @param root_offset [Integer, nil] このタイルが何行下のマスに帰属するか (根元までの行数)
-    # @param solid [Boolean, nil] 通行不可 (壁) かどうか
-    # @param height [Float, nil] このタイルの高さ
+    #
+    # - `tile_id` (`Integer`): タイル ID
+    # - `root_offset:` (`Integer`, `nil`): このタイルが何行下のマスに帰属するか（根元までの行数）
+    # - `solid:` (`Boolean`, `nil`): 通行不可（壁）かどうか
+    # - `height:` (`Float`, `nil`): このタイルの高さ
+    # - 戻り値: `Tilemap` (`self`)
     def set_tile(tile_id, root_offset: nil, solid: nil, height: nil)
       return self if tile_id.nil? || tile_id < 0
       tid = tile_id.to_i
@@ -919,6 +972,10 @@ module Zenoo
     # - 最下段 (根元) に solid: true を設定し、上段には根元までの行数オフセットを自動計算して設定します
     # 例:
     #   map.define_column([T_PILLAR_TOP, T_PILLAR_MID, T_PILLAR_BOT], solid: true)
+    #
+    # - `tile_ids` (`Array<Integer>`, `Array<Array<Integer>>`): 上段から下段（根元）の順に並べたタイル ID 配列
+    # - `solid:` (`Boolean`): 最下段（根元）のタイルに通行不可フラグを付与するか（デフォルト: `true`）
+    # - 戻り値: `Tilemap` (`self`)
     def define_column(tile_ids, solid: true)
       return self if !tile_ids.is_a?(Array) || tile_ids.empty?
       h = tile_ids.size
@@ -942,24 +999,37 @@ module Zenoo
     end
 
     # 指定したタイルIDの根元オフセットを取得
+    #
+    # - `tile_id` (`Integer`, `nil`): タイル ID
+    # - 戻り値: `Integer` 根元までの下方向行数
     def tile_root_offset(tile_id)
       return 0 if tile_id.nil? || tile_id < 0
       @tile_root_offsets[tile_id] || 0
     end
 
     # 指定したタイルIDが通行不可 (solid) かどうか判定
+    #
+    # - `tile_id` (`Integer`, `nil`): タイル ID
+    # - 戻り値: `Boolean`
     def tile_solid?(tile_id)
       return false if tile_id.nil? || tile_id < 0
       !!@tile_solids[tile_id]
     end
 
     # 新しいレイヤーを追加して返す
-    # @param name [Symbol, String] レイヤー名 (:ground, :walls, :roof など)
-    # @param data [Array<Array<Integer, nil>>, nil] 2次元マップ配列 (省略時は空レイヤー)
-    # @param z [Float] 基準深度 Z
-    # @param y_sort [Boolean] true の場合、各行の足元Y座標で自動 Yソート描画
-    # @param solid [Boolean] true の場合、このレイヤー全体を通行不可として扱う
-    # @param height [Float, nil] このレイヤーの基準高さ
+    #
+    # - `name` (`Symbol`, `String`): レイヤー名（`:ground`, `:walls`, `:roof` など）
+    # - `data` (`Array<Array<Integer, nil>>`, `nil`): 2次元マップ配列（省略時は空レイヤー）
+    # - `z:` (`Float`): 基準深度 Z（デフォルト: 0.0）
+    # - `y_sort:` (`Boolean`, `Symbol`): `true` の場合、各行の足元 Y 座標で自動 Y ソート描画（デフォルト: `false`）
+    # - `z_offset:` (`Float`): Y ソート時の微調整オフセット（デフォルト: 0.0）
+    # - `solid:` (`Boolean`): `true` の場合、このレイヤー全体を通行不可として扱う（デフォルト: `false`）
+    # - `height:` (`Float`, `nil`): このレイヤーの基準高さ
+    # - `visible:` (`Boolean`): 表示 / 非表示（デフォルト: `true`）
+    # - `alpha:` (`Integer`): 不透明度（`0 〜 255`、デフォルト: 255）
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 乗算カラー（デフォルト: `:white`）
+    # - `blend:` (`Symbol`): ブレンドモード（デフォルト: `:alpha`）
+    # - 戻り値: `Tilemap::Layer`
     def add_layer(name, data = nil,
                   z: 0.0,
                   y_sort: false,
@@ -1011,6 +1081,9 @@ module Zenoo
     end
 
     # レイヤー名 (Symbol/String) またはインデックス番号で Layer を取得
+    #
+    # - `name_or_index` (`Symbol`, `String`, `Integer`): レイヤー名または 0 始まりの登録インデックス
+    # - 戻り値: `Tilemap::Layer`, `nil`
     def layer(name_or_index)
       if name_or_index.is_a?(Integer)
         @layers[name_or_index]
@@ -1021,12 +1094,16 @@ module Zenoo
     end
 
     # 単一レイヤー互換: 先頭レイヤーの 2次元マップ配列を取得
+    #
+    # - 戻り値: `Array<Array<Integer, nil>>`, `nil`
     def data
       first = @layers[0]
       first ? first.data : nil
     end
 
     # 単一レイヤー互換: 先頭レイヤーの 2次元マップ配列を設定
+    #
+    # - `new_data` (`Array<Array<Integer, nil>>`): 新しい 2次元マップ配列
     def data=(new_data)
       if @layers.empty?
         add_layer(:default, new_data)
@@ -1053,16 +1130,24 @@ module Zenoo
     end
 
     # マップ全体のピクセル幅
+    #
+    # - 戻り値: `Float` (`cols * tile_width * scale_x`)
     def width
       @cols * @tile_width * @scale_x
     end
 
     # マップ全体のピクセル高さ
+    #
+    # - 戻り値: `Float` (`rows * tile_height * scale_y`)
     def height
       @rows * @tile_height * @scale_y
     end
 
     # [layer_name] で Layer を取得、または [col, row] で先頭レイヤーのタイルIDを取得
+    #
+    # - `arg1` (`Symbol`, `String`, `Integer`): 1引数時はレイヤー名/番号、2引数時は列インデックス (`col`)
+    # - `row` (`Integer`, `nil`): 行インデックス（2引数指定時のみ）
+    # - 戻り値: `Tilemap::Layer`, `Integer`, `nil`
     def [](arg1, row = nil)
       if row.nil?
         layer(arg1)
@@ -1073,12 +1158,20 @@ module Zenoo
     end
 
     # 先頭レイヤーの指定した列・行にタイルIDを設定
+    #
+    # - `col` (`Integer`): 列インデックス
+    # - `row` (`Integer`): 行インデックス
+    # - `tile_id` (`Integer`, `nil`): 設定するタイル ID または `Tilemap.tile` 値
     def []=(col, row, tile_id)
       first = @layers[0]
       first[col, row] = tile_id if first
     end
 
     # ピクセル座標 (px, py) からマスの列・行 [col, row] を算出
+    #
+    # - `px` (`Numeric`): ワールド X 座標（px）
+    # - `py` (`Numeric`): ワールド Y 座標（px）
+    # - 戻り値: `Array<Integer>`, `nil` `[col, row]`（マップ範囲外は `nil`）
     def tile_coords(px, py)
       tw = @tile_width * @scale_x
       th = @tile_height * @scale_y
@@ -1090,6 +1183,11 @@ module Zenoo
     end
 
     # ピクセル座標 (px, py) のタイルIDを取得
+    #
+    # - `px` (`Numeric`): ワールド X 座標（px）
+    # - `py` (`Numeric`): ワールド Y 座標（px）
+    # - `layer_name:` (`Symbol`, `String`, `nil`): 対象レイヤー名（省略時は先頭レイヤー）
+    # - 戻り値: `Integer`, `nil`
     def tile_at(px, py, layer_name: nil)
       coords = tile_coords(px, py)
       return nil unless coords
@@ -1102,6 +1200,10 @@ module Zenoo
     # ==========================================================================
 
     # 指定したマス (col, row) が通行不可 (壁) かどうか判定
+    #
+    # - `col` (`Integer`): 列インデックス
+    # - `row` (`Integer`): 行インデックス
+    # - 戻り値: `Boolean`
     def solid_cell?(col, row)
       return false if col < 0 || col >= @cols || row < 0 || row >= @rows
       i = 0
@@ -1120,12 +1222,20 @@ module Zenoo
     end
 
     # ワールドピクセル座標 (px, py) が通行不可 (壁) かどうか判定
+    #
+    # - `px` (`Numeric`): ワールド X 座標（px）
+    # - `py` (`Numeric`): ワールド Y 座標（px）
+    # - 戻り値: `Boolean`
     def solid_at?(px, py)
       coords = tile_coords(px, py)
       coords ? solid_cell?(coords[0], coords[1]) : false
     end
 
     # 指定したマス (col, row) の高さを取得 (複数レイヤーにある場合は最大値)
+    #
+    # - `col` (`Integer`): 列インデックス
+    # - `row` (`Integer`): 行インデックス
+    # - 戻り値: `Float` 標高（ピクセル単位）
     def height_cell(col, row)
       return 0.0 if col < 0 || col >= @cols || row < 0 || row >= @rows
       max_h = 0.0
@@ -1147,6 +1257,10 @@ module Zenoo
     end
 
     # ワールドピクセル座標 (px, py) の高さを取得
+    #
+    # - `px` (`Numeric`): ワールド X 座標（px）
+    # - `py` (`Numeric`): ワールド Y 座標（px）
+    # - 戻り値: `Float` 標高（ピクセル単位）
     def height_at(px, py)
       coords = tile_coords(px, py)
       coords ? height_cell(coords[0], coords[1]) : 0.0
@@ -1155,13 +1269,13 @@ module Zenoo
     # スプライトの足元が乗っている床面の最高標高を取得
     # スプライトの現在高度以下の床面の中で最大の標高を返します (浮遊中・段差から外れた瞬間の落下開始判定)
     #
-    # @param sprite [Sprite] 判定対象のスプライト
-    # @param altitude [Float] スプライトの現在の絶対高度 (デフォルト 0.0)
-    # @param offset_y [Float] 見た目の描画段差オフセット (例: -PLATEAU_HEIGHT で足元と床描画範囲を一致させる)
-    # @param probe_rx [Float] 左右の接地判定半径 (px)
-    # @param probe_ry [Float] 上下の接地判定半径 (px)
-    # @param step_tolerance [Float] 乗り越え許容高度差 (デフォルト 2.0px)
-    # @return [Float] 支持されている床面の標高
+    # - `sprite` (`Sprite`): 判定対象のスプライト
+    # - `altitude:` (`Float`): スプライトの現在の絶対高度（デフォルト: 0.0）
+    # - `offset_y:` (`Float`): 見た目の描画段差オフセット（例: `-PLATEAU_HEIGHT` で足元と床描画範囲を一致させる、デフォルト: 0.0）
+    # - `probe_rx:` (`Float`): 左右の接地判定半径（ピクセル、デフォルト: 6.0）
+    # - `probe_ry:` (`Float`): 上下の接地判定半径（ピクセル、デフォルト: 4.0）
+    # - `step_tolerance:` (`Float`): 乗り越え許容高度差（ピクセル、デフォルト: 2.0）
+    # - 戻り値: `Float` 支持されている床面の標高
     def support_height(sprite, altitude: 0.0, offset_y: 0.0, probe_rx: 6.0, probe_ry: 4.0, step_tolerance: 2.0)
       return 0.0 if sprite.nil?
       col = sprite.respond_to?(:collider) ? sprite.collider : sprite
@@ -1191,6 +1305,9 @@ module Zenoo
     end
 
     # Sprite または Collision::Shape がマップの障害物タイルと接触しているか判定
+    #
+    # - `target` (`Sprite`, `Collision::Shape`, `nil`): 判定対象
+    # - 戻り値: `Boolean`
     def collide?(target)
       return false unless target
       col_shape = target.respond_to?(:collider) ? target.collider : target
@@ -1238,10 +1355,11 @@ module Zenoo
     # コライダー中心から最も近い壁タイルから順に MTV (最小移動ベクトル) を適用することで、
     # 斜め移動時でも壁面に沿ってスムーズに滑る挙動になります。
     #
-    # @param sprite [Sprite] 押し出し対象のスプライト
-    # @param target_root [Boolean] true の場合、ルートスプライトの位置を補正
-    # @param altitude [Float, nil] スプライトの絶対高度。指定時、自分の高度より高い段差タイルも壁として衝突
-    # @param step_tolerance [Float] 乗り越え許容高度差 (デフォルト 2.0px)
+    # - `sprite` (`Sprite`): 押し出し対象のスプライト
+    # - `target_root:` (`Boolean`): `true` の場合、ルートスプライトの位置を補正（デフォルト: `true`）
+    # - `altitude:` (`Float`, `nil`): スプライトの絶対高度。指定時は自分の高度より高い段差タイルも壁として衝突
+    # - `step_tolerance:` (`Float`): 乗り越え許容高度差（ピクセル、デフォルト: 2.0）
+    # - 戻り値: `Boolean` 衝突を解消した場合 `true`
     def resolve_collision(sprite, target_root: true, altitude: nil, step_tolerance: 2.0)
       return false if sprite.nil? || (sprite.respond_to?(:vanished?) && sprite.vanished?)
       col_shape = sprite.respond_to?(:collider) ? sprite.collider : sprite
@@ -1333,9 +1451,11 @@ module Zenoo
     end
 
     # アニメーションタイルの定義
-    # @param tile_id [Integer] マップ上で配置する代表タイルID
-    # @param frames [Array<Integer>] コマとなるタイルIDの配列
-    # @param wait [Integer, Array<Integer>] コマごとの待機フレーム数 (単一数値または配列)
+    #
+    # - `tile_id` (`Integer`): マップ上で配置する代表タイル ID
+    # - `frames:` (`Array<Integer>`): コマとなるタイル ID の配列
+    # - `wait:` (`Integer`, `Array<Integer>`): コマごとの待機フレーム数（単一数値または配列、デフォルト: 10）
+    # - 戻り値: `Tilemap` (`self`)
     def define_animation(tile_id, frames:, wait: 10)
       @animations[tile_id.to_i] = Animation.new(tile_id, frames: frames, wait: wait)
       invalidate_all_layers!
@@ -1343,16 +1463,23 @@ module Zenoo
     end
 
     # アニメーション定義を取得
+    #
+    # - `tile_id` (`Integer`): 代表タイル ID
+    # - 戻り値: `Tilemap::Animation`, `nil`
     def tile_animation(tile_id)
       @animations[tile_id]
     end
 
     # 登録されている全アニメーション定義のハッシュ
+    #
+    # - 戻り値: `Hash<Integer, Tilemap::Animation>`
     def animations
       @animations
     end
 
     # アニメーションタイルの更新 (毎フレームのゲームループ内で呼び出し)
+    #
+    # - 戻り値: `Tilemap` (`self`)
     def update
       return self if @animations.empty?
 
@@ -1373,6 +1500,11 @@ module Zenoo
     end
 
     # 全レイヤーを一括描画
+    #
+    # - `x:` (`Numeric`, `nil`): 描画原点 X 座標の上書き（省略時は `self.x`）
+    # - `y:` (`Numeric`, `nil`): 描画原点 Y 座標の上書き（省略時は `self.y`）
+    # - `z:` (`Numeric`, `nil`): 基準 Z オーダーの上書き（省略時は `self.z + layer.z`）
+    # - `camera:` (`Boolean`, `Camera`, `nil`): カメラ適用の有無または特定 `Camera`（省略時は `self.camera`）
     def draw(x: nil, y: nil, z: nil, camera: nil)
       i = 0
       len = @layers.size

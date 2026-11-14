@@ -45,7 +45,9 @@ module Zenoo
       attr_accessor :enabled, :capacity
 
       # カテゴリごとの実行時間をブロックで計測 (ネスト対応: 子セクションの時間は自動で除外され排他自己消費時間を記録)
-      # @param category [Symbol, String] 計測カテゴリ (例: :update, :physics, :render, :separate)
+      #
+      # - `category` (`Symbol`, `String`): 計測カテゴリ（例: `:update`, `:physics`, `:render`, `:separate`）
+      # - 戻り値: ブロックの評価結果
       def measure(category)
         return yield unless @enabled
 
@@ -69,6 +71,8 @@ module Zenoo
       end
 
       # 手動での計測開始
+      #
+      # - `category` (`Symbol`, `String`): 計測カテゴリ
       def begin_section(category)
         return unless @enabled
         cat = category.to_sym
@@ -77,6 +81,8 @@ module Zenoo
       end
 
       # 手動での計測終了
+      #
+      # - `category` (`Symbol`, `String`): `begin_section` で開始した計測カテゴリ
       def end_section(category)
         return unless @enabled
         cat = category.to_sym
@@ -102,16 +108,23 @@ module Zenoo
       end
 
       # 直近 N フレームの履歴配列 (各要素は { category => ms })
+      #
+      # - 戻り値: `Array<Hash<Symbol, Float>>`
       def history
         @history
       end
 
       # 登録されている全カテゴリ
+      #
+      # - 戻り値: `Array<Symbol>`
       def categories
         @registered_categories
       end
 
       # カテゴリの表示色を取得
+      #
+      # - `category` (`Symbol`, `String`): カテゴリ名
+      # - 戻り値: `Zenoo::Color`
       def color_for(category)
         cat = category.to_sym
         @colors[cat] ||= begin
@@ -121,11 +134,17 @@ module Zenoo
       end
 
       # カテゴリのカスタム表示色を設定
+      #
+      # - `category` (`Symbol`, `String`): カテゴリ名
+      # - `color` (`Color`, `Symbol`, `Array<Integer>`): 表示色
       def set_color(category, color)
         @colors[category.to_sym] = color
       end
 
       # 複数カテゴリの表示色を一括設定
+      #
+      # - `color_hash` (`Hash`, `nil`): `{ category => color }` のマップ
+      # - `kwargs` (`Hash`): キーワード引数による `{ category: color }` 指定
       def set_colors(color_hash = nil, **kwargs)
         if color_hash.is_a?(Hash)
           color_hash.each { |k, v| @colors[k.to_sym] = v }
@@ -134,11 +153,15 @@ module Zenoo
       end
 
       # 直近フレームのカテゴリ別時間 { category => ms }
+      #
+      # - 戻り値: `Hash<Symbol, Float>`
       def last_times
         @history.last || {}
       end
 
       # 直近フレームの合計時間 (ms)
+      #
+      # - 戻り値: `Float`
       def last_total_ms
         last = @history.last
         return 0.0 unless last
@@ -146,6 +169,9 @@ module Zenoo
       end
 
       # 直近 N フレームにおける平均時間 { category => ms }
+      #
+      # - `samples` (`Integer`): 平均を算出する直近フレーム数
+      # - 戻り値: `Hash<Symbol, Float>`
       def average_times(samples = 30)
         return {} if @history.empty?
         recent = @history.last(samples)
@@ -161,6 +187,9 @@ module Zenoo
       end
 
       # 直近 N フレームの最大合計時間 (ms)
+      #
+      # - `samples` (`Integer`): 集計対象の直近フレーム数
+      # - 戻り値: `Float`
       def max_total_ms(samples = 60)
         return 0.0 if @history.empty?
         @history.last(samples).map { |f| f.values.sum }.max || 0.0

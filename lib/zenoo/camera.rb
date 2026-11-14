@@ -17,6 +17,20 @@ module Zenoo
     attr_reader :bounds
     attr_accessor :target_offset_x, :target_offset_y
 
+    # カメラを生成します。
+    #
+    # - `x:` (`Numeric`): カメラ中心のワールドX座標 (デフォルト: `0.0`)
+    # - `y:` (`Numeric`): カメラ中心のワールドY座標 (デフォルト: `0.0`)
+    # - `zoom:` (`Numeric`): 拡大率 (`1.0` で等倍、デフォルト: `1.0`)
+    # - `offset_x:` (`Numeric, nil`): スクリーン基準点のX座標 (省略時は画面中央)
+    # - `offset_y:` (`Numeric, nil`): スクリーン基準点のY座標 (省略時は画面中央)
+    # - `width:` (`Numeric, nil`): ビューポート幅 (省略時は現在のレンダーターゲット/ウィンドウ幅)
+    # - `height:` (`Numeric, nil`): ビューポート高さ (省略時は現在のレンダーターゲット/ウィンドウ高さ)
+    # - `target:` (`Object, Array, nil`): 自動追従する対象 (`#x`/`#y` を持つオブジェクトまたは `[x, y]` 配列)
+    # - `smooth_speed:` (`Numeric`): 追従の滑らかさ (`0.0` で即時追従、`> 0` で補間追従、デフォルト: `0.0`)
+    # - `bounds:` (`Array<Numeric>, nil`): カメラ移動範囲の制限 `[min_x, min_y, max_x, max_y]`
+    # - `target_offset_x:` (`Numeric`): 追従対象からのX方向オフセット (デフォルト: `0.0`)
+    # - `target_offset_y:` (`Numeric`): 追従対象からのY方向オフセット (デフォルト: `0.0`)
     def initialize(x: 0.0, y: 0.0, zoom: 1.0, offset_x: nil, offset_y: nil, width: nil, height: nil, target: nil, smooth_speed: 0.0, bounds: nil, target_offset_x: 0.0, target_offset_y: 0.0)
       @x = x.to_f
       @y = y.to_f
@@ -45,66 +59,94 @@ module Zenoo
       clamp_to_bounds! if @bounds
     end
 
+    # カメラ中心のワールドX座標を設定します (`bounds` 指定時は範囲内にクランプ)。
+    #
+    # - `v` (`Numeric`): ワールドX座標
     def x=(v)
       @x = v.to_f
       clamp_to_bounds!
       @view = nil
     end
 
+    # カメラ中心のワールドY座標を設定します (`bounds` 指定時は範囲内にクランプ)。
+    #
+    # - `v` (`Numeric`): ワールドY座標
     def y=(v)
       @y = v.to_f
       clamp_to_bounds!
       @view = nil
     end
 
+    # カメラの拡大率を設定します。
+    #
+    # - `v` (`Numeric`): 拡大率 (`1.0` で等倍)
     def zoom=(v)
       @zoom = v.to_f
       clamp_to_bounds!
       @view = nil
     end
 
+    # スクリーン基準点のX座標を設定します (`nil` で画面中央)。
+    #
+    # - `v` (`Numeric, nil`): スクリーンX座標
     def offset_x=(v)
       @offset_x = v ? v.to_f : nil
       clamp_to_bounds!
       @view = nil
     end
 
+    # スクリーン基準点のY座標を設定します (`nil` で画面中央)。
+    #
+    # - `v` (`Numeric, nil`): スクリーンY座標
     def offset_y=(v)
       @offset_y = v ? v.to_f : nil
       clamp_to_bounds!
       @view = nil
     end
 
+    # ビューポート幅を設定します (`nil` で現在の描画先幅を自動参照)。
+    #
+    # - `v` (`Numeric, nil`): ビューポート幅
     def width=(v)
       @width = v ? v.to_f : nil
       clamp_to_bounds!
       @view = nil
     end
 
+    # ビューポート高さを設定します (`nil` で現在の描画先高さを自動参照)。
+    #
+    # - `v` (`Numeric, nil`): ビューポート高さ
     def height=(v)
       @height = v ? v.to_f : nil
       clamp_to_bounds!
       @view = nil
     end
 
+    # カメラの移動可能範囲を設定します (`nil` で制限解除)。
+    #
+    # - `b` (`Array<Numeric>, nil`): `[min_x, min_y, max_x, max_y]` のワールド座標配列
     def bounds=(b)
       @bounds = b ? b.map(&:to_f) : nil
       clamp_to_bounds!
       @view = nil
     end
 
-    # 注視対象 (x, y メソッドを持つオブジェクト、または [x, y] 配列)
+    # 注視対象 (x, y メソッドを持つオブジェクト、または [x, y] 配列) を返します。
     def target
       @target
     end
 
+    # 自動追従する注視対象を設定します。
+    #
+    # - `obj` (`Object, Array, nil`): `#x`/`#y` を持つオブジェクトまたは `[x, y]` 配列
     def target=(obj)
       @target = obj
     end
 
     # 画面シェイクの発動
-    # - intensity: 揺れの強さ (ピクセル)
-    # - duration: 揺れる時間 (秒数またはフレーム数)
+    #
+    # - `intensity` (`Numeric`): 揺れの強さ (ピクセル単位、デフォルト: `12.0`)
+    # - `duration` (`Numeric`): 揺れる時間 (`update` の `dt` と同じ単位、デフォルト: `0.3`)
     def shake(intensity = 12.0, duration = 0.3)
       @shake_intensity = intensity.to_f
       @shake_duration = duration.to_f
@@ -112,6 +154,8 @@ module Zenoo
     end
 
     # 毎フレームの更新 (ターゲット追従とシェイク減衰)
+    #
+    # - `dt` (`Numeric`): 経過時間 (秒単位、デフォルト: `1.0 / 60.0`)
     def update(dt = 1.0 / 60.0)
       # 1. ターゲット自動追従
       if @target
@@ -162,12 +206,13 @@ module Zenoo
       end
     end
 
-    # カメラのスクリーン中心座標
+    # カメラのスクリーン中心X座標を返します (`offset_x` 未設定時はビューポート幅の半分)。
     def screen_center_x
       return @offset_x if @offset_x
       target_width * 0.5
     end
 
+    # カメラのスクリーン中心Y座標を返します (`offset_y` 未設定時はビューポート高さの半分)。
     def screen_center_y
       return @offset_y if @offset_y
       target_height * 0.5
@@ -193,6 +238,9 @@ module Zenoo
 
     # パララックス係数付きの描画用変換 [zoom, ox, oy]
     # (px, py) = (1, 1) のときは #view と同じ
+    #
+    # - `px` (`Numeric`): X方向のスクロール倍率 (`0.0` で固定、`1.0` で通常追従)
+    # - `py` (`Numeric`): Y方向のスクロール倍率 (`0.0` で固定、`1.0` で通常追従)
     def parallax_view(px, py)
       return view if px == 1.0 && py == 1.0
       [
@@ -203,12 +251,20 @@ module Zenoo
     end
 
     # 画面座標 -> ワールド座標への逆変換 (マウス入力やクリック判定用)
+    #
+    # - `sx` (`Numeric`): スクリーンX座標
+    # - `sy` (`Numeric`): スクリーンY座標
+    # - 戻り値: `Array<Float>` `[world_x, world_y]`
     def screen_to_world(sx, sy)
       z, ox, oy = view
       [(sx.to_f - ox) / z, (sy.to_f - oy) / z]
     end
 
     # ワールド座標 -> 画面座標への変換
+    #
+    # - `wx` (`Numeric`): ワールドX座標
+    # - `wy` (`Numeric`): ワールドY座標
+    # - 戻り値: `Array<Float>` `[screen_x, screen_y]`
     def world_to_screen(wx, wy)
       z, ox, oy = view
       [wx.to_f * z + ox, wy.to_f * z + oy]
@@ -216,6 +272,10 @@ module Zenoo
 
     # 画面矩形 (0, 0)-(w, h) に映るワールド範囲 [left, top, right, bottom]
     # カリング用。負のズームによる反転も正規化する
+    #
+    # - `w` (`Numeric`): ビューポート幅 (デフォルト: 現在の描画先幅)
+    # - `h` (`Numeric`): ビューポート高さ (デフォルト: 現在の描画先高さ)
+    # - 戻り値: `Array<Float>` `[left, top, right, bottom]`
     def visible_rect(w = target_width, h = target_height)
       z, ox, oy = view
       x1 = -ox / z

@@ -1,7 +1,15 @@
 module Zenoo
+  # RGBA 各色成分を 0〜255 の整数で保持する不変色クラス。
+  # 描画 API の color: 引数では Color インスタンスのほか、[r, g, b, a] 配列や :red などのシンボルも利用できます。
   class Color
     attr_reader :r, :g, :b, :a
 
+    # 新しい Color インスタンスを生成します。
+    #
+    # - `r` (`Integer`): 赤成分 (`0..255` にクランプ)
+    # - `g` (`Integer`): 緑成分 (`0..255` にクランプ)
+    # - `b` (`Integer`): 青成分 (`0..255` にクランプ)
+    # - `a` (`Integer`): 不透明度 (`0..255` にクランプ、デフォルト: `255`)
     def initialize(r, g, b, a = 255)
       @r = clamp(r, 0, 255)
       @g = clamp(g, 0, 255)
@@ -11,18 +19,23 @@ module Zenoo
     end
 
     # 浮動小数点 (0.0..1.0) ゲッター (シェーダー連携用)
+
+    # 赤成分を `0.0..1.0` の浮動小数点数で返します。
     def rf
       @r / 255.0
     end
 
+    # 緑成分を `0.0..1.0` の浮動小数点数で返します。
     def gf
       @g / 255.0
     end
 
+    # 青成分を `0.0..1.0` の浮動小数点数で返します。
     def bf
       @b / 255.0
     end
 
+    # 不透明度を `0.0..1.0` の浮動小数点数で返します。
     def af
       @a / 255.0
     end
@@ -30,19 +43,42 @@ module Zenoo
     # ----------------------------------------------------
     # ファクトリメソッド
     # ----------------------------------------------------
+
+    # 不透明 (アルファ 255) の Color を生成します。
+    #
+    # - `r` (`Integer`): 赤成分 (`0..255`)
+    # - `g` (`Integer`): 緑成分 (`0..255`)
+    # - `b` (`Integer`): 青成分 (`0..255`)
     def self.rgb(r, g, b)
       new(r, g, b, 255)
     end
 
+    # アルファ指定付きの Color を生成します。
+    #
+    # - `r` (`Integer`): 赤成分 (`0..255`)
+    # - `g` (`Integer`): 緑成分 (`0..255`)
+    # - `b` (`Integer`): 青成分 (`0..255`)
+    # - `a` (`Integer`): 不透明度 (`0..255`)
     def self.rgba(r, g, b, a)
       new(r, g, b, a)
     end
 
+    # `0.0..1.0` の浮動小数点値から Color を生成します (内部で `0..255` へ変換)。
+    #
+    # - `r` (`Numeric`): 赤成分 (`0.0..1.0`)
+    # - `g` (`Numeric`): 緑成分 (`0.0..1.0`)
+    # - `b` (`Numeric`): 青成分 (`0.0..1.0`)
+    # - `a` (`Numeric`): 不透明度 (`0.0..1.0`、デフォルト: `1.0`)
     def self.from_floats(r, g, b, a = 1.0)
       new((r.to_f * 255.0).round, (g.to_f * 255.0).round, (b.to_f * 255.0).round, (a.to_f * 255.0).round)
     end
 
-    # HSV (色相: 0..360, 彩度: 0.0..1.0, 明度: 0.0..1.0)
+    # HSV (色相: 0..360, 彩度: 0.0..1.0, 明度: 0.0..1.0) から Color を生成します。
+    #
+    # - `h` (`Numeric`): 色相 (`0..360` 度、範囲外は周回補正)
+    # - `s` (`Numeric`): 彩度 (`0.0..1.0` にクランプ)
+    # - `v` (`Numeric`): 明度 (`0.0..1.0` にクランプ)
+    # - `a` (`Integer`): 不透明度 (`0..255`、デフォルト: `255`)
     def self.hsv(h, s, v, a = 255)
       h_deg = h.to_f % 360.0
       h_deg += 360.0 if h_deg < 0.0
@@ -77,7 +113,10 @@ module Zenoo
       new(((r1 + m) * 255.0).round, ((g1 + m) * 255.0).round, ((b1 + m) * 255.0).round, a)
     end
 
-    # HEXコード (0xFF5500 または "#FF5500" / "FF5500")
+    # HEXコード (0xFF5500 または "#FF5500" / "FF5500") から Color を生成します。
+    #
+    # - `val` (`Integer, String`): 16進数カラー値 (7文字以上の文字列で `#RRGGBBAA` を指定した場合は末尾2桁をアルファ値として使用)
+    # - `a` (`Integer`): 不透明度 (`0..255`、デフォルト: `255`)
     def self.hex(val, a = 255)
       if val.is_a?(String)
         str = val.to_s
@@ -97,12 +136,18 @@ module Zenoo
     # ----------------------------------------------------
     # 操作・演出メソッド
     # ----------------------------------------------------
-    # アルファ値のみ変更した新しいColorを生成
+
+    # アルファ値のみ変更した新しい Color を生成します。
+    #
+    # - `new_a` (`Integer`): 新しい不透明度 (`0..255`)
     def with_alpha(new_a)
       Color.new(@r, @g, @b, new_a)
     end
 
-    # 線形補間 (Lerp)
+    # 別の色との線形補間 (Lerp) を行った新しい Color を返します。
+    #
+    # - `target` (`Color`): 補間先の色
+    # - `t` (`Numeric`): 補間係数 (`0.0..1.0` にクランプ。`0.0` で自身、`1.0` で `target`)
     def lerp(target, t)
       tf = t.to_f < 0.0 ? 0.0 : (t.to_f > 1.0 ? 1.0 : t.to_f)
       nr = (@r + (target.r - @r) * tf).round.to_i
@@ -112,18 +157,24 @@ module Zenoo
       Color.new(nr, ng, nb, na)
     end
 
-    # 明度スケーリング (color * 0.8)
+    # 明度スケーリング (color * 0.8) を行った新しい Color を返します (アルファ値は維持)。
+    #
+    # - `factor` (`Numeric`): RGB 各成分に掛ける倍率
     def *(factor)
       f = factor.to_f
       Color.new((@r * f).round.to_i, (@g * f).round.to_i, (@b * f).round.to_i, @a)
     end
 
-    # 加算合成
+    # 加算合成した新しい Color を返します (アルファ値は維持)。
+    #
+    # - `other` (`Color`): 加算する色
     def +(other)
       Color.new(@r + other.r, @g + other.g, @b + other.b, @a)
     end
 
-    # 減算合成
+    # 減算合成した新しい Color を返します (アルファ値は維持)。
+    #
+    # - `other` (`Color`): 減算する色
     def -(other)
       Color.new(@r - other.r, @g - other.g, @b - other.b, @a)
     end
@@ -131,22 +182,26 @@ module Zenoo
     # ----------------------------------------------------
     # 変換メソッド
     # ----------------------------------------------------
-    # 0〜255 の整数配列 [r, g, b, a]
+
+    # 0〜255 の整数配列 [r, g, b, a] を返します。
     def to_a
       [@r, @g, @b, @a]
     end
 
-    # 0.0〜1.0 の浮動小数点配列 [r, g, b, a] (シェーダー直接送出用)
+    # 0.0〜1.0 の浮動小数点配列 [r, g, b, a] を返します (シェーダー直接送出用)。
     def to_f4
       @f4
     end
 
-    # 0xRRGGBBAA 形式の uint32 (32bit signed環境で r >= 128 のオーバーフローを防止)
+    # 0xRRGGBBAA 形式の uint32 (32bit signed環境で r >= 128 のオーバーフローを防止) を返します。
     def to_i
       val = ((@r & 0x7F) << 24) | (@g << 16) | (@b << 8) | @a
       (@r >= 128) ? (val | -2147483648) : val
     end
 
+    # 別のオブジェクトと各 RGBA 成分が一致するか判定します。
+    #
+    # - `other` (`Object`): 比較対象のオブジェクト
     def ==(other)
       other.is_a?(Color) && @r == other.r && @g == other.g && @b == other.b && @a == other.a
     end
