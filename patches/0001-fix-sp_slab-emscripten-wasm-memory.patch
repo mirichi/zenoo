@@ -1,8 +1,8 @@
 diff --git a/lib/sp_slab.c b/lib/sp_slab.c
-index c57f423e0..840b7b97f 100644
+index c264e41e9..5d1d694a9 100644
 --- a/lib/sp_slab.c
 +++ b/lib/sp_slab.c
-@@ -260,7 +260,7 @@ static inline void bm_store(uint64_t *p, uint64_t v) { *p = v; }
+@@ -265,7 +265,7 @@ static inline void bm_store(uint64_t *p, uint64_t v) { *p = v; }
     middle; the pages are untouched until a chunk is carved, so the size costs
     nothing but address space. */
  static void sp_slab_reserve(void) {
