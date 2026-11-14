@@ -290,10 +290,16 @@ case "$TARGET" in
         build_scene
         sleep 0.5
         build_sound_generator
+        sleep 0.5
+        build_particle_editor
+        sleep 0.5
+        build_sprite_animation
+        sleep 0.5
+        build_procedural_runner
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Usage: $0 [game|gui|font|vector|image|atlas|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|articulated|skinned_mesh|canvas_mesh|mesh_deform|scene|sound_generator|sprite_animation|all]"
+        echo "Usage: $0 [game|gui|font|vector|image|atlas|clip|sound|collision|tween|coords|billiards|zero_gravity|particles|danmaku|articulated|skinned_mesh|canvas_mesh|mesh_deform|scene|sound_generator|particle_editor|sprite_animation|procedural_runner|all]"
         exit 1
         ;;
 esac
@@ -324,4 +330,6 @@ echo " CanvasMesh : ${DOCS_DIR}/canvas_mesh/index.html"
 echo " MeshDeform : ${DOCS_DIR}/mesh_deform/index.html"
 echo " Scene      : ${DOCS_DIR}/scene/index.html"
 echo " SFX Gen    : ${DOCS_DIR}/sound_generator/index.html"
+echo " ParticleEd : ${DOCS_DIR}/particle_editor/index.html"
+echo " ProcRunner : ${DOCS_DIR}/procedural_runner/index.html"
 echo "=========================================================="
