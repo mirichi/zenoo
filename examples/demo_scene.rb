@@ -14,10 +14,14 @@ require_relative '../lib/zenoo'
 
 # GUI ボタンの簡易描画 & クリック判定ヘルパー
 module SceneUI
-  def self.button(x, y, w, h, text, base_color: [59, 130, 246, 230])
-    mx = Input.mouse_x
-    my = Input.mouse_y
-    hover = mx >= x && mx <= x + w && my >= y && my <= y + h
+  def self.button(x, y, w, h, text, base_color: [59, 130, 246, 230], enabled: true)
+    if enabled
+      mx = Input.mouse_x
+      my = Input.mouse_y
+      hover = mx >= x && mx <= x + w && my >= y && my <= y + h
+    else
+      hover = false
+    end
 
     # ホバー時は少し明るく光らせる
     r = [base_color[0] + (hover ? 35 : 0), 255].min
@@ -94,19 +98,22 @@ class PlayScene < Scene
 
     return if Scene.transitioning?
 
+    # オーバーレイ等により背後に回っている間はボタン表示のみ行い、操作は無効化する
+    is_active = active?
+
     # GUI ボタン配置
     # 1. below: :freeze (既定) → 背景のボールがピタッと止まる
-    if SceneUI.button(240, 500, 240, 46, "Pause (below: :freeze)", base_color: [225, 29, 72, 240])
+    if SceneUI.button(240, 500, 240, 46, "Pause (below: :freeze)", base_color: [225, 29, 72, 240], enabled: is_active)
       Scene.push(FreezePauseScene.new, below: :freeze)
     end
 
     # 2. below: :live → 背景のボールが止まらずに動き続ける！
-    if SceneUI.button(520, 500, 240, 46, "Overlay (below: :live)", base_color: [13, 148, 136, 240])
+    if SceneUI.button(520, 500, 240, 46, "Overlay (below: :live)", base_color: [13, 148, 136, 240], enabled: is_active)
       Scene.push(LiveOverlayScene.new, below: :live)
     end
 
     # 3. ブロックによるポップアップダイアログ (below: :freeze)
-    if SceneUI.button(800, 500, 240, 46, "Block Dialog (push { })", base_color: [124, 58, 237, 240])
+    if SceneUI.button(800, 500, 240, 46, "Block Dialog (push { })", base_color: [124, 58, 237, 240], enabled: is_active)
       Scene.push do
         Window.draw_rect(0, 0, 1280, 720, color: [0, 0, 0, 180])
         Window.draw_rect(440, 240, 400, 220, radius: 16, color: [30, 41, 59, 255], border_width: 2, border_color: :green)
@@ -121,7 +128,7 @@ class PlayScene < Scene
     end
 
     # 4. タイトルへ戻るボタン
-    if SceneUI.button(520, 580, 240, 42, "Back to Title (Fade 0.4s)", base_color: [71, 85, 105, 240])
+    if SceneUI.button(520, 580, 240, 42, "Back to Title (Fade 0.4s)", base_color: [71, 85, 105, 240], enabled: is_active)
       Scene.change(TitleScene.new, fade: 0.4)
     end
   end

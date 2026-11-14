@@ -273,6 +273,11 @@ module Zenoo
       @scene_elapsed || 0.0
     end
 
+    # このシーンが現在スタックの最前面にあるか (上に別シーンが積まれていないか)
+    def active?
+      Scene.current == self
+    end
+
     # --- 以下はマネージャ用の内部メソッド ---
     def __attach(below)
       @scene_below = below
