@@ -1073,7 +1073,8 @@ module Zenoo
     # 単一または配列スプライトの一括描画 (DXRuby互換)
     def self.draw(sprites = nil)
       return unless sprites
-      if sprites.is_a?(Array)
+      case sprites
+      when Array
         i = 0
         len = sprites.length
         while i < len
@@ -1089,7 +1090,8 @@ module Zenoo
     # 単一または配列スプライトの一括フレーム更新 (DXRuby互換)
     def self.update(sprites = nil)
       return unless sprites
-      if sprites.is_a?(Array)
+      case sprites
+      when Array
         i = 0
         len = sprites.length
         while i < len
