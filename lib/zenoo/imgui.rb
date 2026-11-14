@@ -36,11 +36,11 @@ module Zenoo
       attr_accessor :renderer
       attr_reader :layout, :focus_id, :hot_id, :active_id
 
-      # テーマの設定または取得
-      # - 引数なし: 現在の Theme オブジェクトを返却
-      # - 引数あり: プリセット適用 or プロパティ上書き
-      #   例: GUI.theme(:navy)
-      #   例: GUI.theme(bg_normal: [30, 40, 60, 200])
+      # テーマの取得・設定・上書きを行う
+      #
+      # - `preset` (`Symbol | Theme | nil`): 適用するプリセット名（`:tool_dark`, `:cyber`, または `Theme.register` で登録した名前）または `Theme` インスタンス（省略時は現在のテーマを取得またはキーワード引数で上書き）
+      # - `overrides` (`Hash`): 上書きするテーマ属性（`Theme#configure` と同じキーワード引数。色は `0..255` 基準）
+      # - 戻り値: `Theme`
       def theme(preset = nil, **overrides)
         if preset.nil? && overrides.empty?
           @theme
@@ -55,11 +55,20 @@ module Zenoo
         end
       end
 
+      # テーマを直接設定する
+      #
+      # - `val` (`Symbol | Theme`): プリセット名のシンボルまたは `Theme` インスタンス
+      # - 戻り値: `Symbol | Theme`
       def theme=(val)
         @theme = val.is_a?(Symbol) ? Theme.new(val) : val
       end
 
-      # 一時的にテーマを切り替えてブロックを実行
+      # ブロック実行中のみ一時的にテーマを切り替える
+      #
+      # - `target_theme` (`Symbol | Theme | Object`): 切り替え先のプリセット名または `Theme`（それ以外の値または `nil` の場合は現在のテーマを複製して上書き）
+      # - `overrides` (`Hash`): 一時テーマへ適用する属性上書き（`Theme#configure` と同じキーワード引数）
+      # - `&block`: 切り替え後のテーマで実行する描画ブロック
+      # - 戻り値: `Theme`
       def with_theme(target_theme, **overrides)
         old_theme = @theme
         @theme = if target_theme.is_a?(Symbol)
@@ -73,8 +82,9 @@ module Zenoo
         @theme = old_theme
       end
 
-      # マウスカーソルが GUI コントロール上にあるか、操作中かどうか (Dear ImGui の WantCaptureMouse 相当)
-      # update -> draw の実行順序でも正しく判定できるよう、描画前は前フレーム状態を参照
+      # マウスカーソルが GUI コントロールまたはウィンドウ上にあるか、操作中かを返す（Dear ImGui の `WantCaptureMouse` 相当）
+      #
+      # - 戻り値: `Boolean`
       def mouse_captured?
         if @evaluated
           !@hot_id.nil? || !@active_id.nil? || !@focus_id.nil? || !@win_mgr.hovered_window_id.nil?
@@ -83,16 +93,27 @@ module Zenoo
         end
       end
 
+      # テキスト入力などのフォーカス先ウィジェット ID を設定する
+      #
+      # - `val` (`String | Symbol | nil`): フォーカスを与えるウィジェット ID（`nil` で解除）
+      # - 戻り値: `nil`
       def focus_id=(val)
         @focus_id = val ? val.to_s : nil
         @blink_time = 0.0
         Input.set_ime_position(-1, -1) unless @focus_id
       end
 
+      # 指定 ID のウィジェットが現在フォーカスを持っているかを返す
+      #
+      # - `id` (`String | Symbol`): 確認するウィジェット ID
+      # - 戻り値: `Boolean`
       def has_focus?(id)
         @focus_id == id.to_s
       end
 
+      # 現在のウィジェットフォーカスを解除する
+      #
+      # - 戻り値: `nil`
       def clear_focus
         self.focus_id = nil
       end
@@ -100,18 +121,31 @@ module Zenoo
       # --------------------------------------------------
       # ウィンドウ管理状態へのアクセサ (WindowManager へ委譲)
       # --------------------------------------------------
+
+      # 管理中の全ウィンドウ状態のハッシュ（`id => WindowState`）を返す
+      #
+      # - 戻り値: `Hash{String => WindowState}`
       def windows
         @win_mgr.windows
       end
 
+      # ウィンドウの描画順（末尾が最前面）の ID 配列を返す
+      #
+      # - 戻り値: `Array<String>`
       def window_order
         @win_mgr.window_order
       end
 
+      # 現在マウスカーソル直下にある最前面ウィンドウの ID を返す
+      #
+      # - 戻り値: `String | nil`
       def hovered_window_id
         @win_mgr.hovered_window_id
       end
 
+      # 現在アクティブ（最前面）なウィンドウの ID を返す
+      #
+      # - 戻り値: `String | nil`
       def active_window_id
         @win_mgr.active_window_id
       end
@@ -119,6 +153,10 @@ module Zenoo
       # --------------------------------------------------
       # フレーム開始・終了処理 (Window.loop で毎フレーム自動呼び出し)
       # --------------------------------------------------
+
+      # フレーム開始時の入力・カーソル・レイアウト初期化を行う（`Window.loop` で自動呼び出し）
+      #
+      # - 戻り値: `nil`
       def begin_frame
         @mouse_x    = Input.mouse_x.to_f
         @mouse_y    = Input.mouse_y.to_f
@@ -136,14 +174,24 @@ module Zenoo
         @layout.reset
       end
 
+      # このフレームで要求するマウスカーソル形状を設定する
+      #
+      # - `shape` (`Symbol`): カーソル形状（`:arrow`, `:hand`, `:ibeam`, `:nwse` 等）
+      # - 戻り値: `Symbol`
       def set_mouse_cursor(shape)
         @requested_cursor = shape
       end
 
+      # このフレームで要求されているマウスカーソル形状を返す
+      #
+      # - 戻り値: `Symbol`
       def requested_cursor
         @requested_cursor
       end
 
+      # フレーム終了時のカーソル反映処理を行う（`Window.loop` で自動呼び出し）
+      #
+      # - 戻り値: `Symbol`
       def end_frame
         if @requested_cursor != :arrow
           Window.cursor = @requested_cursor
@@ -157,63 +205,120 @@ module Zenoo
       # --------------------------------------------------
       # レイアウト & カーソル操作 (Layout へ委譲)
       # --------------------------------------------------
+      # レイアウトカーソル位置の取得または設定を行う
+      #
+      # - `x` (`Float | nil`): 設定する X 座標（`x`・`y` とも `nil` の場合は現在座標 `[cursor_x, cursor_y]` を取得）
+      # - `y` (`Float | nil`): 設定する Y 座標
+      # - 戻り値: `Array<Float>`
       def cursor(x = nil, y = nil)
         @layout.cursor(x, y)
       end
 
+      # レイアウトカーソル位置を設定する
+      #
+      # - `x` (`Float`): 設定する X 座標
+      # - `y` (`Float`): 設定する Y 座標
+      # - 戻り値: `Array<Float>`
       def set_cursor(x, y)
         @layout.cursor(x, y)
       end
 
+      # 現在のレイアウトカーソル X 座標を返す
+      #
+      # - 戻り値: `Float`
       def cursor_x
         @layout.cursor_x
       end
 
+      # レイアウトカーソル X 座標を設定する
+      #
+      # - `val` (`Float`): X 座標
+      # - 戻り値: `Float`
       def cursor_x=(val)
         @layout.cursor_x = val
         val
       end
 
+      # 現在のレイアウトカーソル Y 座標を返す
+      #
+      # - 戻り値: `Float`
       def cursor_y
         @layout.cursor_y
       end
 
+      # レイアウトカーソル Y 座標を設定する
+      #
+      # - `val` (`Float`): Y 座標
+      # - 戻り値: `Float`
       def cursor_y=(val)
         @layout.cursor_y = val
         val
       end
 
+      # ウィジェット間の余白（spacing）の取得または設定を行う
+      #
+      # - `x` (`Float | nil`): 横方向の間隔（`x`・`y` とも `nil` の場合は `[spacing_x, spacing_y]` を取得）
+      # - `y` (`Float | nil`): 縦方向の間隔
+      # - 戻り値: `Array<Float>`
       def spacing(x = nil, y = nil)
         @layout.spacing(x, y)
       end
 
+      # 現在の横方向間隔を返す
+      #
+      # - 戻り値: `Float`
       def spacing_x
         @layout.spacing_x
       end
 
+      # 横方向間隔を設定する
+      #
+      # - `val` (`Float`): 横方向間隔（ピクセル単位）
+      # - 戻り値: `Float`
       def spacing_x=(val)
         @layout.spacing_x = val
         val
       end
 
+      # 現在の縦方向間隔を返す
+      #
+      # - 戻り値: `Float`
       def spacing_y
         @layout.spacing_y
       end
 
+      # 縦方向間隔を設定する
+      #
+      # - `val` (`Float`): 縦方向間隔（ピクセル単位）
+      # - 戻り値: `Float`
       def spacing_y=(val)
         @layout.spacing_y = val
         val
       end
 
+      # 指定サイズの要素を配置した前提でレイアウトカーソルを進める
+      #
+      # - `w` (`Float`): 配置した要素の幅
+      # - `h` (`Float`): 配置した要素の高さ
+      # - 戻り値: `Float`
       def advance_cursor(w, h)
         @layout.advance(w, h)
       end
 
+      # レイアウトカーソルを指定ピクセル分進めて余白を空ける
+      #
+      # - `size` (`Float`): 空けるサイズ（ピクセル、デフォルト `8.0`）
+      # - 戻り値: `Float`
       def spacer(size = 8.0)
         @layout.spacer(size)
       end
 
-      # 横並びブロック (cols: N を指定するとコンテナ幅を N 等分した幅を自動割り当て)
+      # 横並びブロックを実行する（`cols` 指定時はコンテナ幅を等分した幅が自動割り当てされる）
+      #
+      # - `spacing` (`Float`): 要素間の横間隔（負値時は現在の `spacing_x` を使用）
+      # - `cols` (`Integer | nil`): 列数（指定すると子要素の幅が自動等分される）
+      # - `&block`: 横並びで配置するウィジェット呼び出しブロック
+      # - 戻り値: `Object | nil`
       def row(spacing: -1.0, cols: nil, &block)
         @layout.row(spacing: spacing, cols: cols, &block)
       end
@@ -221,11 +326,22 @@ module Zenoo
       # --------------------------------------------------
       # 座標・入力遮断ヘルパー
       # --------------------------------------------------
+      # 点 `(px, py)` が矩形 `(rx, ry, rw, rh)` の内側にあるかを判定する
+      #
+      # - `px` (`Float`): 判定点の X 座標
+      # - `py` (`Float`): 判定点の Y 座標
+      # - `rx` (`Float`): 矩形左上 X 座標
+      # - `ry` (`Float`): 矩形左上 Y 座標
+      # - `rw` (`Float`): 矩形の幅
+      # - `rh` (`Float`): 矩形の高さ
+      # - 戻り値: `Boolean`
       def in_rect?(px, py, rx, ry, rw, rh)
         px >= rx && px <= (rx + rw) && py >= ry && py <= (ry + rh)
       end
 
-      # コントロールの操作可否判定 (前面ウィンドウによる入力遮断 & クリップ範囲外遮断)
+      # 現在のウィジェットがマウス操作を受け付けられるかを判定する（最前面ウィンドウ・クリッピング範囲を考慮）
+      #
+      # - 戻り値: `Boolean`
       def can_interact?
         @evaluated = true
         # 1. ハードウェアクリッピング矩形外なら不可 (スクロールではみ出たコントロール等の遮断)
@@ -238,11 +354,16 @@ module Zenoo
         @win_mgr.hovered_window_id == @win_mgr.current_window_id
       end
 
-      # ローカル座標系対応のマウス座標
+      # 現在のクリップ・オフセット空間に対応したマウス X 座標を返す
+      #
+      # - 戻り値: `Float`
       def gui_mouse_x
         @mouse_x - Window.__offset_x
       end
 
+      # 現在のクリップ・オフセット空間に対応したマウス Y 座標を返す
+      #
+      # - 戻り値: `Float`
       def gui_mouse_y
         @mouse_y - Window.__offset_y
       end
@@ -250,7 +371,27 @@ module Zenoo
       # --------------------------------------------------
       # コンテナ (Panel / Window)
       # --------------------------------------------------
-      # パネルの開始 (描画とコンテナ設定を別関数に切り出し、yieldのインライン展開肥大化を防止)
+      # パネルコンテナの描画とレイアウトスコープを開始する（通常はブロック付きの `ImGui.panel` を使用）
+      #
+      # - `title` (`String`): 上部に表示するタイトル文字列
+      # - `x` (`Float | nil`): X座標（省略時は現在のレイアウトカーソル X）
+      # - `y` (`Float | nil`): Y座標（省略時は現在のレイアウトカーソル Y）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `360.0`）
+      # - `h` (`Float`): 高さ（デフォルト `400.0`）
+      # - `padding` (`Float`): 内側余白（デフォルト `16.0`）
+      # - `radius` (`Float`): 角丸半径（負値時はテーマ既定値を使用）
+      # - `color` (`Color | Symbol | Array | nil`): 背景色（`0..255` 基準、省略時はテーマ準拠）
+      # - `border_width` (`Float | nil`): 枠線太さ（ピクセル単位）
+      # - `border_color` (`Color | Symbol | Array | nil`): 枠線色（`0..255` 基準）
+      # - `shadow_blur` (`Float`): ドロップシャドウのぼかし半径（デフォルト `8.0`）
+      # - `shadow_color` (`Color | Symbol | Array | nil`): ドロップシャドウ色（`0..255` 基準）
+      # - `z` (`Float`): 描画 Z 深度（デフォルト `0.0`）
+      # - `title_size` (`Integer`): タイトル文字列のフォントサイズ（デフォルト `18`）
+      # - `title_color` (`Color | Symbol | Array | nil`): タイトル文字色（`0..255` 基準）
+      # - `clip` (`Boolean`): 子ウィジェットをパネル領域内にクリッピングするか（デフォルト `false`）
+      # - `spacing_x` (`Float | nil`): パネル内横間隔の上書き値
+      # - `spacing_y` (`Float | nil`): パネル内縦間隔の上書き値
+      # - 戻り値: `Array`（`end_panel` に渡す状態配列）
       def begin_panel(title = "", x: nil, y: nil, w: nil, h: 400.0, padding: 16.0,
                       radius: -1.0, color: nil,
                       border_width: nil, border_color: nil,
@@ -295,14 +436,38 @@ module Zenoo
         [pw, ph, !x.nil? || !y.nil?, container_state]
       end
 
-      # パネルの終了
+      # `begin_panel` で開始したパネルコンテナを終了しレイアウトカーソルを進める
+      #
+      # - `state` (`Array`): `begin_panel` の戻り値
+      # - 戻り値: `Float | nil`
       def end_panel(state)
         pw, ph, is_manual_pos, container_state = state
         @layout.end_container(container_state)
         @layout.advance(pw, ph) unless is_manual_pos
       end
 
-      # パネル (コンテナ枠)
+      # パネル（コンテナ枠）を描画し、ブロック内のウィジェットを自動レイアウトする
+      #
+      # - `title` (`String`): 上部に表示するタイトル文字列
+      # - `x` (`Float | nil`): X座標（省略時は現在のレイアウトカーソル X）
+      # - `y` (`Float | nil`): Y座標（省略時は現在のレイアウトカーソル Y）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `360.0`）
+      # - `h` (`Float`): 高さ（デフォルト `400.0`）
+      # - `padding` (`Float`): 内側余白（デフォルト `16.0`）
+      # - `radius` (`Float`): 角丸半径（負値時はテーマ既定値を使用）
+      # - `color` (`Color | Symbol | Array | nil`): 背景色（`0..255` 基準、省略時はテーマ準拠）
+      # - `border_width` (`Float | nil`): 枠線太さ（ピクセル単位）
+      # - `border_color` (`Color | Symbol | Array | nil`): 枠線色（`0..255` 基準）
+      # - `shadow_blur` (`Float`): ドロップシャドウのぼかし半径（デフォルト `8.0`）
+      # - `shadow_color` (`Color | Symbol | Array | nil`): ドロップシャドウ色（`0..255` 基準）
+      # - `z` (`Float`): 描画 Z 深度（デフォルト `0.0`）
+      # - `title_size` (`Integer`): タイトル文字列のフォントサイズ（デフォルト `18`）
+      # - `title_color` (`Color | Symbol | Array | nil`): タイトル文字色（`0..255` 基準）
+      # - `clip` (`Boolean`): 子ウィジェットをパネル領域内にクリッピングするか（デフォルト `false`）
+      # - `spacing_x` (`Float | nil`): パネル内横間隔の上書き値
+      # - `spacing_y` (`Float | nil`): パネル内縦間隔の上書き値
+      # - `&block`: パネル内に配置するウィジェット描画ブロック
+      # - 戻り値: `Float | nil`
       def panel(title = "", x: nil, y: nil, w: nil, h: 400.0, padding: 16.0,
                 radius: -1.0, color: nil,
                 border_width: nil, border_color: nil,
@@ -325,7 +490,20 @@ module Zenoo
         end
       end
 
-      # ウィンドウの開始
+      # フローティングウィンドウの描画とレイアウトスコープを開始する（通常はブロック付きの `ImGui.window` を使用）
+      #
+      # - `title` (`String`): タイトルバー文字列（`id` 未指定時は識別 ID としても使用）
+      # - `x` (`Float | nil`): 初期 X 座標
+      # - `y` (`Float | nil`): 初期 Y 座標
+      # - `w` (`Float`): 初期幅（デフォルト `320.0`）
+      # - `h` (`Float`): 初期高さ（デフォルト `240.0`）
+      # - `id` (`String`): ウィンドウ識別 ID（空文字時は `title` を使用）
+      # - `padding` (`Float`): 内側余白（デフォルト `12.0`）
+      # - `resizable` (`Boolean`): 右下ドラッグによるサイズ変更を許可するか（デフォルト `false`）
+      # - `min_w` (`Float`): リサイズ時の最小幅（デフォルト `120.0`）
+      # - `min_h` (`Float`): リサイズ時の最小高さ（デフォルト `80.0`）
+      # - `collapsible` (`Boolean`): タイトルバーによる折りたたみを許可するか（デフォルト `true`）
+      # - 戻り値: `Array | nil`（ウィンドウが閉じている場合は `nil`）
       def begin_window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, resizable: false, min_w: 120.0, min_h: 80.0, collapsible: true)
         win_id = id.to_s.empty? ? title.to_s : id.to_s
         win = @win_mgr.find_or_create(win_id, title, x, y, w, h, resizable: resizable, min_w: min_w, min_h: min_h, collapsible: collapsible)
@@ -376,18 +554,31 @@ module Zenoo
         [win, win_id, container_state]
       end
 
-      # ウィンドウの終了
+      # `begin_window` で開始したウィンドウを終了しクリッピング／レイアウトスコープを閉じる
+      #
+      # - `state` (`Array | nil`): `begin_window` の戻り値
+      # - 戻り値: `nil`
       def end_window(state)
         return unless state
         _win, _win_id, container_state = state
         @layout.end_container(container_state)
       end
 
-      # フローティングウィンドウ (Window)
-      # - ドラッグ移動、タイトルバー、最前面フォーカス切り替え
-      # - 最小化ボタン（タイトルバー右端アイコンクリック、またはタイトルバーダブルクリックで折りたたみ）
-      # - Window.clip(local: true) によるコンテンツのビューポートクリッピング
-      # - resizable: true で右下ドラッグによるサイズ変更を許可 (オプション)
+      # ドラッグ移動・折りたたみ・最前面切り替え・クリッピング対応のフローティングウィンドウを描画する
+      #
+      # - `title` (`String`): タイトルバー文字列（`id` 未指定時は識別 ID としても使用）
+      # - `x` (`Float | nil`): 初期 X 座標
+      # - `y` (`Float | nil`): 初期 Y 座標
+      # - `w` (`Float`): 初期幅（デフォルト `320.0`）
+      # - `h` (`Float`): 初期高さ（デフォルト `240.0`）
+      # - `id` (`String`): ウィンドウ識別 ID（空文字時は `title` を使用）
+      # - `padding` (`Float`): 内側余白（デフォルト `12.0`）
+      # - `resizable` (`Boolean`): 右下ドラッグによるサイズ変更を許可するか（デフォルト `false`）
+      # - `min_w` (`Float`): リサイズ時の最小幅（デフォルト `120.0`）
+      # - `min_h` (`Float`): リサイズ時の最小高さ（デフォルト `80.0`）
+      # - `collapsible` (`Boolean`): タイトルバーによる折りたたみを許可するか（デフォルト `true`）
+      # - `&block`: ウィンドウ内部のウィジェット構築ブロック（`WindowState` を引数に受け取る）
+      # - 戻り値: `nil`
       def window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, resizable: false, min_w: 120.0, min_h: 80.0, collapsible: true)
         state = begin_window(title, x: x, y: y, w: w, h: h, id: id, padding: padding, resizable: resizable, min_w: min_w, min_h: min_h, collapsible: collapsible)
         return unless state
@@ -403,9 +594,16 @@ module Zenoo
       # --------------------------------------------------
       # ウィジェット (Button / Slider / Label / TextBox / Divider / ProfileGraph)
       # --------------------------------------------------
-      # ボタン (クリックされた瞬間のみ true を返却)
-      # - x, y: 省略時はレイアウトカーソル位置を使用。指定時はその座標に直接配置
-      # - active: true の場合、選択中 (ハイライト) 状態で描画 (ラジオ/トグルボタン対応)
+      # ボタンを描画し、クリックされた瞬間のみ `true` を返す
+      #
+      # - `label` (`String`): ボタンラベル文字列（`id` 未指定時は識別 ID としても使用）
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置を使用）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置を使用）
+      # - `w` (`Float | nil`): 幅（省略時はコンテナ幅等分または `140.0`）
+      # - `h` (`Float`): 高さ（デフォルト `40.0`）
+      # - `active` (`Boolean`): `true` の場合に選択・ハイライト状態で描画する（デフォルト `false`）
+      # - `id` (`String`): ウィジェット識別 ID（ラベル重複時の衝突回避に使用）
+      # - 戻り値: `Boolean`（このフレームでクリックが成立した場合 `true`）
       def button(label, x: nil, y: nil, w: nil, h: 40.0, active: false, id: "")
         widget_id = id.empty? ? label.to_s : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -444,12 +642,22 @@ module Zenoo
         clicked
       end
 
-      # スライダー (マウスドラッグで値を変更し、更新された Float 値を返却)
-      # - x, y: 省略時はレイアウトカーソル位置を使用
-      # - step: 刻み幅 (例: 0.1, 1.0)
-      # - unit: 単位サフィックス (例: "px", "x", "%")
-      # - format: 数値書式 (例: "%.2f", "%d")
-      # - enabled: 有効/非活性フラグ (false でグレーアウト・操作無効)
+      # スライダーを描画し、ドラッグ操作で更新された現在値を返す
+      #
+      # - `label` (`String`): ラベル文字列（`id` 未指定時は識別 ID としても使用）
+      # - `value` (`Numeric`): 現在の数値
+      # - `min` (`Numeric`): 最小値
+      # - `max` (`Numeric`): 最大値
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置を使用）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置を使用）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `200.0`）
+      # - `h` (`Float`): 高さ（デフォルト `44.0`）
+      # - `step` (`Numeric | nil`): 値の刻み幅（例: `0.1`, `1.0`）
+      # - `unit` (`String`): 値表示の末尾に付ける単位文字列（例: `"px"`, `"%"`）
+      # - `format` (`String | nil`): 値表示の `sprintf` 書式（例: `"%.2f"`, `"%d"`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - `enabled` (`Boolean`): 有効状態（`false` で操作無効・グレーアウト、デフォルト `true`）
+      # - 戻り値: `Float`（更新後の値）
       def slider(label, value, min, max, x: nil, y: nil, w: nil, h: 44.0, step: nil, unit: "", format: nil, id: "", enabled: true)
         widget_id = id.empty? ? label.to_s : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -491,7 +699,14 @@ module Zenoo
         v_val
       end
 
-      # ラベル (テキストを描画)
+      # テキストラベルを描画する
+      #
+      # - `text` (`String`): 表示する文字列
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `size` (`Integer`): フォントサイズ（ピクセル単位、デフォルト `18`）
+      # - `color` (`Color | Symbol | Array | nil`): 文字色（`0..255` 基準、省略時はテーマ準拠）
+      # - 戻り値: `nil`
       def label(text, x: nil, y: nil, size: 18, color: nil)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
@@ -507,7 +722,14 @@ module Zenoo
         nil
       end
 
-      # 水平区切り線 (Divider)
+      # 水平区切り線を描画する
+      #
+      # - `x` (`Float | nil`): 左端 X 座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y 座標（省略時はレイアウトカーソル + `spacing`）
+      # - `w` (`Float | nil`): 線の長さ（省略時はコンテナ幅または `200.0`）
+      # - `color` (`Color | Symbol | Array | nil`): 線の色（`0..255` 基準、省略時はテーマ準拠）
+      # - `spacing` (`Float`): 上下の余白（ピクセル、デフォルト `6.0`）
+      # - 戻り値: `nil`
       def divider(x: nil, y: nil, w: nil, color: nil, spacing: 6.0)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : (@layout.cursor_y + spacing.to_f)
@@ -520,7 +742,16 @@ module Zenoo
         nil
       end
 
-      # テキストボックス (フォーカス中に文字入力・キー操作を受け付け、更新された文字列を返却)
+      # テキストボックスを描画し、フォーカス中の入力を反映した更新後文字列を返す
+      #
+      # - `label` (`String`): ウィジェット識別ラベル（`id` 未指定時は識別 ID として使用）
+      # - `text` (`String`): 現在の入力テキスト
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `200.0`）
+      # - `h` (`Float`): 高さ（デフォルト `42.0`）
+      # - `id` (`String`): ウィジェット識別 ID
+      # - 戻り値: `String`（編集を反映した最新の文字列）
       def text_box(label, text, x: nil, y: nil, w: nil, h: 42.0, id: "")
         widget_id = id.empty? ? label.to_s : id.to_s
         rx = x ? x.to_f : @layout.cursor_x
@@ -562,7 +793,16 @@ module Zenoo
         cur_text
       end
 
-      # プロファイルグラフ (Profile Graph / Frame Time Histogram)
+      # フレーム時間プロファイルグラフ（積み上げヒストグラム＋内訳凡例）を描画する
+      #
+      # - `x` (`Float | nil`): X座標（省略時はレイアウトカーソル位置）
+      # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
+      # - `w` (`Float | nil`): 幅（省略時は自動割り当てまたは `280.0`）
+      # - `h` (`Float`): グラフ領域の高さ（デフォルト `80.0`）
+      # - `max_ms` (`Float`): グラフ縦軸の最大ミリ秒（デフォルト `33.33`）
+      # - `show_legend` (`Boolean`): グラフ下部にカテゴリ別内訳凡例を表示するか（デフォルト `true`）
+      # - `id` (`String`): 識別用 ID
+      # - 戻り値: `nil`
       def profile_graph(x: nil, y: nil, w: nil, h: 80.0, max_ms: 33.33, show_legend: true, id: "")
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y

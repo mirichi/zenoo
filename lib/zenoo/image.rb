@@ -1,3 +1,6 @@
+# 2D テクスチャ・オフスクリーンレンダーターゲットを表す画像クラス。
+# 画像ファイルの読み込み (`Image.load`)、空テクスチャ生成 (`Image.new`)、タイル分割 (`slice_tiles` / `Image.load_tiles`)、
+# オフスクリーン描画 (`Image.render_to`)、シェーダーフィルター (`apply_filter`) などを提供します。
 class Zenoo::Image
   # 内部描画キュー（Backend が使用）
   attr_accessor :__draw_queue
@@ -6,6 +9,12 @@ class Zenoo::Image
   # - 分割数指定 (DXRuby互換): slice_tiles(xcount = 1, ycount = 1)
   # - ピクセル指定:           slice_tiles(tile_width: 32, tile_height: 32)
   # ※ 引数未指定時は 1x1 (画像全体) として処理します。
+  #
+  # - `xcount` (`Integer`): 横方向の分割数（`tile_width` / `tile_height` 未指定時に使用、デフォルト: 1）
+  # - `ycount` (`Integer`): 縦方向の分割数（`tile_width` / `tile_height` 未指定時に使用、デフォルト: 1）
+  # - `tile_width:` (`Integer`, `nil`): 1タイルあたりの幅（ピクセル単位、`tile_height:` とセットで指定）
+  # - `tile_height:` (`Integer`, `nil`): 1タイルあたりの高さ（ピクセル単位、`tile_width:` とセットで指定）
+  # - 戻り値: `Array<Image>` 分割された `sub_image` の配列（行優先順）
   def slice_tiles(xcount = 1, ycount = 1, tile_width: nil, tile_height: nil)
     if tile_width && tile_height
       tw = tile_width.to_i
@@ -35,6 +44,13 @@ class Zenoo::Image
   # ファイルから画像をロードし、格子状に分割した配列を生成
   # - 分割数指定 (DXRuby互換): load_tiles(filename, xcount = 1, ycount = 1)
   # - ピクセル指定:           load_tiles(filename, tile_width: 32, tile_height: 32)
+  #
+  # - `filename` (`String`): 読み込む画像ファイルのパス
+  # - `xcount` (`Integer`): 横方向の分割数（デフォルト: 1）
+  # - `ycount` (`Integer`): 縦方向の分割数（デフォルト: 1）
+  # - `tile_width:` (`Integer`, `nil`): 1タイルあたりの幅（ピクセル単位）
+  # - `tile_height:` (`Integer`, `nil`): 1タイルあたりの高さ（ピクセル単位）
+  # - 戻り値: `Array<Image>` 分割された `Image` の配列（行優先順）
   def self.load_tiles(filename, xcount = 1, ycount = 1, tile_width: nil, tile_height: nil)
     img = Zenoo::Image.load(filename.to_s)
     img.slice_tiles(xcount, ycount, tile_width: tile_width, tile_height: tile_height)
@@ -42,6 +58,8 @@ class Zenoo::Image
 
   if RUBY_ENGINE == "spinel"
     # テクスチャ全体における正規化 UV 座標 [u, v, uw, vh] (CRuby版は C 拡張で定義済み)
+    #
+    # - 戻り値: `Array<Float>` `[u, v, uw, vh]`（0.0 〜 1.0）
     def uv
       tw = texture_width.to_f
       th = texture_height.to_f
@@ -52,6 +70,10 @@ class Zenoo::Image
   end
 
   # ピクセル色取得: image.get_pixel(x, y) -> Color
+  #
+  # - `x` (`Integer`): X座標（ピクセル単位）
+  # - `y` (`Integer`): Y座標（ピクセル単位）
+  # - 戻り値: `Color` 取得した RGBA カラー（各成分 0 〜 255）
   def get_pixel(x, y)
     col = raw_get_pixel(x.to_i, y.to_i)
     r = col & 0xFF
@@ -62,6 +84,10 @@ class Zenoo::Image
   end
 
   # ピクセル色設定: image.set_pixel(x, y, color)
+  #
+  # - `x` (`Integer`): X座標（ピクセル単位）
+  # - `y` (`Integer`): Y座標（ピクセル単位）
+  # - `color` (`Color`, `Symbol`, `Array<Integer>`): 設定する色（RGBA 0 〜 255、色名シンボル等）
   def set_pixel(x, y, color)
     c = Zenoo::Backend.normalize_color(color)
     r = (c[0] * 255.0).round.clamp(0, 255)
@@ -77,6 +103,9 @@ class Zenoo::Image
   #   Window.draw_rect(...)
   # end
   # ※ sub_image に対して呼び出された場合は、自動的に該当領域へクリッピングされます。
+  #
+  # - `target` (`Image`): 描画先となるオフスクリーン `Image`（`sub_image` も指定可）
+  # - `&block`: 描画コマンド（`Window.draw_*` 等）を記述するブロック
   def self.render_to(target)
     is_sub = target.sub_image?
     old_target = Zenoo::Backend.current_target
@@ -106,6 +135,9 @@ class Zenoo::Image
   end
 
   # 画像のクリア (引数省略時は透明色 [0, 0, 0, 0])
+  #
+  # - `color` (`Color`, `Symbol`, `Array<Integer>`): 塗りつぶす背景色（デフォルト: `:clear` = 透明 `[0, 0, 0, 0]`）
+  # - 戻り値: `Image` (`self`)
   def clear(color = :clear)
     Zenoo::Image.render_to(self) do
       Zenoo::Window.clear(color)
@@ -115,6 +147,10 @@ class Zenoo::Image
 
   # シェーダーフィルターの適用 (画像加工・ポストプロセス)
   # 非破壊版: 加工済みの新しい Image を生成して返します
+  #
+  # - `shader` (`Shader`, `NativeShader`): 適用するフラグメントシェーダー
+  # - `uniforms:` (`Hash`, `nil`): シェーダーに渡す追加の uniform 変数のハッシュ（デフォルト: `nil`）
+  # - 戻り値: `Image` フィルター適用済みの新しい `Image`
   def apply_filter(shader, uniforms: nil)
     result = Zenoo::Image.new(width, height)
     Zenoo::Image.render_to(result) do
@@ -126,6 +162,10 @@ class Zenoo::Image
   end
 
   # 破壊版: 自身のテクスチャをシェーダー処理で上書き加工します
+  #
+  # - `shader` (`Shader`, `NativeShader`): 適用するフラグメントシェーダー
+  # - `uniforms:` (`Hash`, `nil`): シェーダーに渡す追加の uniform 変数のハッシュ（デフォルト: `nil`）
+  # - 戻り値: `Image` (`self`)
   def apply_filter!(shader, uniforms: nil)
     filtered = apply_filter(shader, uniforms: uniforms)
     replace_texture!(filtered)
@@ -133,18 +173,30 @@ class Zenoo::Image
   end
 
   if RUBY_ENGINE == "spinel"
+    # この画像に適用されているテクスチャ補間フィルタを取得します。
+    #
+    # - 戻り値: `Symbol` (`:nearest` または `:linear`)
     def texture_filter
       raw_texture_filter == 0 ? :nearest : :linear
     end
 
+    # この画像の拡大・縮小時のテクスチャ補間フィルタを設定します。
+    #
+    # - `val` (`Symbol`, `Integer`): `:nearest`（または `0`、ドット絵向け）または `:linear`（または `1`、滑らか補間）
     def texture_filter=(val)
       self.raw_texture_filter = (val == :nearest || val == 0) ? 0 : 1
     end
 
+    # 新規作成される画像にデフォルトで適用されるテクスチャ補間フィルタを取得します。
+    #
+    # - 戻り値: `Symbol` (`:nearest` または `:linear`)
     def self.default_texture_filter
       raw_default_texture_filter == 0 ? :nearest : :linear
     end
 
+    # 新規作成される画像のデフォルトのテクスチャ補間フィルタを設定します。
+    #
+    # - `val` (`Symbol`, `Integer`): `:nearest`（または `0`）または `:linear`（または `1`）
     def self.default_texture_filter=(val)
       self.raw_default_texture_filter = (val == :nearest || val == 0) ? 0 : 1
     end

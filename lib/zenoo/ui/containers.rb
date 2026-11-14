@@ -5,7 +5,14 @@ module Zenoo
     # ==========================================================================
     # Stage (ルートキャンバス: 画面全体を覆う透明な親コンテナ)
     # ==========================================================================
+    # 画面全体をルートとする全画面 UI コンテナ（常にウィンドウサイズへ追従する）
     class Stage < Widget
+      # 全画面ルートステージを初期化する
+      #
+      # - `width` (`Float | nil`): 幅（省略時は `Zenoo::Window.width`）
+      # - `height` (`Float | nil`): 高さ（省略時は `Zenoo::Window.height`）
+      # - `theme` (`Theme | Symbol | nil`): ステージ全体に適用するテーマ
+      # - 戻り値: `Stage`
       def initialize(width: nil, height: nil, theme: nil)
         w = width ? width.to_f : 1280.0
         h = height ? height.to_f : 720.0
@@ -33,10 +40,29 @@ module Zenoo
     # - align: 交差軸の揃え (:start, :center, :end, :stretch)
     # - justify: 主軸の揃え (:start, :center, :end, :space_between)
     # ==========================================================================
+    # 縦・横方向の Flexbox 風自動レイアウトおよびクリッピングに対応した汎用コンテナ
     class Box < Widget
       attr_reader :direction, :gap, :align, :justify, :pad_left, :pad_top, :pad_right, :pad_bottom, :header_height, :explicit_width, :explicit_height
       attr_accessor :auto_layout
 
+      # 汎用レイアウトコンテナを初期化する
+      #
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float | nil`): 幅（省略時は `200.0`、`explicit_width` が `false` になる）
+      # - `height` (`Float | nil`): 高さ（省略時は `200.0`、`explicit_height` が `false` になる）
+      # - `direction` (`Symbol`): 子要素の並び方向（`:column` または `:row`、デフォルト `:column`）
+      # - `padding` (`Float | Array<Float>`): 内側余白（デフォルト `0.0`）
+      # - `gap` (`Float`): 子要素間の間隔（デフォルト `8.0`）
+      # - `align` (`Symbol`): 交差軸方向の子要素整列（`:start`, `:center`, `:end`, `:stretch`）
+      # - `justify` (`Symbol`): 主軸方向の子要素配置（`:start`, `:center`, `:end`, `:space_between`）
+      # - `auto_layout` (`Boolean`): 自動レイアウトを有効にするか（デフォルト `true`）
+      # - `clip` (`Boolean`): 子要素をコンテナ領域でクリッピングするか（デフォルト `false`）
+      # - `interactive` (`Boolean`): 当たり判定の対象とするか（デフォルト `false`）
+      # - `parent` (`Widget | Sprite | nil`): 親ウィジェット
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: 子ウィジェット構築用ブロック（`self` を渡す）
+      # - 戻り値: `Box`
       def initialize(x = 0.0, y = 0.0, width: nil, height: nil,
                      direction: :column, padding: 0.0, gap: 8.0,
                      align: :stretch, justify: :start,
@@ -61,6 +87,9 @@ module Zenoo
         yield(self) if block
       end
 
+      # 子要素の合計高さ（パディング・ギャップ込み）を算出する
+      #
+      # - 戻り値: `Float`
       def content_height
         tot = @pad_top + @pad_bottom + @header_height
         ch_list = @children
@@ -81,6 +110,9 @@ module Zenoo
         tot + h_sum + ((@direction == :column && vis_count > 1) ? @gap * (vis_count - 1) : 0.0)
       end
 
+      # 子要素の合計幅（パディング・ギャップ込み）を算出する
+      #
+      # - 戻り値: `Float`
       def content_width
         tot = @pad_left + @pad_right
         ch_list = @children
@@ -101,17 +133,29 @@ module Zenoo
         tot + w_sum + ((@direction == :row && vis_count > 1) ? @gap * (vis_count - 1) : 0.0)
       end
 
+      # コンテナ内側の余白（パディング）を設定する
+      #
+      # - `val` (`Float | Array<Float>`): 全方向共通値、`[上下, 左右]`、または `[上, 右, 下, 左]`
+      # - 戻り値: `true`
       def padding=(val)
         parse_padding(val)
         mark_layout_dirty!
       end
 
+      # 子要素の並び方向を設定する
+      #
+      # - `val` (`Symbol`): `:column`（縦並び）または `:row`（横並び）
+      # - 戻り値: `true | nil`
       def direction=(val)
         return if @direction == val
         @direction = val
         mark_layout_dirty!
       end
 
+      # 子要素間の間隔（ギャップ）を設定する
+      #
+      # - `val` (`Float`): ピクセル間隔
+      # - 戻り値: `true | nil`
       def gap=(val)
         vf = val.to_f
         return if @gap == vf
@@ -119,18 +163,29 @@ module Zenoo
         mark_layout_dirty!
       end
 
+      # 交差軸方向の子要素整列方法を設定する
+      #
+      # - `val` (`Symbol`): `:start`, `:center`, `:end`, `:stretch` のいずれか
+      # - 戻り値: `true | nil`
       def align=(val)
         return if @align == val
         @align = val
         mark_layout_dirty!
       end
 
+      # 主軸方向の子要素配置方法を設定する
+      #
+      # - `val` (`Symbol`): `:start`, `:center`, `:end`, `:space_between` のいずれか
+      # - 戻り値: `true | nil`
       def justify=(val)
         return if @justify == val
         @justify = val
         mark_layout_dirty!
       end
 
+      # レイアウト再計算フラグを立てる（次フレームの更新／描画時に再配置される）
+      #
+      # - 戻り値: `true`
       def mark_layout_dirty!
         @layout_dirty = true
       end
@@ -152,6 +207,9 @@ module Zenoo
         super
       end
 
+      # 子ウィジェットの自動レイアウト計算を即時に実行する
+      #
+      # - 戻り値: `Boolean`
       def perform_layout
         @layout_dirty = false
         ch_list = @children
@@ -313,6 +371,13 @@ module Zenoo
 
     # VBox (縦並び Flexbox ショートカット)
     class VBox < Box
+      # 縦並びコンテナを初期化する
+      #
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `opts` (`Hash`): `Box#initialize` に渡すキーワードオプション
+      # - `&block`: 子ウィジェット構築用ブロック
+      # - 戻り値: `VBox`
       def initialize(x = 0.0, y = 0.0, **opts, &block)
         super(x, y, direction: :column, **opts, &block)
       end
@@ -320,6 +385,13 @@ module Zenoo
 
     # HBox (横並び Flexbox ショートカット)
     class HBox < Box
+      # 横並びコンテナを初期化する
+      #
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `opts` (`Hash`): `Box#initialize` に渡すキーワードオプション
+      # - `&block`: 子ウィジェット構築用ブロック
+      # - 戻り値: `HBox`
       def initialize(x = 0.0, y = 0.0, **opts, &block)
         super(x, y, direction: :row, **opts, &block)
       end
@@ -332,6 +404,32 @@ module Zenoo
       attr_reader :title
       attr_accessor :bg_color, :border_color, :border_width, :radius, :shadow_blur, :shadow_color, :title_size, :title_color
 
+      # パネルを初期化する
+      #
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `320.0`）
+      # - `height` (`Float`): 高さ（デフォルト `240.0`）
+      # - `title` (`String`): 上部ヘッダーに表示するタイトル文字列
+      # - `padding` (`Float | Array<Float>`): 内側余白（デフォルト `14.0`）
+      # - `gap` (`Float`): 子要素間の間隔（デフォルト `8.0`）
+      # - `direction` (`Symbol`): 子要素の並び方向（デフォルト `:column`）
+      # - `align` (`Symbol`): 交差軸整列（デフォルト `:stretch`）
+      # - `justify` (`Symbol`): 主軸配置（デフォルト `:start`）
+      # - `auto_layout` (`Boolean`): 自動レイアウトを有効にするか（デフォルト `true`）
+      # - `clip` (`Boolean`): クリッピングを有効にするか（デフォルト `false`）
+      # - `bg_color` (`Color | Symbol | Array | nil`): 背景色（`0..255` 基準、省略時はテーマ準拠）
+      # - `border_color` (`Color | Symbol | Array | nil`): 枠線色（`0..255` 基準、省略時はテーマ準拠）
+      # - `border_width` (`Float | nil`): 枠線太さ（ピクセル単位）
+      # - `radius` (`Float | nil`): 角丸半径（ピクセル単位）
+      # - `shadow_blur` (`Float | nil`): ドロップシャドウのぼかし半径
+      # - `shadow_color` (`Color | Symbol | Array | nil`): ドロップシャドウ色（`0..255` 基準）
+      # - `title_size` (`Integer`): タイトル文字列のフォントサイズ（デフォルト `16`）
+      # - `title_color` (`Color | Symbol | Array | nil`): タイトル文字色（`0..255` 基準）
+      # - `interactive` (`Boolean`): 当たり判定の対象とするか（デフォルト `true`）
+      # - `opts` (`Hash`): `Box#initialize` に渡す追加オプション
+      # - `&block`: 子ウィジェット構築用ブロック
+      # - 戻り値: `Panel`
       def initialize(x = 0.0, y = 0.0, width: 320.0, height: 240.0,
                      title: "", padding: 14.0, gap: 8.0,
                      direction: :column, align: :stretch, justify: :start,
@@ -359,6 +457,10 @@ module Zenoo
         update_header_height
       end
 
+      # パネルのタイトル文字列を変更しヘッダー高さとレイアウトを更新する
+      #
+      # - `val` (`String`): 新しいタイトル文字列
+      # - 戻り値: `true`
       def title=(val)
         @title = val.to_s
         update_header_height
@@ -428,6 +530,28 @@ module Zenoo
       attr_accessor :resizable, :collapsible, :draggable, :min_width, :min_height, :title_bar_height
       attr_reader :collapsed
 
+      # フローティングウィンドウを初期化する
+      #
+      # - `title` (`String`): タイトルバー文字列（デフォルト `"Window"`）
+      # - `x` (`Float`): X座標（デフォルト `60.0`）
+      # - `y` (`Float`): Y座標（デフォルト `60.0`）
+      # - `width` (`Float`): 幅（デフォルト `340.0`）
+      # - `height` (`Float`): 高さ（デフォルト `260.0`）
+      # - `padding` (`Float | Array<Float>`): 内側余白（デフォルト `12.0`）
+      # - `gap` (`Float`): 子要素間の間隔（デフォルト `8.0`）
+      # - `direction` (`Symbol`): 子要素の並び方向（デフォルト `:column`）
+      # - `align` (`Symbol`): 交差軸整列（デフォルト `:stretch`）
+      # - `justify` (`Symbol`): 主軸配置（デフォルト `:start`）
+      # - `auto_layout` (`Boolean`): 自動レイアウトを有効にするか（デフォルト `true`）
+      # - `clip` (`Boolean`): 子要素のクリッピングを有効にするか（デフォルト `true`）
+      # - `resizable` (`Boolean`): 右下グリップでのリサイズを許可するか（デフォルト `false`）
+      # - `collapsible` (`Boolean`): 折りたたみボタンとダブルクリック折りたたみを許可するか（デフォルト `true`）
+      # - `draggable` (`Boolean`): タイトルバーのドラッグ移動を許可するか（デフォルト `true`）
+      # - `min_width` (`Float`): リサイズ時の最小幅（デフォルト `140.0`）
+      # - `min_height` (`Float`): リサイズ時の最小高さ（デフォルト `90.0`）
+      # - `opts` (`Hash`): `Panel#initialize` に渡す追加オプション
+      # - `&block`: 子ウィジェット構築用ブロック
+      # - 戻り値: `Window`
       def initialize(title = "Window", x = 60.0, y = 60.0, width: 340.0, height: 260.0,
                      padding: 12.0, gap: 8.0,
                      direction: :column, align: :stretch, justify: :start,
@@ -465,6 +589,10 @@ module Zenoo
         @header_height = @title_bar_height || 34.0
       end
 
+      # ウィンドウの折りたたみ状態を設定する
+      #
+      # - `val` (`Boolean`): `true` でタイトルバーのみに折り畳み、`false` で元の高さに展開する
+      # - 戻り値: `Float | nil`
       def collapsed=(val)
         v = !!val
         return if @collapsed == v
@@ -477,10 +605,16 @@ module Zenoo
         end
       end
 
+      # ウィンドウの折りたたみ状態を反転する
+      #
+      # - 戻り値: `Float | nil`
       def toggle_collapse!
         self.collapsed = !@collapsed
       end
 
+      # このウィンドウが兄弟内で最前面（アクティブ）かを返す
+      #
+      # - 戻り値: `Boolean`
       def active_window?
         return true unless @parent
         ch = @parent.children
@@ -489,6 +623,8 @@ module Zenoo
       end
 
       # 親の children 配列の末尾に移動させ、描画順とヒットテストを最前面にする
+      #
+      # - 戻り値: `Array<Sprite> | nil`
       def bring_to_front!
         return unless (p = @parent)
         ch = p.children
@@ -779,10 +915,27 @@ module Zenoo
     # ==========================================================================
     # ScrollView (ハードウェアクリッピング + スクロールバー + ホイール対応コンテナ)
     # ==========================================================================
+    # スクロールバー・マウスホイール・ハードウェアクリッピングに対応した縦スクロールコンテナ
     class ScrollView < Box
       attr_reader :scroll_y, :content_height
       attr_accessor :scrollbar_width, :wheel_step
 
+      # スクロールビューを初期化する
+      #
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): ビュー幅（デフォルト `300.0`）
+      # - `height` (`Float`): ビュー高さ（デフォルト `220.0`）
+      # - `padding` (`Float | Array<Float>`): 内側余白（デフォルト `10.0`）
+      # - `gap` (`Float`): 子要素間の間隔（デフォルト `8.0`）
+      # - `direction` (`Symbol`): 子要素の並び方向（デフォルト `:column`）
+      # - `align` (`Symbol`): 交差軸整列（デフォルト `:stretch`）
+      # - `justify` (`Symbol`): 主軸配置（デフォルト `:start`）
+      # - `content_height` (`Float | nil`): 固定コンテンツ高さ（省略時は子要素から自動計測）
+      # - `wheel_step` (`Float`): ホイール 1 ノッチあたりのスクロール量（デフォルト `32.0`）
+      # - `opts` (`Hash`): `Box#initialize` に渡す追加オプション
+      # - `&block`: 子ウィジェット構築用ブロック
+      # - 戻り値: `ScrollView`
       def initialize(x = 0.0, y = 0.0, width: 300.0, height: 220.0,
                      padding: 10.0, gap: 8.0,
                      direction: :column, align: :stretch, justify: :start,
@@ -803,6 +956,10 @@ module Zenoo
               interactive: true, **opts, &block)
       end
 
+      # 現在の縦スクロール量を設定する（`0.0..max_scroll` にクランプされる）
+      #
+      # - `val` (`Float`): スクロール位置（ピクセル単位）
+      # - 戻り値: `Boolean | nil`
       def scroll_y=(val)
         max_s = max_scroll
         new_y = [[val.to_f, 0.0].max, max_s].min
@@ -811,14 +968,23 @@ module Zenoo
         mark_layout_dirty!
       end
 
+      # 表示領域の内側高さを返す
+      #
+      # - 戻り値: `Float`
       def view_height
         [height - 4.0, 1.0].max
       end
 
+      # スクロール可能な最大オフセット量を返す
+      #
+      # - 戻り値: `Float`
       def max_scroll
         [@content_height - view_height, 0.0].max
       end
 
+      # コンテンツが表示領域を超えておりスクロールバーが必要かを返す
+      #
+      # - 戻り値: `Boolean`
       def needs_scrollbar?
         max_scroll > 0.5
       end

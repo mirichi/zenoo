@@ -2,16 +2,19 @@
 
 module Zenoo
   module ImGui
+    # `ImGui` ウィジェットの配色・角丸・フォントなどのテーマ設定を管理するクラス
     class Theme
       @custom_presets = {}
 
       class << self
         attr_reader :custom_presets
 
-        # カスタムテーマ（プリセット）の動的登録
-        # 例:
-        #   Theme.register(:coords_blue, bg_normal: [30, 40, 60, 200], ...)
-        #   Theme.register(:my_theme, base: :cyber, accent_color: [255, 100, 100])
+        # カスタムテーマプリセットを動的に登録する
+        #
+        # - `name` (`Symbol | String`): 登録するプリセット名
+        # - `base` (`Symbol`): ベースとなる既存プリセット名（デフォルト `:tool_dark`）
+        # - `attrs` (`Hash`): ベースから上書きするテーマ属性（`#configure` と同じキーワード引数。色は `0..255` 基準）
+        # - 戻り値: `Hash`
         def register(name, base: :tool_dark, **attrs)
           @custom_presets[name.to_sym] = { base: base, attrs: attrs }
         end
@@ -26,12 +29,42 @@ module Zenoo
                     :accent_color, :accent_hover, :track_bg, :track_border,
                     :corner_radius, :font_size, :font
 
+      # テーマを初期化する
+      #
+      # - `preset` (`Symbol`): 初期適用するプリセット名（`:tool_dark`, `:cyber`, または `Theme.register` で登録した名前）
+      # - `overrides` (`Hash`): プリセット適用後に上書きするテーマ属性
+      # - 戻り値: `Theme`
       def initialize(preset = :tool_dark, **overrides)
         apply_preset(preset)
         configure(**overrides) unless overrides.empty?
       end
 
-      # プロパティの一括更新 (配列形式の色指定 [r, g, b, a] にも対応)
+      # テーマの配色・角丸・フォント属性を一括更新する（配列色 `[r, g, b]` / `[r, g, b, a]` に対応、色・透明度は `0..255` 基準）
+      #
+      # - `bg_normal` (`Color | Symbol | Array | nil`): 通常時の背景色
+      # - `bg_hover` (`Color | Symbol | Array | nil`): ホバー時の背景色
+      # - `bg_active` (`Color | Symbol | Array | nil`): 押下・アクティブ時の背景色
+      # - `border_normal` (`Array | nil`): 通常時の枠線設定 `[太さ, 色]`
+      # - `border_hover` (`Array | nil`): ホバー時の枠線設定 `[太さ, 色]`
+      # - `border_active` (`Array | nil`): アクティブ時の枠線設定 `[太さ, 色]`
+      # - `shadow_normal` (`Array | nil`): 通常時の影設定 `[ぼかし半径, 色]`
+      # - `shadow_hover` (`Array | nil`): ホバー時の影設定 `[ぼかし半径, 色]`
+      # - `shadow_active` (`Array | nil`): アクティブ時の影設定 `[ぼかし半径, 色]`
+      # - `win_bg` (`Color | Symbol | Array | nil`): ウィンドウ／パネルの背景色
+      # - `win_title_bg` (`Color | Symbol | Array | nil`): 非アクティブなウィンドウタイトルバー背景色
+      # - `win_title_bg_active` (`Color | Symbol | Array | nil`): アクティブなウィンドウタイトルバー背景色
+      # - `win_border_normal` (`Array | nil`): 非アクティブなウィンドウ枠線設定 `[太さ, 色]`
+      # - `win_border_active` (`Array | nil`): アクティブなウィンドウ枠線設定 `[太さ, 色]`
+      # - `text_color` (`Color | Symbol | Array | nil`): 通常テキスト色
+      # - `text_disabled` (`Color | Symbol | Array | nil`): 無効状態テキスト色
+      # - `accent_color` (`Color | Symbol | Array | nil`): アクセントカラー
+      # - `accent_hover` (`Color | Symbol | Array | nil`): ホバー時のアクセントカラー
+      # - `track_bg` (`Color | Symbol | Array | nil`): スライダーやスクロールバーのトラック背景色
+      # - `track_border` (`Array | nil`): トラックの枠線設定 `[太さ, 色]`
+      # - `corner_radius` (`Float | nil`): 角丸半径（ピクセル単位）
+      # - `font_size` (`Integer | nil`): 標準フォントサイズ（ピクセル単位）
+      # - `font` (`Font | nil`): 標準フォント
+      # - 戻り値: `Theme`（`self`）
       def configure(
         bg_normal: nil, bg_hover: nil, bg_active: nil,
         border_normal: nil, border_hover: nil, border_active: nil,
@@ -68,6 +101,10 @@ module Zenoo
         self
       end
 
+      # 指定したプリセットをテーマに適用する
+      #
+      # - `preset` (`Symbol`): プリセット名（`:tool_dark`, `:cyber`, または `Theme.register` で登録した名前）
+      # - 戻り値: `Object | nil`
       def apply_preset(preset)
         sym = preset.to_sym
         custom = Theme.custom_presets[sym]

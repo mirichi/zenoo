@@ -7,6 +7,11 @@ module Zenoo
   class Touch
     attr_reader :id, :start_x, :start_y, :x, :y, :prev_x, :prev_y, :duration
 
+    # 新しいタッチセッションを初期化します（通常は `Input` 内部で自動生成されます）。
+    #
+    # - `id` (`Integer`): OS / ブラウザが割り当てた一意のタッチ識別 ID
+    # - `x` (`Numeric`): 押下開始時の論理 X 座標
+    # - `y` (`Numeric`): 押下開始時の論理 Y 座標
     def initialize(id, x, y)
       @id = id
       @start_x = x
@@ -22,46 +27,70 @@ module Zenoo
       @duration = 0
     end
 
+    # 指がまだ画面に触れている状態かどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def active?
       @active
     end
 
+    # このタッチが正常に指を離して終了したかどうかを返します（離されたフレームのみ参照可）。
+    #
+    # - 戻り値: `Boolean`
     def released?
       @released
     end
 
+    # システム割り込みや `Input.cancel_touches` 等で強制キャンセルされたかどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def cancelled?
       @cancelled
     end
 
     # UI・GUI等で処理済みとしてマークされているか (バーチャルパッド等への貫通防止)
+    #
+    # - 戻り値: `Boolean`
     def consumed?
       @consumed
     end
 
+    # このタッチを UI 等で消費済みとしてマークし、以降の処理やバーチャルパッドが反応しないようにします。
     def consume!
       @consumed = true
     end
 
     # 前フレームからの移動量 (Delta)
+    #
+    # - 戻り値: `Float` X 方向の移動差分（px）
     def dx
       @x - @prev_x
     end
 
+    # 前フレームからの Y 方向の移動量を返します。
+    #
+    # - 戻り値: `Float` Y 方向の移動差分（px）
     def dy
       @y - @prev_y
     end
 
     # 触れた起点からの総移動量
+    #
+    # - 戻り値: `Float` 開始位置 (`start_x`) からの X 方向総変位（px）
     def total_dx
       @x - @start_x
     end
 
+    # 触れた起点 (`start_y`) からの Y 方向総変位を返します。
+    #
+    # - 戻り値: `Float` Y 方向総変位（px）
     def total_dy
       @y - @start_y
     end
 
     # 触れた起点からの直線距離
+    #
+    # - 戻り値: `Float` 開始座標 `(start_x, start_y)` と現在座標 `(x, y)` のユークリッド距離（px）
     def distance
       Math.hypot(@x - @start_x, @y - @start_y)
     end
@@ -98,6 +127,7 @@ module Zenoo
     end
   end
 
+  # キーボード・マウス・ゲームパッド・マルチタッチ・アクションマップを統合管理する入力モジュール。
   module Input
     # キーシンボルからGLFWキーコードへのマッピング
     KEY_MAP = {
@@ -206,6 +236,10 @@ module Zenoo
       middle: 2
     }
 
+    # キーシンボルまたはキーコードを内部 GLFW キーコードへ解決します。
+    #
+    # - `key` (`Symbol`, `Integer`): `KEY_MAP` のキーシンボルまたは GLFW キーコード
+    # - 戻り値: `Integer`
     def self.resolve_key(key)
       return key if key.is_a?(Integer)
       code = KEY_MAP[key]
@@ -213,6 +247,10 @@ module Zenoo
       raise ArgumentError, "Unknown key: #{key.inspect}"
     end
 
+    # マウスボタンシンボルまたはボタン ID を内部ボタンコードへ解決します。
+    #
+    # - `button` (`Symbol`, `Integer`): `:left`, `:right`, `:middle` またはボタン番号
+    # - 戻り値: `Integer`
     def self.resolve_mouse(button)
       return button if button.is_a?(Integer)
       code = MOUSE_MAP[button]
@@ -221,6 +259,9 @@ module Zenoo
     end
 
     # 押されている状態 (持続)
+    #
+    # - `key` (`Symbol`, `Integer`): 判定対象のキー（`:space`, `:a`, `:up`, `:shift`, `:ctrl` 等）
+    # - 戻り値: `Boolean`
     def self.key_pressed?(key)
       if key == :shift
         Native::Input.key_pressed?(340) || Native::Input.key_pressed?(344)
@@ -236,6 +277,9 @@ module Zenoo
     end
 
     # 押した瞬間 (トリガー)
+    #
+    # - `key` (`Symbol`, `Integer`): 判定対象のキー
+    # - 戻り値: `Boolean`
     def self.key_push?(key)
       if key == :shift
         Native::Input.key_push?(340) || Native::Input.key_push?(344)
@@ -251,6 +295,9 @@ module Zenoo
     end
 
     # 離した瞬間 (リリース)
+    #
+    # - `key` (`Symbol`, `Integer`): 判定対象のキー
+    # - 戻り値: `Boolean`
     def self.key_release?(key)
       if key == :shift
         Native::Input.key_release?(340) || Native::Input.key_release?(344)
@@ -266,6 +313,9 @@ module Zenoo
     end
 
     # 押した瞬間、または長押しによるキーリピート
+    #
+    # - `key` (`Symbol`, `Integer`): 判定対象のキー
+    # - 戻り値: `Boolean`
     def self.key_repeat?(key)
       if key == :shift
         Native::Input.key_repeat?(340) || Native::Input.key_repeat?(344)
@@ -281,16 +331,24 @@ module Zenoo
     end
 
     # フレーム内で入力された文字（UTF-8文字列）の配列
+    # IME 確定文字やキーボード文字入力を取得します。
+    #
+    # - 戻り値: `Array<String>`
     def self.input_chars
       Native::Input.input_chars
     end
 
     # IME変換候補ウィンドウの位置設定
+    #
+    # - `x` (`Integer`): ウィンドウ内の論理 X 座標
+    # - `y` (`Integer`): ウィンドウ内の論理 Y 座標
     def self.set_ime_position(x, y)
       Native::Input.set_ime_position(x.to_i, y.to_i)
     end
 
     # マウス座標 (タッチ操作時は未消費のアクティブタッチ座標を透過的に反映)
+    #
+    # - 戻り値: `Float` 論理画面空間の X 座標
     def self.mouse_x
       if @using_touch
         t = __mouse_emulation_touch
@@ -300,6 +358,9 @@ module Zenoo
       end
     end
 
+    # マウスの論理 Y 座標を取得します（タッチ操作時は未消費のアクティブタッチ座標を透過的に反映）。
+    #
+    # - 戻り値: `Float` 論理画面空間の Y 座標
     def self.mouse_y
       if @using_touch
         t = __mouse_emulation_touch
@@ -309,6 +370,9 @@ module Zenoo
       end
     end
 
+    # 現在のマウス座標 `[mouse_x, mouse_y]` を返します。
+    #
+    # - 戻り値: `Array<Float>` `[x, y]`
     def self.mouse_pos
       [mouse_x, mouse_y]
     end
@@ -357,6 +421,10 @@ module Zenoo
 
     @mouse_consumed = false
 
+    # マウスボタンが押されているかどうかを返します（`consume_mouse!` 済み時は `false`、タッチ操作時は `:left` をタッチでエミュレート）。
+    #
+    # - `button` (`Symbol`, `Integer`): 判定対象ボタン（`:left`, `:right`, `:middle`、デフォルト: `:left`）
+    # - 戻り値: `Boolean`
     def self.mouse_pressed?(button = :left)
       return false if @mouse_consumed
       __raw_mouse_pressed?(button)
@@ -377,6 +445,10 @@ module Zenoo
       end
     end
 
+    # マウスボタンが押された瞬間（トリガー）かどうかを返します（`consume_mouse!` 済み時は `false`）。
+    #
+    # - `button` (`Symbol`, `Integer`): 判定対象ボタン（`:left`, `:right`, `:middle`、デフォルト: `:left`）
+    # - 戻り値: `Boolean`
     def self.mouse_push?(button = :left)
       return false if @mouse_consumed
       b = resolve_mouse(button)
@@ -392,6 +464,10 @@ module Zenoo
       end
     end
 
+    # マウスボタンが離された瞬間（リリース）かどうかを返します（`consume_mouse!` 済み時は `false`）。
+    #
+    # - `button` (`Symbol`, `Integer`): 判定対象ボタン（`:left`, `:right`, `:middle`、デフォルト: `:left`）
+    # - 戻り値: `Boolean`
     def self.mouse_release?(button = :left)
       return false if @mouse_consumed
       b = resolve_mouse(button)
@@ -419,23 +495,37 @@ module Zenoo
     end
 
     # マウスホイール (スクロール量)
+    #
+    # - 戻り値: `Float` 水平スクロール量
     def self.mouse_wheel_x
       Native::Input.mouse_wheel_x
     end
 
+    # マウスホイールの垂直スクロール量を取得します。
+    #
+    # - 戻り値: `Float` 垂直スクロール量（上回転が正）
     def self.mouse_wheel_y
       Native::Input.mouse_wheel_y
     end
 
+    # マウスホイールの垂直スクロール量（`mouse_wheel_y` と同値）を取得します。
+    #
+    # - 戻り値: `Float`
     def self.mouse_wheel
       Native::Input.mouse_wheel
     end
 
     # クリップボード
+    # システムのクリップボードにあるテキスト文字列を取得します。
+    #
+    # - 戻り値: `String`
     def self.clipboard
       Native::Input.clipboard
     end
 
+    # システムのクリップボードに文字列を設定します。
+    #
+    # - `str` (`String`): コピーするテキスト文字列
     def self.clipboard=(str)
       Native::Input.clipboard = str.to_s
     end
@@ -443,6 +533,11 @@ module Zenoo
     # ==========================================
     # ゲームパッド API
     # ==========================================
+
+    # ゲームパッドボタンのシンボルまたは番号を内部ボタン ID へ解決します。
+    #
+    # - `btn` (`Symbol`, `Integer`): `:a`, `:b`, `:x`, `:y`, `:lb`, `:rb`, `:start`, `:back`, `:dpad_up` 等、またはボタン ID
+    # - 戻り値: `Integer`
     def self.resolve_gamepad_button(btn)
       return btn.to_i if btn.is_a?(Integer)
       case btn
@@ -466,6 +561,10 @@ module Zenoo
       end
     end
 
+    # ゲームパッド軸のシンボルまたは番号を内部軸 ID へ解決します。
+    #
+    # - `axis` (`Symbol`, `Integer`): `:lx`, `:ly`, `:rx`, `:ry`, `:lt`, `:rt`（`:left_x`, `:left_trigger` 等も可）または軸 ID
+    # - 戻り値: `Integer`
     def self.resolve_gamepad_axis(axis)
       return axis if axis.is_a?(Integer)
       case axis
@@ -480,37 +579,74 @@ module Zenoo
       end
     end
 
+    # 指定した ID のゲームパッドが接続されているかどうかを返します。
+    #
+    # - `id` (`Integer`): ゲームパッド番号（0 始まり、デフォルト: 0）
+    # - 戻り値: `Boolean`
     def self.gamepad_connected?(id = 0)
       Native::Input.gamepad_connected?(id.to_i)
     end
 
+    # ゲームパッドのアナログ軸入力値を取得します。
+    #
+    # - `axis` (`Symbol`, `Integer`): 軸指定（`:lx`, `:ly`, `:rx`, `:ry`, `:lt`, `:rt` 等）
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Float` スティックは `-1.0 〜 1.0`、トリガーは `0.0 〜 1.0`（環境により `-1.0 〜 1.0`）
     def self.gamepad_axis(axis, id = 0)
       Native::Input.gamepad_axis(id.to_i, resolve_gamepad_axis(axis))
     end
 
+    # ゲームパッドのボタンが押されている状態（持続）かどうかを返します。
+    #
+    # - `button` (`Symbol`, `Integer`): ボタン指定（`:a`, `:b`, `:lb`, `:dpad_up` 等）
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Boolean`
     def self.gamepad_button_pressed?(button, id = 0)
       Native::Input.gamepad_button_pressed?(id.to_i, resolve_gamepad_button(button))
     end
 
+    # ゲームパッドのボタンが押された瞬間（トリガー）かどうかを返します。
+    #
+    # - `button` (`Symbol`, `Integer`): ボタン指定
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Boolean`
     def self.gamepad_button_push?(button, id = 0)
       Native::Input.gamepad_button_push?(id.to_i, resolve_gamepad_button(button))
     end
 
+    # ゲームパッドのボタンが離された瞬間（リリース）かどうかを返します。
+    #
+    # - `button` (`Symbol`, `Integer`): ボタン指定
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Boolean`
     def self.gamepad_button_release?(button, id = 0)
       Native::Input.gamepad_button_release?(id.to_i, resolve_gamepad_button(button))
     end
 
     # ゲームパッドの振動 (デュアルランブル)
+    #
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - `strong` (`Numeric`): 低周波（強）モーター強度 `0.0 〜 1.0`（デフォルト: 1.0）
+    # - `weak` (`Numeric`): 高周波（弱）モーター強度 `0.0 〜 1.0`（デフォルト: 1.0）
+    # - `duration` (`Numeric`): 振動時間（秒、デフォルト: 0.2）
     def self.vibrate_gamepad(id = 0, strong = 1.0, weak = 1.0, duration = 0.2)
       Native::Input.vibrate_gamepad(id.to_i, strong.to_f, weak.to_f, duration.to_f)
     end
 
     # スマホ/デバイス本体の振動 (Web/Android等)
+    #
+    # - `duration` (`Numeric`): 振動時間（秒、デフォルト: 0.2）
     def self.vibrate(duration = 0.2)
       Native::Input.vibrate(duration.to_f)
     end
 
     # アナログスティックの円形デッドゾーン処理 (Radial Deadzone)
+    # 入力ベクトル長が `deadzone` 以下なら `[0.0, 0.0]` とし、超えた分を `0.0 〜 1.0` に再スケールします。
+    #
+    # - `vx` (`Numeric`): X 軸生入力値
+    # - `vy` (`Numeric`): Y 軸生入力値
+    # - `deadzone` (`Numeric`): 不感帯しきい値（`0.0 〜 1.0`、デフォルト: 0.2）
+    # - 戻り値: `Array<Float>` `[x, y]`
     def self.apply_deadzone(vx, vy, deadzone = 0.2)
       len = Math.sqrt(vx * vx + vy * vy)
       if len <= deadzone
@@ -522,6 +658,10 @@ module Zenoo
     end
 
     # 左スティックの正規化ベクトル [x, y] (-1.0 .. 1.0)
+    #
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - `deadzone` (`Numeric`): 円形デッドゾーンしきい値（デフォルト: 0.2）
+    # - 戻り値: `Array<Float>` `[x, y]`
     def self.left_stick(id = 0, deadzone = 0.2)
       vx = gamepad_axis(0, id)
       vy = gamepad_axis(1, id)
@@ -529,6 +669,10 @@ module Zenoo
     end
 
     # 右スティックの正規化ベクトル [x, y] (-1.0 .. 1.0)
+    #
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - `deadzone` (`Numeric`): 円形デッドゾーンしきい値（デフォルト: 0.2）
+    # - 戻り値: `Array<Float>` `[x, y]`
     def self.right_stick(id = 0, deadzone = 0.2)
       vx = gamepad_axis(2, id)
       vy = gamepad_axis(3, id)
@@ -540,17 +684,27 @@ module Zenoo
     # ==========================================
     # 水平方向の入力値 (-1.0 .. 1.0)
     # デフォルトでアクション :left と :right を合成
+    #
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Float` `-1.0 〜 1.0`
     def self.x(id = 0)
       axis(:left, :right, id)
     end
 
     # 垂直方向の入力値 (-1.0 .. 1.0)
     # デフォルトでアクション :up と :down を合成
+    #
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Float` `-1.0 〜 1.0`
     def self.y(id = 0)
       axis(:up, :down, id)
     end
 
     # 右スティック水平方向 (-1.0 .. 1.0)
+    # バーチャルパッドからの照準ベクトルが入力されている場合はそちらを優先します。
+    #
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Float` `-1.0 〜 1.0`
     def self.rx(id = 0)
       return @vpad_rx if @vpad_rx && @vpad_rx != 0.0
       stick = right_stick(id, 0.2)
@@ -558,6 +712,10 @@ module Zenoo
     end
 
     # 右スティック垂直方向 (-1.0 .. 1.0)
+    # バーチャルパッドからの照準ベクトルが入力されている場合はそちらを優先します。
+    #
+    # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Float` `-1.0 〜 1.0`
     def self.ry(id = 0)
       return @vpad_ry if @vpad_ry && @vpad_ry != 0.0
       stick = right_stick(id, 0.2)
@@ -576,14 +734,24 @@ module Zenoo
     @vpad_rx = 0.0
     @vpad_ry = 0.0
 
+    # 現在定義されているアクションマップ全体のハッシュを返します。
+    #
+    # - 戻り値: `Hash`
     def self.actions
       @actions
     end
 
+    # 現在セットされている `VirtualPad` インスタンスを取得します。
+    #
+    # - 戻り値: `VirtualPad`, `nil`
     def self.virtual_pad
       @virtual_pad
     end
 
+    # 画面上のタッチバーチャルパッドを設定します（`nil` で解除）。
+    # セットしたパッドは毎フレーム自動で更新・描画され、アクションや移動ベクトルへ統合されます。
+    #
+    # - `pad` (`VirtualPad`, `nil`): 使用する `VirtualPad` インスタンス
     def self.virtual_pad=(pad)
       @virtual_pad.reset if @virtual_pad
       @virtual_pad = pad
@@ -594,6 +762,9 @@ module Zenoo
     end
 
     # 仮想アクション注入 (VirtualPad 等から今フレームのアクション強度を注入)
+    #
+    # - `name` (`Symbol`): 注入するアクション名
+    # - `strength` (`Numeric`): 強度（`0.0 〜 1.0` にクランプ、デフォルト: 1.0）
     def self.inject_action(name, strength = 1.0)
       sym = name.to_sym
       val = strength.to_f.clamp(0.0, 1.0)
@@ -602,6 +773,9 @@ module Zenoo
     end
 
     # 仮想2次元ベクトル注入 (VirtualPad のスティックやフリック方向を移動アクションへ注入)
+    #
+    # - `dx` (`Numeric`): 水平成分（負で `:left`、正で `:right` へ注入）
+    # - `dy` (`Numeric`): 垂直成分（負で `:up`、正で `:down` へ注入）
     def self.inject_vector(dx, dy)
       vx = dx.to_f
       vy = dy.to_f
@@ -623,6 +797,9 @@ module Zenoo
     end
 
     # 仮想右スティックベクトル注入 (VirtualPad の照準スティック等を Input.rx / Input.ry へ注入)
+    #
+    # - `dx` (`Numeric`): 右スティック水平成分（`-1.0 〜 1.0`）
+    # - `dy` (`Numeric`): 右スティック垂直成分（`-1.0 〜 1.0`）
     def self.inject_right_vector(dx, dy)
       rx = dx.to_f
       ry = dy.to_f
@@ -636,12 +813,15 @@ module Zenoo
     end
 
     # アクションの定義・追加登録
-    # @param name [Symbol] アクション名 (例: :jump, :ui_accept)
-    # @param keys [Symbol, Array<Symbol>] キーボードのキー
-    # @param gamepad [Symbol, Integer, Array] ゲームパッドのボタン
-    # @param mouse [Symbol, Integer, Array] マウスのボタン (:left, :right, :middle)
-    # @param stick [Symbol] スティック方向ショートカット (:up, :down, :left, :right)
-    # @param axes [Array<Array>] アナログ軸バインド [axis_sym, direction, threshold]
+    # キーボード・ゲームパッド・マウス・アナログスティックを統一的な論理アクション名へ紐付けます。
+    # 同じ `name` に対して複数回呼び出すと、既存のバインドに追記されます。
+    #
+    # - `name` (`Symbol`): アクション名（例: `:jump`, `:ui_accept`）
+    # - `keys:` (`Symbol`, `Array<Symbol>`, `nil`): キーボードのキー
+    # - `gamepad:` (`Symbol`, `Integer`, `Array`, `nil`): ゲームパッドのボタン
+    # - `mouse:` (`Symbol`, `Integer`, `Array`, `nil`): マウスのボタン（`:left`, `:right`, `:middle`）
+    # - `stick:` (`Symbol`, `nil`): スティック方向ショートカット（`:up`, `:down`, `:left`, `:right`）
+    # - `axes:` (`Array<Array>`, `nil`): アナログ軸バインド `[axis_sym, direction, threshold]`
     def self.define_action(name, keys: nil, gamepad: nil, mouse: nil, stick: nil, axes: nil)
       act = (@actions[name.to_sym] ||= { keys: [], gamepad: [], mouse: [], axes: [], axis_prev: [] })
       if keys
@@ -679,6 +859,8 @@ module Zenoo
     end
 
     # 指定したアクション、または全アクションをクリア
+    #
+    # - `name` (`Symbol`, `nil`): 削除するアクション名（`nil` の場合はすべての定義を削除）
     def self.clear_action(name = nil)
       if name
         @actions.delete(name.to_sym)
@@ -688,6 +870,10 @@ module Zenoo
     end
 
     # アクションの強度 (0.0 .. 1.0)
+    #
+    # - `name` (`Symbol`): 判定するアクション名
+    # - `id` (`Integer`): 対象ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Float` `0.0 〜 1.0`
     def self.action_strength(name, id = 0)
       sym = name.to_sym
       vpad_val = @vpad_actions_cur[sym] || 0.0
@@ -735,6 +921,10 @@ module Zenoo
     end
 
     # アクションが押されているか (持続)
+    #
+    # - `name` (`Symbol`): 判定するアクション名
+    # - `id` (`Integer`): 対象ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Boolean`
     def self.action_pressed?(name, id = 0)
       sym = name.to_sym
       vpad_val = @vpad_actions_cur[sym] || 0.0
@@ -777,6 +967,10 @@ module Zenoo
     end
 
     # アクションが押された瞬間か (トリガー)
+    #
+    # - `name` (`Symbol`): 判定するアクション名
+    # - `id` (`Integer`): 対象ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Boolean`
     def self.action_push?(name, id = 0)
       sym = name.to_sym
       cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
@@ -808,6 +1002,10 @@ module Zenoo
     end
 
     # アクションが離された瞬間か (リリース)
+    #
+    # - `name` (`Symbol`): 判定するアクション名
+    # - `id` (`Integer`): 対象ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Boolean`
     def self.action_release?(name, id = 0)
       sym = name.to_sym
       cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
@@ -892,6 +1090,11 @@ module Zenoo
 
     # 軸の入力値 (-1.0 .. 1.0)
     # positive_action の強さ - negative_action の強さ
+    #
+    # - `negative_action` (`Symbol`): 負方向（左・上など）に割り当てるアクション名
+    # - `positive_action` (`Symbol`): 正方向（右・下など）に割り当てるアクション名
+    # - `id` (`Integer`): 対象ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Float` `-1.0 〜 1.0`
     def self.axis(negative_action, positive_action, id = 0)
       pos = action_strength(positive_action, id)
       neg = action_strength(negative_action, id)
@@ -901,6 +1104,13 @@ module Zenoo
     # 2次元移動ベクトル [dx, dy]
     # 4方向のアクションからベクトルを算出し、長さを 1.0 にクランプ (斜め移動速度超過を防止)
     # 引数省略時はデフォルトで (:left, :right, :up, :down) を使用
+    #
+    # - `negative_x` (`Symbol`): 左方向アクション名（デフォルト: `:left`）
+    # - `positive_x` (`Symbol`): 右方向アクション名（デフォルト: `:right`）
+    # - `negative_y` (`Symbol`): 上方向アクション名（デフォルト: `:up`）
+    # - `positive_y` (`Symbol`): 下方向アクション名（デフォルト: `:down`）
+    # - `id` (`Integer`): 対象ゲームパッド番号（デフォルト: 0）
+    # - 戻り値: `Array<Float>` `[dx, dy]`（長さ最大 1.0）
     def self.vector(negative_x = :left, positive_x = :right, negative_y = :up, positive_y = :down, id = 0)
       dx = axis(negative_x, positive_x, id)
       dy = axis(negative_y, positive_y, id)
@@ -925,21 +1135,30 @@ module Zenoo
     @last_raw_my = 0.0
 
     # 現在タッチ操作モード中か (ブラウザのタッチ由来マウスエミュレーションを自動排除し、物理マウス移動時にfalseへ復帰)
+    #
+    # - 戻り値: `Boolean`
     def self.using_touch?
       @using_touch
     end
 
     # 現在アクティブ、またはこのフレームで離された Touch オブジェクトの配列
+    #
+    # - 戻り値: `Array<Touch>`
     def self.touches
       @touches
     end
 
     # タッチIDから該当する Touch オブジェクトを取得 (無効/終了時は nil)
+    #
+    # - `id` (`Integer`): 取得するタッチの ID
+    # - 戻り値: `Touch`, `nil`
     def self.touch(id)
       @active_touches[id]
     end
 
     # タッチ入力が利用可能・発生しているか
+    #
+    # - 戻り値: `Boolean`
     def self.touch_available?
       !@active_touches.empty? || !@touches.empty?
     end

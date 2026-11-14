@@ -5,7 +5,12 @@ module Zenoo
     # テキストボックスのキャレット位置算出・IME座標同期・キー入力編集ロジック
     module TextEdit
       class << self
-        # クリック位置から最適なキャレット文字インデックスを算出
+        # クリック位置から最適なキャレット文字インデックスを算出する
+        #
+        # - `str` (`String`): 対象テキスト文字列
+        # - `click_x` (`Float`): テキスト左端からの相対 X 座標
+        # - `theme` (`Theme`): 現在の ImGui テーマ
+        # - 戻り値: `Integer`
         def caret_index_from_click(str, click_x, theme)
           f_font = theme.font || Font.default
           f_size = theme.font_size.to_i
@@ -24,8 +29,15 @@ module Zenoo
           best_idx
         end
 
-        # フォーカス中のテキスト編集・IME位置更新処理
-        # @return [Array(String, Integer, Boolean, Boolean)] [updated_text, updated_cursor_pos, reset_blink, unfocus]
+        # フォーカス中のテキスト編集および IME 候補ウィンドウ座標同期を処理する
+        #
+        # - `cur_text` (`String`): 現在のテキスト文字列
+        # - `cursor_pos` (`Integer`): 現在のキャレット文字インデックス
+        # - `rx` (`Float`): テキストボックス左端 X 座標
+        # - `ry` (`Float`): テキストボックス上端 Y 座標
+        # - `rh` (`Float`): テキストボックス高さ
+        # - `theme` (`Theme`): 現在の ImGui テーマ
+        # - 戻り値: `Array`（`[updated_text, updated_cursor_pos, reset_blink, unfocus]`）
         def process_focused_input(cur_text, cursor_pos, rx, ry, rh, theme)
           cursor_pos = cur_text.length if cursor_pos > cur_text.length
           cursor_pos = 0 if cursor_pos < 0

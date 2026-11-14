@@ -3,10 +3,30 @@
 module Zenoo
   module UI
     # Sprite ベースの保持モード (Retained Mode) UI ウィジェット基底クラス
+    # すべての UI ウィジェットの基底クラス（`Sprite` を継承し、レイアウト・入力・クリッピング・テーマ機能を備える）
     class Widget < Sprite
       attr_accessor :enabled, :interactive, :clip_children, :flex, :align_self, :id, :tooltip
       attr_reader :hovered, :pressed, :clicked, :changed, :radius
 
+      # ウィジェットを初期化する
+      #
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `100.0`）
+      # - `height` (`Float`): 高さ（デフォルト `32.0`）
+      # - `anchor` (`Symbol | Array<Float>`): 基準アンカー位置（デフォルト `:top_left`）
+      # - `pivot` (`Symbol | Array<Float>`): 回転・拡大のピボット位置（デフォルト `:center`）
+      # - `z` (`Float`): 描画 Z 深度（デフォルト `0.0`）
+      # - `camera` (`Boolean | Camera`): カメラ追従設定（UI 用途のデフォルト `false`）
+      # - `parent` (`Sprite | Widget | nil`): 親オブジェクト
+      # - `enabled` (`Boolean`): 有効状態（`false` で操作無効化、デフォルト `true`）
+      # - `interactive` (`Boolean`): マウス・入力の当たり判定対象とするか（デフォルト `true`）
+      # - `flex` (`Float | nil`): 親 `Box` レイアウト内でのフレックス伸長係数
+      # - `align_self` (`Symbol | nil`): 親 `Box` の交差軸整列を個別に上書きする値（`:start`, `:center`, `:end`, `:stretch`）
+      # - `id` (`Symbol | String | nil`): 識別用 ID
+      # - `theme` (`Theme | Symbol | nil`): このウィジェット個別のテーマ（省略時は親またはグローバルテーマを参照）
+      # - `radius` (`Float | nil`): 角丸半径（ピクセル単位）
+      # - 戻り値: `Widget`
       def initialize(x = 0.0, y = 0.0, width: 100.0, height: 32.0,
                      anchor: :top_left, pivot: :center, z: 0.0,
                      camera: false, parent: nil,
@@ -35,6 +55,10 @@ module Zenoo
         update_collider_shape if @radius && @radius > 0.0
       end
 
+      # 角丸半径を設定しコライダー形状を更新する
+      #
+      # - `val` (`Float | nil`): 角丸半径（ピクセル単位）
+      # - 戻り値: `Float | nil`
       def radius=(val)
         vf = val ? val.to_f : nil
         return if @radius == vf
@@ -51,62 +75,104 @@ module Zenoo
         end
       end
 
+      # このウィジェットに適用されるテーマを取得する（個別テーマ未設定時は親または `UI.theme` を継承）
+      #
+      # - 戻り値: `Theme`
       def theme
         @theme || (@parent.is_a?(Widget) ? @parent.theme : UI.theme)
       end
 
+      # このウィジェット個別のテーマを設定する
+      #
+      # - `val` (`Theme | Symbol | nil`): `Theme` インスタンス、プリセット名シンボル、または `nil`（親継承に戻す）
+      # - 戻り値: `Theme | nil`
       def theme=(val)
         @theme = val.is_a?(Symbol) ? Theme.new(val) : val
       end
 
+      # マウスカーソルがこのウィジェット上にあるかを返す
+      #
+      # - 戻り値: `Boolean`
       def hovered?
         @hovered
       end
 
+      # マウスボタンが押下中かを返す
+      #
+      # - 戻り値: `Boolean`
       def pressed?
         @pressed
       end
 
+      # このフレームでクリックが成立したかを返す
+      #
+      # - 戻り値: `Boolean`
       def clicked?
         @clicked
       end
 
+      # このフレームで値が変更されたかを返す
+      #
+      # - 戻り値: `Boolean`
       def changed?
         @changed
       end
 
+      # 現在フォーカスを持っているかを返す
+      #
+      # - 戻り値: `Boolean`
       def focused?
         UI.focused_widget.equal?(self)
       end
 
+      # このウィジェットにフォーカスを与える
+      #
+      # - 戻り値: `Widget`
       def focus!
         UI.focused_widget = self
         self
       end
 
+      # このウィジェットのフォーカスを解除する
+      #
+      # - 戻り値: `nil`
       def blur!
         UI.clear_focus if focused?
         self
       end
 
+      # クリック時のコールバックブロックを登録する
+      #
+      # - `&block`: クリック時に呼び出されるブロック（引数として `self` を受け取る）
+      # - 戻り値: `Widget`（`self`）
       def on_click(&block)
         @on_click_proc = block
         self
       end
 
+      # 値変更時のコールバックブロックを登録する
+      #
+      # - `&block`: 値変更時に呼び出されるブロック（変更後の値を受け取る）
+      # - 戻り値: `Widget`（`self`）
       def on_change(&block)
         @on_change_proc = block
         self
       end
 
+      # カスタム描画コールバックブロックを登録する
+      #
+      # - `&block`: 描画時に `(left, top, width, height, visual_state)` を受け取るブロック
+      # - 戻り値: `Widget`（`self`）
       def on_draw(&block)
         @on_draw_proc = block
         self
       end
 
-      # 子ウィジェットの追加 (add / <<)
-      # @param child [Widget] 追加するウィジェット
-      # @return [Widget] 追加した child 自身
+      # 子ウィジェットを追加する（`add` / `<<`）
+      #
+      # - `child` (`Widget`): 追加する子ウィジェット
+      # - `&block`: 追加後に `child` を引数に実行するセットアップ用ブロック
+      # - 戻り値: `Widget | nil`（追加した `child` 自身、`child` が `nil` の場合は `nil`）
       def add(child, &block)
         return nil unless child
         child.parent = self
@@ -114,6 +180,11 @@ module Zenoo
         child
       end
 
+      # 子ウィジェットを追加する（`add` の演算子版）
+      #
+      # - `child` (`Widget`): 追加する子ウィジェット
+      # - `&block`: 追加後に `child` を引数に実行するセットアップ用ブロック
+      # - 戻り値: `Widget | nil`
       def <<(child, &block)
         add(child, &block)
       end
@@ -125,6 +196,9 @@ module Zenoo
       end
 
       # 状態を応じた視覚ステート (:normal, :hover, :active, :disabled)
+      # 現在の見た目の状態シンボルを返す
+      #
+      # - 戻り値: `Symbol`（`:disabled`, `:active`, `:hover`, `:normal` のいずれか）
       def visual_state
         return :disabled unless @enabled
         return :active if @pressed
@@ -133,18 +207,30 @@ module Zenoo
       end
 
       # ワールド空間での描画左上座標 (Pivot 中心スケーリング考慮)
+      # ウィジェット左端のスクリーン X 座標を返す
+      #
+      # - 戻り値: `Float`
       def screen_left
         world_pivot_x - @pivot_x * width * world_scale_x
       end
 
+      # ウィジェット上端のスクリーン Y 座標を返す
+      #
+      # - 戻り値: `Float`
       def screen_top
         world_pivot_y - @pivot_y * height * world_scale_y
       end
 
+      # スケール適用後のスクリーン上の幅を返す
+      #
+      # - 戻り値: `Float`
       def screen_width
         width * world_scale_x
       end
 
+      # スケール適用後のスクリーン上の高さを返す
+      #
+      # - 戻り値: `Float`
       def screen_height
         height * world_scale_y
       end
@@ -264,6 +350,9 @@ module Zenoo
       end
 
       # フレーム更新 (ルートウィジェットに対して update を呼ぶとツリー全体が更新されます)
+      # 毎フレームの入力処理・レイアウト・子要素更新を実行する
+      #
+      # - 戻り値: `nil`
       def update
         return if @vanished || !@visible
 
@@ -402,11 +491,18 @@ module Zenoo
         false
       end
 
+      # クリックイベントを発火し、`clicked?` を `true` にして `on_click` コールバックを実行する
+      #
+      # - 戻り値: `Object | nil`
       def trigger_click!
         @clicked = true
         @on_click_proc.call(self) if @on_click_proc
       end
 
+      # 値変更イベントを発火し、`changed?` を `true` にして `on_change` コールバックを実行する
+      #
+      # - `val` (`Object | nil`): コールバックへ渡す変更後の値
+      # - 戻り値: `Object | nil`
       def trigger_change!(val = nil)
         @changed = true
         if @on_change_proc
@@ -418,7 +514,9 @@ module Zenoo
         end
       end
 
-      # 描画
+      # ウィジェットと子ウィジェットを描画する（ルートウィジェットではレイアウト自動更新も実行）
+      #
+      # - 戻り値: `nil`
       def draw
         return if @vanished || !@visible
 

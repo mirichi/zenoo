@@ -10,6 +10,14 @@ module Zenoo
   # ==============================================================================
   class VirtualPad
     # 領域判定ヘルパー (:left_half, :right_half, :full, または [x, y, w, h])
+    # 指定座標 `(px, py)` がタッチ反応領域 `zone` の内側に含まれるかどうかを返します。
+    #
+    # - `zone` (`Symbol`, `Array<Numeric>`): 判定領域（`:left_half`, `:right_half`, `:full`, または `[x, y, w, h]`）
+    # - `px` (`Numeric`): 判定対象の X 座標
+    # - `py` (`Numeric`): 判定対象の Y 座標
+    # - `win_w` (`Numeric`): 論理画面幅
+    # - `win_h` (`Numeric`): 論理画面高さ
+    # - 戻り値: `Boolean`
     def self.in_zone?(zone, px, py, win_w, win_h)
       case zone
       when :left_half
@@ -39,6 +47,19 @@ module Zenoo
       attr_accessor :fixed_x, :fixed_y, :color, :border_color, :knob_color
       attr_reader   :touch, :ox, :oy, :cx, :cy, :vx, :vy, :last_ox, :last_oy
 
+      # バーチャルアナログスティックを初期化します。
+      #
+      # - `zone:` (`Symbol`, `Array<Numeric>`): スティックが反応する画面領域（`:left_half`, `:right_half`, `:full`, `[x, y, w, h]`、デフォルト: `:left_half`）
+      # - `target:` (`Symbol`): ベクトルの注入先（`:move` = 左移動入力、`:aim` / `:right` = 右スティック `Input.rx` / `Input.ry`、デフォルト: `:move`）
+      # - `radius:` (`Numeric`): スティック外周の最大可動半径（px、デフォルト: 90.0）
+      # - `knob_radius:` (`Numeric`): 内側ノブの描画半径（px、デフォルト: 40.0）
+      # - `deadzone:` (`Numeric`): 入力を 0 とみなす中心不感帯半径（px、デフォルト: 12.0）
+      # - `follow:` (`Boolean`): フローティング時に指が `radius` を超えて動いた場合、基準中心を追従させるか（デフォルト: `true`）
+      # - `fixed_x:` (`Numeric`, `nil`): 固定位置モード時の中心 X 座標（`nil` でタッチ位置に出現するフローティングモード）
+      # - `fixed_y:` (`Numeric`, `nil`): 固定位置モード時の中心 Y 座標
+      # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 外周ベースの塗り色（RGBA 0 〜 255）
+      # - `border_color:` (`Color`, `Symbol`, `Array<Integer>`): 外周ベースの枠線色（RGBA 0 〜 255）
+      # - `knob_color:` (`Color`, `Symbol`, `Array<Integer>`): ノブの色（RGBA 0 〜 255）
       def initialize(zone: :left_half, target: :move, radius: 90.0, knob_radius: 40.0, deadzone: 12.0,
                      follow: true, fixed_x: nil, fixed_y: nil,
                      color: [0, 0, 0, 70], border_color: [100, 200, 255, 160], knob_color: [0, 220, 255, 180])
@@ -56,6 +77,7 @@ module Zenoo
         reset
       end
 
+      # スティックの操作状態と出力ベクトルを初期状態にリセットします。
       def reset
         @touch      = nil
         @ox         = @fixed_x || 0.0
@@ -69,14 +91,25 @@ module Zenoo
         @moved      = false
       end
 
+      # このスティックが有効な未消費タッチによって現在操作中かどうかを返します。
+      #
+      # - 戻り値: `Boolean`
       def active?
         !@touch.nil? && @touch.active? && !@touch.consumed?
       end
 
+      # デッドゾーンを超えてスティック入力が発生しているかどうかを返します。
+      #
+      # - 戻り値: `Boolean`
       def moving?
         @vx != 0.0 || @vy != 0.0
       end
 
+      # 現在のタッチ一覧からスティックの捕捉・追従・正規化ベクトル `(vx, vy)` を更新します。
+      #
+      # - `touches` (`Array<Touch>`): アクティブなタッチ配列
+      # - `win_w` (`Float`): 論理画面幅
+      # - `win_h` (`Float`): 論理画面高さ
       def update(touches, win_w, win_h)
         @vx = 0.0
         @vy = 0.0
@@ -146,6 +179,9 @@ module Zenoo
         end
       end
 
+      # スティックの外周ベースとノブを描画します（フローティング時は一定条件を満たすまで非表示）。
+      #
+      # - `z` (`Numeric`): 描画 Z オーダー
       def draw(z)
         if @fixed_x && @fixed_y
           Window.draw_circle(@ox, @oy, @radius, color: @color, border_width: 3, border_color: @border_color, z: z)
@@ -165,6 +201,20 @@ module Zenoo
       attr_accessor :color, :active_color, :border_color, :active_border_color
       attr_accessor :pressed
 
+      # バーチャルパッドの円形アクションボタンを初期化します。
+      # `x:` / `y:` に負値を指定すると画面右端／下端からの相対座標として配置されます。
+      #
+      # - `action` (`Symbol`): 押下時に発火するアクション名（例: `:jump`, `:attack`）
+      # - `x:` (`Numeric`): 中心 X 座標（負値で `Window.width + x`）
+      # - `y:` (`Numeric`): 中心 Y 座標（負値で `Window.height + y`）
+      # - `radius:` (`Numeric`): ボタンの見た目上の半径（px、デフォルト: 56.0）
+      # - `hit_radius:` (`Numeric`): タッチ反応半径（px。見た目より広くして押し損ねを防ぎ、複数重複時は最寄りを優先。デフォルト: 140.0）
+      # - `label:` (`String`): ボタン中央に表示するテキスト（デフォルト: `""`）
+      # - `font_size:` (`Integer`): ラベルの文字サイズ（デフォルト: 20）
+      # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 通常時の背景色（RGBA 0 〜 255）
+      # - `active_color:` (`Color`, `Symbol`, `Array<Integer>`): 押下時の背景色（RGBA 0 〜 255）
+      # - `border_color:` (`Color`, `Symbol`, `Array<Integer>`): 通常時の枠線色（RGBA 0 〜 255）
+      # - `active_border_color:` (`Color`, `Symbol`, `Array<Integer>`): 押下時の枠線色（RGBA 0 〜 255）
       def initialize(action, x:, y:, radius: 56.0, hit_radius: 140.0, label: "", font_size: 20,
                      color: [0, 180, 140, 95], active_color: [0, 255, 190, 200],
                      border_color: [255, 255, 255, 140], active_border_color: [255, 255, 255, 255])
@@ -182,18 +232,32 @@ module Zenoo
         @pressed             = false
       end
 
+      # 現在の画面幅に応じたボタン中心の絶対 X 座標を返します（負値は右端基準）。
+      #
+      # - `win_w` (`Numeric`): 論理画面幅
+      # - 戻り値: `Float`
       def screen_x(win_w)
         @x < 0.0 ? (win_w + @x) : @x
       end
 
+      # 現在の画面高さに応じたボタン中心の絶対 Y 座標を返します（負値は下端基準）。
+      #
+      # - `win_h` (`Numeric`): 論理画面高さ
+      # - 戻り値: `Float`
       def screen_y(win_h)
         @y < 0.0 ? (win_h + @y) : @y
       end
 
+      # ボタンの押下状態をリセットします。
       def reset
         @pressed = false
       end
 
+      # ボタン本体とラベルを描画します。
+      #
+      # - `win_w` (`Numeric`): 論理画面幅
+      # - `win_h` (`Numeric`): 論理画面高さ
+      # - `z` (`Numeric`): 描画 Z オーダー
       def draw(win_w, win_h, z)
         bx = screen_x(win_w)
         by = screen_y(win_h)
@@ -218,6 +282,20 @@ module Zenoo
       attr_accessor :flick_distance, :flick_speed, :tap_max_duration, :shared_with_stick
       attr_accessor :guide_text, :guide_x, :guide_y, :guide_color
 
+      # タップおよびフリック入力を検出するジェスチャー領域を初期化します。
+      #
+      # - `zone:` (`Symbol`, `Array<Numeric>`): 判定対象領域（`:right_half`, `:full`, `[x, y, w, h]` 等、デフォルト: `:right_half`）
+      # - `tap_action:` (`Symbol`, `nil`): タップ検出時に発火するアクション名（デフォルト: `:attack`）
+      # - `flick_action:` (`Symbol`, `nil`): フリック検出時に発火するアクション名（デフォルト: `:jump`）
+      # - `flick_direction:` (`Boolean`): `true` の場合、フリック方向を `Input.vector` にも注入（デフォルト: `true`）
+      # - `flick_distance:` (`Numeric`): フリックとみなす最小移動距離（px、デフォルト: 24.0）
+      # - `flick_speed:` (`Numeric`): フリックとみなす最小終端速度（px/frame、デフォルト: 6.0）
+      # - `tap_max_duration:` (`Integer`): スティック共有時にタップとみなす最大経過フレーム数（デフォルト: 16）
+      # - `shared_with_stick:` (`Boolean`): `true` でスティックと領域を共有するワンハンド判定モードを使用（デフォルト: `false`）
+      # - `guide_text:` (`String`, `nil`): 画面上に表示する操作ガイドテキスト
+      # - `guide_x:` (`Numeric`, `nil`): ガイドテキスト X 座標（負値で右端基準）
+      # - `guide_y:` (`Numeric`, `nil`): ガイドテキスト Y 座標（負値で下端基準）
+      # - `guide_color:` (`Color`, `Symbol`, `Array<Integer>`): ガイドテキストの色（RGBA 0 〜 255）
       def initialize(zone: :right_half, tap_action: :attack, flick_action: :jump,
                      flick_direction: true, flick_distance: 24.0, flick_speed: 6.0,
                      tap_max_duration: 16, shared_with_stick: false,
@@ -236,6 +314,13 @@ module Zenoo
         @guide_color       = guide_color
       end
 
+      # 離されたタッチを評価し、条件を満たせばタップ／フリックのアクションを発火します。
+      #
+      # - `touches` (`Array<Touch>`): タッチ配列
+      # - `sticks` (`Array<Stick>`): 同じ `VirtualPad` 内のスティック配列
+      # - `stick_moving` (`Boolean`): いずれかのスティックが現在移動中か
+      # - `win_w` (`Numeric`): 論理画面幅
+      # - `win_h` (`Numeric`): 論理画面高さ
       def update(touches, sticks, stick_moving, win_w, win_h)
         i = 0
         len = touches.length
@@ -252,6 +337,11 @@ module Zenoo
         end
       end
 
+      # `guide_text` が設定されている場合に操作ガイドを描画します。
+      #
+      # - `win_w` (`Numeric`): 論理画面幅
+      # - `win_h` (`Numeric`): 論理画面高さ
+      # - `z` (`Numeric`): 描画 Z オーダー
       def draw(win_w, win_h, z)
         return unless @guide_text && !@guide_text.empty?
         gx = @guide_x ? (@guide_x < 0.0 ? win_w + @guide_x : @guide_x) : (win_w * 0.5)
@@ -321,6 +411,9 @@ module Zenoo
     attr_accessor :enabled, :visible, :auto_draw, :mouse_input, :z, :preset_name
     attr_reader   :sticks, :buttons, :gestures
 
+    # 空のバーチャルパッドを生成します。通常は `VirtualPad.gamepad` 等のプリセットファクトリも利用できます。
+    #
+    # - `preset_name:` (`Symbol`): 識別用のプリセット名（デフォルト: `:custom`）
     def initialize(preset_name: :custom)
       @preset_name = preset_name
       @enabled     = true
@@ -340,6 +433,12 @@ module Zenoo
     # --------------------------------------------------------------------------
 
     # プリセット1: 王道ゲームパッド型 (左: フローティングスティック / 右: 2ボタン)
+    #
+    # - `primary:` (`Symbol`): 右下メインボタンのアクション名（デフォルト: `:attack`）
+    # - `secondary:` (`Symbol`): 左隣サブボタンのアクション名（デフォルト: `:jump`）
+    # - `primary_label:` (`String`): メインボタンの表示ラベル（デフォルト: `"ATK"`）
+    # - `secondary_label:` (`String`): サブボタンの表示ラベル（デフォルト: `"JUMP"`）
+    # - 戻り値: `VirtualPad`
     def self.gamepad(primary: :attack, secondary: :jump, primary_label: "ATK", secondary_label: "JUMP")
       pad = new(preset_name: :gamepad)
       pad.add_stick(zone: :left_half, radius: 90.0, knob_radius: 40.0, follow: true)
@@ -359,6 +458,12 @@ module Zenoo
     end
 
     # プリセット2: 画面分割ジェスチャー型 (左: フローティングスティック / 右: タップ＆フリック)
+    #
+    # - `tap:` (`Symbol`, `nil`): 右画面タップ時のアクション名（デフォルト: `:attack`）
+    # - `flick:` (`Symbol`, `nil`): 右画面フリック時のアクション名（デフォルト: `:jump`）
+    # - `flick_direction:` (`Boolean`): フリック方向を移動ベクトルに注入するか（デフォルト: `true`）
+    # - `show_guide:` (`Boolean`): 操作ガイドテキストを表示するか（デフォルト: `true`）
+    # - 戻り値: `VirtualPad`
     def self.split_gesture(tap: :attack, flick: :jump, flick_direction: true, show_guide: true)
       pad = new(preset_name: :split_gesture)
       pad.add_stick(zone: :left_half, radius: 90.0, knob_radius: 40.0, follow: true)
@@ -377,6 +482,12 @@ module Zenoo
     end
 
     # プリセット3: 指1本・ワンハンド型 (全画面: スライドでスティック移動 / タップ＆フリック)
+    #
+    # - `tap:` (`Symbol`, `nil`): 素早いタップ時のアクション名（デフォルト: `:attack`）
+    # - `flick:` (`Symbol`, `nil`): フリック時のアクション名（デフォルト: `:jump`）
+    # - `flick_direction:` (`Boolean`): フリック方向を移動ベクトルに注入するか（デフォルト: `true`）
+    # - `show_guide:` (`Boolean`): 操作ガイドテキストを表示するか（デフォルト: `true`）
+    # - 戻り値: `VirtualPad`
     def self.one_hand(tap: :attack, flick: :jump, flick_direction: true, show_guide: true)
       pad = new(preset_name: :one_hand)
       pad.add_stick(zone: :full, radius: 90.0, knob_radius: 40.0, follow: true)
@@ -395,6 +506,8 @@ module Zenoo
     end
 
     # プリセット4: ツインスティック型 (左: 移動スティック / 右: 照準スティック)
+    #
+    # - 戻り値: `VirtualPad`
     def self.twin_stick
       pad = new(preset_name: :twin_stick)
       pad.add_stick(zone: :left_half, target: :move, radius: 90.0, knob_radius: 40.0, follow: true)
@@ -408,18 +521,32 @@ module Zenoo
     # --------------------------------------------------------------------------
     # パーツ追加 API
     # --------------------------------------------------------------------------
+
+    # バーチャルパッドにアナログスティックを追加します。
+    #
+    # - `**opts`: `VirtualPad::Stick.new` に渡すキーワード引数
+    # - 戻り値: `VirtualPad::Stick`
     def add_stick(**opts)
       st = Stick.new(**opts)
       @sticks << st
       st
     end
 
+    # バーチャルパッドに円形アクションボタンを追加します。
+    #
+    # - `action` (`Symbol`): 発火させるアクション名
+    # - `**opts`: `VirtualPad::Button.new` に渡すキーワード引数（`x:`, `y:`, `radius:`, `label:` 等）
+    # - 戻り値: `VirtualPad::Button`
     def add_button(action, **opts)
       btn = Button.new(action, **opts)
       @buttons << btn
       btn
     end
 
+    # バーチャルパッドにタップ／フリック検出用のジェスチャー領域を追加します。
+    #
+    # - `**opts`: `VirtualPad::GestureZone.new` に渡すキーワード引数
+    # - 戻り値: `VirtualPad::GestureZone`
     def add_gesture(**opts)
       gz = GestureZone.new(**opts)
       @gestures << gz
@@ -442,11 +569,13 @@ module Zenoo
       end
     end
 
+    # `mouse_input = true` 時に追跡中の擬似マウスタッチを消費済みにします（`Input.consume_mouse!` から内部的に呼ばれます）。
     def consume_mouse_touch!
       @mouse_touch.consume! if @mouse_touch
     end
 
     # 毎フレーム更新 (Input.__update_virtual_pad から自動呼び出し)
+    # スティック・ボタン・ジェスチャーを評価し、結果を `Input` の仮想アクション／ベクトルへ注入します。
     def update
       return unless @enabled
       return unless Input.using_touch? || @mouse_input
@@ -513,6 +642,7 @@ module Zenoo
     end
 
     # 描画 (Window.without_camera でスクリーン空間へ描画)
+    # `enabled`・`visible` が `true` かつタッチ操作中（または `mouse_input = true`）のときに各要素を描画します。
     def draw
       return unless @enabled && @visible
       return unless Input.using_touch? || @mouse_input

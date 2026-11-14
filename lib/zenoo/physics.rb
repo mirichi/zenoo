@@ -16,9 +16,22 @@ module Zenoo
     # ====================================================
     # 物理応答結果オブジェクト
     # ====================================================
+    # 1体の物理応答計算結果を保持するオブジェクト
     class Response
       attr_accessor :push_x, :push_y, :vx, :vy, :omega, :d_angle, :impact, :normal_impulse, :tangent_impulse, :hit
 
+      # 物理応答結果オブジェクトを生成する
+      #
+      # - `push_x` (`Float`): めり込み解消の X 押し出し量
+      # - `push_y` (`Float`): めり込み解消の Y 押し出し量
+      # - `vx` (`Float`): 応答後の X 速度
+      # - `vy` (`Float`): 応答後の Y 速度
+      # - `omega` (`Float`): 応答後の角速度（度/秒）
+      # - `d_angle` (`Float`): 位置補正に伴う角度変化量（度）
+      # - `impact` (`Float`): 衝突の強さ指標
+      # - `normal_impulse` (`Float`): 法線方向インパルス
+      # - `tangent_impulse` (`Float`): 接線（摩擦）方向インパルス
+      # - `hit` (`Zenoo::Collision::Hit`, `nil`): 元となった衝突結果
       def initialize(push_x: 0.0, push_y: 0.0, vx: 0.0, vy: 0.0, omega: 0.0, d_angle: 0.0, impact: 0.0, normal_impulse: 0.0, tangent_impulse: 0.0, hit: nil)
         @push_x = push_x.to_f
         @push_y = push_y.to_f
@@ -33,6 +46,9 @@ module Zenoo
       end
 
       # 位置と速度・角速度・角度への反映ショートカット
+      #
+      # - `target` (`PhysicsSprite`, `Object`): 反映先の剛体オブジェクト（`x`, `y`, `angle`, `vx`, `vy`, `omega` を持つもの）
+      # - 戻り値: `self`
       def apply_to(target)
         target.x += @push_x
         target.y += @push_y
@@ -51,9 +67,16 @@ module Zenoo
     # ====================================================
     # 2体衝突物理応答結果オブジェクト
     # ====================================================
+    # 2体間の物理応答計算結果（物体 A / B それぞれの `Response`）を保持するオブジェクト
     class PairResponse
       attr_accessor :a, :b, :impact, :hit
 
+      # 2体衝突の物理応答結果オブジェクトを生成する
+      #
+      # - `a` (`Zenoo::Physics::Response`): 物体 A の応答結果
+      # - `b` (`Zenoo::Physics::Response`): 物体 B の応答結果
+      # - `impact` (`Float`): 衝突の強さ指標
+      # - `hit` (`Zenoo::Collision::Hit`, `nil`): 元となった衝突結果
       def initialize(a, b, impact: 0.0, hit: nil)
         @a = a
         @b = b
@@ -62,6 +85,10 @@ module Zenoo
       end
 
       # 2つのターゲットに一括反映
+      #
+      # - `target_a` (`PhysicsSprite`, `Object`): 物体 A
+      # - `target_b` (`PhysicsSprite`, `Object`): 物体 B
+      # - 戻り値: `self`
       def apply_to(target_a, target_b)
         @a.apply_to(target_a)
         @b.apply_to(target_b)
@@ -79,6 +106,11 @@ module Zenoo
 
     # 矩形の慣性モーメント (質量中心まわり)
     # I = (1/12) * m * (w^2 + h^2)
+    #
+    # - `width` (`Float`): 矩形の幅（ピクセル）
+    # - `height` (`Float`): 矩形の高さ（ピクセル）
+    # - `mass` (`Float`): 質量
+    # - 戻り値: `Float`
     def self.inertia_rect(width, height, mass: 1.0)
       m = mass.to_f
       w = width.to_f
@@ -88,6 +120,10 @@ module Zenoo
 
     # 円の慣性モーメント
     # I = (1/2) * m * r^2
+    #
+    # - `radius` (`Float`): 円の半径（ピクセル）
+    # - `mass` (`Float`): 質量
+    # - 戻り値: `Float`
     def self.inertia_circle(radius, mass: 1.0)
       m = mass.to_f
       r = radius.to_f
@@ -95,6 +131,10 @@ module Zenoo
     end
 
     # Shape または Sprite から慣性モーメントを自動推定
+    #
+    # - `shape_or_sprite` (`Zenoo::Collision::Shape`, `Sprite`, `nil`): 推定元の形状またはスプライト
+    # - `mass` (`Float`): 質量
+    # - 戻り値: `Float`
     def self.inertia_of(shape_or_sprite, mass: 1.0)
       target = shape_or_sprite
       target = target.collider if target.respond_to?(:collider) && target.collider
@@ -118,6 +158,9 @@ module Zenoo
     end
 
     # 逆質量取得ヘルパー (Sprite, PhysicsSprite, Hash, Object 対応)
+    #
+    # - `body` (`PhysicsSprite`, `Object`, `nil`): 対象オブジェクト（`0` または負の質量は静的扱いとして `0.0`）
+    # - 戻り値: `Float`
     def self.inv_mass_of(body)
       return 0.0 unless body
       return body.inv_mass if body.respond_to?(:inv_mass)
@@ -126,6 +169,10 @@ module Zenoo
     end
 
     # 逆慣性モーメント取得ヘルパー
+    #
+    # - `body` (`PhysicsSprite`, `Object`, `nil`): 対象オブジェクト
+    # - `mass` (`Float`, `nil`): 慣性モーメント自動推定に使う質量（省略時は `body.mass`）
+    # - 戻り値: `Float`
     def self.inv_inertia_of(body, mass = nil)
       return 0.0 unless body
       return body.inv_inertia if body.respond_to?(:inv_inertia)
@@ -140,6 +187,19 @@ module Zenoo
     end
 
     # 接触点における法線インパルス jn、摩擦インパルス jt、および合計インパルス [jn, jt, total_jx, total_jy] を計算
+    #
+    # - `vn` (`Float`): 相対速度の法線成分
+    # - `vt` (`Float`): 相対速度の接線成分
+    # - `kn` (`Float`): 法線方向の有効逆質量和
+    # - `kt` (`Float`): 接線方向の有効逆質量和
+    # - `restitution` (`Float`): 反発係数（`0.0`〜`1.0`）
+    # - `friction` (`Float`): 摩擦係数（`0.0`〜`1.0`）
+    # - `nx` (`Float`): 単位法線 X 成分
+    # - `ny` (`Float`): 単位法線 Y 成分
+    # - `tx` (`Float`): 単位接線 X 成分
+    # - `ty` (`Float`): 単位接線 Y 成分
+    # - `bounce_threshold` (`Float`): 微小衝突時に反発を無効化する速度閾値
+    # - 戻り値: `Array<Float>`（`[jn, jt, total_jx, total_jy]`）
     def self.compute_contact_impulse(vn, vt, kn, kt, restitution, friction, nx, ny, tx, ty, bounce_threshold: 0.5)
       jn = 0.0
       jt = 0.0
@@ -164,13 +224,15 @@ module Zenoo
     # ====================================================
     # 即時物理応答計算 (動的オブジェクト vs 静的地形/壁)
     # ====================================================
-    # @param hit [Zenoo::Collision::Hit] 衝突判定結果
-    # @param a [PhysicsSprite] 動的オブジェクト
-    # @param b [PhysicsSprite, Sprite, Collision::Shape, nil] 静的障害物オブジェクト
-    # @param restitution [Float, nil] 反発係数 (省略時は a.restitution)
-    # @param friction [Float, nil] 摩擦係数 (省略時は a.friction)
-    # @param bounce_threshold [Float] 微小衝突時の反発カット閾値 (ジッター防止)
-    # @return [Zenoo::Physics::Response] 反映すべき新値
+    # 動的オブジェクトと静的地形・壁との衝突応答を計算して `Response` を返す（`apply_to` で反映可能）
+    #
+    # - `hit` (`Zenoo::Collision::Hit`): 衝突判定結果
+    # - `a` (`PhysicsSprite`, `Object`): 動的オブジェクト
+    # - `b` (`PhysicsSprite`, `Sprite`, `Zenoo::Collision::Shape`, `nil`): 静的障害物（`nil` 可）
+    # - `restitution` (`Float`, `nil`): 反発係数（`0.0`〜`1.0`、省略時は `a.restitution`）
+    # - `friction` (`Float`, `nil`): 摩擦係数（`0.0`〜`1.0`、省略時は `a.friction`）
+    # - `bounce_threshold` (`Float`): 微小衝突時の反発カット閾値（ジッター防止）
+    # - 戻り値: `Zenoo::Physics::Response` | `nil`
     def self.resolve_static(hit, a, b = nil, restitution: nil, friction: nil, bounce_threshold: 0.5)
       return nil unless hit && a
 
@@ -408,13 +470,15 @@ module Zenoo
     # ====================================================
     # 2体衝突即時物理応答計算 (動的オブジェクト vs 動的オブジェクト)
     # ====================================================
-    # @param hit [Zenoo::Collision::Hit] 衝突判定結果
-    # @param a [PhysicsSprite] 物体A (x, y, vx, vy, omega, mass, inertia, restitution, friction, collider 等を保持)
-    # @param b [PhysicsSprite] 物体B
-    # @param restitution [Float, nil] 反発係数 (0.0〜1.0、省略時は A/B の最大値)
-    # @param friction [Float, nil] 摩擦係数 (0.0〜1.0、省略時は A/B の幾何平均)
-    # @param bounce_threshold [Float] 微小衝突時の反発カット閾値
-    # @return [Zenoo::Physics::PairResponse] 物体Aと物体Bそれぞれの反映新値を含む結果
+    # 2つの動的オブジェクト間の衝突応答を計算し、双方の新値を持つ `PairResponse` を返す
+    #
+    # - `hit` (`Zenoo::Collision::Hit`): 衝突判定結果
+    # - `a` (`PhysicsSprite`, `Object`): 物体 A
+    # - `b` (`PhysicsSprite`, `Object`): 物体 B
+    # - `restitution` (`Float`, `nil`): 反発係数（`0.0`〜`1.0`、省略時は A/B の最大値）
+    # - `friction` (`Float`, `nil`): 摩擦係数（`0.0`〜`1.0`、省略時は A/B の幾何平均）
+    # - `bounce_threshold` (`Float`): 微小衝突時の反発カット閾値
+    # - 戻り値: `Zenoo::Physics::PairResponse` | `nil`
     def self.resolve(hit, a, b, restitution: nil, friction: nil, bounce_threshold: 0.5)
       return nil unless hit && a && b
 
@@ -602,6 +666,11 @@ module Zenoo
     # ====================================================
 
     # 物体のローカル座標 [lx, ly] を現在のワールド座標 [wx, wy] に変換
+    #
+    # - `body` (`PhysicsSprite`, `Object`): 基準物体（`x`, `y`, `angle` を持つもの）
+    # - `lx` (`Float`): ローカル X 座標
+    # - `ly` (`Float`): ローカル Y 座標
+    # - 戻り値: `Array<Float>`（`[wx, wy]`）
     def self.local_to_world(body, lx, ly)
       rad = body.angle.to_f * DEG_TO_RAD
       c = Math.cos(rad)
@@ -610,6 +679,11 @@ module Zenoo
     end
 
     # ワールド座標 [wx, wy] を物体の現在のローカル座標 [lx, ly] に変換
+    #
+    # - `body` (`PhysicsSprite`, `Object`): 基準物体
+    # - `wx` (`Float`): ワールド X 座標
+    # - `wy` (`Float`): ワールド Y 座標
+    # - 戻り値: `Array<Float>`（`[lx, ly]`）
     def self.world_to_local(body, wx, wy)
       rad = body.angle.to_f * DEG_TO_RAD
       c = Math.cos(rad)
@@ -620,6 +694,10 @@ module Zenoo
     end
 
     # 物体 A から見た物体 B の相対オフセット [ox, oy] と相対角度 rel_angle (deg) を計算
+    #
+    # - `body_a` (`PhysicsSprite`, `Object`): 基準となる物体 A
+    # - `body_b` (`PhysicsSprite`, `Object`): 対象の物体 B
+    # - 戻り値: `Array`（`[[ox, oy], rel_angle]`）
     def self.relative_offset(body_a, body_b)
       lx, ly = world_to_local(body_a, body_b.x, body_b.y)
       diff_ang = (body_b.angle.to_f - body_a.angle.to_f) % 360.0
@@ -633,12 +711,14 @@ module Zenoo
     # ====================================================
 
     # 1. 目標点 / マウスへの引っ張り拘束 (スプリング・トルクドラッグ)
-    # @param body [PhysicsSprite, Object] 対象物体
-    # @param tx [Float] 目標ワールドX座標 (マウスXなど)
-    # @param ty [Float] 目標ワールドY座標 (マウスYなど)
-    # @param anchor [Array<Float>, nil] 物体上のローカル接続点 [lx, ly] (省略時は重心 [0, 0])
-    # @param stiffness [Float] 引っ張りの強さ (0.0〜1.0, デフォルト 0.3)
-    # @param damping [Float] 速度減衰 (0.0〜1.0, デフォルト 0.85)
+    #
+    # - `body` (`PhysicsSprite`, `Object`): 対象物体
+    # - `tx` (`Float`): 目標ワールド X 座標（マウス X 等）
+    # - `ty` (`Float`): 目標ワールド Y 座標（マウス Y 等）
+    # - `anchor` (`Array<Float>`, `nil`): 物体上のローカル接続点 `[lx, ly]`（省略時は重心 `[0, 0]`）
+    # - `stiffness` (`Float`): 引っ張りの強さ（`0.0`〜`1.0`）
+    # - `damping` (`Float`): 速度減衰率（`0.0`〜`1.0`）
+    # - 戻り値: `Boolean` | `nil`
     def self.constrain_point(body, tx, ty, anchor: nil, stiffness: 0.3, damping: 0.85)
       return nil unless body
 
@@ -693,11 +773,13 @@ module Zenoo
     end
 
     # 2. ピン結合・回転ジョイント (Revolute / Pin Joint)
-    # @param a [PhysicsSprite, Object] 物体A
-    # @param b [PhysicsSprite, Object, Array, nil] 物体B (nilまたは座標[x, y]の場合は空間の固定点)
-    # @param pivot [Array<Float>, nil] ワールド結合点座標 [px, py]
-    # @param anchor_a [Array<Float>, nil] 物体Aのローカル結合点 [lx, ly]
-    # @param anchor_b [Array<Float>, nil] 物体Bのローカル結合点 [lx, ly]
+    #
+    # - `a` (`PhysicsSprite`, `Object`): 物体 A
+    # - `b` (`PhysicsSprite`, `Object`, `Array<Float>`, `nil`): 物体 B（`nil` または `[x, y]` の場合は空間の固定点に結合）
+    # - `pivot` (`Array<Float>`, `nil`): ワールド結合点座標 `[px, py]`
+    # - `anchor_a` (`Array<Float>`, `nil`): 物体 A のローカル結合点 `[lx, ly]`
+    # - `anchor_b` (`Array<Float>`, `nil`): 物体 B のローカル結合点 `[lx, ly]`
+    # - 戻り値: `Boolean` | `nil`
     def self.constrain_pin(a, b = nil, pivot: nil, anchor_a: nil, anchor_b: nil)
       return nil unless a
 
@@ -823,11 +905,13 @@ module Zenoo
 
     # 3. 完全固定・溶接ジョイント (Weld / Fixed Constraint)
     # 物体 A から見た物体 B の目標相対位置 (offset) と相対角度 (angle) を維持して一体化
-    # @param a [PhysicsSprite, Object] 基準物体A
-    # @param b [PhysicsSprite, Object] 結合物体B
-    # @param offset [Array<Float>] Aから見たBの目標ローカル位置 [ox, oy] (省略時は現在の相対位置)
-    # @param angle [Float, nil] Aから見たBの目標相対角度 (deg, 省略時は現在の角度差または0.0)
-    # @param stiffness [Float] 結合の硬さ (0.0〜1.0, デフォルト 1.0 = 完全固定)
+    #
+    # - `a` (`PhysicsSprite`, `Object`): 基準物体 A
+    # - `b` (`PhysicsSprite`, `Object`): 結合物体 B
+    # - `offset` (`Array<Float>`, `nil`): A から見た B の目標ローカル位置 `[ox, oy]`（省略時は現在の相対位置）
+    # - `angle` (`Float`, `nil`): A から見た B の目標相対角度（度数法、省略時は現在の角度差）
+    # - `stiffness` (`Float`): 結合の硬さ（`0.0`〜`1.0`）
+    # - 戻り値: `Boolean` | `nil`
     def self.constrain_weld(a, b, offset: nil, angle: nil, stiffness: 1.0)
       return nil unless a && b
 
@@ -957,13 +1041,15 @@ module Zenoo
     end
 
     # 4. 距離拘束・ロッド・ロープ (Distance / Rod / Rope Joint)
-    # @param a [PhysicsSprite, Object] 物体A
-    # @param b [PhysicsSprite, Object] 物体B
-    # @param length [Float, nil] 目標距離 (nil の場合は min/max、または現在の距離)
-    # @param min [Float, nil] 最小距離 (伸縮ロッド)
-    # @param max [Float, nil] 最大距離 (ロープ・糸)
-    # @param anchor_a [Array<Float>, nil] 物体Aのローカル接続点
-    # @param anchor_b [Array<Float>, nil] 物体Bのローカル接続点
+    #
+    # - `a` (`PhysicsSprite`, `Object`): 物体 A
+    # - `b` (`PhysicsSprite`, `Object`, `Array<Float>`): 物体 B（または固定座標 `[x, y]`）
+    # - `length` (`Float`, `nil`): 目標固定距離（省略時は `min`/`max`、両方未指定なら現在の距離）
+    # - `min` (`Float`, `nil`): 最小距離（伸縮ロッド用）
+    # - `max` (`Float`, `nil`): 最大距離（ロープ・糸用）
+    # - `anchor_a` (`Array<Float>`, `nil`): 物体 A のローカル接続点 `[lx, ly]`
+    # - `anchor_b` (`Array<Float>`, `nil`): 物体 B のローカル接続点 `[lx, ly]`
+    # - 戻り値: `Boolean` | `nil`
     def self.constrain_distance(a, b, length: nil, min: nil, max: nil, anchor_a: nil, anchor_b: nil)
       return nil unless a && b
 
@@ -1071,6 +1157,21 @@ module Zenoo
   class PhysicsSprite < Sprite
     attr_accessor :vx, :vy, :omega, :mass, :inertia, :restitution, :friction
 
+    # 剛体物理パラメータを備えたスプライトを生成する
+    #
+    # - `x` (`Float`): 配置 X 座標
+    # - `y` (`Float`): 配置 Y 座標
+    # - `image` (`Image`, `nil`): 描画する画像（省略時は `nil`）
+    # - `vx` (`Float`): 初期 X 速度（ピクセル/フレーム等）
+    # - `vy` (`Float`): 初期 Y 速度
+    # - `omega` (`Float`): 初期角速度（度/フレーム等）
+    # - `mass` (`Float`): 質量（`0` 以下で無限質量/静的扱い）
+    # - `inertia` (`Float`, `nil`): 慣性モーメント（省略時はコライダー形状から自動推定）
+    # - `restitution` (`Float`): 反発係数（`0.0`〜`1.0`）
+    # - `friction` (`Float`): 摩擦係数（`0.0`〜`1.0`）
+    # - `anchor` (`Symbol`, `Array<Float>`): 配置基準アンカー
+    # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点ピボット
+    # - `kwargs` (`Hash`): `Sprite#initialize` へ引き継ぐキーワード引数
     def initialize(x = 0.0, y = 0.0, image = nil,
                    vx: 0.0, vy: 0.0, omega: 0.0,
                    mass: 1.0, inertia: nil,
@@ -1087,17 +1188,26 @@ module Zenoo
     end
 
     # 逆質量 (1 / mass)
+    #
+    # - 戻り値: `Float`
     def inv_mass
       @mass > 0.00001 ? 1.0 / @mass : 0.0
     end
 
     # 逆慣性モーメント (1 / inertia)
+    #
+    # - 戻り値: `Float`
     def inv_inertia
       inert = @inertia || Physics.inertia_of(collider, mass: @mass)
       inert > 0.00001 ? 1.0 / inert : 0.0
     end
 
     # 静的障害物との衝突物理応答を計算し、自身に即時反映
+    #
+    # - `hit` (`Zenoo::Collision::Hit`): 衝突判定結果
+    # - `static_body` (`Sprite`, `Zenoo::Collision::Shape`, `nil`): 静的障害物オブジェクト
+    # - `kwargs` (`Hash`): `Zenoo::Physics.resolve_static` に渡すオプション（`restitution:`, `friction:` 等）
+    # - 戻り値: `Zenoo::Physics::Response` | `nil`
     def resolve_static(hit, static_body = nil, **kwargs)
       res = Physics.resolve_static(hit, self, static_body, **kwargs)
       res&.apply_to(self)
@@ -1105,6 +1215,11 @@ module Zenoo
     end
 
     # 別の動的物体との2体衝突物理応答を計算し、双方に即時反映
+    #
+    # - `hit` (`Zenoo::Collision::Hit`): 衝突判定結果
+    # - `other_body` (`PhysicsSprite`, `Object`): 相手の動的物体
+    # - `kwargs` (`Hash`): `Zenoo::Physics.resolve` に渡すオプション（`restitution:`, `friction:` 等）
+    # - 戻り値: `Zenoo::Physics::PairResponse` | `nil`
     def resolve_collision(hit, other_body, **kwargs)
       res = Physics.resolve(hit, self, other_body, **kwargs)
       res&.apply_to(self, other_body)
@@ -1116,16 +1231,27 @@ module Zenoo
     # ====================================================
 
     # 自身のローカル座標 [lx, ly] を現在のワールド座標 [wx, wy] に変換
+    #
+    # - `lx` (`Float`): ローカル X 座標
+    # - `ly` (`Float`): ローカル Y 座標
+    # - 戻り値: `Array<Float>`（`[wx, wy]`）
     def local_to_world(lx, ly)
       Physics.local_to_world(self, lx, ly)
     end
 
     # ワールド座標 [wx, wy] を自身の現在のローカル座標 [lx, ly] に変換
+    #
+    # - `wx` (`Float`): ワールド X 座標
+    # - `wy` (`Float`): ワールド Y 座標
+    # - 戻り値: `Array<Float>`（`[lx, ly]`）
     def world_to_local(wx, wy)
       Physics.world_to_local(self, wx, wy)
     end
 
     # 相手スプライトとの現在の相対オフセット [ox, oy] と角度差 (deg) を計算
+    #
+    # - `other_sprite` (`PhysicsSprite`, `Object`): 相対位置を求める相手オブジェクト
+    # - 戻り値: `Array`（`[[ox, oy], rel_angle]`）
     def relative_offset(other_sprite)
       Physics.relative_offset(self, other_sprite)
     end
@@ -1135,21 +1261,47 @@ module Zenoo
     # ====================================================
 
     # 目標点への引っ張り拘束
+    #
+    # - `tx` (`Float`): 目標ワールド X 座標
+    # - `ty` (`Float`): 目標ワールド Y 座標
+    # - `anchor` (`Array<Float>`, `nil`): 自身のローカル接続点 `[lx, ly]`
+    # - `kwargs` (`Hash`): `Zenoo::Physics.constrain_point` に渡すオプション（`stiffness:`, `damping:`）
+    # - 戻り値: `Boolean` | `nil`
     def constrain_point(tx, ty, anchor: nil, **kwargs)
       Physics.constrain_point(self, tx, ty, anchor: anchor, **kwargs)
     end
 
     # 相手物体（または固定点）とのピン結合
+    #
+    # - `other` (`PhysicsSprite`, `Object`, `Array<Float>`, `nil`): 結合相手または固定座標 `[x, y]`
+    # - `pivot` (`Array<Float>`, `nil`): ワールド結合点 `[px, py]`
+    # - `anchor_a` (`Array<Float>`, `nil`): 自身のローカル結合点 `[lx, ly]`
+    # - `anchor_b` (`Array<Float>`, `nil`): 相手のローカル結合点 `[lx, ly]`
+    # - 戻り値: `Boolean` | `nil`
     def constrain_pin(other = nil, pivot: nil, anchor_a: nil, anchor_b: nil)
       Physics.constrain_pin(self, other, pivot: pivot, anchor_a: anchor_a, anchor_b: anchor_b)
     end
 
     # 相手物体との完全固定 (溶接 / リジッド結合)
+    #
+    # - `other` (`PhysicsSprite`, `Object`): 結合物体 B
+    # - `offset` (`Array<Float>`, `nil`): 目標ローカル相対位置 `[ox, oy]`
+    # - `angle` (`Float`, `nil`): 目標相対角度（度数法）
+    # - `kwargs` (`Hash`): `Zenoo::Physics.constrain_weld` に渡すオプション（`stiffness:`）
+    # - 戻り値: `Boolean` | `nil`
     def constrain_weld(other, offset: nil, angle: nil, **kwargs)
       Physics.constrain_weld(self, other, offset: offset, angle: angle, **kwargs)
     end
 
     # 相手物体との距離拘束 (ロッド / ロープ)
+    #
+    # - `other` (`PhysicsSprite`, `Object`, `Array<Float>`): 相手物体または固定座標 `[x, y]`
+    # - `length` (`Float`, `nil`): 目標固定距離
+    # - `min` (`Float`, `nil`): 最小距離
+    # - `max` (`Float`, `nil`): 最大距離
+    # - `anchor_a` (`Array<Float>`, `nil`): 自身のローカル接続点 `[lx, ly]`
+    # - `anchor_b` (`Array<Float>`, `nil`): 相手のローカル接続点 `[lx, ly]`
+    # - 戻り値: `Boolean` | `nil`
     def constrain_distance(other, length: nil, min: nil, max: nil, anchor_a: nil, anchor_b: nil)
       Physics.constrain_distance(self, other, length: length, min: min, max: max, anchor_a: anchor_a, anchor_b: anchor_b)
     end

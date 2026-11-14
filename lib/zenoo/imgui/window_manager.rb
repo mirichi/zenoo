@@ -8,6 +8,21 @@ module Zenoo
                     :resizable, :min_w, :min_h, :max_w, :max_h,
                     :collapsed, :expanded_h, :collapsible
 
+      # ウィンドウ状態オブジェクトを初期化する
+      #
+      # - `id` (`String | Symbol`): ウィンドウ識別 ID
+      # - `title` (`String`): タイトルバー表示文字列
+      # - `x` (`Float`): 初期 X 座標
+      # - `y` (`Float`): 初期 Y 座標
+      # - `w` (`Float`): 初期幅
+      # - `h` (`Float`): 初期高さ
+      # - `resizable` (`Boolean`): リサイズを許可するか
+      # - `min_w` (`Float`): 最小幅
+      # - `min_h` (`Float`): 最小高さ
+      # - `max_w` (`Float`): 最大幅
+      # - `max_h` (`Float`): 最大高さ
+      # - `collapsible` (`Boolean`): 折りたたみを許可するか
+      # - 戻り値: `WindowState`
       def initialize(id, title, x, y, w, h, resizable: false, min_w: 120.0, min_h: 80.0, max_w: 2000.0, max_h: 2000.0, collapsible: true)
         @id          = id.to_s
         @title       = title.to_s

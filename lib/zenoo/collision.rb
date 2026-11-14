@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 module Zenoo
+  # 2D 幾何形状の衝突判定およびめり込み量（MTV）算出モジュール
   module Collision
     # 形状種別定数 (高速整数ディスパッチ用)
     TYPE_POINT   = 0
@@ -11,9 +12,19 @@ module Zenoo
     # ====================================================
     # 衝突めり込み・押し出し結果 (MTV: Minimum Translation Vector)
     # ====================================================
+    # 2形状間のめり込み量・法線ベクトル・押し戻し移動量・接触点を保持する結果オブジェクト
     class Hit
       attr_accessor :depth, :normal_x, :normal_y, :push_x, :push_y, :contact_x, :contact_y
 
+      # 衝突めり込み結果（Hit）を生成
+      #
+      # - `depth` (`Float`): めり込み深さ（ピクセル）
+      # - `normal_x` (`Float`): 物体 A を押し戻す単位法線 X 成分
+      # - `normal_y` (`Float`): 物体 A を押し戻す単位法線 Y 成分
+      # - `push_x` (`Float`): 物体 A を押し戻す X 移動量（`normal_x * depth`）
+      # - `push_y` (`Float`): 物体 A を押し戻す Y 移動量（`normal_y * depth`）
+      # - `contact_x` (`Float`): 推定接触点のワールド X 座標
+      # - `contact_y` (`Float`): 推定接触点のワールド Y 座標
       def initialize(depth = 0.0, normal_x = 0.0, normal_y = 0.0, push_x = 0.0, push_y = 0.0, contact_x = 0.0, contact_y = 0.0)
         @depth = depth.to_f
         @normal_x = normal_x.to_f
@@ -25,10 +36,22 @@ module Zenoo
       end
 
       # b を押し戻す移動量 (-push_x, -push_y)
+      #
+      # 物体 B 側を押し戻す X 移動量を返す
+      #
+      # - 戻り値: `Float`
       def push_b_x; -@push_x; end
+
+      # 物体 B 側を押し戻す Y 移動量を返す
+      #
+      # - 戻り値: `Float`
       def push_b_y; -@push_y; end
 
       # 向き反転 (a と b を入れ替えた結果)
+      #
+      # 法線・押し戻しベクトルを反転した新しい `Hit` を返す
+      #
+      # - 戻り値: `Zenoo::Collision::Hit`
       def flipped
         Hit.new(@depth, -@normal_x, -@normal_y, -@push_x, -@push_y, @contact_x, @contact_y)
       end
@@ -76,6 +99,10 @@ module Zenoo
       attr_reader :at_x, :at_y
       attr_reader :parent
 
+      # 親オブジェクト（主に `Sprite`）を設定する
+      #
+      # - `p` (`Sprite`, `nil`): 追従先の親オブジェクト
+      # - 戻り値: `Object`
       def parent=(p)
         return if @parent.equal?(p)
         @parent = p
@@ -84,6 +111,20 @@ module Zenoo
 
       # anchor: 単体 Shape で自分のどの点を (x, y) に置くか (Sprite#anchor と同義)
       # at:     親 Sprite に付けた場合、親のどの点にコライダーの中心を置くか (:center, :bottom_center, :pivot 等)
+      #
+      # 衝突形状の基底プロパティを初期化する
+      #
+      # - `x` (`Float`): 配置 X 座標
+      # - `y` (`Float`): 配置 Y 座標
+      # - `angle` (`Float`): 回転角度（度数法）
+      # - `scale_x` (`Float`): X 方向倍率
+      # - `scale_y` (`Float`): Y 方向倍率
+      # - `offset_x` (`Float`): 親からのローカル X オフセット
+      # - `offset_y` (`Float`): 親からのローカル Y オフセット
+      # - `anchor` (`Symbol`, `Array<Float>`): 単体配置時に座標 `(x, y)` へ合わせる自身の基準点
+      # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点
+      # - `at` (`Symbol`, `Array<Float>`): 親 Sprite 上でコライダー中心を配置する基準点（`:pivot` 等）
+      # - `parent` (`Sprite`, `nil`): 追従先の親オブジェクト
       def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, at: :center, parent: nil)
         @parent = parent
         @x = x.to_f
@@ -129,10 +170,16 @@ module Zenoo
       def dirty_geom!; @dirty_geom = true; @dirty_pos = true; end
       def dirty_angle!; dirty_geom!; end
 
+      # 現在の X 座標を返す（親がある場合は親の `world_x`）
+      #
+      # - 戻り値: `Float`
       def x
         @parent ? @parent.world_x : @x
       end
 
+      # X 座標を設定する
+      #
+      # - `v` (`Float`): 新しい X 座標
       def x=(v)
         vf = v.to_f
         return if @x == vf
@@ -140,10 +187,16 @@ module Zenoo
         dirty_pos!
       end
 
+      # 現在の Y 座標を返す（親がある場合は親の `world_y`）
+      #
+      # - 戻り値: `Float`
       def y
         @parent ? @parent.world_y : @y
       end
 
+      # Y 座標を設定する
+      #
+      # - `v` (`Float`): 新しい Y 座標
       def y=(v)
         vf = v.to_f
         return if @y == vf
@@ -151,10 +204,16 @@ module Zenoo
         dirty_pos!
       end
 
+      # 現在の回転角度（度数法）を返す（親がある場合は親の `world_angle`）
+      #
+      # - 戻り値: `Float`
       def angle
         @parent ? @parent.world_angle : @angle
       end
 
+      # 回転角度（度数法）を設定する
+      #
+      # - `v` (`Float`): 回転角度（度）
       def angle=(v)
         vf = v.to_f
         return if @angle == vf
@@ -162,10 +221,16 @@ module Zenoo
         dirty_angle!
       end
 
+      # 現在の X 方向スケールを返す（親がある場合は親の `world_scale_x`）
+      #
+      # - 戻り値: `Float`
       def scale_x
         @parent ? @parent.world_scale_x : @scale_x
       end
 
+      # X 方向スケールを設定する
+      #
+      # - `v` (`Float`): X 方向倍率
       def scale_x=(v)
         vf = v.to_f
         return if @scale_x == vf
@@ -173,10 +238,16 @@ module Zenoo
         dirty_geom!
       end
 
+      # 現在の Y 方向スケールを返す（親がある場合は親の `world_scale_y`）
+      #
+      # - 戻り値: `Float`
       def scale_y
         @parent ? @parent.world_scale_y : @scale_y
       end
 
+      # Y 方向スケールを設定する
+      #
+      # - `v` (`Float`): Y 方向倍率
       def scale_y=(v)
         vf = v.to_f
         return if @scale_y == vf
@@ -184,6 +255,9 @@ module Zenoo
         dirty_geom!
       end
 
+      # X / Y 方向のスケールを同じ値で一括設定する
+      #
+      # - `v` (`Float`): 縦横共通の倍率
       def scale=(v)
         vf = v.to_f
         return if @scale_x == vf && @scale_y == vf
@@ -229,17 +303,27 @@ module Zenoo
         end
       end
 
+      # ワールド重心の X 座標を返す
+      #
+      # - 戻り値: `Float`
       def center_x
         update_cache if dirty?
         @center_x
       end
 
+      # ワールド重心の Y 座標を返す
+      #
+      # - 戻り値: `Float`
       def center_y
         update_cache if dirty?
         @center_y
       end
 
       # アンカー (取得)
+      #
+      # 単体形状の配置アンカーを返す
+      #
+      # - 戻り値: `Symbol` | `Array<Float>`
       def anchor
         if (@anchor_x - 0.0).abs < 0.0001 && (@anchor_y - 0.0).abs < 0.0001
           :top_left
@@ -252,6 +336,9 @@ module Zenoo
         end
       end
 
+      # 単体形状の配置アンカーを設定する
+      #
+      # - `val` (`Symbol`, `Array<Float>`): `:top_left`, `:center`, `:bottom_center` 等のシンボルまたは `[ax, ay]`
       def anchor=(val)
         ax, ay = Collision.parse_anchor(val)
         return if @anchor_x == ax && @anchor_y == ay
@@ -260,6 +347,9 @@ module Zenoo
         dirty_pos!
       end
 
+      # X 方向の配置アンカー比率を設定する
+      #
+      # - `val` (`Float`): 横方向アンカー位置（`0.0`〜`1.0`）
       def anchor_x=(val)
         vf = val.to_f
         return if @anchor_x == vf
@@ -267,6 +357,9 @@ module Zenoo
         dirty_pos!
       end
 
+      # Y 方向の配置アンカー比率を設定する
+      #
+      # - `val` (`Float`): 縦方向アンカー位置（`0.0`〜`1.0`）
       def anchor_y=(val)
         vf = val.to_f
         return if @anchor_y == vf
@@ -275,6 +368,8 @@ module Zenoo
       end
 
       # 親 Sprite 上のコライダー中心配置先 (取得)
+      #
+      # - 戻り値: `Symbol` | `Array<Float>`
       def at
         return :pivot if @at_pivot
         if (@at_x - 0.5).abs < 0.0001 && (@at_y - 0.5).abs < 0.0001
@@ -289,6 +384,8 @@ module Zenoo
       end
 
       # 親 Sprite 上のコライダー中心配置先 (設定: :pivot は親のピボットに追従)
+      #
+      # - `val` (`Symbol`, `Array<Float>`): `:center`, `:bottom_center`, `:pivot` 等のシンボルまたは `[ax, ay]`
       def at=(val)
         if val == :pivot
           return if @at_pivot
@@ -304,6 +401,9 @@ module Zenoo
         dirty_geom!
       end
 
+      # 親 Sprite 上のコライダー中心配置先 X 比率を設定する
+      #
+      # - `val` (`Float`): 親幅に対する横方向位置（`0.0`〜`1.0`）
       def at_x=(val)
         vf = val.to_f
         return if !@at_pivot && @at_x == vf
@@ -312,6 +412,9 @@ module Zenoo
         dirty_geom!
       end
 
+      # 親 Sprite 上のコライダー中心配置先 Y 比率を設定する
+      #
+      # - `val` (`Float`): 親高さに対する縦方向位置（`0.0`〜`1.0`）
       def at_y=(val)
         vf = val.to_f
         return if !@at_pivot && @at_y == vf
@@ -321,6 +424,10 @@ module Zenoo
       end
 
       # ピボット (取得)
+      #
+      # 回転・拡大縮小の支点ピボットを返す
+      #
+      # - 戻り値: `Symbol` | `Array<Float>`
       def pivot
         if (@pivot_x - 0.5).abs < 0.0001 && (@pivot_y - 0.5).abs < 0.0001
           :center
@@ -331,6 +438,9 @@ module Zenoo
         end
       end
 
+      # 回転・拡大縮小の支点ピボットを設定する
+      #
+      # - `val` (`Symbol`, `Array<Float>`): `:center`, `:top_left` 等のシンボルまたは `[px, py]`
       def pivot=(val)
         px, py = Collision.parse_pivot(val)
         return if @pivot_x == px && @pivot_y == py
@@ -339,6 +449,9 @@ module Zenoo
         dirty_geom!
       end
 
+      # 親からの X オフセットを設定する
+      #
+      # - `val` (`Float`): ローカル X オフセット（ピクセル）
       def offset_x=(val)
         vf = val.to_f
         return if @offset_x == vf
@@ -346,6 +459,9 @@ module Zenoo
         dirty_geom!
       end
 
+      # 親からの Y オフセットを設定する
+      #
+      # - `val` (`Float`): ローカル Y オフセット（ピクセル）
       def offset_y=(val)
         vf = val.to_f
         return if @offset_y == vf
@@ -354,6 +470,8 @@ module Zenoo
       end
 
       # 重心 (設定: アンカー位置に関わらず重心が指定座標になるよう x, y を平行移動)
+      #
+      # - `val` (`Float`): 目標ワールド重心 X 座標
       def center_x=(val)
         vf = val.to_f
         diff = vf - center_x
@@ -361,6 +479,9 @@ module Zenoo
         dirty_pos!
       end
 
+      # 重心の Y 座標を指定位置に合わせるよう平行移動する
+      #
+      # - `val` (`Float`): 目標ワールド重心 Y 座標
       def center_y=(val)
         vf = val.to_f
         diff = vf - center_y
@@ -368,6 +489,10 @@ module Zenoo
         dirty_pos!
       end
 
+      # 重心座標 `(cx, cy)` を直接設定する
+      #
+      # - `cx` (`Float`): 目標ワールド重心 X 座標
+      # - `cy` (`Float`): 目標ワールド重心 Y 座標
       def set_center(cx, cy)
         self.center_x = cx
         self.center_y = cy
@@ -379,6 +504,21 @@ module Zenoo
       attr_reader :radius_x, :radius_y
       attr_reader :bounding_radius, :is_true_circle, :effective_radius
 
+      # 円または楕円形状を生成する
+      #
+      # - `x` (`Float`): 配置 X 座標
+      # - `y` (`Float`): 配置 Y 座標
+      # - `radius_x` (`Float`): X 半径（真円の場合は共通半径）
+      # - `radius_y` (`Float`): Y 半径（省略時は `radius_x` と同じ）
+      # - `angle` (`Float`): 回転角度（度数法）
+      # - `scale_x` (`Float`): X 方向倍率
+      # - `scale_y` (`Float`): Y 方向倍率
+      # - `offset_x` (`Float`): ローカル X オフセット
+      # - `offset_y` (`Float`): ローカル Y オフセット
+      # - `anchor` (`Symbol`, `Array<Float>`): 単体配置時の基準点
+      # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点
+      # - `at` (`Symbol`, `Array<Float>`): 親 Sprite 上の配置先
+      # - `parent` (`Sprite`, `nil`): 親オブジェクト
       def initialize(x = 0.0, y = 0.0, radius_x = 0.0, radius_y = radius_x, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, at: :center, parent: nil)
         super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, at: at, parent: parent)
         @radius_x = radius_x.to_f
@@ -389,7 +529,14 @@ module Zenoo
 
       def shape_type; TYPE_CIRCLE; end
 
+      # X 半径を取得する
+      #
+      # - 戻り値: `Float`
       def radius; @radius_x; end
+
+      # X / Y 半径を同じ値で一括設定する
+      #
+      # - `val` (`Float`): 新しい半径
       def radius=(val)
         vf = val.to_f
         return if @radius_x == vf && @radius_y == vf
@@ -398,6 +545,9 @@ module Zenoo
         dirty_geom!
       end
 
+      # X 半径を設定する
+      #
+      # - `val` (`Float`): X 方向半径
       def radius_x=(val)
         vf = val.to_f
         return if @radius_x == vf
@@ -405,6 +555,9 @@ module Zenoo
         dirty_geom!
       end
 
+      # Y 半径を設定する
+      #
+      # - `val` (`Float`): Y 方向半径
       def radius_y=(val)
         vf = val.to_f
         return if @radius_y == vf
@@ -552,6 +705,19 @@ module Zenoo
 
     # 点
     class Point < Shape
+      # 点形状を生成する
+      #
+      # - `x` (`Float`): 配置 X 座標
+      # - `y` (`Float`): 配置 Y 座標
+      # - `angle` (`Float`): 回転角度（度数法）
+      # - `scale_x` (`Float`): X 方向倍率
+      # - `scale_y` (`Float`): Y 方向倍率
+      # - `offset_x` (`Float`): ローカル X オフセット
+      # - `offset_y` (`Float`): ローカル Y オフセット
+      # - `anchor` (`Symbol`, `Array<Float>`): 単体配置時の基準点
+      # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点
+      # - `at` (`Symbol`, `Array<Float>`): 親 Sprite 上の配置先
+      # - `parent` (`Sprite`, `nil`): 親オブジェクト
       def initialize(x = 0.0, y = 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, at: :center, parent: nil)
         super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, at: at, parent: parent)
         @rotation_invariant = false
@@ -639,6 +805,22 @@ module Zenoo
       attr_reader :is_aabb, :is_rounded, :is_uniform, :bounding_radius, :cos, :sin
       attr_reader :m00, :m01, :m10, :m11
 
+      # 矩形・OBB・角丸矩形形状を生成する
+      #
+      # - `x` (`Float`): 配置 X 座標
+      # - `y` (`Float`): 配置 Y 座標
+      # - `width` (`Float`): 幅（親があり `0` の場合は親の幅を使用）
+      # - `height` (`Float`): 高さ（親があり `0` の場合は親の高さを使用）
+      # - `angle` (`Float`): 回転角度（度数法）
+      # - `radius` (`Float`): 角丸の半径（ピクセル）
+      # - `scale_x` (`Float`): X 方向倍率
+      # - `scale_y` (`Float`): Y 方向倍率
+      # - `offset_x` (`Float`): ローカル X オフセット
+      # - `offset_y` (`Float`): ローカル Y オフセット
+      # - `anchor` (`Symbol`, `Array<Float>`): 単体配置時の基準点
+      # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点
+      # - `at` (`Symbol`, `Array<Float>`): 親 Sprite 上の配置先
+      # - `parent` (`Sprite`, `nil`): 親オブジェクト
       def initialize(x = 0.0, y = 0.0, width = 0.0, height = 0.0, angle: 0.0, radius: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center, at: :center, parent: nil)
         super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, at: at, parent: parent)
         @width = width.to_f
@@ -653,6 +835,9 @@ module Zenoo
 
       def shape_type; TYPE_RECT; end
 
+      # 矩形の幅を返す（親があり `0` の場合は親の幅）
+      #
+      # - 戻り値: `Float`
       def width
         if @parent && (@width == 0.0 || @width.nil?)
           @parent.width
@@ -661,6 +846,9 @@ module Zenoo
         end
       end
 
+      # 矩形の幅を設定する
+      #
+      # - `v` (`Float`): 幅（ピクセル）
       def width=(v)
         vf = v.to_f
         return if @width == vf
@@ -668,6 +856,9 @@ module Zenoo
         dirty_size!
       end
 
+      # 矩形の高さを返す（親があり `0` の場合は親の高さ）
+      #
+      # - 戻り値: `Float`
       def height
         if @parent && (@height == 0.0 || @height.nil?)
           @parent.height
@@ -676,6 +867,9 @@ module Zenoo
         end
       end
 
+      # 矩形の高さを設定する
+      #
+      # - `v` (`Float`): 高さ（ピクセル）
       def height=(v)
         vf = v.to_f
         return if @height == vf
@@ -683,6 +877,9 @@ module Zenoo
         dirty_size!
       end
 
+      # 角丸の半径を設定する
+      #
+      # - `v` (`Float`): 角丸半径（ピクセル）
       def radius=(v)
         vf = v.to_f
         return if @radius == vf
@@ -845,6 +1042,20 @@ module Zenoo
     class Polygon < Shape
       attr_reader :vertices, :local_vertices, :bounding_radius
 
+      # 凸多角形形状を生成する
+      #
+      # - `vertices` (`Array<Array<Float>>`): ローカル頂点座標の配列 `[[x0, y0], [x1, y1], ...]`（3点以上の凸多角形）
+      # - `x` (`Float`): 配置 X 座標
+      # - `y` (`Float`): 配置 Y 座標
+      # - `angle` (`Float`): 回転角度（度数法）
+      # - `scale_x` (`Float`): X 方向倍率
+      # - `scale_y` (`Float`): Y 方向倍率
+      # - `offset_x` (`Float`): ローカル X オフセット
+      # - `offset_y` (`Float`): ローカル Y オフセット
+      # - `anchor` (`Symbol`, `Array<Float>`): 単体配置時の基準点
+      # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点
+      # - `at` (`Symbol`, `Array<Float>`): 親 Sprite 上の配置先
+      # - `parent` (`Sprite`, `nil`): 親オブジェクト
       def initialize(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center, at: :center, parent: nil)
         super(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot, at: at, parent: parent)
         @vertices = vertices.map { |v| [v[0].to_f, v[1].to_f] }
@@ -854,6 +1065,9 @@ module Zenoo
 
       def shape_type; TYPE_POLYGON; end
 
+      # ローカル頂点座標の配列を再設定する
+      #
+      # - `v` (`Array<Array<Float>>`): 頂点配列 `[[x0, y0], ...]`
       def vertices=(v); @vertices = v.map { |pt| [pt[0].to_f, pt[1].to_f] }; dirty_verts!; end
 
       def dirty_pos!; @dirty_pos = true; @_dirty_world_verts = true; end
@@ -1071,6 +1285,11 @@ module Zenoo
     # ====================================================
     # 衝突判定メインエントリ
     # ====================================================
+    # 2つの形状またはコライダー付きオブジェクトの衝突を判定する
+    #
+    # - `shape_a` (`Zenoo::Collision::Shape`, `Sprite`): 判定対象 A
+    # - `shape_b` (`Zenoo::Collision::Shape`, `Sprite`): 判定対象 B
+    # - 戻り値: `Boolean`（接触していれば `true`）
     def self.check(shape_a, shape_b)
       shape_a = shape_a.collider if shape_a.respond_to?(:collider)
       shape_b = shape_b.collider if shape_b.respond_to?(:collider)
@@ -1504,6 +1723,11 @@ module Zenoo
 
     # 配列・オブジェクト同士の一括衝突判定 (DXRuby 互換: ブロック省略時は衝突ペア配列を返す)
     # Sweep and Prune (X軸ソート＆スイープ) による O(N log N) 高速ブロードフェーズ
+    #
+    # - `group_a` (`Array<Object>`, `Object`): 対象グループ A（単体オブジェクトも可）
+    # - `group_b` (`Array<Object>`, `Object`, `nil`): 対象グループ B（省略時は `group_a` 内同士を重複なく判定）
+    # - ブロック引数 (`a, b`): 衝突したペアごとに呼ばれる（指定時は `nil` を返す）
+    # - 戻り値: `Array<Array>` | `nil`（ブロック省略時は `[[a, b], ...]`）
     def self.check_all(group_a, group_b = nil, &block)
       arr_a = group_a.is_a?(Array) ? group_a : [group_a]
       same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
@@ -1527,6 +1751,11 @@ module Zenoo
     # ====================================================
     # 衝突めり込み量・押し出しベクトル (MTV) 算出エントリ
     # ====================================================
+    # 2つの形状間のめり込み量・法線・接触点（MTV）を計算する
+    #
+    # - `shape_a` (`Zenoo::Collision::Shape`, `Sprite`): 判定対象 A
+    # - `shape_b` (`Zenoo::Collision::Shape`, `Sprite`): 判定対象 B
+    # - 戻り値: `Zenoo::Collision::Hit` | `nil`（非接触時は `nil`）
     def self.penetration(shape_a, shape_b)
       shape_a = shape_a.collider if shape_a.respond_to?(:collider)
       shape_b = shape_b.collider if shape_b.respond_to?(:collider)
@@ -1722,6 +1951,11 @@ module Zenoo
     # 配列・オブジェクト同士の一括めり込み量・押し出し (MTV) 判定
     # ブロック省略時は [[item_a, item_b, hit], ...] の配列を返す
     # Sweep and Prune (X軸ソート＆スイープ) による高速ブロードフェーズ
+    #
+    # - `group_a` (`Array<Object>`, `Object`): 対象グループ A（単体オブジェクトも可）
+    # - `group_b` (`Array<Object>`, `Object`, `nil`): 対象グループ B（省略時は `group_a` 内同士を判定）
+    # - ブロック引数 (`a, b, hit`): 衝突したペアと `Hit` ごとに呼ばれる（指定時は `nil` を返す）
+    # - 戻り値: `Array<Array>` | `nil`（ブロック省略時は `[[a, b, hit], ...]`）
     def self.penetration_all(group_a, group_b = nil, &block)
       arr_a = group_a.is_a?(Array) ? group_a : [group_a]
       same_group = group_b.nil? || group_a.equal?(group_b) || arr_a.equal?(group_b)
@@ -2188,21 +2422,66 @@ module Zenoo
 
     # ファクトリメソッド
     # 円 / 楕円 (ry を省略した場合は真円)
+    #
+    # - `x` (`Float`): 配置 X 座標
+    # - `y` (`Float`): 配置 Y 座標
+    # - `rx` (`Float`): X 半径（真円の場合は共通半径）
+    # - `ry` (`Float`): Y 半径（省略時は `rx`）
+    # - `angle` (`Float`): 回転角度（度数法）
+    # - `scale_x` (`Float`): X 方向倍率
+    # - `scale_y` (`Float`): Y 方向倍率
+    # - `offset_x` (`Float`): ローカル X オフセット
+    # - `offset_y` (`Float`): ローカル Y オフセット
+    # - `anchor` (`Symbol`, `Array<Float>`): 配置基準アンカー
+    # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点
+    # - 戻り値: `Zenoo::Collision::Circle`
     def self.circle(x, y, rx, ry = rx, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center)
       Circle.new(x, y, rx, ry, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot)
     end
 
     # 矩形 / 角丸矩形
+    #
+    # - `x` (`Float`): 配置 X 座標
+    # - `y` (`Float`): 配置 Y 座標
+    # - `w` (`Float`): 幅
+    # - `h` (`Float`): 高さ
+    # - `angle` (`Float`): 回転角度（度数法）
+    # - `radius` (`Float`): 角丸半径（ピクセル）
+    # - `scale_x` (`Float`): X 方向倍率
+    # - `scale_y` (`Float`): Y 方向倍率
+    # - `offset_x` (`Float`): ローカル X オフセット
+    # - `offset_y` (`Float`): ローカル Y オフセット
+    # - `anchor` (`Symbol`, `Array<Float>`): 配置基準アンカー
+    # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点
+    # - 戻り値: `Zenoo::Collision::Rect`
     def self.rect(x, y, w, h, angle: 0.0, radius: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center)
       Rect.new(x, y, w, h, angle: angle, radius: radius, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot)
     end
 
     # 点
+    #
+    # - `x` (`Float`): 配置 X 座標
+    # - `y` (`Float`): 配置 Y 座標
+    # - `angle` (`Float`): 回転角度（度数法）
+    # - `scale_x` (`Float`): X 方向倍率
+    # - `scale_y` (`Float`): Y 方向倍率
+    # - `offset_x` (`Float`): ローカル X オフセット
+    # - `offset_y` (`Float`): ローカル Y オフセット
+    # - `anchor` (`Symbol`, `Array<Float>`): 配置基準アンカー
+    # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点
+    # - 戻り値: `Zenoo::Collision::Point`
     def self.point(x, y, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :top_left, pivot: :center)
       Point.new(x, y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot)
     end
 
     # 太さを持つ直線 / 線分 (角丸なしの OBB: 端面は直角)
+    #
+    # - `x1` (`Float`): 始点 X 座標
+    # - `y1` (`Float`): 始点 Y 座標
+    # - `x2` (`Float`): 終点 X 座標
+    # - `y2` (`Float`): 終点 Y 座標
+    # - `width` (`Float`): 線分の太さ（ピクセル）
+    # - 戻り値: `Zenoo::Collision::Rect`
     def self.line(x1, y1, x2, y2, width = 1.0)
       dx = x2.to_f - x1.to_f
       dy = y2.to_f - y1.to_f
@@ -2214,6 +2493,13 @@ module Zenoo
     end
 
     # セグメント (両端が半円のカプセル形状: 角丸矩形 Rect に統合)
+    #
+    # - `x1` (`Float`): 始点 X 座標
+    # - `y1` (`Float`): 始点 Y 座標
+    # - `x2` (`Float`): 終点 X 座標
+    # - `y2` (`Float`): 終点 Y 座標
+    # - `r` (`Float`): カプセル半径（ピクセル）
+    # - 戻り値: `Zenoo::Collision::Rect`
     def self.segment(x1, y1, x2, y2, r)
       dx = x2.to_f - x1.to_f
       dy = y2.to_f - y1.to_f
@@ -2226,6 +2512,18 @@ module Zenoo
     end
 
     # 多角形
+    #
+    # - `vertices` (`Array<Array<Float>>`): ローカル頂点配列 `[[x0, y0], ...]`（凸多角形）
+    # - `x` (`Float`): 配置 X 座標
+    # - `y` (`Float`): 配置 Y 座標
+    # - `angle` (`Float`): 回転角度（度数法）
+    # - `scale_x` (`Float`): X 方向倍率
+    # - `scale_y` (`Float`): Y 方向倍率
+    # - `offset_x` (`Float`): ローカル X オフセット
+    # - `offset_y` (`Float`): ローカル Y オフセット
+    # - `anchor` (`Symbol`, `Array<Float>`): 配置基準アンカー
+    # - `pivot` (`Symbol`, `Array<Float>`): 回転・拡大縮小の支点
+    # - 戻り値: `Zenoo::Collision::Polygon`
     def self.polygon(vertices, x: 0.0, y: 0.0, angle: 0.0, scale_x: 1.0, scale_y: 1.0, offset_x: 0.0, offset_y: 0.0, anchor: :center, pivot: :center)
       Polygon.new(vertices, x: x, y: y, angle: angle, scale_x: scale_x, scale_y: scale_y, offset_x: offset_x, offset_y: offset_y, anchor: anchor, pivot: pivot)
     end
@@ -2502,6 +2800,10 @@ module Zenoo
 
     # 空間ハッシュによる近傍ペア列挙 (ブロードフェーズ)
     # ensure を使用せず、Clang 最適化を阻害しないシーケンシャル実行
+    #
+    # - `group` (`Array<Object>`): 判定対象オブジェクトの配列
+    # - `cell_size` (`Float`): 空間ハッシュのグリッドセル幅（ピクセル）
+    # - ブロック引数 (`a, b`): 近傍候補ペアごとに呼ばれる
     def self.each_pair_spatial(group, cell_size: 64.0, &block)
       ws = @spatial_workspace
       ws.prepare(cell_size)
@@ -2512,6 +2814,11 @@ module Zenoo
     end
 
     # 空間ハッシュによる一括衝突判定 (ナローフェーズ幾何チェック込み)
+    #
+    # - `group` (`Array<Object>`): 判定対象オブジェクトの配列
+    # - `cell_size` (`Float`): 空間ハッシュのグリッドセル幅（ピクセル）
+    # - ブロック引数 (`a, b`): 衝突ペアごとに呼ばれる（指定時は `nil` を返す）
+    # - 戻り値: `Array<Array>` | `nil`（ブロック省略時は `[[a, b], ...]`）
     def self.check_spatial(group, cell_size: 64.0, &block)
       ws = @spatial_workspace
       ws.prepare(cell_size)
@@ -2522,6 +2829,11 @@ module Zenoo
     end
 
     # 空間ハッシュによる一括めり込み量 (MTV) 判定
+    #
+    # - `group` (`Array<Object>`): 判定対象オブジェクトの配列
+    # - `cell_size` (`Float`): 空間ハッシュのグリッドセル幅（ピクセル）
+    # - ブロック引数 (`a, b, hit`): 衝突ペアと `Hit` ごとに呼ばれる（指定時は `nil` を返す）
+    # - 戻り値: `Array<Array>` | `nil`（ブロック省略時は `[[a, b, hit], ...]`）
     def self.penetration_spatial(group, cell_size: 64.0, &block)
       ws = @spatial_workspace
       ws.prepare(cell_size)

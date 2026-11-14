@@ -5,7 +5,19 @@ module Zenoo
     # プロファイルグラフ (Profile Graph / Frame Time Histogram) 描画モジュール
     module ProfileGraph
       class << self
-        # 各処理の実行時間 (ms) をカテゴリ別に積み上げ棒グラフとして描画し、全体の高さを返却
+        # 各処理の実行時間（ms）をカテゴリ別に積み上げ棒グラフとして描画し、全体の高さを返す
+        #
+        # - `rx` (`Float`): 左上 X 座標
+        # - `ry` (`Float`): 左上 Y 座標
+        # - `rw` (`Float`): 幅
+        # - `rh` (`Float`): グラフ領域の高さ
+        # - `max_ms` (`Float`): グラフ縦軸の最大ミリ秒
+        # - `show_legend` (`Boolean`): 下部にカテゴリ別内訳凡例を表示するか
+        # - `can_interact` (`Boolean`): ホバー操作を許可するか
+        # - `mouse_x` (`Float`): マウス X 座標
+        # - `mouse_y` (`Float`): マウス Y 座標
+        # - `theme` (`Theme`): 現在の ImGui テーマ
+        # - 戻り値: `Float`（凡例を含む描画全体の高さ）
         def draw(rx, ry, rw, rh, max_ms, show_legend, can_interact, mouse_x, mouse_y, theme)
           f_font = theme.font || Font.default
 

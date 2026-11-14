@@ -1,9 +1,17 @@
 module Zenoo
+  # ウィンドウの生成・メインループ・2D 描画・カメラ・クリッピングを統括するモジュール。
+  # `Window.loop` でゲームループを開始し、ブロック内で `Window.draw` や `Window.draw_rect` 等の描画 API を呼び出します。
   module Window
+    # 現在の描画先レンダーターゲットを取得します（ウィンドウ画面の場合は `nil`、オフスクリーン描画中は `Image`）。
+    #
+    # - 戻り値: `Image`, `nil`
     def self.current_target
       Backend.current_target
     end
 
+    # 現在の描画先レンダーターゲットを設定します（通常は `Image.render_to` により自動管理されます）。
+    #
+    # - `target` (`Image`, `nil`): 描画先 `Image`（`nil` でメイン画面に戻す）
     def self.current_target=(target)
       Backend.current_target = target
     end
@@ -21,6 +29,9 @@ module Zenoo
     @resume_handlers = []
 
     class << self
+      # Web (Wasm) 環境等でブラウザタブが非表示になった際に、ゲームループと音声を自動一時停止するかどうかを設定します（デフォルト: `true`）。
+      #
+      # - `val` (`Boolean`): `true` で自動ポーズ有効、`false` で無効
       def auto_pause=(val)
         @auto_pause = !!val
         if Native::Window.wasm?
@@ -28,30 +39,44 @@ module Zenoo
         end
       end
 
+      # バックグラウンド移行時の自動一時停止が有効かどうかを返します。
+      #
+      # - 戻り値: `Boolean`
       def auto_pause
         @auto_pause
       end
 
+      # 自動ポーズによりゲームが一時停止中かどうかを返します。
+      #
+      # - 戻り値: `Boolean`
       def paused?
         @paused || false
       end
 
       # バックグラウンド移行（タブ非表示）時ハンドラー登録
+      #
+      # - `&block`: 一時停止時に呼び出されるコールバックブロック
       def on_pause(&block)
         @pause_handlers << block if block
       end
 
       # フォアグラウンド復帰時ハンドラー登録
+      #
+      # - `&block`: 再開時に呼び出されるコールバックブロック
       def on_resume(&block)
         @resume_handlers << block if block
       end
 
       # セーフエリアインセット [left, top, right, bottom] (仮想解像度px)
+      #
+      # - 戻り値: `Array<Float>` `[left, top, right, bottom]`
       def safe_area
         Browser.safe_area
       end
 
       # 安全表示領域の矩形 [x, y, w, h] (仮想解像度px)
+      #
+      # - 戻り値: `Array<Float>` `[x, y, width, height]`
       def safe_area_rect
         Browser.safe_area_rect
       end
@@ -94,6 +119,20 @@ module Zenoo
     end
 
     # DXRuby風メインループ (scale: nil の場合はモニターのDPIスケールを自動検出)
+    # ウィンドウを生成して毎フレーム `&block` を実行し、終了時まで制御を保ちます。
+    #
+    # - `width` (`Integer`): 論理（仮想）解像度の幅（デフォルト: 1280）
+    # - `height` (`Integer`): 論理（仮想）解像度の高さ（デフォルト: 720）
+    # - `title` (`String`): ウィンドウタイトル文字列（デフォルト: `"Zenoo"`）
+    # - `scale:` (`Numeric`, `nil`): 初期ウィンドウ拡大率（`nil` の場合は環境に応じて 1.0 等で自動初期化）
+    # - `scale_mode:` (`Symbol`): ウィンドウリサイズ時のスケーリング方式（`:fit`, `:fill`, `:stretch`, `:pixel`, `:crop` 等、デフォルト: `:fit`）
+    # - `window_width:` (`Integer`, `nil`): 実ウィンドウ幅を直接指定（`nil` の場合は `width * scale`）
+    # - `window_height:` (`Integer`, `nil`): 実ウィンドウ高さを直接指定（`nil` の場合は `height * scale`）
+    # - `fullscreen:` (`Boolean`): フルスクリーン起動するかどうか（デフォルト: `false`）
+    # - `vsync:` (`Boolean`): 垂直同期（VSync）を有効にするかどうか（デフォルト: `false`）
+    # - `msaa:` (`Integer`, `Boolean`, `nil`): マルチサンプルアンチエイリアスのサンプル数（`nil` で変更なし、`true` で 4、整数で指定数）
+    # - `fps:` (`Integer`): 目標フレームレート（0 以下で無制限、デフォルト: 60）
+    # - `&block`: 毎フレーム呼び出される更新・描画処理ブロック
     def self.loop(width = 1280, height = 720, title = "Zenoo", scale: nil, scale_mode: :fit, window_width: nil, window_height: nil, fullscreen: false, vsync: false, msaa: nil, fps: 60, &block)
       self.msaa = msaa unless msaa.nil?
       win_w = window_width ? window_width.to_i : 0
@@ -189,115 +228,194 @@ module Zenoo
     end
 
     # OSの実経過時間 (秒)
+    #
+    # - 戻り値: `Float` アプリ起動からの経過時間（秒）
     def self.real_time
       Native::Window.time
     end
 
+    # フレーム開始時の背景クリア色を 32bit RGBA 整数値として取得します。
+    #
+    # - 戻り値: `Integer` パック済み RGBA 値
     def self.bg_color
       @bg_color
     end
 
+    # フレーム開始時の背景クリア色を設定します。
+    #
+    # - `val` (`Color`, `Symbol`, `Array<Integer>`, `Integer`): 背景色（RGBA 0 〜 255、色名シンボル等）
     def self.bg_color=(val)
       @bg_color = Backend.color_to_uint32(val)
     end
 
     # 画面またはレンダーターゲットのクリア (引数省略時: 画面は背景色、Imageは透明色)
+    #
+    # - `color` (`Color`, `Symbol`, `Array<Integer>`, `nil`): クリア色（省略時は描画先に応じたデフォルト色）
     def self.clear(color = nil)
       Backend.enqueue_clear(color)
     end
 
+    # 論理（仮想）解像度の幅（ピクセル単位）を返します。
+    #
+    # - 戻り値: `Integer`
     def self.width
       Native::Window.size_w
     end
 
+    # 論理（仮想）解像度の高さ（ピクセル単位）を返します。
+    #
+    # - 戻り値: `Integer`
     def self.height
       Native::Window.size_h
     end
 
+    # 論理（仮想）解像度のサイズ `[width, height]` を返します。
+    #
+    # - 戻り値: `Array<Integer>` `[width, height]`
     def self.size
       [Native::Window.size_w, Native::Window.size_h]
     end
 
+    # 論理解像度に対するウィンドウの拡大倍率を取得します。
+    #
+    # - 戻り値: `Float`
     def self.scale
       Native::Window.window_scale
     end
 
+    # 論理解像度に対するウィンドウの拡大倍率を設定してウィンドウサイズを変更します。
+    #
+    # - `val` (`Numeric`): 拡大倍率（例: `2.0`）
     def self.scale=(val)
       Native::Window.window_scale = val.to_f
     end
 
+    # 現在の実ビューポートにおける論理座標からのスケーリング倍率を返します。
+    #
+    # - 戻り値: `Float`
     def self.viewport_scale
       Native::Window.scale
     end
 
+    # モニターの DPI スケール倍率を返します。
+    #
+    # - 戻り値: `Float`
     def self.dpi_scale
       Native::Window.dpi_scale
     end
 
+    # 現在のスケーリングモード（`:fit`, `:fill`, `:stretch`, `:pixel`, `:crop` 等）を返します。
+    #
+    # - 戻り値: `Symbol`
     def self.scale_mode
       Native::Window.scale_mode
     end
 
+    # ウィンドウリサイズ時のスケーリングモードを設定します。
+    #
+    # - `val` (`Symbol`): スケーリングモード（`:fit`, `:fill`, `:stretch`, `:pixel`, `:crop` 等）
     def self.scale_mode=(val)
       Native::Window.scale_mode = val
     end
 
+    # OS 上の実際のウィンドウサイズ `[width, height]` を取得します。
+    #
+    # - 戻り値: `Array<Integer>` `[window_width, window_height]`
     def self.window_size
       Native::Window.window_size
     end
 
+    # OS 上の実際のウィンドウサイズを設定します。
+    #
+    # - `size` (`Array<Integer>`): `[width, height]` 形式のウィンドウサイズ
     def self.window_size=(size)
       Native::Window.set_window_size(size[0].to_i, size[1].to_i)
     end
 
+    # 現在のウィンドウタイトル文字列を取得します。
+    #
+    # - 戻り値: `String`
     def self.title
       Native::Window.title
     end
 
+    # ウィンドウのタイトルバーに表示する文字列を設定します。
+    #
+    # - `val` (`String`): 新しいタイトル文字列
     def self.title=(val)
       Native::Window.title = val.to_s
       val
     end
 
+    # デスクトップ上のウィンドウ左上座標 `[x, y]` を取得します。
+    #
+    # - 戻り値: `Array<Integer>` `[x, y]`
     def self.window_position
       Native::Window.window_position
     end
 
+    # デスクトップ上のウィンドウ左上座標を設定します。
+    #
+    # - `pos` (`Array<Integer>`): `[x, y]` 形式の座標
     def self.window_position=(pos)
       if pos.is_a?(Array) && pos.length >= 2
         Native::Window.set_window_position(pos[0].to_i, pos[1].to_i)
       end
     end
 
+    # ウィンドウが現在フォーカス（入力フォーカス）を持っているかどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def self.focused?
       Native::Window.focused?
     end
 
+    # ウィンドウが最小化（アイコン化）されているかどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def self.minimized?
       Native::Window.minimized?
     end
 
+    # ウィンドウが最大化されているかどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def self.maximized?
       Native::Window.maximized?
     end
 
+    # マウスカーソルがウィンドウのクライアント領域上にあるかどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def self.hovered?
       Native::Window.hovered?
     end
 
+    # 直前フレームからの経過時間（秒単位）を返します。
+    #
+    # - 戻り値: `Float`
     def self.delta_time
       Native::Window.delta_time
     end
 
+    # 実測された現在のフレームレート（FPS）を返します。
+    #
+    # - 戻り値: `Float`
     def self.fps
       @fps || 60.0
     end
 
+    # 目標フレームレート（FPS）を設定します（`0` または `nil` で上限解除）。
+    #
+    # - `val` (`Integer`, `nil`): 目標 FPS（デフォルト: 60）
     def self.target_fps=(val)
       t = (val.nil? || val.to_i <= 0) ? 0 : val.to_i
       Native::Window.target_fps = t
     end
 
+    # 現在設定されている目標フレームレート（FPS）を返します。
+    #
+    # - 戻り値: `Integer`（`0` は無制限）
     def self.target_fps
       Native::Window.target_fps
     end
@@ -316,19 +434,29 @@ module Zenoo
       end
     end
 
+    # 垂直同期（VSync）の有効・無効を切り替えます。
+    #
+    # - `val` (`Boolean`): `true` で VSync 有効、`false` で無効
     def self.vsync=(val)
       Native::Window.vsync = (val ? 1 : 0)
     end
 
+    # メイン画面の MSAA（マルチサンプルアンチエイリアス）サンプル数を返します。
+    #
+    # - 戻り値: `Integer`（`0` は無効）
     def self.msaa
       Native::Window.msaa_samples
     end
 
+    # メイン画面の MSAA サンプル数を設定します（通常は `Window.loop` の `msaa:` 引数で起動前に指定します）。
+    #
+    # - `val` (`Integer`, `Boolean`, `nil`): サンプル数（`true` で 4、`false`/`nil`/`0` で無効）
     def self.msaa=(val)
       samples = val ? (val.is_a?(Integer) ? val : 4) : 0
       Native::Window.msaa_samples = samples
     end
 
+    # `Window.cursor=` で指定可能な標準マウスカーソル形状の定義マップ
     CURSOR_SHAPES = {
       arrow: 0,
       ibeam: 1,
@@ -342,14 +470,23 @@ module Zenoo
       not_allowed: 9
     }.freeze
 
+    # マウスカーソルの表示・非表示を設定します。
+    #
+    # - `val` (`Boolean`): `true` で表示、`false` で非表示
     def self.cursor_visible=(val)
       Native::Window.show_cursor(!!val)
     end
 
+    # 現在設定されているマウスカーソル形状を返します。
+    #
+    # - 戻り値: `Symbol`, `Integer`
     def self.cursor
       @current_cursor_shape || :arrow
     end
 
+    # マウスカーソルの形状を変更します。
+    #
+    # - `shape` (`Symbol`, `Integer`): `CURSOR_SHAPES` のキー（`:arrow`, `:ibeam`, `:crosshair`, `:hand`, `:hresize`, `:vresize`, `:resize_nwse`, `:resize_nesw`, `:resize_all`, `:not_allowed`）または形状 ID
     def self.cursor=(shape)
       @current_cursor_shape = shape
       shape_id = CURSOR_SHAPES[shape] || (shape.is_a?(Integer) ? shape : 0)
@@ -361,22 +498,37 @@ module Zenoo
     @flat_primitive_shader = nil
     @gradient_primitive_shader = nil
 
+    # デフォルトのスプライト描画用シェーダーを取得します。
+    #
+    # - 戻り値: `Shader`
     def self.default_sprite_shader
       @default_sprite_shader ||= Shader.new(Shaders::DEFAULT_SPRITE_VERTEX, Shaders::DEFAULT_SPRITE_FRAGMENT)
     end
 
+    # 単色プリミティブ描画用シェーダーを取得します。
+    #
+    # - 戻り値: `Shader`
     def self.flat_primitive_shader
       @flat_primitive_shader ||= Shader.new(Shaders::FLAT_PRIMITIVE_VERTEX, Shaders::FLAT_PRIMITIVE_FRAGMENT)
     end
 
+    # グラデーション付きプリミティブ描画用シェーダーを取得します。
+    #
+    # - 戻り値: `Shader`
     def self.gradient_primitive_shader
       @gradient_primitive_shader ||= Shader.new(Shaders::GRADIENT_PRIMITIVE_VERTEX, Shaders::GRADIENT_PRIMITIVE_FRAGMENT)
     end
 
+    # テクスチャ付きプリミティブ描画用シェーダーを取得します。
+    #
+    # - 戻り値: `Shader`
     def self.textured_primitive_shader
       @textured_primitive_shader ||= Shader.new(Shaders::TEXTURED_PRIMITIVE_VERTEX, Shaders::TEXTURED_PRIMITIVE_FRAGMENT)
     end
 
+    # `Window.draw_rect` / `Window.draw_circle` 等で使用される SDF 図形カード描画用シェーダーを取得します。
+    #
+    # - 戻り値: `Shader`
     def self.card_shader
       @card_shader ||= Shader.new(Shaders::CARD_VERTEX, Shaders::CARD_FRAGMENT)
     end
@@ -394,6 +546,9 @@ module Zenoo
       @active_camera = @camera_disabled_depth.zero? ? @camera : nil
     end
 
+    # 現在描画に実際に適用されているカメラを取得します（`Window.without_camera` ブロック内では `nil` を返します）。
+    #
+    # - 戻り値: `Camera`, `nil`
     def self.active_camera
       @active_camera
     end
@@ -402,6 +557,9 @@ module Zenoo
     # - 引数なし: 現在のカメラを取得
     # - 引数あり (ブロックなし): カメラを設定
     # - ブロックあり: ブロック内のみカメラを適用
+    #
+    # - `cam` (`Camera`, `nil`): 適用するカメラオブジェクト（省略時は現在のカメラを取得）
+    # - `&block`: 一時的にそのカメラを適用して描画を行うブロック
     def self.camera(cam = nil, &block)
       if block
         old_cam = @camera
@@ -417,12 +575,17 @@ module Zenoo
       end
     end
 
+    # 描画に使用するカメラを設定します（`nil` でカメラ解除）。
+    #
+    # - `cam` (`Camera`, `nil`): 設定するカメラオブジェクト
     def self.camera=(cam)
       @camera = cam
       __sync_active_camera
     end
 
     # カメラを一時的に無効化して UI などを画面ピクセル座標で描画
+    #
+    # - `&block`: カメラ変換を無効化した状態で描画を行うブロック
     def self.without_camera
       @camera_disabled_depth += 1
       __sync_active_camera
@@ -431,11 +594,19 @@ module Zenoo
       __sync_active_camera
     end
 
+    # 現在描画に対してカメラが有効に適用されているかどうかを返します。
+    #
+    # - 戻り値: `Boolean`
     def self.camera_enabled?
       !@active_camera.nil?
     end
 
     # 画面座標 -> ワールド座標変換 (マウス位置など)
+    # アクティブなカメラが未設定の場合はそのまま `[sx.to_f, sy.to_f]` を返します。
+    #
+    # - `sx` (`Numeric`): 画面上の X 座標（論理ピクセル単位）
+    # - `sy` (`Numeric`): 画面上の Y 座標（論理ピクセル単位）
+    # - 戻り値: `Array<Float>` `[world_x, world_y]`
     def self.to_world(sx, sy)
       if @active_camera
         @active_camera.screen_to_world(sx, sy)
@@ -445,6 +616,11 @@ module Zenoo
     end
 
     # ワールド座標 -> 画面座標変換
+    # アクティブなカメラが未設定の場合はそのまま `[wx.to_f, wy.to_f]` を返します。
+    #
+    # - `wx` (`Numeric`): ワールド空間の X 座標
+    # - `wy` (`Numeric`): ワールド空間の Y 座標
+    # - 戻り値: `Array<Float>` `[screen_x, screen_y]`
     def self.to_screen(wx, wy)
       if @active_camera
         @active_camera.world_to_screen(wx, wy)
@@ -470,6 +646,9 @@ module Zenoo
       @offset_y = val.to_f
     end
 
+    # 現在有効なクリッピング矩形 `[x, y, w, h]` を取得します（未設定時は `nil`）。
+    #
+    # - 戻り値: `Array<Float>`, `nil`
     def self.current_clip
       Backend.current_clip
     end
@@ -478,6 +657,14 @@ module Zenoo
     # - local: false => 元の画面座標系のまま指定矩形外をクリップ (Ebitengine SubImage 風)
     # - local: true  => クリップ矩形の左上を (0, 0) とするローカル相対座標系 (UI ウィンドウ用)
     # - z: Float     => クリップ全体の親キューにおける Z レベル。クリップ内部は独立して Z ソートされます。
+    #
+    # - `x` (`Numeric`): クリップ矩形の左上 X 座標
+    # - `y` (`Numeric`): クリップ矩形の左上 Y 座標
+    # - `w` (`Numeric`): クリップ矩形の幅
+    # - `h` (`Numeric`): クリップ矩形の高さ
+    # - `local:` (`Boolean`): `true` の場合、スコープ内の描画座標原点をクリップ矩形左上に設定（デフォルト: `false`）
+    # - `z:` (`Numeric`): 親描画キューにおける Z ソート順（デフォルト: `0.0`）
+    # - 戻り値: `Array<Float>` `pop_clip_scope` に渡す復元用オフセット `[prev_ox, prev_oy]`
     def self.push_clip_scope(x, y, w, h, local: false, z: 0.0)
       prev_ox = @offset_x
       prev_oy = @offset_y
@@ -520,12 +707,26 @@ module Zenoo
       [prev_ox, prev_oy]
     end
 
+    # `push_clip_scope` で開始したクリッピングスコープを終了し、座標オフセットを復元します。
+    # 通常はブロック付きの `Window.clip` の使用を推奨します。
+    #
+    # - `prev_ox` (`Float`): `push_clip_scope` が返した前の X オフセット
+    # - `prev_oy` (`Float`): `push_clip_scope` が返した前の Y オフセット
     def self.pop_clip_scope(prev_ox, prev_oy)
       Backend.pop_clip
       @offset_x = prev_ox
       @offset_y = prev_oy
     end
 
+    # 指定した矩形範囲内に描画を限定するクリッピングブロックを実行します（ネスト対応・親領域との交差で自動クリップ）。
+    #
+    # - `x` (`Numeric`): クリップ矩形の左上 X 座標
+    # - `y` (`Numeric`): クリップ矩形の左上 Y 座標
+    # - `w` (`Numeric`): クリップ矩形の幅
+    # - `h` (`Numeric`): クリップ矩形の高さ
+    # - `local:` (`Boolean`): `true` の場合、ブロック内の描画原点 `(0, 0)` をクリップ矩形左上にする（デフォルト: `false`）
+    # - `z:` (`Numeric`): 親描画キューにおける Z ソート順（デフォルト: `0.0`）
+    # - `&block`: クリップ範囲内に描画を行うブロック
     def self.clip(x, y, w, h, local: false, z: 0.0)
       prev_ox, prev_oy = push_clip_scope(x, y, w, h, local: local, z: z)
       yield
@@ -1156,22 +1357,35 @@ module Zenoo
 
     @sdf_font_shader = nil
 
+    # `Window.draw_text` で使用される SDF テキスト描画用シェーダーを取得します。
+    #
+    # - 戻り値: `Shader`
     def self.sdf_font_shader
       @sdf_font_shader ||= Shader.new(Shaders::FONT_SDF_VERTEX, Shaders::FONT_SDF_FRAGMENT)
     end
 
+    # `Window.draw_text` にブロックを渡した際に各文字ごとに渡される装飾コンテキスト。
+    # ブロック内で `c.x`, `c.y`, `c.color`, `c.scale`, `c.visible`, `c.outline_width`, `c.outline_color`, `c.weight` を書き換えることで、
+    # 波打ち・タイプライター・文字ごとの色分けなどの演出を実現できます。
     class CharContext
       attr_accessor :char, :index, :line_index, :x, :y, :w, :h, :color, :visible
       attr_accessor :outline_width, :outline_color, :weight
 
+      # この文字の拡大倍率を取得します（デフォルト: `1.0`）。
+      #
+      # - 戻り値: `Float`
       def scale
         @scale
       end
 
+      # この文字の拡大倍率を設定します。
+      #
+      # - `val` (`Numeric`): 拡大倍率
       def scale=(val)
         @scale = val
       end
 
+      # 内部用: 再利用インスタンスを次の文字の初期状態にリセットする
       def reset(char, index, gx, gy, gw, gh, default_color, def_out_w, def_out_c, def_weight = 0.0, line_index = 0)
         @char = char
         @index = index
@@ -1192,6 +1406,11 @@ module Zenoo
     @char_ctx = CharContext.new
 
     # テキスト描画幅の計算
+    #
+    # - `text` (`String`, `nil`): 計測対象の文字列
+    # - `font:` (`Font`, `nil`): 使用するフォント（省略時は `Font.default`）
+    # - `size:` (`Numeric`): フォントサイズ（ピクセル単位、デフォルト: 24）
+    # - 戻り値: `Float` ピクセル単位の描画幅
     def self.text_width(text, font: nil, size: 24)
       target_font = font || Font.default
       return 0.0 unless target_font
@@ -1199,6 +1418,12 @@ module Zenoo
     end
 
     # テキスト描画サイズの計算 [width, height] (複数行対応)
+    #
+    # - `text` (`String`, `nil`): 計測対象の文字列（`\n` による複数行に対応）
+    # - `font:` (`Font`, `nil`): 使用するフォント（省略時は `Font.default`）
+    # - `size:` (`Numeric`): フォントサイズ（ピクセル単位、デフォルト: 24）
+    # - `line_spacing:` (`Numeric`, `nil`): 行間倍率（省略時はフォントの `line_height` を使用）
+    # - 戻り値: `Array<Float>` `[width, height]`
     def self.text_size(text, font: nil, size: 24, line_spacing: nil)
       target_font = font || Font.default
       return [0.0, 0.0] unless target_font
@@ -1206,6 +1431,12 @@ module Zenoo
     end
 
     # テキスト描画高さの計算 (複数行対応)
+    #
+    # - `text` (`String`, `nil`): 計測対象の文字列（`\n` による複数行に対応）
+    # - `font:` (`Font`, `nil`): 使用するフォント（省略時は `Font.default`）
+    # - `size:` (`Numeric`): フォントサイズ（ピクセル単位、デフォルト: 24）
+    # - `line_spacing:` (`Numeric`, `nil`): 行間倍率（省略時はフォントの `line_height` を使用）
+    # - 戻り値: `Float` ピクセル単位の描画高さ
     def self.text_height(text, font: nil, size: 24, line_spacing: nil)
       target_font = font || Font.default
       return 0.0 unless target_font
@@ -1540,6 +1771,9 @@ module Zenoo
       char_offset
     end
 
+    # ベクターパス描画 (`Window.draw_path`) で共有利用される `Canvas` インスタンスを返します。
+    #
+    # - 戻り値: `Canvas`
     def self.canvas
       @canvas ||= Canvas.new
     end

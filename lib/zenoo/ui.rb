@@ -30,9 +30,11 @@ module Zenoo
         @hit_test_point ||= Collision::Point.new(0.0, 0.0)
       end
 
-      # テーマの設定または取得
-      # - 引数なし: 現在の Theme オブジェクトを返却
-      # - 引数あり: プリセット適用 or プロパティ上書き
+      # テーマの取得・設定・上書きを行う
+      #
+      # - `preset` (`Symbol | nil`): 適用するテーマプリセット名（`:modern_dark`, `:tool_dark`, `:cyber`, または `Theme.register` で登録した名前。省略時は現在のテーマを変更しない）
+      # - `overrides` (`Hash`): 上書きするテーマ属性（キーワード引数で `Theme#configure` と同じ属性を指定可能）
+      # - 戻り値: `Theme`（現在適用されているテーマオブジェクト）
       def theme(preset = nil, **overrides)
         if preset.nil? && overrides.empty?
           @theme
@@ -47,10 +49,18 @@ module Zenoo
         end
       end
 
+      # テーマを直接設定する
+      #
+      # - `val` (`Symbol | Theme`): プリセット名のシンボルまたは `Theme` インスタンス
+      # - 戻り値: `Symbol | Theme`
       def theme=(val)
         @theme = val.is_a?(Symbol) ? Theme.new(val) : val
       end
 
+      # 現在フォーカスされているウィジェットを設定する
+      #
+      # - `w` (`Widget | nil`): フォーカスを与えるウィジェット（`nil` で解除）
+      # - 戻り値: `Widget | nil`
       def focused_widget=(w)
         return if @focused_widget.equal?(w)
         old = @focused_widget
@@ -64,27 +74,45 @@ module Zenoo
         end
       end
 
+      # 現在のウィジェットフォーカスを解除する
+      #
+      # - 戻り値: `nil`
       def clear_focus
         self.focused_widget = nil
       end
 
+      # このフレームで要求するマウスカーソル形状を設定する
+      #
+      # - `shape` (`Symbol`): カーソル形状（`:arrow`, `:hand`, `:ibeam`, `:nwse` 等）
+      # - 戻り値: `Symbol`
       def set_mouse_cursor(shape)
         @requested_cursor = shape
       end
 
+      # このフレームで UI がマウス入力を捕捉したことを記録する
+      #
+      # - 戻り値: `true`
       def mark_mouse_captured!
         @mouse_captured = true
       end
 
+      # UI が現在マウス入力を捕捉しているかを返す
+      #
+      # - 戻り値: `Boolean`
       def mouse_captured?
         @mouse_captured || @prev_captured || !@active_widget.nil? || !@hovered_widget.nil?
       end
 
+      # テキストボックス等のウィジェットがキーボードフォーカスを持っているかを返す
+      #
+      # - 戻り値: `Boolean`
       def has_keyboard_focus?
         !@focused_widget.nil?
       end
 
-      # フレーム開始処理 (Window.loop で毎フレーム自動呼び出し)
+      # UI のフレーム開始処理を行う（`Window.loop` 内で毎フレーム自動呼び出し）
+      #
+      # - 戻り値: `nil`
       def begin_frame
         @prev_captured = @mouse_captured || !@active_widget.nil? || !@hovered_widget.nil?
         @mouse_captured = false
@@ -105,7 +133,9 @@ module Zenoo
         end
       end
 
-      # フレーム終了処理 (Window.loop で毎フレーム自動呼び出し)
+      # UI のフレーム終了処理（ポップアップ入力・カーソル適用等）を行う（`Window.loop` 内で自動呼び出し）
+      #
+      # - 戻り値: `nil`
       def end_frame
         # 開いているポップアップの最前面オーバーレイ描画
         if (pop = @open_popup_widget) && !pop.vanished? && pop.visible
@@ -120,12 +150,18 @@ module Zenoo
         end
       end
 
-      # ウィジェットツリーまたは配列の一括更新
+      # ウィジェットツリーまたは配列を一括更新する
+      #
+      # - `widgets` (`Widget | Array<Widget> | nil`): 更新対象のルートウィジェットまたは配列（省略時は何もしない）
+      # - 戻り値: `nil`
       def update(widgets = nil)
         Sprite.update(widgets)
       end
 
-      # ウィジェットツリーまたは配列の一括描画
+      # ウィジェットツリーまたは配列を一括描画する
+      #
+      # - `widgets` (`Widget | Array<Widget> | nil`): 描画対象のルートウィジェットまたは配列（省略時は何もしない）
+      # - 戻り値: `nil`
       def draw(widgets = nil)
         Sprite.draw(widgets)
       end

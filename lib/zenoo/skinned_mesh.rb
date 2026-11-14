@@ -105,6 +105,9 @@ module Zenoo
       }
     GLSL
 
+    # スキニング用シェーダーを返す（初回呼び出し時にコンパイル）
+    #
+    # - 戻り値: `Zenoo::Shader`
     def self.shader
       @shader ||= Shader.new(SKINNED_VERTEX_SHADER, Shaders::DEFAULT_SPRITE_FRAGMENT)
     end
@@ -112,14 +115,22 @@ module Zenoo
     attr_reader :image, :bones, :weight_map, :div_x, :div_y, :mesh, :x, :y, :anchor
     attr_accessor :z, :blend, :alpha, :color, :visible, :camera, :weight_mode
 
-    # 初期化
-    # - image:       描画するテクスチャ (Zenoo::Image)
-    # - bones:       影響を与える Bone / Sprite の配列
-    # - weight_map:  重み付け用 Zenoo::Image (省略時はボーン配置から自動生成)
-    # - weight_mode: :auto (自動判定), :gradient (2ボーン白黒補間), :rgba (4色塗り分け), :chain (多関節チェーン補間)
-    # - div_x, div_y: メッシュの横・縦分割数 (デフォルト: 16x16)
-    # - x, y:        バインド時の画像の配置基準座標 (省略時は先頭ボーンのワールド座標、ボーンがなければ 0, 0)
-    # - anchor:      画像の配置基準 (:top_left, :center, :center_left 等)
+    # スキニングメッシュを初期化する
+    #
+    # - `image` (`Image`): 描画するテクスチャ画像
+    # - `bones:` (`Array<Bone, Sprite>`): 影響を与えるボーンの配列（最大 8 本）
+    # - `weight_map:` (`Image`, `nil`): 重み付け用ウェイトマップ画像（省略時はボーン配置から自動生成）
+    # - `weight_mode:` (`Symbol`): ウェイト解釈モード（`:auto`, `:gradient`, `:rgba`, `:chain`）
+    # - `div_x:` (`Integer`): メッシュの横分割数
+    # - `div_y:` (`Integer`): メッシュの縦分割数
+    # - `x:` (`Float`, `nil`): バインド時の配置基準 X 座標（省略時は先頭ボーン位置または `0.0`）
+    # - `y:` (`Float`, `nil`): バインド時の配置基準 Y 座標
+    # - `anchor:` (`Symbol`, `Array<Float>`): 画像の配置アンカー（`:top_left`, `:center` 等）
+    # - `z:` (`Float`): 描画深度 Z
+    # - `blend:` (`Symbol`): ブレンドモード（`:alpha`, `:add` 等）
+    # - `alpha:` (`Integer`): 不透明度（`0 〜 255`）
+    # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 乗算カラー
+    # - `camera:` (`Boolean`, `Camera`): カメラ変換の追従有無
     def initialize(image,
                    bones: [],
                    weight_map: nil,
@@ -171,20 +182,31 @@ module Zenoo
       end
     end
 
+    # バインド基準 X 座標を設定する
+    #
+    # - `v` (`Float`): X 座標
     def x=(v)
       @x = v.to_f
     end
 
+    # バインド基準 Y 座標を設定する
+    #
+    # - `v` (`Float`): Y 座標
     def y=(v)
       @y = v.to_f
     end
 
+    # 画像の配置アンカーを設定する
+    #
+    # - `v` (`Symbol`, `Array<Float>`): アンカー指定（`:top_left`, `:center` 等）
     def anchor=(v)
       @anchor = v
       @anchor_x, @anchor_y = Collision.parse_anchor(v)
     end
 
     # 重み画像の設定
+    #
+    # - `img` (`Image`): ウェイトマップ画像
     def weight_map=(img)
       @weight_map = img
       if @weight_map && @weight_map.is_a?(Image)
@@ -194,6 +216,8 @@ module Zenoo
     end
 
     # 現在のボーン群のワールド姿勢を「初期姿勢（バインドポーズ）」として記憶します
+    #
+    # - 戻り値: `self`
     def bind!
       @bind_poses.clear
       @bones.first(MAX_BONES).each do |b|
@@ -223,6 +247,10 @@ module Zenoo
     end
 
     # ボーン配置から自動で滑らかな重みマップ (Image) を生成
+    #
+    # - `width:` (`Integer`): 生成するウェイトマップの幅（最小 4）
+    # - `height:` (`Integer`): 生成するウェイトマップの高さ（最小 4）
+    # - 戻り値: `Zenoo::Image`
     def generate_auto_weight_map!(width: 64, height: 64)
       w = [width.to_i, 4].max
       h = [height.to_i, 4].max
@@ -355,7 +383,11 @@ module Zenoo
       w_img
     end
 
-    # 描画
+    # スキニングメッシュを描画する
+    #
+    # - `z:` (`Float`, `nil`): 描画深度 Z の一時上書き（省略時は `@z`）
+    # - `blend:` (`Symbol`, `nil`): ブレンドモードの一時上書き
+    # - `shader:` (`Shader`, `nil`): シェーダーの一時上書き
     def draw(z: nil, blend: nil, shader: nil)
       return unless @visible && @image && @mesh
 

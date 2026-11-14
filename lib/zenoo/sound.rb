@@ -15,23 +15,39 @@ module Zenoo
     @oneshot_cache = {}
 
     class << self
+      # オーディオ経過時間（秒）を返す
+      #
+      # - 戻り値: `Float`
       def time
         @audio_time || 0.0
       end
 
+      # オーディオ更新フレーム数を返す
+      #
+      # - 戻り値: `Integer`
       def frame_count
         @audio_frame || 0
       end
 
+      # マスター音量（`0.0〜`）を取得する
+      #
+      # - 戻り値: `Float`
       def master_volume
         Native::Audio.master_volume
       end
 
+      # マスター音量（`0.0〜`）を設定する
+      #
+      # - `vol` (`Float`): マスター音量（`1.0` が等倍）
       def master_volume=(vol)
         Native::Audio.master_volume = vol.to_f
       end
 
       # バス音量取得 / 設定 (引数が2つの場合は設定)
+      #
+      # - `bus` (`Symbol`): バス名（`:master`, `:bgm`, `:se`, `:voice`）
+      # - `vol` (`Float`, `nil`): 設定する音量（省略時は現在の音量を返す）
+      # - 戻り値: `Float`
       def bus_volume(bus = :master, vol = nil)
         if vol.nil?
           b = bus.to_sym
@@ -42,6 +58,10 @@ module Zenoo
       end
 
       # バス音量設定
+      #
+      # - `bus` (`Symbol`): バス名（`:master`, `:bgm`, `:se`, `:voice`）
+      # - `vol` (`Float`): 音量倍率（`1.0` が等倍）
+      # - 戻り値: `Float`
       def set_bus_volume(bus, vol)
         b = bus.to_sym
         v = vol.to_f
@@ -58,6 +78,9 @@ module Zenoo
       end
 
       # バス音量セッター（単一引数 / 多重代入 / 2引数呼び出し対応）
+      #
+      # - `bus_or_args` (`Array`, `Hash`, `Symbol`): `[bus, vol]` 配列、`{ bus => vol }` ハッシュ、または第2引数と併用するバス名
+      # - `vol` (`Float`, `nil`): バス名指定時の音量
       def bus_volume=(bus_or_args, vol = nil)
         if vol
           set_bus_volume(bus_or_args, vol)
@@ -69,6 +92,8 @@ module Zenoo
       end
 
       # フレーム毎のオーディオ更新 (フェード制御・タイマー更新)
+      #
+      # - `dt` (`Float`, `nil`): 経過時間（秒、省略時は `Window.delta_time`）
       def update(dt = nil)
         frame_dt = dt ? dt.to_f : Window.delta_time
         @audio_time = (@audio_time || 0.0) + frame_dt
@@ -130,10 +155,12 @@ module Zenoo
         end
       end
 
+      # オーディオサブシステムを初期化する
       def init
         Native::Audio.init
       end
 
+      # オーディオサブシステムを終了しリソースを解放する
       def shutdown
         Native::Audio.shutdown
       end
@@ -149,12 +176,29 @@ module Zenoo
     attr_accessor :min_interval
     attr_accessor :dedup_frame
 
+    # ストリーミング再生モードかどうかを返す
+    #
+    # - 戻り値: `Boolean`
     def stream?
       @stream
     end
 
     class << self
       # ファイルからサウンドをロード (stream: true でストリーミング再生)
+      #
+      # - `path` (`String`): 音声ファイルのパス（WAV / MP3 / OGG 等）
+      # - `bus:` (`Symbol`): 出力先オーディオバス（`:se`, `:bgm`, `:voice` 等）
+      # - `stream:` (`Boolean`): `true` の場合はストリーミング再生（BGM 向け）
+      # - `loop:` (`Boolean`): ループ再生を有効にするか
+      # - `loop_start:` (`Float`, `nil`): ループ開始位置（秒）
+      # - `loop_end:` (`Float`, `nil`): ループ終了位置（秒）
+      # - `loop_start_sample:` (`Integer`, `nil`): ループ開始位置（PCM サンプル数）
+      # - `loop_end_sample:` (`Integer`, `nil`): ループ終了位置（PCM サンプル数）
+      # - `max_polyphony:` (`Integer`, `nil`): 同時発音数上限（省略時は 1）
+      # - `min_interval:` (`Float`): 最小連続発音間隔（秒）
+      # - `dedup_frame:` (`Boolean`): 同一フレーム内の重複再生を抑制するか
+      # - `polyphony_behavior:` (`Symbol`): 上限到達時の挙動（`:stop_oldest` または `:drop`）
+      # - 戻り値: `Zenoo::Sound`
       def load(path, bus: :se, stream: false, loop: false,
                loop_start: nil, loop_end: nil,
                loop_start_sample: nil, loop_end_sample: nil,
@@ -178,6 +222,16 @@ module Zenoo
       end
 
       # ワンショット再生用の簡易メソッド (重複抑制・同時発音数制御付き)
+      #
+      # - `path` (`String`): 音声ファイルのパス
+      # - `volume:` (`Float`): 音量（`0.0〜`）
+      # - `bus:` (`Symbol`): 出力先オーディオバス
+      # - `stream:` (`Boolean`): ストリーミング再生を行うか
+      # - `max_polyphony:` (`Integer`): 同時発音数上限
+      # - `min_interval:` (`Float`): 最小連続発音間隔（秒）
+      # - `dedup_frame:` (`Boolean`): 同一フレーム内の重複再生を抑制するか
+      # - `polyphony_behavior:` (`Symbol`): 上限到達時の挙動（`:stop_oldest` または `:drop`）
+      # - 戻り値: `Zenoo::Sound`
       def play(path, volume: 1.0, bus: :se, stream: false,
                max_polyphony: 3, min_interval: 0.03, dedup_frame: true,
                polyphony_behavior: :stop_oldest)
@@ -188,6 +242,12 @@ module Zenoo
       end
 
       # PCMサンプル配列またはバイナリ文字列から Sound インスタンスを生成
+      #
+      # - `samples` (`Array<Float>`, `String`): `-1.0〜1.0` の Float 配列またはパック済み PCM バイナリ
+      # - `channels:` (`Integer`): チャンネル数（`1`: モノラル, `2`: ステレオ）
+      # - `sample_rate:` (`Integer`): サンプリングレート（Hz）
+      # - `bus:` (`Symbol`): 出力先オーディオバス
+      # - 戻り値: `Zenoo::Sound`
       def from_pcm(samples, channels: 1, sample_rate: 44100, bus: :se)
         if samples.is_a?(Array)
           packed = samples.pack('e*')
@@ -203,6 +263,10 @@ module Zenoo
       end
     end
 
+    # サウンドインスタンスを生成する（通常は `Sound.load` や `Sound.from_pcm` を使用）
+    #
+    # - `source` (`String`, `Native::Sound`): 音声ファイルパスまたはネイティブサウンドハンドル
+    # - `stream:` (`Boolean`): ファイル読み込み時にストリーミング再生を行うか
     def initialize(source, stream: false)
       if source.is_a?(String)
         @path = source.to_s
@@ -245,6 +309,8 @@ module Zenoo
     end
 
     # 再生開始 (同一フレーム重複抑制、最小インターバル、多重発音数制限対応)
+    #
+    # - 戻り値: `self`
     def play
       cur_frame = Audio.frame_count
       cur_time = Audio.time
@@ -279,6 +345,8 @@ module Zenoo
     end
 
     # 停止 (全ボイスの再生を停止し、先頭にリセット)
+    #
+    # - 戻り値: `self`
     def stop
       @fade_speed = 0.0
       i = 0
@@ -290,6 +358,8 @@ module Zenoo
     end
 
     # 一時停止 (全ボイスの再生位置を保持して停止)
+    #
+    # - 戻り値: `self`
     def pause
       @fade_speed = 0.0
       i = 0
@@ -301,6 +371,10 @@ module Zenoo
     end
 
     # フェードイン再生
+    #
+    # - `duration` (`Float`): フェードイン所要時間（秒）
+    # - `target_volume:` (`Float`, `nil`): 目標ベース音量（省略時は現在の `volume`）
+    # - 戻り値: `self`
     def fade_in(duration = 1.0, target_volume: nil)
       @base_volume = target_volume.to_f if target_volume
       @fade_volume = 0.0
@@ -315,6 +389,10 @@ module Zenoo
     end
 
     # フェードアウト
+    #
+    # - `duration` (`Float`): フェードアウト所要時間（秒）
+    # - `stop_on_complete:` (`Boolean`): 完了時に完全停止するか（`false` の場合は一時停止）
+    # - 戻り値: `self`
     def fade_out(duration = 1.0, stop_on_complete: true)
       return self unless playing?
       @fade_target = 0.0
@@ -327,6 +405,8 @@ module Zenoo
     end
 
     # フェード中かどうか
+    #
+    # - 戻り値: `Boolean`
     def fading?
       @fade_speed != 0.0
     end
@@ -368,6 +448,8 @@ module Zenoo
     end
 
     # 再生中かどうか (いずれかのボイスが再生中であれば true)
+    #
+    # - 戻り値: `Boolean`
     def playing?
       i = 0
       while i < @voices.length
@@ -378,20 +460,30 @@ module Zenoo
     end
 
     # ユーザー設定音量 (0.0 .. 1.0 またはそれ以上)
+    #
+    # - 戻り値: `Float`
     def volume
       @base_volume
     end
 
+    # ユーザー設定音量を設定する
+    #
+    # - `vol` (`Float`): 音量倍率（`1.0` が基準）
     def volume=(vol)
       @base_volume = vol.to_f
       __update_volume
     end
 
     # ループ再生フラグ
+    #
+    # - 戻り値: `Boolean`
     def looping?
       @native.looping?
     end
 
+    # ループ再生の有効/無効を設定する
+    #
+    # - `loop_flag` (`Boolean`): ループする場合 `true`
     def looping=(loop_flag)
       flag = !!loop_flag
       i = 0
@@ -403,10 +495,15 @@ module Zenoo
     end
 
     # ピッチ / 再生速度
+    #
+    # - 戻り値: `Float`
     def pitch
       @native.pitch
     end
 
+    # ピッチ / 再生速度を設定する
+    #
+    # - `p` (`Float`): ピッチ倍率（`1.0` が原音）
     def pitch=(p)
       val = p.to_f
       i = 0
@@ -418,10 +515,15 @@ module Zenoo
     end
 
     # パン (-1.0: 左, 0.0: 中央, 1.0: 右)
+    #
+    # - 戻り値: `Float`
     def pan
       @native.pan
     end
 
+    # ステレオ定位パンを設定する
+    #
+    # - `p` (`Float`): `-1.0`（左）〜 `0.0`（中央）〜 `1.0`（右）
     def pan=(p)
       val = p.to_f
       i = 0
@@ -433,6 +535,9 @@ module Zenoo
     end
 
     # シーク (秒数)
+    #
+    # - `seconds` (`Float`): 移動先の再生位置（秒）
+    # - 戻り値: `self`
     def seek(seconds)
       sec = seconds.to_f
       i = 0
@@ -444,25 +549,36 @@ module Zenoo
     end
 
     # 現在の再生位置 (秒数)
+    #
+    # - 戻り値: `Float`
     def time
       @native.cursor
     end
 
+    # 現在の再生位置（秒数）を指定位置へシークする
+    #
+    # - `seconds` (`Float`): 移動先の再生位置（秒）
     def time=(seconds)
       seek(seconds)
     end
 
     # サウンドの全長 (秒数)
+    #
+    # - 戻り値: `Float`
     def length
       @native.length
     end
 
     # サンプリングレート (Hz)
+    #
+    # - 戻り値: `Integer`
     def sample_rate
       @native.sample_rate
     end
 
     # サウンドの全長 (PCMサンプル数)
+    #
+    # - 戻り値: `Integer`
     def length_pcm
       @native.length_pcm
     end
@@ -470,6 +586,11 @@ module Zenoo
     # ==========================================
     # ループポイント制御 (イントロ付きループ等)
     # ==========================================
+    # ループ区間を秒単位で設定する（イントロ付き BGM 等）
+    #
+    # - `start` (`Float`): ループ開始位置（秒）
+    # - `end_point` (`Float`): ループ終了位置（秒、`0.0` で終端）
+    # - 戻り値: `self`
     def set_loop_points(start = 0.0, end_point = 0.0)
       s_sec = start.to_f
       e_sec = end_point.to_f
@@ -481,6 +602,11 @@ module Zenoo
       self
     end
 
+    # ループ区間を PCM サンプル単位で設定する
+    #
+    # - `start_pcm` (`Integer`): ループ開始位置（サンプル数）
+    # - `end_pcm` (`Integer`): ループ終了位置（サンプル数、`0` で終端）
+    # - 戻り値: `self`
     def set_loop_points_pcm(start_pcm = 0, end_pcm = 0)
       s_frame = start_pcm.to_i
       e_frame = end_pcm.to_i
@@ -492,10 +618,16 @@ module Zenoo
       self
     end
 
+    # ループ開始位置（秒）を返す
+    #
+    # - 戻り値: `Float`
     def loop_start
       @native.loop_start
     end
 
+    # ループ開始位置（秒）を設定する
+    #
+    # - `sec` (`Float`): ループ開始位置（秒）
     def loop_start=(sec)
       s_sec = sec.to_f
       i = 0
@@ -506,10 +638,16 @@ module Zenoo
       s_sec
     end
 
+    # ループ終了位置（秒）を返す
+    #
+    # - 戻り値: `Float`
     def loop_end
       @native.loop_end
     end
 
+    # ループ終了位置（秒）を設定する
+    #
+    # - `sec` (`Float`): ループ終了位置（秒）
     def loop_end=(sec)
       e_sec = sec.to_f
       i = 0
@@ -520,10 +658,16 @@ module Zenoo
       e_sec
     end
 
+    # ループ開始位置（PCM サンプル数）を返す
+    #
+    # - 戻り値: `Integer`
     def loop_start_sample
       @native.loop_start_pcm
     end
 
+    # ループ開始位置（PCM サンプル数）を設定する
+    #
+    # - `pcm` (`Integer`): サンプル位置
     def loop_start_sample=(pcm)
       val = pcm.to_i
       i = 0
@@ -534,10 +678,16 @@ module Zenoo
       val
     end
 
+    # ループ終了位置（PCM サンプル数）を返す
+    #
+    # - 戻り値: `Integer`
     def loop_end_sample
       @native.loop_end_pcm
     end
 
+    # ループ終了位置（PCM サンプル数）を設定する
+    #
+    # - `pcm` (`Integer`): サンプル位置
     def loop_end_sample=(pcm)
       val = pcm.to_i
       i = 0
@@ -548,10 +698,16 @@ module Zenoo
       val
     end
 
+    # ループポイントが設定されているかを返す
+    #
+    # - 戻り値: `Boolean`
     def has_loop_points?
       @native.has_loop_points?
     end
 
+    # 設定済みのループポイントをクリアする
+    #
+    # - 戻り値: `self`
     def clear_loop_points
       i = 0
       while i < @voices.length

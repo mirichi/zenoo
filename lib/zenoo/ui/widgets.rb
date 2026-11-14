@@ -9,6 +9,23 @@ module Zenoo
       attr_reader :text, :size
       attr_accessor :text_color, :align, :valign, :font, :outline_width, :outline_color
 
+      # テキストラベルを初期化する
+      #
+      # - `text` (`String`): 表示する文字列（デフォルト `""`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float | nil`): 幅（省略時はテキスト幅から自動計測）
+      # - `height` (`Float | nil`): 高さ（省略時はフォントサイズから自動計算）
+      # - `size` (`Integer | nil`): フォントサイズ（ピクセル単位、省略時はテーマ既定値）
+      # - `color` (`Color | Symbol | Array | nil`): テキスト色（`0..255` 基準、省略時はテーマ準拠）
+      # - `align` (`Symbol`): 水平揃え（`:left`, `:center`, `:right`、デフォルト `:left`）
+      # - `valign` (`Symbol`): 垂直揃え（`:top`, `:center`, `:bottom`、デフォルト `:center`）
+      # - `font` (`Font | nil`): 使用するフォント（省略時はテーマまたは `Font.default`）
+      # - `outline_width` (`Float`): 縁取りの太さ（デフォルト `0.0`）
+      # - `outline_color` (`Color | Symbol | Array`): 縁取りの色（`0..255` 基準、デフォルト `:black`）
+      # - `interactive` (`Boolean`): 当たり判定の対象とするか（デフォルト `false`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - 戻り値: `Label`
       def initialize(text = "", x = 0.0, y = 0.0, width: nil, height: nil,
                      size: nil, color: nil, align: :left, valign: :center,
                      font: nil, outline_width: 0.0, outline_color: :black,
@@ -32,6 +49,10 @@ module Zenoo
         super(x, y, width: w, height: h, interactive: interactive, **opts)
       end
 
+      # 表示文字列を設定する（幅が自動計測設定の場合は幅も再計算される）
+      #
+      # - `val` (`String`): 新しい文字列
+      # - 戻り値: `Float | nil`
       def text=(val)
         s = val.to_s
         return if @text == s
@@ -43,6 +64,10 @@ module Zenoo
         end
       end
 
+      # フォントサイズを設定する（高さが自動計算設定の場合は高さも再計算される）
+      #
+      # - `val` (`Integer | nil`): フォントサイズ（ピクセル単位、`nil` でテーマ既定値を使用）
+      # - 戻り値: `Float | Integer | nil`
       def size=(val)
         @size = val ? val.to_i : nil
         if @auto_h
@@ -92,6 +117,15 @@ module Zenoo
     class Divider < Widget
       attr_accessor :line_color
 
+      # 水平区切り線を初期化する
+      #
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `200.0`）
+      # - `height` (`Float`): ウィジェット高さ（線は中央に 1px で描画、デフォルト `10.0`）
+      # - `color` (`Color | Symbol | Array | nil`): 線の色（`0..255` 基準、省略時はテーマ準拠）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - 戻り値: `Divider`
       def initialize(x = 0.0, y = 0.0, width: 200.0, height: 10.0, color: nil, **opts)
         @line_color = color
         super(x, y, width: width, height: height, interactive: false, **opts)
@@ -112,6 +146,12 @@ module Zenoo
     # Spacer (空白調整用ウィジェット)
     # ==========================================================================
     class Spacer < Widget
+      # レイアウト余白・伸縮用スペーサーを初期化する
+      #
+      # - `size` (`Float`): 幅・高さの初期サイズ（ピクセル、デフォルト `8.0`）
+      # - `flex` (`Float | nil`): 親 `Box` 内でのフレックス伸長係数
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - 戻り値: `Spacer`
       def initialize(size = 8.0, flex: nil, **opts)
         s = size.to_f
         super(0.0, 0.0, width: s, height: s, flex: flex, interactive: false, **opts)
@@ -128,6 +168,21 @@ module Zenoo
     class ImageBox < Widget
       attr_accessor :fit, :bg_color, :border_color, :border_width, :radius
 
+      # 画像表示ウィジェットを初期化する
+      #
+      # - `image` (`Image | nil`): 表示する画像オブジェクト
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float | nil`): 表示枠の幅（省略時は画像幅または `64.0`）
+      # - `height` (`Float | nil`): 表示枠の高さ（省略時は画像高さまたは `64.0`）
+      # - `fit` (`Symbol`): 画像フィット方式（`:contain`, `:stretch`, `:center`、デフォルト `:contain`）
+      # - `bg_color` (`Color | Symbol | Array | nil`): 背景色（`0..255` 基準）
+      # - `border_color` (`Color | Symbol | Array | nil`): 枠線色（`0..255` 基準）
+      # - `border_width` (`Float`): 枠線の太さ（デフォルト `0.0`）
+      # - `radius` (`Float`): 背景枠の角丸半径（デフォルト `4.0`）
+      # - `interactive` (`Boolean`): 当たり判定の対象とするか（デフォルト `false`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - 戻り値: `ImageBox`
       def initialize(image = nil, x = 0.0, y = 0.0, width: nil, height: nil,
                      fit: :contain, bg_color: nil, border_color: nil, border_width: 0.0, radius: 4.0,
                      interactive: false, **opts)
@@ -206,6 +261,24 @@ module Zenoo
     class Button < Widget
       attr_accessor :label, :icon, :active, :bg_color, :hover_color, :active_color, :text_color, :radius, :font_size
 
+      # ボタンを初期化する
+      #
+      # - `label` (`String`): 表示ラベル（デフォルト `"Button"`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `140.0`）
+      # - `height` (`Float`): 高さ（デフォルト `38.0`）
+      # - `icon` (`Image | nil`): 左側または中央に表示するアイコン画像
+      # - `active` (`Boolean`): トグルアクティブ状態（デフォルト `false`）
+      # - `bg_color` (`Color | Symbol | Array | nil`): 通常時の背景色（`0..255` 基準）
+      # - `hover_color` (`Color | Symbol | Array | nil`): ホバー時の背景色（`0..255` 基準）
+      # - `active_color` (`Color | Symbol | Array | nil`): 押下・アクティブ時の背景色（`0..255` 基準）
+      # - `text_color` (`Color | Symbol | Array | nil`): ラベル文字色（`0..255` 基準）
+      # - `radius` (`Float | nil`): 角丸半径（省略時はテーマ準拠）
+      # - `font_size` (`Integer | nil`): フォントサイズ（省略時はテーマ準拠）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: クリック時コールバック（`on_click`）
+      # - 戻り値: `Button`
       def initialize(label = "Button", x = 0.0, y = 0.0, width: 140.0, height: 38.0,
                      icon: nil, active: false,
                      bg_color: nil, hover_color: nil, active_color: nil, text_color: nil,
@@ -329,6 +402,17 @@ module Zenoo
     class Checkbox < Widget
       attr_accessor :label, :checked
 
+      # チェックボックスを初期化する
+      #
+      # - `label` (`String`): 横に表示するラベル文字列（デフォルト `""`）
+      # - `checked` (`Boolean`): 初期チェック状態（デフォルト `false`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float | nil`): 幅（省略時はボックス＋ラベル幅から自動計算）
+      # - `height` (`Float`): 高さ（デフォルト `28.0`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: チェック状態変更時コールバック（`on_change`、新しい `Boolean` を渡す）
+      # - 戻り値: `Checkbox`
       def initialize(label = "", checked = false, x = 0.0, y = 0.0, width: nil, height: 28.0, **opts, &block)
         @label   = label.to_s
         @checked = !!checked
@@ -339,6 +423,9 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # 現在チェックされているかを返す
+      #
+      # - 戻り値: `Boolean`
       def checked?
         @checked
       end
@@ -409,6 +496,19 @@ module Zenoo
     class RadioButton < Widget
       attr_accessor :label, :checked, :group, :value
 
+      # ラジオボタンを初期化する
+      #
+      # - `label` (`String`): 横に表示するラベル文字列（デフォルト `""`）
+      # - `checked` (`Boolean`): 初期選択状態（デフォルト `false`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float | nil`): 幅（省略時は自動計算）
+      # - `height` (`Float`): 高さ（デフォルト `28.0`）
+      # - `group` (`Symbol | String | nil`): 排他選択を行うグループ識別子（同一親内で一致する兄弟を自動 OFF 化する）
+      # - `value` (`Object | nil`): 選択時に `on_change` コールバックへ渡す値（省略時は `true`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: 選択時コールバック（`on_change`）
+      # - 戻り値: `RadioButton`
       def initialize(label = "", checked = false, x = 0.0, y = 0.0, width: nil, height: 28.0,
                      group: nil, value: nil, **opts, &block)
         @label   = label.to_s
@@ -422,6 +522,9 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # 現在選択されているかを返す
+      #
+      # - 戻り値: `Boolean`
       def checked?
         @checked
       end
@@ -498,6 +601,21 @@ module Zenoo
     class ProgressBar < Widget
       attr_accessor :value, :min, :max, :label, :fill_color, :bg_color, :show_percentage
 
+      # プログレスバーを初期化する
+      #
+      # - `value` (`Float`): 初期値（デフォルト `0.5`）
+      # - `min` (`Float`): 最小値（デフォルト `0.0`）
+      # - `max` (`Float`): 最大値（デフォルト `1.0`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `200.0`）
+      # - `height` (`Float`): 高さ（デフォルト `22.0`）
+      # - `label` (`String | nil`): 中央に表示するカスタムラベル文字列
+      # - `fill_color` (`Color | Symbol | Array | nil`): ゲージ塗りつぶし色（`0..255` 基準、省略時はテーマ準拠）
+      # - `bg_color` (`Color | Symbol | Array | nil`): トラック背景色（`0..255` 基準、省略時はテーマ準拠）
+      # - `show_percentage` (`Boolean`): `label` 未指定時にパーセンテージ文字列を表示するか（デフォルト `false`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - 戻り値: `ProgressBar`
       def initialize(value = 0.5, min = 0.0, max = 1.0, x = 0.0, y = 0.0, width: 200.0, height: 22.0,
                      label: nil, fill_color: nil, bg_color: nil, show_percentage: false, **opts)
         @value           = value.to_f
@@ -511,6 +629,9 @@ module Zenoo
         super(x, y, width: width, height: height, interactive: false, **opts)
       end
 
+      # 最小値から最大値までの進行割合（`0.0..1.0`）を返す
+      #
+      # - 戻り値: `Float`
       def ratio
         range = @max - @min
         return 0.0 if range <= 0.00001
@@ -578,6 +699,22 @@ module Zenoo
       attr_accessor :label, :min, :max, :step, :unit, :format
       attr_reader :value
 
+      # スライダーを初期化する
+      #
+      # - `label` (`String`): 上部左に表示するラベル文字列（デフォルト `""`）
+      # - `value` (`Float`): 初期値（デフォルト `0.0`）
+      # - `min` (`Float`): 最小値（デフォルト `0.0`）
+      # - `max` (`Float`): 最大値（デフォルト `100.0`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `220.0`）
+      # - `height` (`Float`): 高さ（デフォルト `42.0`）
+      # - `step` (`Float | nil`): 値の刻み幅（`nil` で連続値）
+      # - `unit` (`String`): 値表示の末尾に付ける単位文字列（デフォルト `""`）
+      # - `format` (`String | nil`): 値表示の `sprintf` フォーマット（例 `"%.2f"`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: 値変更時コールバック（`on_change`）
+      # - 戻り値: `Slider`
       def initialize(label = "", value = 0.0, min = 0.0, max = 100.0,
                      x = 0.0, y = 0.0, width: 220.0, height: 42.0,
                      step: nil, unit: "", format: nil, **opts, &block)
@@ -593,6 +730,10 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # スライダーの現在値を設定する（`min..max` と `step` に従って丸められる）
+      #
+      # - `val` (`Numeric`): 設定する値
+      # - 戻り値: `Float | nil`
       def value=(val)
         nv = clamp_and_step(val.to_f)
         return if (@value - nv).abs < 0.00001
@@ -740,6 +881,21 @@ module Zenoo
       attr_accessor :label, :min, :max, :step, :format
       attr_reader :value
 
+      # スピナーを初期化する
+      #
+      # - `label` (`String`): 左側に表示するラベル文字列（デフォルト `""`）
+      # - `value` (`Numeric`): 初期値（デフォルト `0`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `min` (`Numeric | nil`): 最小値（`nil` で下限なし）
+      # - `max` (`Numeric | nil`): 最大値（`nil` で上限なし）
+      # - `step` (`Numeric`): `[−]`/`[+]` ボタン押下時の増減量（デフォルト `1`）
+      # - `width` (`Float`): 幅（デフォルト `220.0`）
+      # - `height` (`Float`): 高さ（デフォルト `34.0`）
+      # - `format` (`String | nil`): 値表示の `sprintf` フォーマット
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: 値変更時コールバック（`on_change`）
+      # - 戻り値: `Spinner`
       def initialize(label = "", value = 0, x = 0.0, y = 0.0,
                      min: nil, max: nil, step: 1,
                      width: 220.0, height: 34.0,
@@ -756,6 +912,10 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # スピナーの現在値を設定する（`min..max` にクランプされる）
+      #
+      # - `val` (`Numeric`): 設定する値
+      # - 戻り値: `Numeric`
       def value=(val)
         @value = clamp_val(val)
       end
@@ -910,6 +1070,17 @@ module Zenoo
       attr_accessor :items
       attr_reader :selected_index
 
+      # タブバーを初期化する
+      #
+      # - `items` (`Array<String>`): タブ項目のラベル配列
+      # - `selected_index` (`Integer`): 初期選択タブのインデックス（デフォルト `0`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `300.0`）
+      # - `height` (`Float`): 高さ（デフォルト `36.0`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: タブ選択変更時コールバック（`on_change`、選択インデックスを渡す）
+      # - 戻り値: `Tabs`
       def initialize(items = [], selected_index = 0, x = 0.0, y = 0.0, width: 300.0, height: 36.0, **opts, &block)
         @items          = items.map(&:to_s)
         @selected_index = selected_index.to_i
@@ -919,10 +1090,17 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # 選択中のタブインデックスを設定する（範囲内へクランプされる）
+      #
+      # - `idx` (`Integer`): 新しいインデックス
+      # - 戻り値: `Integer`
       def selected_index=(idx)
         @selected_index = idx.to_i.clamp(0, [@items.length - 1, 0].max)
       end
 
+      # 現在選択されているタブの文字列を返す
+      #
+      # - 戻り値: `String | nil`
       def selected_item
         @items[@selected_index]
       end
@@ -1011,6 +1189,17 @@ module Zenoo
       attr_accessor :placeholder
       attr_reader :text, :cursor_pos
 
+      # テキスト入力ボックスを初期化する
+      #
+      # - `text` (`String`): 初期テキスト文字列（デフォルト `""`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `220.0`）
+      # - `height` (`Float`): 高さ（デフォルト `38.0`）
+      # - `placeholder` (`String`): 未入力時に表示するプレースホルダ文字列（デフォルト `""`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: テキスト変更時コールバック（`on_change`）
+      # - 戻り値: `TextBox`
       def initialize(text = "", x = 0.0, y = 0.0, width: 220.0, height: 38.0,
                      placeholder: "", **opts, &block)
         @text        = text.to_s.dup
@@ -1021,6 +1210,10 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # 入力テキストを設定する（キャレット位置もテキスト長内に調整される）
+      #
+      # - `val` (`String`): 新しいテキスト文字列
+      # - 戻り値: `Integer | nil`
       def text=(val)
         @text = val.to_s.dup
         @cursor_pos = @text.length if @cursor_pos > @text.length
@@ -1204,6 +1397,18 @@ module Zenoo
       attr_accessor :label, :items
       attr_reader :selected_index, :open
 
+      # ドロップダウンを初期化する
+      #
+      # - `items` (`Array<String>`): 選択肢の文字列配列
+      # - `selected_index` (`Integer`): 初期選択インデックス（デフォルト `0`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `200.0`）
+      # - `height` (`Float`): 高さ（デフォルト `36.0`）
+      # - `label` (`String`): 左側に表示するラベル接頭辞（デフォルト `""`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: 選択変更時コールバック（`on_change`、選択インデックスを渡す）
+      # - 戻り値: `Dropdown`
       def initialize(items = [], selected_index = 0, x = 0.0, y = 0.0, width: 200.0, height: 36.0,
                      label: "", **opts, &block)
         @items          = items.map(&:to_s)
@@ -1216,18 +1421,33 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # 選択中の項目インデックスを設定する（範囲内へクランプされる）
+      #
+      # - `idx` (`Integer`): 新しいインデックス
+      # - 戻り値: `Integer`
       def selected_index=(idx)
         @selected_index = idx.to_i.clamp(0, [@items.length - 1, 0].max)
       end
 
+      # 現在選択されている項目の文字列を返す
+      #
+      # - 戻り値: `String | nil`
       def selected_item
         @items[@selected_index]
       end
 
+      # カーソル形状を返す（`:hand`）
+      #
+      # - 戻り値: `Symbol`
       def hover_cursor_shape
         :hand
       end
 
+      # ポインター押下時にポップアップの開閉を切り替える
+      #
+      # - `_mx` (`Float`): マウス X 座標
+      # - `_my` (`Float`): マウス Y 座標
+      # - 戻り値: `Dropdown | nil`
       def on_pointer_down(_mx, _my)
         super
         if @open
@@ -1237,11 +1457,17 @@ module Zenoo
         end
       end
 
+      # 選択肢ポップアップを開く
+      #
+      # - 戻り値: `Dropdown`
       def open_popup!
         @open = true
         UI.open_popup_widget = self
       end
 
+      # 選択肢ポップアップを閉じる
+      #
+      # - 戻り値: `nil`
       def close_popup!
         @open = false
         @hover_item_idx = nil
@@ -1380,6 +1606,18 @@ module Zenoo
       attr_accessor :items, :item_height
       attr_reader :selected_index, :scroll_y
 
+      # リストボックスを初期化する
+      #
+      # - `items` (`Array<String>`): 表示する項目の文字列配列
+      # - `selected_index` (`Integer`): 初期選択インデックス（デフォルト `0`）
+      # - `x` (`Float`): X座標（デフォルト `0.0`）
+      # - `y` (`Float`): Y座標（デフォルト `0.0`）
+      # - `width` (`Float`): 幅（デフォルト `240.0`）
+      # - `height` (`Float`): 高さ（デフォルト `150.0`）
+      # - `item_height` (`Float`): 1行あたりの項目高さ（デフォルト `28.0`）
+      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
+      # - `&block`: 選択変更時コールバック（`on_change`、選択インデックスを渡す）
+      # - 戻り値: `ListBox`
       def initialize(items = [], selected_index = 0, x = 0.0, y = 0.0, width: 240.0, height: 150.0,
                      item_height: 28.0, **opts, &block)
         @items          = items.map(&:to_s)
@@ -1393,26 +1631,45 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # 選択中の項目インデックスを設定する（範囲内へクランプされる）
+      #
+      # - `idx` (`Integer`): 新しいインデックス
+      # - 戻り値: `Integer`
       def selected_index=(idx)
         @selected_index = idx.to_i.clamp(0, [@items.length - 1, 0].max)
       end
 
+      # 現在選択されている項目の文字列を返す
+      #
+      # - 戻り値: `String | nil`
       def selected_item
         @items[@selected_index]
       end
 
+      # 全項目を並べた場合の総高さを返す
+      #
+      # - 戻り値: `Float`
       def total_content_height
         @items.length.to_f * @item_height + 8.0
       end
 
+      # 表示枠の内側高さを返す
+      #
+      # - 戻り値: `Float`
       def inner_height
         [height - 4.0, 1.0].max
       end
 
+      # スクロール可能な最大オフセット量を返す
+      #
+      # - 戻り値: `Float`
       def max_scroll
         [total_content_height - inner_height, 0.0].max
       end
 
+      # リストがスクロールバーを必要としているかを返す
+      #
+      # - 戻り値: `Boolean`
       def needs_scroll?
         max_scroll > 0.5
       end
