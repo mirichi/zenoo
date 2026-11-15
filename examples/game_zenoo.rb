@@ -425,7 +425,7 @@ class DamageText
     @vanished = false
   end
 
-  def vanish
+  def vanish!
     @vanished = true
   end
 
@@ -436,7 +436,7 @@ class DamageText
   def update
     @y -= 1.2
     @life -= 1
-    vanish if @life <= 0
+    vanish! if @life <= 0
   end
 
   def draw
@@ -463,7 +463,7 @@ class Bullet < Sprite
     self.x += @vx
     self.y += @vy
     @traveled += 16.0
-    vanish if @traveled > 1400.0
+    vanish! if @traveled > 1400.0
   end
 
   def draw
@@ -492,7 +492,7 @@ class Missile < Sprite
   def update(enemies, vfx = nil)
     @life -= 1
     if @life <= 0
-      vanish
+      vanish!
       @exploded = true
       return
     end
@@ -527,7 +527,7 @@ class Missile < Sprite
   end
 
   def explode
-    vanish
+    vanish!
     @exploded = true
   end
 
@@ -581,7 +581,7 @@ class Item < Sprite
   def update(px, py, magnet_radius)
     @life -= 1
     if @life <= 0
-      vanish
+      vanish!
       return
     end
 
@@ -1340,7 +1340,7 @@ class Game
 
     # 1. 通常弾 vs 敵 (Sprite.check: Sweep and Prune による一括高速判定)
     Sprite.check(@bullets, @enemies) do |b, e|
-      b.vanish
+      b.vanish!
       damage_enemy(e, b.damage, Color::YELLOW)
     end
 
@@ -1382,7 +1382,7 @@ class Game
     # 7. アイテム取得判定 (自機 vs アイテム: Sprite.check)
     unless @player_dead
       Sprite.check(@player, @items) do |p, item|
-        item.vanish
+        item.vanish!
         if item.kind == 1
           pick_heart(item)
         else
@@ -1463,7 +1463,7 @@ class Game
     @vfx.emit_hit(e.x, e.y, text_color)
 
     if e.hp <= 0
-      e.vanish
+      e.vanish!
       kill_enemy(e)
     end
   end

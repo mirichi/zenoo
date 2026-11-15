@@ -730,7 +730,7 @@ module Zenoo
   # Zenoo::Tweenable - Sprite 等に Tween 機能を組み込むモジュール
   # ====================================================================
   # 各オブジェクト単位で Tween を保持・管理することで、
-  # オブジェクト破棄 (vanish) 時の自動停止や、ヒットストップ・ポーズとの
+  # オブジェクト破棄 (vanish!) 時の自動停止や、ヒットストップ・ポーズとの
   # 親和性を高めます。
   # ====================================================================
   module Tweenable
@@ -744,7 +744,7 @@ module Zenoo
     # 新しい Tween を作成し、このオブジェクトの管理下に登録して返す
     # ※ グローバルマネージャ (Zenoo::Tween) には登録されず、このオブジェクトの更新に同期します
     # 例: sprite.tween.to(0.5, x: 200, ease: :quad_out)
-    #     sprite.tween.delay(0.2).to(0.3, alpha: 0.0).call { sprite.vanish }
+    #     sprite.tween.delay(0.2).to(0.3, alpha: 0.0).call { sprite.vanish! }
     #
     # - 戻り値: `Tween`
     def tween

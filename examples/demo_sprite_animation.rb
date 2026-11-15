@@ -490,7 +490,7 @@ class SlashEffect < Zenoo::Sprite
     t = @timer.to_f / LIFE
     self.alpha = (255.0 * t).clamp(0, 255).to_i
     self.scale = 1.0 + (1.0 - t) * 0.18
-    vanish if @timer <= 0
+    vanish! if @timer <= 0
   end
 end
 
@@ -632,7 +632,7 @@ class SlimeEnemy < Zenoo::Sprite
 
     if @dying
       self.alpha = (255.0 * (1.0 - (elapsed - 26) / 12.0)).clamp(0, 255).to_i if elapsed >= 26
-      vanish if @hit_timer <= 0
+      vanish! if @hit_timer <= 0
     end
 
     return [ROUND_SX, ROUND_SY] if elapsed < BOUNCE_END

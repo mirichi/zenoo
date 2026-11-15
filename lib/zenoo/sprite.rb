@@ -199,12 +199,12 @@ module Zenoo
 
     # ライフサイクル管理 (消滅)
     # スプライトに消滅フラグを立て、実行中の全 Tween を停止します（`Sprite.clean` で配列から一括除去されます）。
-    def vanish
+    def vanish!
       @vanished = true
       kill_tweens
     end
 
-    # `vanish` によって消滅済みとしてマークされているかどうかを返します。
+    # `vanish!` によって消滅済みとしてマークされているかどうかを返します。
     #
     # - 戻り値: `Boolean`
     def vanished?

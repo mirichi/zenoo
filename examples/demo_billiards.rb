@@ -33,10 +33,10 @@ class Spark
     @vx *= 0.92
     @vy *= 0.92
     @life -= 1
-    vanish if @life <= 0
+    vanish! if @life <= 0
   end
 
-  def vanish
+  def vanish!
     @vanished = true
   end
 
