@@ -308,7 +308,11 @@ module Zenoo
       # - 戻り値: `UI::Widget`
       def custom(x = 0.0, y = 0.0, width: 100.0, height: 32.0, collider: nil, **opts, &block)
         w = add(Widget.new(x, y, width: width, height: height, **opts))
-        w.set_collider(collider) if collider
+        if collider.is_a?(Array)
+          w.set_collider(*collider)
+        elsif collider
+          w.set_collider(collider)
+        end
         w.on_draw(&block) if block
         w
       end

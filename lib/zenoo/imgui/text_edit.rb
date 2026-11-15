@@ -29,6 +29,18 @@ module Zenoo
           best_idx
         end
 
+        def compute_scroll_x(str, cursor_pos, rw, theme)
+          f_font = theme.font || Font.default
+          f_size = theme.font_size.to_i
+          f_size = 14 if f_size <= 0
+          cp = cursor_pos.to_i.clamp(0, str.length)
+          sub_str = str[0...cp] || ""
+          caret_ox = f_font.text_width(sub_str, f_size)
+          avail_w = [rw.to_f - 24.0, 10.0].max
+          scroll_x = caret_ox > avail_w ? (caret_ox - avail_w) : 0.0
+          [caret_ox, scroll_x]
+        end
+
         # フォーカス中のテキスト編集および IME 候補ウィンドウ座標同期を処理する
         #
         # - `cur_text` (`String`): 現在のテキスト文字列
@@ -37,21 +49,18 @@ module Zenoo
         # - `ry` (`Float`): テキストボックス上端 Y 座標
         # - `rh` (`Float`): テキストボックス高さ
         # - `theme` (`Theme`): 現在の ImGui テーマ
+        # - `rw` (`Float`): テキストボックス幅（水平スクロール計算用）
         # - 戻り値: `Array`（`[updated_text, updated_cursor_pos, reset_blink, unfocus]`）
-        def process_focused_input(cur_text, cursor_pos, rx, ry, rh, theme)
+        def process_focused_input(cur_text, cursor_pos, rx, ry, rh, theme, rw: 200.0)
           cursor_pos = cur_text.length if cursor_pos > cur_text.length
           cursor_pos = 0 if cursor_pos < 0
           reset_blink = false
           unfocus = false
 
           # 1. IME変換候補位置の更新 (キャレットの直下 - 画面絶対座標に変換)
-          f_font = theme.font || Font.default
-          f_size = theme.font_size.to_i
-          f_size = 14 if f_size <= 0
-          sub_str = cur_text[0...cursor_pos] || ""
-          caret_offset = f_font.text_width(sub_str, f_size)
+          caret_offset, scroll_x = compute_scroll_x(cur_text, cursor_pos, rw, theme)
           pad_x = 10.0
-          abs_ime_x = rx + pad_x + caret_offset + Window.__offset_x
+          abs_ime_x = rx + pad_x + caret_offset - scroll_x + Window.__offset_x
           abs_ime_y = ry + rh + 2.0 + Window.__offset_y
           Input.set_ime_position(abs_ime_x, abs_ime_y)
 
@@ -62,6 +71,7 @@ module Zenoo
           if ctrl_down && Input.key_push?(:v)
             clip = Input.clipboard
             if clip && !clip.empty?
+              clip = clip.gsub(/[\r\n\t]+/, " ")
               cur_text.insert(cursor_pos, clip)
               cursor_pos += clip.length
               reset_blink = true
@@ -110,7 +120,7 @@ module Zenoo
           # 3. 通常文字・日本語確定文字の入力 (Ctrl押下時のショートカット文字混入を防止)
           unless ctrl_down
             Input.input_chars.each do |ch|
-              next if ch.ord < 32 && ch != "\t"
+              next if ch.ord < 32
               cur_text.insert(cursor_pos, ch)
               cursor_pos += ch.length
               reset_blink = true

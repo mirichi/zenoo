@@ -31,6 +31,8 @@ module Zenoo
     @evaluated     = false
     @cursor_pos    = 0
     @blink_time    = 0.0
+    @prev_dropdown_rect = nil
+    @deferred_dropdown  = nil
 
     class << self
       attr_accessor :renderer
@@ -74,7 +76,7 @@ module Zenoo
         @theme = if target_theme.is_a?(Symbol)
                    Theme.new(target_theme, **overrides)
                  elsif target_theme.is_a?(Theme)
-                   target_theme
+                   overrides.empty? ? target_theme : target_theme.dup.configure(**overrides)
                  else
                    @theme.dup.configure(**overrides)
                  end
@@ -87,10 +89,26 @@ module Zenoo
       # - 戻り値: `Boolean`
       def mouse_captured?
         if @evaluated
-          !@hot_id.nil? || !@active_id.nil? || !@focus_id.nil? || !@win_mgr.hovered_window_id.nil?
+          !@hot_id.nil? || !@active_id.nil? || !@win_mgr.hovered_window_id.nil?
         else
-          @prev_captured || !@active_id.nil? || !@focus_id.nil?
+          @prev_captured || !@active_id.nil?
         end
+      end
+
+      def resolve_widget_id(base, id = "")
+        raw = id.to_s
+        key = raw.empty? ? base.to_s : raw
+        cur_win = @win_mgr.current_window_id
+        cur_win ? "#{cur_win}::#{key}" : key
+      end
+
+      def queue_dropdown_overlay(data)
+        @deferred_dropdown = data
+      end
+
+      def overlay_point?(px, py)
+        r = @prev_dropdown_rect
+        r ? in_rect?(px, py, r[0], r[1], r[2], r[3]) : false
       end
 
       # テキスト入力などのフォーカス先ウィジェット ID を設定する
@@ -163,14 +181,16 @@ module Zenoo
         @mouse_down = Input.mouse_pressed?(:left)
         @mouse_push = Input.mouse_push?(:left)
         @mouse_rel  = Input.mouse_release?(:left)
-        @prev_captured = !@hot_id.nil? || !@active_id.nil? || !@focus_id.nil? || !@win_mgr.hovered_window_id.nil?
+        over_overlay = overlay_point?(@mouse_x, @mouse_y)
+        @prev_captured = !@hot_id.nil? || !@active_id.nil? || !@win_mgr.hovered_window_id.nil? || over_overlay
         @hot_id     = nil
         @evaluated  = false
-        @blink_time = (@blink_time || 0.0) + Window.delta_time
+        @blink_time += Window.delta_time
         @requested_cursor = :arrow
+        @deferred_dropdown = nil
 
-        @win_mgr.begin_frame(@mouse_x, @mouse_y, @mouse_down, @mouse_push)
-        Input.consume_mouse! unless @win_mgr.hovered_window_id.nil?
+        @win_mgr.begin_frame(@mouse_x, @mouse_y, @mouse_down, @mouse_push, overlay_blocked: over_overlay)
+        Input.consume_mouse! if over_overlay || !@win_mgr.hovered_window_id.nil?
         @layout.reset
       end
 
@@ -193,6 +213,8 @@ module Zenoo
       #
       # - 戻り値: `Symbol`
       def end_frame
+        render_dropdown_overlay
+        @active_id = nil unless @mouse_down
         if @requested_cursor != :arrow
           Window.cursor = @requested_cursor
         elsif UI.requested_cursor
@@ -342,8 +364,10 @@ module Zenoo
       # 現在のウィジェットがマウス操作を受け付けられるかを判定する（最前面ウィンドウ・クリッピング範囲を考慮）
       #
       # - 戻り値: `Boolean`
-      def can_interact?
+      def can_interact?(ignore_overlay: false)
         @evaluated = true
+        return false if !ignore_overlay && overlay_point?(@mouse_x, @mouse_y)
+
         # 1. ハードウェアクリッピング矩形外なら不可 (スクロールではみ出たコントロール等の遮断)
         clip = Backend.current_clip
         if clip
@@ -524,8 +548,7 @@ module Zenoo
         # ダブルクリック判定 (ボタン外のタイトルバー)
         double_clicked = false
         if @mouse_push && !btn_hover
-          cur_time = (defined?(Audio) ? Audio.time : 0.0)
-          double_clicked = @win_mgr.check_title_bar_double_click(win, title_bar_h, @mouse_x, @mouse_y, cur_time)
+          double_clicked = @win_mgr.check_title_bar_double_click(win, title_bar_h, @mouse_x, @mouse_y, Window.real_time)
         end
 
         unless btn_hover || double_clicked
@@ -551,7 +574,8 @@ module Zenoo
         content_h = win.collapsed ? 0.0 : [wh - title_bar_h - pad - 8.0, 0.0].max
 
         container_state = @layout.begin_container(content_x, content_y, content_w, content_h, clip: true, z: win_z + 10.0)
-        [win, win_id, container_state]
+        prev_win_id = @win_mgr.push_window_context(win_id)
+        [win, win_id, container_state, prev_win_id]
       end
 
       # `begin_window` で開始したウィンドウを終了しクリッピング／レイアウトスコープを閉じる
@@ -560,8 +584,9 @@ module Zenoo
       # - 戻り値: `nil`
       def end_window(state)
         return unless state
-        _win, _win_id, container_state = state
+        _win, _win_id, container_state, prev_win_id = state
         @layout.end_container(container_state)
+        @win_mgr.pop_window_context(prev_win_id)
       end
 
       # ドラッグ移動・折りたたみ・最前面切り替え・クリッピング対応のフローティングウィンドウを描画する
@@ -582,13 +607,10 @@ module Zenoo
       def window(title, x: nil, y: nil, w: 320.0, h: 240.0, id: "", padding: 12.0, resizable: false, min_w: 120.0, min_h: 80.0, collapsible: true)
         state = begin_window(title, x: x, y: y, w: w, h: h, id: id, padding: padding, resizable: resizable, min_w: min_w, min_h: min_h, collapsible: collapsible)
         return unless state
-        return unless block_given?
 
-        win, win_id, _cs = state
-        @win_mgr.with_window_context(win_id) do
-          yield win unless win.collapsed
-          end_window(state)
-        end
+        win = state[0]
+        yield win if block_given? && !win.collapsed
+        end_window(state)
       end
 
       # --------------------------------------------------
@@ -605,7 +627,7 @@ module Zenoo
       # - `id` (`String`): ウィジェット識別 ID（ラベル重複時の衝突回避に使用）
       # - 戻り値: `Boolean`（このフレームでクリックが成立した場合 `true`）
       def button(label, x: nil, y: nil, w: nil, h: 40.0, active: false, id: "")
-        widget_id = id.empty? ? label.to_s : id.to_s
+        widget_id = resolve_widget_id(label, id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 140.0)
@@ -659,7 +681,7 @@ module Zenoo
       # - `enabled` (`Boolean`): 有効状態（`false` で操作無効・グレーアウト、デフォルト `true`）
       # - 戻り値: `Float`（更新後の値）
       def slider(label, value, min, max, x: nil, y: nil, w: nil, h: 44.0, step: nil, unit: "", format: nil, id: "", enabled: true)
-        widget_id = id.empty? ? label.to_s : id.to_s
+        widget_id = resolve_widget_id(label, id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 200.0)
@@ -716,8 +738,7 @@ module Zenoo
         @renderer.draw_label(rx, ry, text, f_size, col, @theme)
 
         f_font = @theme.font || Font.default
-        w = f_font.text_width(text.to_s, f_size)
-        h = f_size.to_f
+        w, h = f_font.text_size(text.to_s, f_size)
         @layout.advance(w, h) if x.nil? && y.nil?
         nil
       end
@@ -737,7 +758,7 @@ module Zenoo
         border_cfg = @theme.border_normal
         line_col = color || (border_cfg ? border_cfg[1] : Color.new(70, 70, 75, 180))
 
-        Window.draw_line(rx, ry, rx + rw, ry, color: line_col, width: 1.0)
+        Window.draw_line(rx, ry, rx + rw, ry, color: line_col, width: 1.0, camera: false)
         @layout.advance(rw, spacing.to_f * 2.0 + 1.0) if x.nil? && y.nil?
         nil
       end
@@ -753,7 +774,7 @@ module Zenoo
       # - `id` (`String`): ウィジェット識別 ID
       # - 戻り値: `String`（編集を反映した最新の文字列）
       def text_box(label, text, x: nil, y: nil, w: nil, h: 42.0, id: "")
-        widget_id = id.empty? ? label.to_s : id.to_s
+        widget_id = resolve_widget_id(label, id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 200.0)
@@ -761,25 +782,30 @@ module Zenoo
         cur_text = text.to_s
 
         hover = can_interact? && @renderer.hit_test_text_box(rx, ry, rw, rh, gui_mouse_x, gui_mouse_y, @theme)
+        was_focused = (@focus_id == widget_id)
 
         if @mouse_push
           if hover
             Input.consume_mouse!
+            scroll_x = 0.0
+            if was_focused
+              _ox, scroll_x = TextEdit.compute_scroll_x(cur_text, @cursor_pos || 0, rw, @theme)
+            end
             @focus_id = widget_id
             @blink_time = 0.0
-            click_x = gui_mouse_x - (rx + 10.0)
+            click_x = gui_mouse_x - (rx + 10.0) + scroll_x
             @cursor_pos = TextEdit.caret_index_from_click(cur_text, click_x, @theme)
-          elsif @focus_id == widget_id
+          elsif was_focused
             clear_focus
           end
         end
 
-        cur_text = cur_text.dup
         is_focused = (@focus_id == widget_id)
 
         if is_focused
+          cur_text = cur_text.dup
           cur_text, @cursor_pos, reset_blink, unfocus =
-            TextEdit.process_focused_input(cur_text, @cursor_pos, rx, ry, rh, @theme)
+            TextEdit.process_focused_input(cur_text, @cursor_pos, rx, ry, rh, @theme, rw: rw)
           @blink_time = 0.0 if reset_blink
           clear_focus if unfocus
           is_focused = (@focus_id == widget_id)
@@ -788,7 +814,7 @@ module Zenoo
         bt = @blink_time || 0.0
         blink_on = (bt % 1.0) < 0.5
         set_mouse_cursor(:ibeam) if hover || is_focused
-        @renderer.draw_text_box(rx, ry, rw, rh, cur_text, is_focused, @cursor_pos || 0, blink_on, @theme)
+        @renderer.draw_text_box(rx, ry, rw, rh, cur_text, is_focused, is_focused ? (@cursor_pos || 0) : 0, blink_on, @theme)
         @layout.advance(rw, rh) if x.nil? && y.nil?
         cur_text
       end
@@ -828,6 +854,41 @@ module Zenoo
         else
           :normal
         end
+      end
+
+      def render_dropdown_overlay
+        dd = @deferred_dropdown
+        unless dd
+          @prev_dropdown_rect = nil
+          return
+        end
+
+        px = dd[:px]
+        py = dd[:py]
+        pw = dd[:pw]
+        ph = dd[:ph]
+        items = dd[:items]
+        selected = dd[:selected]
+        scroll_y = dd[:scroll_y]
+        item_h = dd[:item_h]
+        hover_idx = dd[:hover_idx]
+        pop_z = 900.0
+        pad_y = 3.0
+
+        @prev_dropdown_rect = [px, py, pw, ph]
+        @renderer.draw_dropdown_popup_frame(px, py, pw, ph, pop_z, @theme)
+
+        prev_ox, prev_oy = Window.push_clip_scope(px, py + pad_y, pw, [ph - pad_y * 2.0, 1.0].max, local: false, z: pop_z)
+        i = 0
+        len = items.length
+        while i < len
+          iy = py + pad_y + i.to_f * item_h - scroll_y
+          if iy + item_h >= py && iy <= (py + ph)
+            @renderer.draw_dropdown_popup_item(px, iy, pw, item_h, items[i], (i == selected), (i == hover_idx), pop_z, @theme)
+          end
+          i += 1
+        end
+        Window.pop_clip_scope(prev_ox, prev_oy)
       end
 
       def calc_slider_value(rx, rw, v_min, v_max, step = nil)

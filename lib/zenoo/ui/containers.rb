@@ -14,17 +14,19 @@ module Zenoo
       # - `theme` (`Theme | Symbol | nil`): ステージ全体に適用するテーマ
       # - 戻り値: `Stage`
       def initialize(width: nil, height: nil, theme: nil)
-        w = width ? width.to_f : 1280.0
-        h = height ? height.to_f : 720.0
+        @auto_width  = width.nil?
+        @auto_height = height.nil?
+        w = @auto_width ? 1280.0 : width.to_f
+        h = @auto_height ? 720.0 : height.to_f
         super(0.0, 0.0, width: w, height: h, anchor: :top_left, interactive: false, theme: theme)
       end
 
       def update_self
-        # 画面サイズに自動追従
+        # 画面サイズに自動追従（サイズ未指定軸のみ）
         win_w = Zenoo::Window.width.to_f
         win_h = Zenoo::Window.height.to_f
-        @width  = win_w if win_w > 0.0 && @width != win_w
-        @height = win_h if win_h > 0.0 && @height != win_h
+        self.width  = win_w if @auto_width && win_w > 0.0 && width != win_w
+        self.height = win_h if @auto_height && win_h > 0.0 && height != win_h
       end
 
       def draw_self
@@ -83,8 +85,12 @@ module Zenoo
         h = height ? height.to_f : 200.0
         super(x, y, width: w, height: h, interactive: interactive, parent: parent, **opts)
         @clip_children = clip
+        update_header_height
 
         yield(self) if block
+      end
+
+      def update_header_height
       end
 
       # 子要素の合計高さ（パディング・ギャップ込み）を算出する
@@ -202,8 +208,12 @@ module Zenoo
         @layout_dirty = true if height != old_h
       end
 
-      def update_layout_tree
+      def ensure_layout_updated
         perform_layout if @auto_layout && @layout_dirty
+      end
+
+      def update_layout_tree
+        ensure_layout_updated
         super
       end
 
@@ -221,7 +231,7 @@ module Zenoo
         len = ch_list.length
         while i < len
           c = ch_list[i]
-          if c.is_a?(Widget) && c.visible && !c.vanished? && !c.respond_to?(:floating_ignore_layout?)
+          if c.is_a?(Widget) && c.visible && !c.vanished?
             vis_count += 1
           end
           i += 1
@@ -312,6 +322,7 @@ module Zenoo
         while i < len
           c = ch_list[i]
           if c.is_a?(Widget) && c.visible && !c.vanished?
+            c_align = c.align_self || @align
             if c.is_a?(Box) && c_align != :stretch
               if is_row && !c.explicit_height
                 c.height = c.content_height
@@ -321,7 +332,6 @@ module Zenoo
             end
             cw = c.width
             ch = c.height
-            c_align = c.align_self || @align
 
             cross_pos = is_row ? inner_y : inner_x
             c_cross_size = is_row ? ch : cw
@@ -402,7 +412,7 @@ module Zenoo
     # ==========================================================================
     class Panel < Box
       attr_reader :title
-      attr_accessor :bg_color, :border_color, :border_width, :radius, :shadow_blur, :shadow_color, :title_size, :title_color
+      attr_accessor :bg_color, :border_color, :border_width, :shadow_blur, :shadow_color, :title_size, :title_color
 
       # パネルを初期化する
       #
@@ -442,7 +452,6 @@ module Zenoo
         @bg_color     = bg_color
         @border_color = border_color
         @border_width = border_width
-        @radius       = radius
         @shadow_blur  = shadow_blur
         @shadow_color = shadow_color
         @title_size   = title_size.to_i
@@ -452,9 +461,7 @@ module Zenoo
               direction: direction, padding: padding, gap: gap,
               align: align, justify: justify,
               auto_layout: auto_layout, clip: clip,
-              interactive: interactive, **opts, &block)
-
-        update_header_height
+              radius: radius, interactive: interactive, **opts, &block)
       end
 
       # パネルのタイトル文字列を変更しヘッダー高さとレイアウトを更新する
@@ -513,10 +520,12 @@ module Zenoo
         unless @title.empty?
           f_font = th.font || Font.default
           tcol = @title_color || th.text_color
+          t_size = (@title_size.to_f * world_scale_y).to_i
+          t_size = 8 if t_size < 8
           Zenoo::Window.draw_text(
-            rx + @pad_left, ry + @pad_top * 0.75,
+            rx + @pad_left * world_scale_x, ry + @pad_top * 0.75 * world_scale_y,
             @title,
-            font: f_font, size: @title_size, color: tcol,
+            font: f_font, size: t_size, color: tcol,
             camera: @camera, z: @z
           )
         end
@@ -527,8 +536,8 @@ module Zenoo
     # Window (ドラッグ移動・リサイズ・折りたたみ・最前面化に対応したフローティングウィンドウ)
     # ==========================================================================
     class Window < Panel
-      attr_accessor :resizable, :collapsible, :draggable, :min_width, :min_height, :title_bar_height
-      attr_reader :collapsed
+      attr_accessor :resizable, :collapsible, :draggable, :min_width, :min_height
+      attr_reader :collapsed, :title_bar_height
 
       # フローティングウィンドウを初期化する
       #
@@ -585,8 +594,17 @@ module Zenoo
               interactive: true, **opts, &block)
       end
 
+      def title_bar_height=(val)
+        vf = val.to_f
+        return if @title_bar_height == vf
+        @title_bar_height = vf
+        update_header_height
+        self.height = @title_bar_height if @collapsed
+        mark_layout_dirty!
+      end
+
       def update_header_height
-        @header_height = @title_bar_height || 34.0
+        @header_height = @title_bar_height
       end
 
       # ウィンドウの折りたたみ状態を設定する
@@ -624,15 +642,16 @@ module Zenoo
 
       # 親の children 配列の末尾に移動させ、描画順とヒットテストを最前面にする
       #
-      # - 戻り値: `Array<Sprite> | nil`
+      # - 戻り値: `Boolean`
       def bring_to_front!
-        return unless (p = @parent)
+        return true unless (p = @parent)
         ch = p.children
-        return unless ch && ch.length > 1
+        return true unless ch && ch.length > 1
         if !ch.last.equal?(self)
           ch.delete(self)
           ch << self
         end
+        true
       end
 
       def clip_bounds
@@ -646,8 +665,10 @@ module Zenoo
 
       def find_hit_widget(px, py)
         return nil if @vanished || !@visible || !@enabled
+        return nil unless point_in_ancestor_clips?(px, py)
 
         # リサイズハンドルまたはタイトルバー上のボタンは子要素より優先してウィンドウ自身が受け取る
+        return self if @collapsible && in_collapse_button?(px, py)
         if !@collapsed && @resizable && in_resize_grip?(px, py)
           return self
         end
@@ -765,6 +786,9 @@ module Zenoo
       def draw
         return if @vanished || !@visible
 
+        update_layout_tree unless @parent.is_a?(Widget)
+        ensure_layout_updated unless @collapsed
+
         if @on_draw_proc
           @on_draw_proc.call(screen_left, screen_top, screen_width, screen_height, visual_state)
         else
@@ -772,7 +796,6 @@ module Zenoo
         end
 
         if !@collapsed && @children
-          perform_layout if @auto_layout && @layout_dirty
           if @clip_children
             cx, cy, cw, ch = clip_bounds
             if cw > 0.0 && ch > 0.0
@@ -792,7 +815,9 @@ module Zenoo
         wy = screen_top
         ww = screen_width
         wh = screen_height
-        th_bar = @title_bar_height * world_scale_y
+        sy = world_scale_y
+        sx = world_scale_x
+        th_bar = @title_bar_height * sy
         is_act = active_window?
 
         border_cfg = is_act ? (th.win_border_active || th.border_active) : (th.win_border_normal || th.border_normal)
@@ -821,8 +846,9 @@ module Zenoo
         # タイトルバー帯
         title_bg = is_act ? (th.win_title_bg_active || th.bg_active) : (th.win_title_bg || th.bg_hover)
         t_rad = [rad - 1.0, 0.0].max
+        bar_h = @collapsed ? [th_bar - 2.0, 0.0].max : th_bar
         Zenoo::Window.draw_rect(
-          wx + 1.0, wy + 1.0, ww - 2.0, th_bar,
+          wx + 1.0, wy + 1.0, [ww - 2.0, 0.0].max, bar_h,
           radius: t_rad,
           color: title_bg,
           camera: @camera,
@@ -833,7 +859,7 @@ module Zenoo
         unless @collapsed
           Zenoo::Window.draw_rect(
             wx + 1.0, wy + th_bar,
-            ww - 2.0, 1.0,
+            [ww - 2.0, 0.0].max, 1.0,
             color: bc,
             camera: @camera,
             z: @z
@@ -843,10 +869,11 @@ module Zenoo
         # タイトルテキスト
         unless @title.empty?
           f_font = th.font || Font.default
-          f_size = 14
+          f_size = ((th.font_size || 14).to_f * sy).to_i
+          f_size = 8 if f_size < 8
           tcol = is_act ? th.text_color : (th.text_disabled || th.text_color)
           Zenoo::Window.draw_text(
-            wx + 12.0, wy + (th_bar - f_size.to_f) * 0.5 + 1.0,
+            wx + 12.0 * sx, wy + (th_bar - f_size.to_f) * 0.5 + 1.0,
             @title,
             font: f_font, size: f_size, color: tcol,
             camera: @camera, z: @z
@@ -855,29 +882,29 @@ module Zenoo
 
         # 折りたたみボタン
         if @collapsible
-          btn_size = 22.0
-          bx = wx + ww - btn_size - 7.0
+          btn_size = 22.0 * sy
+          bx = wx + ww - btn_size - 7.0 * sx
           by = wy + (th_bar - btn_size) * 0.5
           icon_col = is_act ? (th.text_color || Color::WHITE) : (th.text_disabled || Color.new(160, 160, 165))
 
           if @btn_hover
-            Zenoo::Window.draw_rect(bx, by, btn_size, btn_size, radius: 4.0, color: Color.new(255, 255, 255, 45), camera: @camera, z: @z)
+            Zenoo::Window.draw_rect(bx, by, btn_size, btn_size, radius: 4.0 * sy, color: Color.new(255, 255, 255, 45), camera: @camera, z: @z)
           end
 
           if @collapsed
-            Zenoo::Window.draw_rect(bx + 5.0, by + 5.0, 12.0, 12.0, radius: 2.0, color: nil, border_width: 1.5, border_color: icon_col, camera: @camera, z: @z)
+            Zenoo::Window.draw_rect(bx + 5.0 * sy, by + 5.0 * sy, 12.0 * sy, 12.0 * sy, radius: 2.0 * sy, color: nil, border_width: 1.5, border_color: icon_col, camera: @camera, z: @z)
           else
-            Zenoo::Window.draw_line(bx + 5.0, by + 11.0, bx + 17.0, by + 11.0, color: icon_col, width: 2.0, camera: @camera, z: @z)
+            Zenoo::Window.draw_line(bx + 5.0 * sy, by + 11.0 * sy, bx + 17.0 * sy, by + 11.0 * sy, color: icon_col, width: 2.0, camera: @camera, z: @z)
           end
         end
 
         # リサイズグリップ
         if @resizable && !@collapsed
-          rx = wx + ww - 15.0
-          ry = wy + wh - 15.0
-          Zenoo::Window.draw_line(rx + 8.0, ry + 12.0, rx + 12.0, ry + 8.0, color: bc, width: 1.5, camera: @camera, z: @z)
-          Zenoo::Window.draw_line(rx + 4.0, ry + 12.0, rx + 12.0, ry + 4.0, color: bc, width: 1.5, camera: @camera, z: @z)
-          Zenoo::Window.draw_line(rx + 0.0, ry + 12.0, rx + 12.0, ry + 0.0, color: bc, width: 1.5, camera: @camera, z: @z)
+          rx = wx + ww - 15.0 * sx
+          ry = wy + wh - 15.0 * sy
+          Zenoo::Window.draw_line(rx + 8.0 * sx, ry + 12.0 * sy, rx + 12.0 * sx, ry + 8.0 * sy, color: bc, width: 1.5, camera: @camera, z: @z)
+          Zenoo::Window.draw_line(rx + 4.0 * sx, ry + 12.0 * sy, rx + 12.0 * sx, ry + 4.0 * sy, color: bc, width: 1.5, camera: @camera, z: @z)
+          Zenoo::Window.draw_line(rx + 0.0, ry + 12.0 * sy, rx + 12.0 * sx, ry + 0.0, color: bc, width: 1.5, camera: @camera, z: @z)
         end
       end
 
@@ -895,9 +922,11 @@ module Zenoo
         l = screen_left
         t = screen_top
         w = screen_width
-        th_bar = @title_bar_height * world_scale_y
-        btn_size = 22.0
-        bx = l + w - btn_size - 7.0
+        sx = world_scale_x
+        sy = world_scale_y
+        th_bar = @title_bar_height * sy
+        btn_size = 22.0 * sy
+        bx = l + w - btn_size - 7.0 * sx
         by = t + (th_bar - btn_size) * 0.5
         px >= bx && px <= (bx + btn_size) && py >= by && py <= (by + btn_size)
       end
@@ -907,8 +936,9 @@ module Zenoo
         t = screen_top
         w = screen_width
         h = screen_height
-        g = 18.0
-        px >= (l + w - g) && px <= (l + w) && py >= (t + h - g) && py <= (t + h)
+        gx = 18.0 * world_scale_x
+        gy = 18.0 * world_scale_y
+        px >= (l + w - gx) && px <= (l + w) && py >= (t + h - gy) && py <= (t + h)
       end
     end
 
@@ -1002,7 +1032,7 @@ module Zenoo
         return nil if @vanished || !@visible || !@enabled
 
         # スクロールバー領域上なら ScrollView 自身が受け取る
-        if needs_scrollbar? && in_scrollbar_track?(px, py)
+        if needs_scrollbar? && point_in_ancestor_clips?(px, py) && in_scrollbar_track?(px, py)
           return self
         end
 
@@ -1028,7 +1058,7 @@ module Zenoo
         return false unless needs_scrollbar?
         old_s = @scroll_y
         self.scroll_y = @scroll_y - wheel_y * @wheel_step
-        (@scroll_y - old_s).abs > 0.001 || true
+        (@scroll_y - old_s).abs > 0.001
       end
 
       def on_pointer_down(mx, my)
@@ -1126,6 +1156,9 @@ module Zenoo
       def draw
         return if @vanished || !@visible
 
+        update_layout_tree unless @parent.is_a?(Widget)
+        ensure_layout_updated
+
         if @on_draw_proc
           @on_draw_proc.call(screen_left, screen_top, screen_width, screen_height, visual_state)
         else
@@ -1133,7 +1166,6 @@ module Zenoo
         end
 
         if @children
-          perform_layout if @auto_layout && @layout_dirty
           cx, cy, cw, ch = clip_bounds
           if cw > 0.0 && ch > 0.0
             prev_ox, prev_oy = Zenoo::Window.push_clip_scope(cx, cy, cw, ch, local: false, z: @z)

@@ -36,7 +36,8 @@ module Zenoo
           radius: theme.corner_radius,
           color: bg_col,
           border_width: b_w,
-          border_color: b_c
+          border_color: b_c,
+          camera: false
         )
 
         # テキストの描画 (ボタン幅に収まるよう厳密に計算 & センタリング)
@@ -67,7 +68,7 @@ module Zenoo
               text_y += 1.0
             end
 
-            Window.draw_text(text_x, text_y, text_str, font: f_font, size: f_size, color: theme.text_color)
+            Window.draw_text(text_x, text_y, text_str, font: f_font, size: f_size, color: theme.text_color, camera: false)
           end
         end
       end
@@ -103,7 +104,7 @@ module Zenoo
 
         if has_label
           label_str = label.to_s
-          Window.draw_text(rx, ry, label_str, font: f_font, size: f_size, color: lbl_col)
+          Window.draw_text(rx, ry, label_str, font: f_font, size: f_size, color: lbl_col, camera: false)
 
           # 数値テキスト
           val_str = if format
@@ -111,18 +112,12 @@ module Zenoo
                     elsif (v_val % 1.0).abs < 0.0001 && (v_min % 1.0).abs < 0.0001 && (v_max % 1.0).abs < 0.0001
                       v_val.round.to_s
                     else
-                      v_int = v_val.to_i
-                      v_dec = ((v_val - v_int.to_f).abs * 100.0).round
-                      if v_dec == 0
-                        v_int.to_s
-                      else
-                        v_dec_str = sprintf("%02d", v_dec).sub(/0$/, '')
-                        "#{v_int}.#{v_dec_str}"
-                      end
+                      s = sprintf("%.2f", v_val).sub(/\.?0+$/, '')
+                      s == "-0" ? "0" : s
                     end
           val_str = "#{val_str}#{unit}" unless unit.to_s.empty?
           val_w = f_font.text_width(val_str, f_size)
-          Window.draw_text(rx + rw - val_w, ry, val_str, font: f_font, size: f_size, color: num_col)
+          Window.draw_text(rx + rw - val_w, ry, val_str, font: f_font, size: f_size, color: num_col, camera: false)
 
           track_y = ry + f_size.to_f + 8.0
           track_h = 8.0
@@ -147,7 +142,8 @@ module Zenoo
           radius: 4.0,
           color: theme.track_bg,
           border_width: tb_w,
-          border_color: tb_c
+          border_color: tb_c,
+          camera: false
         )
 
         # 進行度フィル (左端からノブ中心まで)
@@ -163,7 +159,8 @@ module Zenoo
           Window.draw_rect(
             track_x, track_y, fill_w, track_h,
             radius: 4.0,
-            color: fill_color
+            color: fill_color,
+            camera: false
           )
         end
 
@@ -191,7 +188,8 @@ module Zenoo
           border_width: kb_border[0].to_f,
           border_color: kb_border[1],
           shadow_blur: kb_s_blur,
-          shadow_color: kb_s_col
+          shadow_color: kb_s_col,
+          camera: false
         )
       end
 
@@ -204,7 +202,7 @@ module Zenoo
         f_size = 16 if f_size <= 0
         c_color = color || theme.text_color
         f_font = theme.font || Font.default
-        Window.draw_text(x.to_f, y.to_f, text.to_s, font: f_font, size: f_size, color: c_color)
+        Window.draw_text(x.to_f, y.to_f, text.to_s, font: f_font, size: f_size, color: c_color, camera: false)
       end
 
       # ----------------------------------------------------
@@ -276,7 +274,8 @@ module Zenoo
           radius: theme.corner_radius,
           color: bg_col,
           border_width: b_w,
-          border_color: b_c
+          border_color: b_c,
+          camera: false
         )
 
         f_size = theme.font_size.to_i
@@ -286,24 +285,28 @@ module Zenoo
         f_font = theme.font || Font.default
 
         str = text.to_s
-        sub_str = str[0...cursor_pos] || ""
-        caret_offset_x = f_font.text_width(sub_str, f_size)
-
-        avail_w = rw - pad_x * 2.0 - 4.0
-        scroll_x = 0.0
-        if caret_offset_x > avail_w
-          scroll_x = caret_offset_x - avail_w
+        if focused
+          cp = cursor_pos.to_i.clamp(0, str.length)
+          sub_str = str[0...cp] || ""
+          caret_offset_x = f_font.text_width(sub_str, f_size)
+          avail_w = [rw - pad_x * 2.0 - 4.0, 10.0].max
+          scroll_x = caret_offset_x > avail_w ? (caret_offset_x - avail_w) : 0.0
+        else
+          caret_offset_x = 0.0
+          scroll_x = 0.0
         end
 
         text_x = rx + pad_x - scroll_x
-        Window.draw_text(text_x, text_y, str, font: f_font, size: f_size, color: theme.text_color)
+        prev_ox, prev_oy = Window.push_clip_scope(rx + 4.0, ry + 2.0, [rw - 8.0, 0.0].max, [rh - 4.0, 0.0].max, local: false)
+        Window.draw_text(text_x, text_y, str, font: f_font, size: f_size, color: theme.text_color, camera: false)
 
         if focused && blink_on
           caret_x = text_x + caret_offset_x
           if caret_x >= rx + pad_x - 2.0 && caret_x <= rx + rw - pad_x + 2.0
-            Window.draw_rect(caret_x, text_y - 1.0, 2.0, f_size.to_f + 2.0, color: theme.accent_color)
+            Window.draw_rect(caret_x, text_y - 1.0, 2.0, f_size.to_f + 2.0, color: theme.accent_color, camera: false)
           end
         end
+        Window.pop_clip_scope(prev_ox, prev_oy)
       end
 
       def hit_test_text_box(x, y, w, h, px, py, theme, **opts)
@@ -338,6 +341,7 @@ module Zenoo
           shadow_blur: s_blur,
           shadow_color: s_col,
           image: card_image,
+          camera: false,
           z: card_z
         )
 
@@ -346,7 +350,7 @@ module Zenoo
           f_font     = opts[:font] || theme.font || Font.default
           title_size = (opts[:title_size] || 20).to_i
           title_col  = opts[:title_color] || theme.text_color
-          Window.draw_text(rx + pad, ry + pad, title.to_s, font: f_font, size: title_size, color: title_col)
+          Window.draw_text(rx + pad, ry + pad, title.to_s, font: f_font, size: title_size, color: title_col, camera: false, z: card_z)
         end
       end
 
@@ -361,7 +365,7 @@ module Zenoo
 
         border_cfg   = active ? (theme.win_border_active || theme.border_active) : (theme.win_border_normal || theme.border_normal)
         border_w     = border_cfg ? border_cfg[0].to_f : 1.0
-        border_color = border_cfg ? border_cfg[1] : theme.border_normal[1]
+        border_color = border_cfg ? border_cfg[1] : (theme.border_normal ? theme.border_normal[1] : theme.accent_color)
 
         shadow_cfg   = active ? theme.shadow_active : theme.shadow_normal
         shadow_blur  = shadow_cfg ? shadow_cfg[0].to_f : 0.0
@@ -378,16 +382,19 @@ module Zenoo
           border_color: border_color,
           shadow_blur: shadow_blur,
           shadow_color: shadow_color,
+          camera: false,
           z: win_z
         )
 
         # タイトルバー帯
         title_bg = active ? (theme.win_title_bg_active || theme.bg_active) : (theme.win_title_bg || theme.bg_hover)
         title_bar_radius = [win_radius - 1.0, 0.0].max
+        bar_h = opts[:collapsed] ? [title_bar_h - 2.0, 0.0].max : title_bar_h
         Window.draw_rect(
-          wx + 1.0, wy + 1.0, ww - 2.0, title_bar_h,
+          wx + 1.0, wy + 1.0, [ww - 2.0, 0.0].max, bar_h,
           radius: title_bar_radius,
           color: title_bg,
+          camera: false,
           z: win_z + 1.0
         )
 
@@ -397,6 +404,7 @@ module Zenoo
             wx + 1.0, wy + title_bar_h + 1.0,
             wx + ww - 1.0, wy + title_bar_h + 1.0,
             color: border_color,
+            camera: false,
             z: win_z + 1.5
           )
         end
@@ -413,6 +421,7 @@ module Zenoo
               font: f_font,
               size: f_size,
               color: title_col,
+              camera: false,
               z: win_z + 2.0
             )
           end
@@ -426,15 +435,15 @@ module Zenoo
           icon_col = active ? (theme.text_color || Color::WHITE) : (theme.text_disabled || Color.new(160, 160, 165))
 
           if opts[:btn_hover]
-            Window.draw_rect(bx, by, btn_size, btn_size, radius: 4.0, color: Color.new(255, 255, 255, 45), z: win_z + 2.0)
+            Window.draw_rect(bx, by, btn_size, btn_size, radius: 4.0, color: Color.new(255, 255, 255, 45), camera: false, z: win_z + 2.0)
           end
 
           if opts[:collapsed]
             # 展開 / 元に戻すアイコン (□)
-            Window.draw_rect(bx + 5.0, by + 5.0, 12.0, 12.0, radius: 2.0, color: nil, border_width: 1.5, border_color: icon_col, z: win_z + 2.5)
+            Window.draw_rect(bx + 5.0, by + 5.0, 12.0, 12.0, radius: 2.0, color: nil, border_width: 1.5, border_color: icon_col, camera: false, z: win_z + 2.5)
           else
             # 最小化アイコン (−)
-            Window.draw_line(bx + 5.0, by + 11.0, bx + 17.0, by + 11.0, color: icon_col, width: 2.0, z: win_z + 2.5)
+            Window.draw_line(bx + 5.0, by + 11.0, bx + 17.0, by + 11.0, color: icon_col, width: 2.0, camera: false, z: win_z + 2.5)
           end
         end
 
@@ -444,9 +453,9 @@ module Zenoo
           grip_color  = grip_border ? grip_border[1] : (active ? theme.accent_color : (theme.text_disabled || theme.text_color))
           rx = wx + ww - 15.0
           ry = wy + wh - 15.0
-          Window.draw_line(rx + 8.0, ry + 12.0, rx + 12.0, ry + 8.0, color: grip_color, width: 1.5, z: win_z + 2.0)
-          Window.draw_line(rx + 4.0, ry + 12.0, rx + 12.0, ry + 4.0, color: grip_color, width: 1.5, z: win_z + 2.0)
-          Window.draw_line(rx + 0.0, ry + 12.0, rx + 12.0, ry + 0.0, color: grip_color, width: 1.5, z: win_z + 2.0)
+          Window.draw_line(rx + 8.0, ry + 12.0, rx + 12.0, ry + 8.0, color: grip_color, width: 1.5, camera: false, z: win_z + 2.0)
+          Window.draw_line(rx + 4.0, ry + 12.0, rx + 12.0, ry + 4.0, color: grip_color, width: 1.5, camera: false, z: win_z + 2.0)
+          Window.draw_line(rx + 0.0, ry + 12.0, rx + 12.0, ry + 0.0, color: grip_color, width: 1.5, camera: false, z: win_z + 2.0)
         end
       end
 
@@ -470,7 +479,8 @@ module Zenoo
           radius: theme.corner_radius || 4.0,
           color: bg_col,
           border_width: b_width,
-          border_color: b_color
+          border_color: b_color,
+          camera: false
         )
 
         if checked
@@ -479,7 +489,8 @@ module Zenoo
             rx + inner_pad, box_y + inner_pad,
             box_size - inner_pad * 2.0, box_size - inner_pad * 2.0,
             radius: [(theme.corner_radius || 4.0) * 0.5, 1.0].max,
-            color: theme.accent_color
+            color: theme.accent_color,
+            camera: false
           )
         end
 
@@ -489,7 +500,7 @@ module Zenoo
           text_col = hover ? Color::WHITE : theme.text_color
           ty = ry + (rh - f_size.to_f) * 0.5
           Profiler.measure(:gui_text) do
-            Window.draw_text(rx + box_size + 10.0, ty, label.to_s, font: f_font, size: f_size, color: text_col)
+            Window.draw_text(rx + box_size + 10.0, ty, label.to_s, font: f_font, size: f_size, color: text_col, camera: false)
           end
         end
       end
@@ -514,11 +525,12 @@ module Zenoo
           cx, cy, circle_r,
           color: bg_col,
           border_width: b_width,
-          border_color: b_color
+          border_color: b_color,
+          camera: false
         )
 
         if active
-          Window.draw_circle(cx, cy, 4.5, color: theme.accent_color)
+          Window.draw_circle(cx, cy, 4.5, color: theme.accent_color, camera: false)
         end
 
         if label && !label.to_s.empty?
@@ -527,7 +539,7 @@ module Zenoo
           text_col = hover ? Color::WHITE : theme.text_color
           ty = ry + (rh - f_size.to_f) * 0.5
           Profiler.measure(:gui_text) do
-            Window.draw_text(rx + circle_r * 2.0 + 10.0, ty, label.to_s, font: f_font, size: f_size, color: text_col)
+            Window.draw_text(rx + circle_r * 2.0 + 10.0, ty, label.to_s, font: f_font, size: f_size, color: text_col, camera: false)
           end
         end
       end
@@ -541,7 +553,7 @@ module Zenoo
         rw = w.to_f
         rh = h.to_f
         count = labels.length
-        return if count == 0
+        return if count == 0 || rw <= 0.0
 
         tab_w = rw / count.to_f
         f_font = theme.font || Font.default
@@ -553,7 +565,8 @@ module Zenoo
           radius: theme.corner_radius || 4.0,
           color: theme.track_bg || theme.bg_normal,
           border_width: track_b ? track_b[0].to_f : 1.0,
-          border_color: track_b ? track_b[1] : nil
+          border_color: track_b ? track_b[1] : nil,
+          camera: false
         )
 
         i = 0
@@ -567,26 +580,30 @@ module Zenoo
             Window.draw_rect(
               tx + 2.0, ry + 2.0, tab_w - 4.0, rh - 4.0,
               radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
-              color: theme.bg_active
+              color: theme.bg_active,
+              camera: false
             )
             # アクティブインジケータ (下線アクセントバー)
             Window.draw_rect(
               tx + 6.0, ry + rh - 3.5, tab_w - 12.0, 2.5,
               radius: 1.0,
-              color: theme.accent_color
+              color: theme.accent_color,
+              camera: false
             )
           elsif is_hov
             Window.draw_rect(
               tx + 2.0, ry + 2.0, tab_w - 4.0, rh - 4.0,
               radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
-              color: theme.bg_hover
+              color: theme.bg_hover,
+              camera: false
             )
           else
             # 非選択・非ホバーのタブも背景を描いてタブ項目としての存在感を確保
             Window.draw_rect(
               tx + 2.0, ry + 2.0, tab_w - 4.0, rh - 4.0,
               radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
-              color: theme.bg_normal
+              color: theme.bg_normal,
+              camera: false
             )
           end
 
@@ -595,7 +612,7 @@ module Zenoo
           text_y = ry + (rh - f_size.to_f) * 0.5 - 1.0
           tcol = is_cur ? Color::WHITE : (is_hov ? theme.text_color : Color.new(200, 205, 215))
           Profiler.measure(:gui_text) do
-            Window.draw_text(text_x, text_y, lbl, font: f_font, size: f_size, color: tcol)
+            Window.draw_text(text_x, text_y, lbl, font: f_font, size: f_size, color: tcol, camera: false)
           end
 
           i += 1
@@ -614,22 +631,29 @@ module Zenoo
         f_font = theme.font || Font.default
         f_size = theme.font_size.to_i > 0 ? theme.font_size.to_i : 14
 
-        has_label = !label.to_s.empty?
-        label_w = has_label ? f_font.text_width(label.to_s, f_size) + 12.0 : 0.0
+        min_ctrl_w = btn_w * 2.0 + 30.0
+        if label.to_s.empty?
+          label_w = 0.0
+        else
+          raw_lw = f_font.text_width(label.to_s, f_size) + 12.0
+          max_lw = [rw - min_ctrl_w, 0.0].max
+          label_w = [raw_lw, max_lw].min
+        end
 
-        if has_label
+        if label_w > 0.0
           ly = ry + (rh - f_size.to_f) * 0.5
           Profiler.measure(:gui_text) do
-            Window.draw_text(rx, ly, label.to_s, font: f_font, size: f_size, color: theme.text_color)
+            Window.draw_text(rx, ly, label.to_s, font: f_font, size: f_size, color: theme.text_color, camera: false)
           end
         end
 
         ctrl_x = rx + label_w
-        ctrl_w = [rw - label_w, btn_w * 2.0 + 30.0].max
+        ctrl_w = [rw - label_w, 0.0].max
+        eff_btn_w = (btn_w * 2.0 + 8.0 > ctrl_w) ? [ctrl_w * 0.35, 4.0].max : btn_w
         minus_x = ctrl_x
-        plus_x = ctrl_x + ctrl_w - btn_w
-        val_x = ctrl_x + btn_w + 2.0
-        val_w = ctrl_w - btn_w * 2.0 - 4.0
+        plus_x = ctrl_x + ctrl_w - eff_btn_w
+        val_x = ctrl_x + eff_btn_w + 2.0
+        val_w = [ctrl_w - eff_btn_w * 2.0 - 4.0, 4.0].max
 
         # 中央の値表示ボックス
         track_b = theme.track_border || theme.border_normal
@@ -638,39 +662,45 @@ module Zenoo
           radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
           color: theme.track_bg || theme.bg_normal,
           border_width: track_b ? track_b[0].to_f : 1.0,
-          border_color: track_b ? track_b[1] : nil
+          border_color: track_b ? track_b[1] : nil,
+          camera: false
         )
 
         v_str = value_str.to_s
         tw = f_font.text_width(v_str, f_size)
         Profiler.measure(:gui_text) do
-          Window.draw_text(val_x + (val_w - tw) * 0.5, ry + (rh - f_size.to_f) * 0.5, v_str, font: f_font, size: f_size, color: theme.text_color)
+          Window.draw_text(val_x + (val_w - tw) * 0.5, ry + (rh - f_size.to_f) * 0.5, v_str, font: f_font, size: f_size, color: theme.text_color, camera: false)
         end
+
+        bar_w = [eff_btn_w - 20.0, 4.0].max
+        bar_h = [rh - 20.0, 4.0].max
 
         # [-] ボタン
         m_border = minus_hover ? theme.border_hover : theme.border_normal
         Window.draw_rect(
-          minus_x, ry, btn_w, rh,
+          minus_x, ry, eff_btn_w, rh,
           radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
           color: minus_hover ? theme.bg_hover : theme.bg_normal,
           border_width: m_border ? m_border[0].to_f : 1.0,
-          border_color: m_border ? m_border[1] : nil
+          border_color: m_border ? m_border[1] : nil,
+          camera: false
         )
         minus_col = minus_hover ? Color::WHITE : theme.text_color
-        Window.draw_rect(minus_x + 10.0, ry + rh * 0.5 - 1.0, btn_w - 20.0, 2.0, color: minus_col)
+        Window.draw_rect(minus_x + (eff_btn_w - bar_w) * 0.5, ry + rh * 0.5 - 1.0, bar_w, 2.0, color: minus_col, camera: false)
 
         # [+] ボタン
         p_border = plus_hover ? theme.border_hover : theme.border_normal
         Window.draw_rect(
-          plus_x, ry, btn_w, rh,
+          plus_x, ry, eff_btn_w, rh,
           radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
           color: plus_hover ? theme.bg_hover : theme.bg_normal,
           border_width: p_border ? p_border[0].to_f : 1.0,
-          border_color: p_border ? p_border[1] : nil
+          border_color: p_border ? p_border[1] : nil,
+          camera: false
         )
         plus_col = plus_hover ? Color::WHITE : theme.text_color
-        Window.draw_rect(plus_x + 10.0, ry + rh * 0.5 - 1.0, btn_w - 20.0, 2.0, color: plus_col)
-        Window.draw_rect(plus_x + btn_w * 0.5 - 1.0, ry + 10.0, 2.0, rh - 20.0, color: plus_col)
+        Window.draw_rect(plus_x + (eff_btn_w - bar_w) * 0.5, ry + rh * 0.5 - 1.0, bar_w, 2.0, color: plus_col, camera: false)
+        Window.draw_rect(plus_x + eff_btn_w * 0.5 - 1.0, ry + (rh - bar_h) * 0.5, 2.0, bar_h, color: plus_col, camera: false)
       end
 
       # ----------------------------------------------------
@@ -683,7 +713,7 @@ module Zenoo
         rh = h.to_f
 
         # トラック
-        Window.draw_rect(rx, ry, rw, rh, radius: rw * 0.5, color: theme.track_bg || theme.bg_normal)
+        Window.draw_rect(rx, ry, rw, rh, radius: rw * 0.5, color: theme.track_bg || theme.bg_normal, camera: false)
 
         if thumb_h && thumb_h > 0.0
           ty = thumb_y.to_f
@@ -699,7 +729,8 @@ module Zenoo
           Window.draw_rect(
             rx + 2.0, ty, rw - 4.0, th,
             radius: (rw - 4.0) * 0.5,
-            color: thumb_col
+            color: thumb_col,
+            camera: false
           )
         end
       end
@@ -718,7 +749,7 @@ module Zenoo
         has_label = !label.to_s.empty?
         if has_label
           Profiler.measure(:gui_text) do
-            Window.draw_text(rx, ry + 2.0, label.to_s, font: f_font, size: f_size, color: theme.text_color)
+            Window.draw_text(rx, ry + 2.0, label.to_s, font: f_font, size: f_size, color: theme.text_color, camera: false)
           end
         end
 
@@ -731,7 +762,8 @@ module Zenoo
           radius: theme.corner_radius || 4.0,
           color: theme.track_bg || theme.bg_normal,
           border_width: track_b ? track_b[0].to_f : 1.0,
-          border_color: track_b ? track_b[1] : nil
+          border_color: track_b ? track_b[1] : nil,
+          camera: false
         )
       end
 
@@ -750,19 +782,21 @@ module Zenoo
           Window.draw_rect(
             rx + 4.0, ry + 1.0, rw - 4.0, rh - 2.0,
             radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
-            color: theme.bg_active
+            color: theme.bg_active,
+            camera: false
           )
         elsif hover
           Window.draw_rect(
             rx + 4.0, ry + 1.0, rw - 4.0, rh - 2.0,
             radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max,
-            color: theme.bg_hover
+            color: theme.bg_hover,
+            camera: false
           )
         end
 
         tcol = (selected || hover) ? Color::WHITE : theme.text_color
         Profiler.measure(:gui_text) do
-          Window.draw_text(rx + 10.0, ry + (rh - f_size.to_f) * 0.5, text.to_s, font: f_font, size: f_size, color: tcol)
+          Window.draw_text(rx + 10.0, ry + (rh - f_size.to_f) * 0.5, text.to_s, font: f_font, size: f_size, color: tcol, camera: false)
         end
       end
 
@@ -780,7 +814,7 @@ module Zenoo
         has_label = !label.to_s.empty?
         if has_label
           Profiler.measure(:gui_text) do
-            Window.draw_text(rx, ry + 1.0, label.to_s, font: f_font, size: f_size, color: theme.text_color)
+            Window.draw_text(rx, ry + 1.0, label.to_s, font: f_font, size: f_size, color: theme.text_color, camera: false)
           end
         end
 
@@ -797,7 +831,8 @@ module Zenoo
           radius: theme.corner_radius || 4.0,
           color: bg_col,
           border_width: b_width,
-          border_color: b_color
+          border_color: b_color,
+          camera: false
         )
 
         sel_str = selected_text.to_s
@@ -806,7 +841,8 @@ module Zenoo
             rx + 10.0, ctrl_y + (rh - f_size.to_f) * 0.5,
             sel_str,
             font: f_font, size: f_size,
-            color: theme.text_color
+            color: theme.text_color,
+            camera: false
           )
         end
 
@@ -818,7 +854,8 @@ module Zenoo
           arrow_x, arrow_y,
           arrow_x + 8.0, arrow_y,
           arrow_x + 4.0, arrow_y + 5.0,
-          color: arrow_col
+          color: arrow_col,
+          camera: false
         )
       end
 
@@ -843,6 +880,7 @@ module Zenoo
           border_color: theme.accent_color,
           shadow_blur: s_cfg ? s_cfg[0].to_f : 0.0,
           shadow_color: s_cfg ? s_cfg[1] : nil,
+          camera: false,
           z: pop_z
         )
       end
@@ -860,14 +898,14 @@ module Zenoo
         f_size = theme.font_size.to_i > 0 ? theme.font_size.to_i : 14
 
         if selected
-          Window.draw_rect(rx + 3.0, ry, rw - 6.0, rh, radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max, color: theme.bg_active, z: pop_z + 1.0)
+          Window.draw_rect(rx + 3.0, ry, rw - 6.0, rh, radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max, color: theme.bg_active, camera: false, z: pop_z + 1.0)
         elsif hover
-          Window.draw_rect(rx + 3.0, ry, rw - 6.0, rh, radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max, color: theme.bg_hover, z: pop_z + 1.0)
+          Window.draw_rect(rx + 3.0, ry, rw - 6.0, rh, radius: [ (theme.corner_radius || 4.0) - 1.0, 1.0 ].max, color: theme.bg_hover, camera: false, z: pop_z + 1.0)
         end
 
         it_col = (selected || hover) ? Color::WHITE : theme.text_color
         Profiler.measure(:gui_text) do
-          Window.draw_text(rx + 10.0, ry + (rh - f_size.to_f) * 0.5, text.to_s, font: f_font, size: f_size, color: it_col, z: pop_z + 2.0)
+          Window.draw_text(rx + 10.0, ry + (rh - f_size.to_f) * 0.5, text.to_s, font: f_font, size: f_size, color: it_col, camera: false, z: pop_z + 2.0)
         end
       end
 
@@ -881,7 +919,8 @@ module Zenoo
           radius: theme.corner_radius || 4.0,
           color: theme.track_bg || theme.bg_normal,
           border_width: track_b ? track_b[0].to_f : 1.0,
-          border_color: track_b ? track_b[1] : nil
+          border_color: track_b ? track_b[1] : nil,
+          camera: false
         )
       end
 
@@ -913,7 +952,7 @@ module Zenoo
         has_label = !label.to_s.empty?
         if has_label
           Profiler.measure(:gui_text) do
-            Window.draw_text(rx, ry + 2.0, label.to_s, font: f_font, size: f_size, color: theme.text_color)
+            Window.draw_text(rx, ry + 2.0, label.to_s, font: f_font, size: f_size, color: theme.text_color, camera: false)
           end
         end
 
@@ -926,7 +965,8 @@ module Zenoo
           radius: theme.corner_radius || 4.0,
           color: theme.track_bg || theme.bg_normal,
           border_width: track_b ? track_b[0].to_f : 1.0,
-          border_color: track_b ? track_b[1] : COL_TBL_BORDER
+          border_color: track_b ? track_b[1] : COL_TBL_BORDER,
+          camera: false
         )
       end
 
@@ -940,10 +980,10 @@ module Zenoo
         f_size = 11
 
         # ヘッダー背景
-        Window.draw_rect(rx, ry, rw, rh, color: COL_TBL_HDR_BG, radius: 2.0)
+        Window.draw_rect(rx, ry, rw, rh, color: COL_TBL_HDR_BG, radius: 2.0, camera: false)
 
         # ヘッダー下部セパレータ線
-        Window.draw_rect(rx, ry + rh - 1.0, rw, 1.0, color: COL_TBL_SEP)
+        Window.draw_rect(rx, ry + rh - 1.0, rw, 1.0, color: COL_TBL_SEP, camera: false)
 
         # カラム描画
         cx = rx
@@ -952,15 +992,19 @@ module Zenoo
         while i < len
           cw = col_widths[i].to_f
           cname = col_names[i].to_s
+          max_h_chars = [((cw - 10.0) / 7.0).to_i, 1].max
+          if cname.length > max_h_chars
+            cname = max_h_chars > 3 ? "#{cname[0...(max_h_chars - 3)]}..." : cname[0...max_h_chars]
+          end
 
           # テキスト
           Profiler.measure(:gui_text) do
-            Window.draw_text(cx + 6.0, ry + (rh - f_size.to_f) * 0.5, cname, font: f_font, size: f_size, color: COL_TBL_HDR_TXT)
+            Window.draw_text(cx + 6.0, ry + (rh - f_size.to_f) * 0.5, cname, font: f_font, size: f_size, color: COL_TBL_HDR_TXT, camera: false)
           end
 
           # カラム右境界線 (最後のカラム以外)
           if i < len - 1
-            Window.draw_rect(cx + cw - 1.0, ry + 2.0, 1.0, rh - 4.0, color: COL_TBL_SEP)
+            Window.draw_rect(cx + cw - 1.0, ry + 2.0, 1.0, rh - 4.0, color: COL_TBL_SEP, camera: false)
           end
 
           cx += cw
@@ -979,11 +1023,11 @@ module Zenoo
 
         # 行背景
         if selected
-          Window.draw_rect(rx, ry, rw, rh, color: theme.bg_active, radius: 2.0)
+          Window.draw_rect(rx, ry, rw, rh, color: theme.bg_active, radius: 2.0, camera: false)
         elsif hover
-          Window.draw_rect(rx, ry, rw, rh, color: theme.bg_hover, radius: 2.0)
+          Window.draw_rect(rx, ry, rw, rh, color: theme.bg_hover, radius: 2.0, camera: false)
         elsif stripe
-          Window.draw_rect(rx, ry, rw, rh, color: COL_TBL_ROW_EVEN, radius: 2.0)
+          Window.draw_rect(rx, ry, rw, rh, color: COL_TBL_ROW_EVEN, radius: 2.0, camera: false)
         end
 
         # セル値の描画
@@ -992,7 +1036,7 @@ module Zenoo
         i = 0
         while i < len
           cw = col_widths[i].to_f
-          val = row_data.is_a?(Array) ? row_data[i] : (row_data.respond_to?(:[]) ? row_data[i] : nil)
+          val = row_data.is_a?(Array) ? row_data[i] : nil
 
           if !val.nil? || row_data.is_a?(Array)
             # 型に応じたカラー分け
@@ -1013,18 +1057,20 @@ module Zenoo
                       end
 
             val_str = val.is_a?(String) ? val : (val.nil? ? "nil" : val.to_s)
-            # セル幅に応じた簡易トリミング
-            max_chars = [((cw - 12.0) / 7.0).to_i, 3].max
-            val_str = val_str[0...max_chars] + "..." if val_str.length > max_chars
+            # セル幅に応じた簡易トリミング（"..." 分を考慮）
+            max_chars = [((cw - 12.0) / 7.0).to_i, 1].max
+            if val_str.length > max_chars
+              val_str = max_chars > 3 ? "#{val_str[0...(max_chars - 3)]}..." : val_str[0...max_chars]
+            end
 
             Profiler.measure(:gui_text) do
-              Window.draw_text(cx + 6.0, ry + (rh - f_size.to_f) * 0.5, val_str, font: f_font, size: f_size, color: val_col)
+              Window.draw_text(cx + 6.0, ry + (rh - f_size.to_f) * 0.5, val_str, font: f_font, size: f_size, color: val_col, camera: false)
             end
           end
 
           # セル間の薄い境界線
           if i < len - 1
-            Window.draw_rect(cx + cw - 1.0, ry + 1.0, 1.0, rh - 2.0, color: COL_TBL_SEP)
+            Window.draw_rect(cx + cw - 1.0, ry + 1.0, 1.0, rh - 2.0, color: COL_TBL_SEP, camera: false)
           end
 
           cx += cw

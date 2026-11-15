@@ -216,7 +216,6 @@ module Zenoo
         row_h = @current.line_max_h
         @current.in_row       = prev[0]
         @current.line_start_x = prev[1]
-        @current.cursor_x     = prev[1]
         @current.spacing_x    = prev[3]
         @current.cols         = prev[4]
         @current.col_width    = prev[5]
@@ -224,7 +223,8 @@ module Zenoo
         if @current.in_row
           @current.line_max_h = [prev[2], row_h].max
         else
-          @current.cursor_y += row_h + @current.spacing_y
+          @current.cursor_x   = prev[1]
+          @current.cursor_y  += row_h + @current.spacing_y
           @current.line_max_h = 0.0
         end
       end

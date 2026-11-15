@@ -105,11 +105,16 @@ module Zenoo
       #
       # - `preset` (`Symbol`): プリセット名（`:modern_dark`, `:tool_dark`, `:cyber`, または `Theme.register` で登録した名前）
       # - 戻り値: `nil`
-      def apply_preset(preset)
+      def apply_preset(preset, visited = nil)
         sym = preset.to_sym
+        if visited
+          return if visited.include?(sym)
+          visited << sym
+        end
         custom = Theme.custom_presets[sym]
         if !custom.nil?
-          apply_preset(custom[:base])
+          visited ||= [sym]
+          apply_preset(custom[:base], visited)
           configure(**custom[:attrs])
         elsif sym == :cyber
           apply_cyber

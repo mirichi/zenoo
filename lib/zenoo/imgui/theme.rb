@@ -105,11 +105,16 @@ module Zenoo
       #
       # - `preset` (`Symbol`): プリセット名（`:tool_dark`, `:cyber`, または `Theme.register` で登録した名前）
       # - 戻り値: `Object | nil`
-      def apply_preset(preset)
+      def apply_preset(preset, visited = nil)
         sym = preset.to_sym
+        if visited
+          return if visited.include?(sym)
+          visited << sym
+        end
         custom = Theme.custom_presets[sym]
         if !custom.nil?
-          apply_preset(custom[:base])
+          visited ||= [sym]
+          apply_preset(custom[:base], visited)
           configure(**custom[:attrs])
         elsif sym == :cyber
           apply_cyber
@@ -198,23 +203,6 @@ module Zenoo
       end
 
       private
-
-      def normalize_attr(key, val)
-        case key.to_sym
-        when :bg_normal, :bg_hover, :bg_active,
-             :win_bg, :win_title_bg, :win_title_bg_active,
-             :text_color, :text_disabled,
-             :accent_color, :accent_hover, :track_bg
-          normalize_color(val)
-        when :border_normal, :border_hover, :border_active,
-             :win_border_normal, :win_border_active,
-             :shadow_normal, :shadow_hover, :shadow_active,
-             :track_border
-          normalize_pair(val)
-        else
-          val
-        end
-      end
 
       def normalize_color(val)
         return val if val.is_a?(Color)

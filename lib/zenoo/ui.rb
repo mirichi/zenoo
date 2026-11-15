@@ -83,7 +83,7 @@ module Zenoo
 
       # このフレームで要求するマウスカーソル形状を設定する
       #
-      # - `shape` (`Symbol`): カーソル形状（`:arrow`, `:hand`, `:ibeam`, `:nwse` 等）
+      # - `shape` (`Symbol`): カーソル形状（`:arrow`, `:hand`, `:ibeam`, `:resize_nwse` 等）
       # - 戻り値: `Symbol`
       def set_mouse_cursor(shape)
         @requested_cursor = shape
@@ -118,18 +118,20 @@ module Zenoo
         @mouse_captured = false
         @hovered_widget = nil
         @requested_cursor = nil
-        @blink_time = (@blink_time || 0.0) + Zenoo::Window.delta_time
+        @blink_time += Zenoo::Window.delta_time
 
-        if @active_widget && (@active_widget.vanished? || !@active_widget.visible || !@active_widget.enabled)
+        if @active_widget && (!widget_tree_visible?(@active_widget) || !@active_widget.enabled)
           @active_widget = nil
         end
 
-        if @focused_widget && (@focused_widget.vanished? || !@focused_widget.visible || !@focused_widget.enabled)
+        if @focused_widget && (!widget_tree_visible?(@focused_widget) || !@focused_widget.enabled)
           self.focused_widget = nil
         end
 
-        if @open_popup_widget && (@open_popup_widget.vanished? || !@open_popup_widget.visible || !@open_popup_widget.enabled)
+        if @open_popup_widget && (!widget_tree_visible?(@open_popup_widget) || !@open_popup_widget.enabled)
+          pop = @open_popup_widget
           @open_popup_widget = nil
+          pop.close_popup!
         end
       end
 
@@ -138,8 +140,13 @@ module Zenoo
       # - 戻り値: `nil`
       def end_frame
         # 開いているポップアップの最前面オーバーレイ描画
-        if (pop = @open_popup_widget) && !pop.vanished? && pop.visible
-          pop.draw_popup_overlay
+        if (pop = @open_popup_widget)
+          if widget_tree_visible?(pop) && pop.enabled
+            pop.draw_popup_overlay
+          else
+            @open_popup_widget = nil
+            pop.close_popup!
+          end
         end
 
         # マウスボタンが離されたらドラッグ状態を解除
@@ -148,6 +155,16 @@ module Zenoo
           @active_widget = nil
           w.on_pointer_up(Input.mouse_x.to_f, Input.mouse_y.to_f, false)
         end
+      end
+
+      def widget_tree_visible?(w)
+        cur = w
+        while cur.is_a?(Widget)
+          return false if cur.vanished? || !cur.visible
+          return false if cur != w && cur.is_a?(UI::Window) && cur.collapsed
+          cur = cur.parent
+        end
+        true
       end
 
       # ウィジェットツリーまたは配列を一括更新する

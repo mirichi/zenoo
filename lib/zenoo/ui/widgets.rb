@@ -41,12 +41,15 @@ module Zenoo
         @auto_w        = width.nil?
         @auto_h        = height.nil?
 
-        f_size = @size || 15
-        f_font = @font || Font.default
-        w = width ? width.to_f : (f_font ? f_font.text_width(@text, f_size) : 100.0)
-        h = height ? height.to_f : (f_size.to_f + 4.0)
+        super(x, y, width: width ? width.to_f : 100.0, height: height ? height.to_f : 19.0, interactive: interactive, **opts)
 
-        super(x, y, width: w, height: h, interactive: interactive, **opts)
+        if @auto_w || @auto_h
+          th = theme
+          f_size = @size || th.font_size || 15
+          f_font = @font || th.font || Font.default
+          self.width  = f_font.text_width(@text, f_size) if @auto_w && f_font
+          self.height = (f_size.to_f + 4.0) if @auto_h
+        end
       end
 
       # 表示文字列を設定する（幅が自動計測設定の場合は幅も再計算される）
@@ -166,7 +169,7 @@ module Zenoo
     # - fit: :contain (アスペクト比維持), :stretch (枠いっぱい), :center (等倍中央)
     # ==========================================================================
     class ImageBox < Widget
-      attr_accessor :fit, :bg_color, :border_color, :border_width, :radius
+      attr_accessor :fit, :bg_color, :border_color, :border_width
 
       # 画像表示ウィジェットを初期化する
       #
@@ -192,9 +195,8 @@ module Zenoo
         @bg_color     = bg_color
         @border_color = border_color
         @border_width = border_width.to_f
-        @radius       = radius.to_f
 
-        super(x, y, width: w, height: h, interactive: interactive, **opts)
+        super(x, y, width: w, height: h, interactive: interactive, radius: radius, **opts)
         @image = image
       end
 
@@ -259,7 +261,7 @@ module Zenoo
     # Button (プッシュボタン / トグル対応ボタン / アイコン付きボタン)
     # ==========================================================================
     class Button < Widget
-      attr_accessor :label, :icon, :active, :bg_color, :hover_color, :active_color, :text_color, :radius, :font_size
+      attr_accessor :label, :icon, :active, :bg_color, :hover_color, :active_color, :text_color, :font_size
 
       # ボタンを初期化する
       #
@@ -290,7 +292,6 @@ module Zenoo
         @hover_color  = hover_color
         @active_color = active_color
         @text_color   = text_color
-        @radius       = radius
         @font_size    = font_size
 
         super(x, y, width: width, height: height, interactive: true, radius: radius, **opts)
@@ -416,10 +417,14 @@ module Zenoo
       def initialize(label = "", checked = false, x = 0.0, y = 0.0, width: nil, height: 28.0, **opts, &block)
         @label   = label.to_s
         @checked = !!checked
-        f_font   = Font.default
-        w = width ? width.to_f : (28.0 + (f_font ? f_font.text_width(@label, 15) : 100.0) + 10.0)
 
-        super(x, y, width: w, height: height, interactive: true, **opts)
+        super(x, y, width: width ? width.to_f : 100.0, height: height, interactive: true, **opts)
+        if width.nil?
+          th = theme
+          f_font = th.font || Font.default
+          f_size = th.font_size || 15
+          self.width = 28.0 + (f_font ? f_font.text_width(@label, f_size) : 100.0) + 10.0
+        end
         @on_change_proc = block if block
       end
 
@@ -478,6 +483,7 @@ module Zenoo
         unless @label.empty?
           f_font = th.font || Font.default
           f_size = ((th.font_size || 15).to_f * world_scale_y).to_i
+          f_size = 8 if f_size < 8
           tcol = @hovered ? Color::WHITE : (@enabled ? th.text_color : th.text_disabled)
           Zenoo::Window.draw_text(
             rx + box_size + 10.0, ry + rh * 0.5,
@@ -515,10 +521,14 @@ module Zenoo
         @checked = !!checked
         @group   = group
         @value   = value
-        f_font   = Font.default
-        w = width ? width.to_f : (28.0 + (f_font ? f_font.text_width(@label, 15) : 100.0) + 10.0)
 
-        super(x, y, width: w, height: height, interactive: true, **opts)
+        super(x, y, width: width ? width.to_f : 100.0, height: height, interactive: true, **opts)
+        if width.nil?
+          th = theme
+          f_font = th.font || Font.default
+          f_size = th.font_size || 15
+          self.width = 28.0 + (f_font ? f_font.text_width(@label, f_size) : 100.0) + 10.0
+        end
         @on_change_proc = block if block
       end
 
@@ -583,6 +593,7 @@ module Zenoo
         unless @label.empty?
           f_font = th.font || Font.default
           f_size = ((th.font_size || 15).to_f * world_scale_y).to_i
+          f_size = 8 if f_size < 8
           tcol = @hovered ? Color::WHITE : (@enabled ? th.text_color : th.text_disabled)
           Zenoo::Window.draw_text(
             rx + r * 2.0 + 10.0, cy,
@@ -752,6 +763,19 @@ module Zenoo
       def on_pointer_drag(mx, _my)
         UI.set_mouse_cursor(:hand)
         update_value_from_mouse(mx)
+      end
+
+      def on_mouse_wheel(wheel_y)
+        range = @max - @min
+        return false if range <= 0.00001
+        delta_unit = @step || (range / 20.0)
+        old = @value
+        @value = clamp_and_step(@value + wheel_y * delta_unit)
+        if (@value - old).abs > 0.00001
+          trigger_change!(@value)
+          return true
+        end
+        false
       end
 
       def draw_self
@@ -947,14 +971,13 @@ module Zenoo
         ry = screen_top
         rw = screen_width
         rh = screen_height
-        btn_w = 32.0 * world_scale_x
         f_font = th.font || Font.default
         f_size = ((th.font_size || 14).to_f * world_scale_y).to_i
+        f_size = 8 if f_size < 8
 
-        has_label = !@label.empty?
-        label_w = has_label ? (f_font.text_width(@label, f_size) + 12.0) : 0.0
+        label_w, ctrl_x, eff_btn_w, minus_x, plus_x, val_x, val_w = spinner_layout(rx, rw, f_font, f_size)
 
-        if has_label
+        if label_w > 0.0
           Zenoo::Window.draw_text(
             rx, ry + rh * 0.5, @label,
             font: f_font, size: f_size, color: th.text_color,
@@ -962,13 +985,7 @@ module Zenoo
           )
         end
 
-        ctrl_x = rx + label_w
-        ctrl_w = [rw - label_w, btn_w * 2.0 + 30.0].max
-        minus_x = ctrl_x
-        plus_x  = ctrl_x + ctrl_w - btn_w
-        val_x   = ctrl_x + btn_w + 2.0
-        val_w   = ctrl_w - btn_w * 2.0 - 4.0
-        rad     = [(th.corner_radius || 4.0) - 1.0, 2.0].max
+        rad = [(th.corner_radius || 4.0) - 1.0, 2.0].max
 
         # 中央値ボックス
         tb = th.track_border || th.border_normal
@@ -993,7 +1010,7 @@ module Zenoo
         m_hov = (@hovered && @hover_part == :minus)
         mb = m_hov ? th.border_hover : th.border_normal
         Zenoo::Window.draw_rect(
-          minus_x, ry, btn_w, rh,
+          minus_x, ry, eff_btn_w, rh,
           radius: rad,
           color: m_hov ? th.bg_hover : th.bg_normal,
           border_width: mb ? mb[0].to_f : 1.0,
@@ -1001,13 +1018,15 @@ module Zenoo
           camera: @camera, z: @z
         )
         m_col = m_hov ? Color::WHITE : th.text_color
-        Zenoo::Window.draw_rect(minus_x + 10.0, ry + rh * 0.5 - 1.0, btn_w - 20.0, 2.0, color: m_col, camera: @camera, z: @z)
+        bar_w = [eff_btn_w - 20.0, 4.0].max
+        bar_h = [rh - 20.0, 4.0].max
+        Zenoo::Window.draw_rect(minus_x + (eff_btn_w - bar_w) * 0.5, ry + rh * 0.5 - 1.0, bar_w, 2.0, color: m_col, camera: @camera, z: @z)
 
         # [+] ボタン
         p_hov = (@hovered && @hover_part == :plus)
         pb = p_hov ? th.border_hover : th.border_normal
         Zenoo::Window.draw_rect(
-          plus_x, ry, btn_w, rh,
+          plus_x, ry, eff_btn_w, rh,
           radius: rad,
           color: p_hov ? th.bg_hover : th.bg_normal,
           border_width: pb ? pb[0].to_f : 1.0,
@@ -1015,11 +1034,31 @@ module Zenoo
           camera: @camera, z: @z
         )
         p_col = p_hov ? Color::WHITE : th.text_color
-        Zenoo::Window.draw_rect(plus_x + 10.0, ry + rh * 0.5 - 1.0, btn_w - 20.0, 2.0, color: p_col, camera: @camera, z: @z)
-        Zenoo::Window.draw_rect(plus_x + btn_w * 0.5 - 1.0, ry + 10.0, 2.0, rh - 20.0, color: p_col, camera: @camera, z: @z)
+        Zenoo::Window.draw_rect(plus_x + (eff_btn_w - bar_w) * 0.5, ry + rh * 0.5 - 1.0, bar_w, 2.0, color: p_col, camera: @camera, z: @z)
+        Zenoo::Window.draw_rect(plus_x + eff_btn_w * 0.5 - 1.0, ry + (rh - bar_h) * 0.5, 2.0, bar_h, color: p_col, camera: @camera, z: @z)
       end
 
       private
+
+      def spinner_layout(rx, rw, f_font, f_size)
+        btn_w = 32.0 * world_scale_x
+        min_ctrl_w = btn_w * 2.0 + 30.0 * world_scale_x
+        if @label.empty?
+          label_w = 0.0
+        else
+          raw_lw = f_font.text_width(@label, f_size) + 12.0
+          max_lw = [rw - min_ctrl_w, 0.0].max
+          label_w = [raw_lw, max_lw].min
+        end
+        ctrl_x = rx + label_w
+        ctrl_w = [rw - label_w, 0.0].max
+        eff_btn_w = (btn_w * 2.0 + 8.0 > ctrl_w) ? [ctrl_w * 0.35, 4.0].max : btn_w
+        minus_x = ctrl_x
+        plus_x  = ctrl_x + ctrl_w - eff_btn_w
+        val_x   = ctrl_x + eff_btn_w + 2.0
+        val_w   = [ctrl_w - eff_btn_w * 2.0 - 4.0, 4.0].max
+        [label_w, ctrl_x, eff_btn_w, minus_x, plus_x, val_x, val_w]
+      end
 
       def clamp_val(v)
         res = (@step.is_a?(Float) || v.is_a?(Float)) ? v.to_f : v.to_i
@@ -1046,16 +1085,12 @@ module Zenoo
         th = theme
         f_font = th.font || Font.default
         f_size = ((th.font_size || 14).to_f * world_scale_y).to_i
-        label_w = @label.empty? ? 0.0 : (f_font.text_width(@label, f_size) + 12.0)
-        btn_w = 32.0 * world_scale_x
-        ctrl_x = rx + label_w
-        ctrl_w = [rw - label_w, btn_w * 2.0 + 30.0].max
-        minus_x = ctrl_x
-        plus_x  = ctrl_x + ctrl_w - btn_w
+        f_size = 8 if f_size < 8
+        _label_w, _ctrl_x, eff_btn_w, minus_x, plus_x, _val_x, _val_w = spinner_layout(rx, rw, f_font, f_size)
 
-        if px >= minus_x && px <= (minus_x + btn_w)
+        if px >= minus_x && px <= (minus_x + eff_btn_w)
           :minus
-        elsif px >= plus_x && px <= (plus_x + btn_w)
+        elsif px >= plus_x && px <= (plus_x + eff_btn_w)
           :plus
         else
           nil
@@ -1067,8 +1102,7 @@ module Zenoo
     # Tabs (タブバー切り替えウィジェット)
     # ==========================================================================
     class Tabs < Widget
-      attr_accessor :items
-      attr_reader :selected_index
+      attr_reader :items, :selected_index
 
       # タブバーを初期化する
       #
@@ -1090,6 +1124,17 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # タブ項目配列を設定する（`selected_index` も範囲内へクランプされる）
+      #
+      # - `val` (`Array<String>`): 新しいタブ項目の配列
+      # - 戻り値: `Array<String>`
+      def items=(val)
+        @items = val.map(&:to_s)
+        @selected_index = @items.empty? ? 0 : @selected_index.clamp(0, @items.length - 1)
+        @hover_index = nil
+        @items
+      end
+
       # 選択中のタブインデックスを設定する（範囲内へクランプされる）
       #
       # - `idx` (`Integer`): 新しいインデックス
@@ -1108,10 +1153,11 @@ module Zenoo
       def set_hovered_state(val)
         @hovered = val
         @hover_index = nil
-        return unless val && @enabled && @interactive && !@items.empty?
+        rw = screen_width
+        return unless val && @enabled && @interactive && !@items.empty? && rw > 0.0
 
         mx = Input.mouse_x.to_f
-        tab_w = screen_width / @items.length.to_f
+        tab_w = rw / @items.length.to_f
         idx = ((mx - screen_left) / tab_w).to_i
         if idx >= 0 && idx < @items.length
           @hover_index = idx
@@ -1121,8 +1167,9 @@ module Zenoo
 
       def on_pointer_down(mx, _my)
         super
-        return if @items.empty?
-        tab_w = screen_width / @items.length.to_f
+        rw = screen_width
+        return if @items.empty? || rw <= 0.0
+        tab_w = rw / @items.length.to_f
         idx = ((mx - screen_left) / tab_w).to_i
         if idx >= 0 && idx < @items.length && idx != @selected_index
           @selected_index = idx
@@ -1131,12 +1178,12 @@ module Zenoo
       end
 
       def draw_self
-        return if @items.empty?
-        th = theme
         rx = screen_left
         ry = screen_top
         rw = screen_width
+        return if @items.empty? || rw <= 0.0
         rh = screen_height
+        th = theme
         count = @items.length
         tab_w = rw / count.to_f
         f_font = th.font || Font.default
@@ -1226,43 +1273,54 @@ module Zenoo
       def on_pointer_down(mx, _my)
         super
         focus!
-        click_x = mx - (screen_left + 10.0)
-        @cursor_pos = caret_index_from_click(@text, click_x)
+        th = theme
+        f_font = th.font || Font.default
+        f_size = ((th.font_size || 15).to_f * world_scale_y).to_i
+        f_size = 8 if f_size < 8
+        _caret_ox, scroll_x = compute_scroll_x(f_font, f_size, screen_width)
+        click_x = mx - (screen_left + 10.0 - scroll_x)
+        @cursor_pos = caret_index_from_click(@text, click_x, f_font, f_size)
         UI.blink_time = 0.0
       end
 
       def update_self
         return unless focused? && @enabled
 
-        old_text = @text.dup
         th = theme
         rx = screen_left
         ry = screen_top
+        rw = screen_width
         rh = screen_height
 
         f_font = th.font || Font.default
         f_size = ((th.font_size || 15).to_f * world_scale_y).to_i
-        sub_str = @text[0...@cursor_pos] || ""
-        caret_offset = f_font.text_width(sub_str, f_size)
-        Input.set_ime_position(rx + 10.0 + caret_offset, ry + rh + 2.0)
+        f_size = 8 if f_size < 8
+        caret_offset, scroll_x = compute_scroll_x(f_font, f_size, rw)
+        Input.set_ime_position(rx + 10.0 + caret_offset - scroll_x, ry + rh + 2.0)
 
         ctrl_down = Input.key_pressed?(:left_control) || Input.key_pressed?(:right_control) ||
                     Input.key_pressed?(:left_super) || Input.key_pressed?(:right_super)
 
         reset_blink = false
+        text_changed = false
         if ctrl_down && Input.key_push?(:v)
           clip = Input.clipboard
           if clip && !clip.empty?
+            clip = clip.gsub(/[\r\n\t]+/, " ")
             @text.insert(@cursor_pos, clip)
             @cursor_pos += clip.length
             reset_blink = true
+            text_changed = true
           end
         elsif ctrl_down && Input.key_push?(:c)
           Input.clipboard = @text
         elsif ctrl_down && Input.key_push?(:x)
           Input.clipboard = @text
-          @text = String.new
-          @cursor_pos = 0
+          if !@text.empty?
+            @text = String.new
+            @cursor_pos = 0
+            text_changed = true
+          end
           reset_blink = true
         elsif ctrl_down && Input.key_push?(:a)
           @cursor_pos = @text.length
@@ -1272,11 +1330,13 @@ module Zenoo
             @text.slice!(@cursor_pos - 1)
             @cursor_pos -= 1
             reset_blink = true
+            text_changed = true
           end
         elsif Input.key_repeat?(:delete)
           if @cursor_pos < @text.length
             @text.slice!(@cursor_pos)
             reset_blink = true
+            text_changed = true
           end
         elsif Input.key_repeat?(:left)
           if @cursor_pos > 0
@@ -1304,19 +1364,18 @@ module Zenoo
           len = chars.length
           while i < len
             ch = chars[i]
-            if ch.ord >= 32 || ch == "\t"
+            if ch.ord >= 32
               @text.insert(@cursor_pos, ch)
               @cursor_pos += ch.length
               reset_blink = true
+              text_changed = true
             end
             i += 1
           end
         end
 
         UI.blink_time = 0.0 if reset_blink
-        if @text != old_text
-          trigger_change!(@text)
-        end
+        trigger_change!(@text) if text_changed
       end
 
       def draw_self
@@ -1343,14 +1402,12 @@ module Zenoo
 
         f_font = th.font || Font.default
         f_size = ((th.font_size || 15).to_f * world_scale_y).to_i
+        f_size = 8 if f_size < 8
         pad_x  = 10.0
         text_y = ry + (rh - f_size.to_f) * 0.5
 
-        sub_str = @text[0...@cursor_pos] || ""
-        caret_ox = f_font.text_width(sub_str, f_size)
-        avail_w  = [rw - pad_x * 2.0 - 4.0, 10.0].max
-        scroll_x = caret_ox > avail_w ? (caret_ox - avail_w) : 0.0
-        text_x   = rx + pad_x - scroll_x
+        caret_ox, scroll_x = compute_scroll_x(f_font, f_size, rw)
+        text_x = rx + pad_x - scroll_x
 
         prev_ox, prev_oy = Zenoo::Window.push_clip_scope(rx + 4.0, ry + 2.0, [rw - 8.0, 0.0].max, [rh - 4.0, 0.0].max, local: false, z: @z)
         if @text.empty? && !is_foc && !@placeholder.empty?
@@ -1368,10 +1425,16 @@ module Zenoo
 
       private
 
-      def caret_index_from_click(str, click_x)
-        th = theme
-        f_font = th.font || Font.default
-        f_size = ((th.font_size || 15).to_f * world_scale_y).to_i
+      def compute_scroll_x(f_font, f_size, rw)
+        pad_x = 10.0
+        sub_str = @text[0...@cursor_pos] || ""
+        caret_ox = f_font.text_width(sub_str, f_size)
+        avail_w = [rw - pad_x * 2.0 - 4.0, 10.0].max
+        scroll_x = caret_ox > avail_w ? (caret_ox - avail_w) : 0.0
+        [caret_ox, scroll_x]
+      end
+
+      def caret_index_from_click(str, click_x, f_font, f_size)
         best_idx = str.length
         accum_w = 0.0
         idx = 0
@@ -1394,8 +1457,8 @@ module Zenoo
     # Dropdown (ポップアップオーバーレイ対応コンボボックス)
     # ==========================================================================
     class Dropdown < Widget
-      attr_accessor :label, :items
-      attr_reader :selected_index, :open
+      attr_accessor :label
+      attr_reader :items, :selected_index, :open
 
       # ドロップダウンを初期化する
       #
@@ -1412,7 +1475,7 @@ module Zenoo
       def initialize(items = [], selected_index = 0, x = 0.0, y = 0.0, width: 200.0, height: 36.0,
                      label: "", **opts, &block)
         @items          = items.map(&:to_s)
-        @selected_index = selected_index.to_i
+        @selected_index = (@items.empty? || selected_index.nil? || selected_index.to_i < 0) ? -1 : selected_index.to_i.clamp(0, @items.length - 1)
         @label          = label.to_s
         @open           = false
         @hover_item_idx = nil
@@ -1421,19 +1484,38 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # 選択肢配列を設定する（`selected_index` も範囲内に調整される）
+      #
+      # - `val` (`Array<String>`): 新しい選択肢の配列
+      # - 戻り値: `Array<String>`
+      def items=(val)
+        @items = val.map(&:to_s)
+        if @items.empty?
+          @selected_index = -1
+          close_popup! if @open
+        elsif @selected_index >= @items.length
+          @selected_index = @items.length - 1
+        end
+        @items
+      end
+
       # 選択中の項目インデックスを設定する（範囲内へクランプされる）
       #
-      # - `idx` (`Integer`): 新しいインデックス
+      # - `idx` (`Integer | nil`): 新しいインデックス
       # - 戻り値: `Integer`
       def selected_index=(idx)
-        @selected_index = idx.to_i.clamp(0, [@items.length - 1, 0].max)
+        if idx.nil? || idx.to_i < 0 || @items.empty?
+          @selected_index = -1
+        else
+          @selected_index = idx.to_i.clamp(0, @items.length - 1)
+        end
       end
 
       # 現在選択されている項目の文字列を返す
       #
       # - 戻り値: `String | nil`
       def selected_item
-        @items[@selected_index]
+        (@selected_index >= 0) ? @items[@selected_index] : nil
       end
 
       # カーソル形状を返す（`:hand`）
@@ -1461,8 +1543,13 @@ module Zenoo
       #
       # - 戻り値: `Dropdown`
       def open_popup!
+        return self if @items.empty?
+        if (prev = UI.open_popup_widget) && !prev.equal?(self)
+          prev.close_popup!
+        end
         @open = true
         UI.open_popup_widget = self
+        self
       end
 
       # 選択肢ポップアップを閉じる
@@ -1482,8 +1569,9 @@ module Zenoo
 
         if in_pop
           UI.set_mouse_cursor(:hand)
-          item_h = 28.0
-          idx = ((my - (py + 3.0)) / item_h).to_i
+          sy = world_scale_y
+          item_h = 28.0 * sy
+          idx = ((my - (py + 3.0 * sy)) / item_h).to_i
           @hover_item_idx = (idx >= 0 && idx < @items.length) ? idx : nil
           if m_push && @hover_item_idx
             old = @selected_index
@@ -1511,6 +1599,7 @@ module Zenoo
         rh = screen_height
         f_font = th.font || Font.default
         f_size = ((th.font_size || 14).to_f * world_scale_y).to_i
+        f_size = 8 if f_size < 8
 
         b_cfg = (@hovered || @open) ? th.border_hover : th.border_normal
         bw = b_cfg ? b_cfg[0].to_f : 1.0
@@ -1526,20 +1615,27 @@ module Zenoo
           camera: @camera, z: @z
         )
 
-        sel_str = (@items[@selected_index] || "").to_s
+        sel_str = (@selected_index >= 0 ? (@items[@selected_index] || "") : "").to_s
+        disp_str = if @label.empty?
+                     sel_str
+                   elsif sel_str.empty?
+                     "#{@label}:"
+                   else
+                     "#{@label}: #{sel_str}"
+                   end
         Zenoo::Window.draw_text(
-          rx + 12.0, ry + rh * 0.5,
-          sel_str,
+          rx + 12.0 * world_scale_x, ry + rh * 0.5,
+          disp_str,
           font: f_font, size: f_size, color: th.text_color,
           align: :left, valign: :center,
           camera: @camera, z: @z
         )
 
         # 下向き矢印 (▼)
-        ax = rx + rw - 20.0
-        ay = ry + rh * 0.5 - 2.0
+        ax = rx + rw - 20.0 * world_scale_x
+        ay = ry + rh * 0.5 - 2.0 * world_scale_y
         acol = (@hovered || @open) ? th.accent_color : Color.new(180, 185, 195)
-        Zenoo::Window.draw_triangle(ax, ay, ax + 8.0, ay, ax + 4.0, ay + 5.0, color: acol, camera: @camera, z: @z)
+        Zenoo::Window.draw_triangle(ax, ay, ax + 8.0 * world_scale_x, ay, ax + 4.0 * world_scale_x, ay + 5.0 * world_scale_y, color: acol, camera: @camera, z: @z)
       end
 
       def draw_popup_overlay
@@ -1547,8 +1643,11 @@ module Zenoo
         th = theme
         px, py, pw, ph = popup_rect
         pop_z = 900.0
+        sx = world_scale_x
+        sy = world_scale_y
         f_font = th.font || Font.default
-        f_size = ((th.font_size || 14).to_f * world_scale_y).to_i
+        f_size = ((th.font_size || 14).to_f * sy).to_i
+        f_size = 8 if f_size < 8
         rad = th.corner_radius || 6.0
         s_cfg = th.shadow_normal
 
@@ -1563,16 +1662,16 @@ module Zenoo
           camera: @camera, z: pop_z
         )
 
-        item_h = 28.0
+        item_h = 28.0 * sy
         i = 0
         len = @items.length
         while i < len
-          iy = py + 3.0 + i.to_f * item_h
+          iy = py + 3.0 * sy + i.to_f * item_h
           is_sel = (i == @selected_index)
           is_hov = (i == @hover_item_idx)
           if is_sel || is_hov
             Zenoo::Window.draw_rect(
-              px + 3.0, iy, pw - 6.0, item_h,
+              px + 3.0 * sx, iy, pw - 6.0 * sx, item_h,
               radius: [rad - 2.0, 2.0].max,
               color: is_sel ? th.bg_active : th.bg_hover,
               camera: @camera, z: pop_z + 1.0
@@ -1580,7 +1679,7 @@ module Zenoo
           end
           tcol = (is_sel || is_hov) ? Color::WHITE : th.text_color
           Zenoo::Window.draw_text(
-            px + 12.0, iy + item_h * 0.5,
+            px + 12.0 * sx, iy + item_h * 0.5,
             @items[i],
             font: f_font, size: f_size, color: tcol,
             align: :left, valign: :center,
@@ -1593,9 +1692,10 @@ module Zenoo
       private
 
       def popup_rect
-        item_h = 28.0
-        pop_h  = @items.length.to_f * item_h + 6.0
-        [screen_left, screen_top + screen_height + 2.0, screen_width, pop_h]
+        sy = world_scale_y
+        item_h = 28.0 * sy
+        pop_h  = @items.length.to_f * item_h + 6.0 * sy
+        [screen_left, screen_top + screen_height + 2.0 * sy, screen_width, pop_h]
       end
     end
 
@@ -1603,8 +1703,8 @@ module Zenoo
     # ListBox (スクロール対応アイテム選択リストウィジェット)
     # ==========================================================================
     class ListBox < Widget
-      attr_accessor :items, :item_height
-      attr_reader :selected_index, :scroll_y
+      attr_accessor :item_height
+      attr_reader :items, :selected_index, :scroll_y
 
       # リストボックスを初期化する
       #
@@ -1621,7 +1721,7 @@ module Zenoo
       def initialize(items = [], selected_index = 0, x = 0.0, y = 0.0, width: 240.0, height: 150.0,
                      item_height: 28.0, **opts, &block)
         @items          = items.map(&:to_s)
-        @selected_index = selected_index.to_i
+        @selected_index = (@items.empty? || selected_index.nil? || selected_index.to_i < 0) ? -1 : selected_index.to_i.clamp(0, @items.length - 1)
         @item_height    = item_height.to_f
         @scroll_y       = 0.0
         @hover_index    = nil
@@ -1631,19 +1731,38 @@ module Zenoo
         @on_change_proc = block if block
       end
 
+      # 選択肢配列を設定する（`selected_index` および `scroll_y` も範囲内に調整される）
+      #
+      # - `val` (`Array<String>`): 新しい選択肢の配列
+      # - 戻り値: `Array<String>`
+      def items=(val)
+        @items = val.map(&:to_s)
+        if @items.empty?
+          @selected_index = -1
+        elsif @selected_index >= @items.length
+          @selected_index = @items.length - 1
+        end
+        @scroll_y = @scroll_y.clamp(0.0, max_scroll)
+        @items
+      end
+
       # 選択中の項目インデックスを設定する（範囲内へクランプされる）
       #
-      # - `idx` (`Integer`): 新しいインデックス
+      # - `idx` (`Integer | nil`): 新しいインデックス
       # - 戻り値: `Integer`
       def selected_index=(idx)
-        @selected_index = idx.to_i.clamp(0, [@items.length - 1, 0].max)
+        if idx.nil? || idx.to_i < 0 || @items.empty?
+          @selected_index = -1
+        else
+          @selected_index = idx.to_i.clamp(0, @items.length - 1)
+        end
       end
 
       # 現在選択されている項目の文字列を返す
       #
       # - 戻り値: `String | nil`
       def selected_item
-        @items[@selected_index]
+        (@selected_index >= 0) ? @items[@selected_index] : nil
       end
 
       # 全項目を並べた場合の総高さを返す
@@ -1681,7 +1800,7 @@ module Zenoo
 
         mx = Input.mouse_x.to_f
         my = Input.mouse_y.to_f
-        if needs_scroll? && mx >= (screen_left + screen_width - 14.0)
+        if needs_scroll? && mx >= (screen_left + screen_width - 14.0 * world_scale_x)
           UI.set_mouse_cursor(:hand)
           return
         end
@@ -1701,7 +1820,7 @@ module Zenoo
 
       def on_pointer_down(mx, my)
         super
-        if needs_scroll? && mx >= (screen_left + screen_width - 14.0)
+        if needs_scroll? && mx >= (screen_left + screen_width - 14.0 * world_scale_x)
           @dragging_sb = true
           update_sb_from_mouse(my)
           return
@@ -1733,6 +1852,8 @@ module Zenoo
         ry = screen_top
         rw = screen_width
         rh = screen_height
+        sx = world_scale_x
+        sy = world_scale_y
         rad = th.corner_radius || 6.0
         tb  = th.track_border || th.border_normal
 
@@ -1745,23 +1866,25 @@ module Zenoo
           camera: @camera, z: @z
         )
 
-        sb_w = needs_scroll? ? 12.0 : 0.0
-        content_w = [rw - sb_w - 4.0, 10.0].max
-        in_h = [rh - 4.0, 1.0].max
+        sb_w = needs_scroll? ? 12.0 * sx : 0.0
+        content_w = [rw - sb_w - 4.0 * sx, 10.0].max
+        in_h = [rh - 4.0 * sy, 1.0].max
         f_font = th.font || Font.default
-        f_size = ((th.font_size || 14).to_f * world_scale_y).to_i
+        f_size = ((th.font_size || 14).to_f * sy).to_i
+        f_size = 8 if f_size < 8
+        ih = @item_height * sy
 
-        prev_ox, prev_oy = Zenoo::Window.push_clip_scope(rx + 2.0, ry + 2.0, content_w, in_h, local: false, z: @z)
+        prev_ox, prev_oy = Zenoo::Window.push_clip_scope(rx + 2.0 * sx, ry + 2.0 * sy, content_w, in_h, local: false, z: @z)
         i = 0
         len = @items.length
         while i < len
-          iy = ry + 4.0 + i.to_f * @item_height - @scroll_y
-          if (iy + @item_height) >= (ry + 2.0) && iy <= (ry + rh - 2.0)
+          iy = ry + 4.0 * sy + (i.to_f * @item_height - @scroll_y) * sy
+          if (iy + ih) >= (ry + 2.0 * sy) && iy <= (ry + rh - 2.0 * sy)
             is_sel = (i == @selected_index)
             is_hov = (@hovered && i == @hover_index)
             if is_sel || is_hov
               Zenoo::Window.draw_rect(
-                rx + 4.0, iy + 1.0, content_w - 4.0, @item_height - 2.0,
+                rx + 4.0 * sx, iy + 1.0 * sy, content_w - 4.0 * sx, ih - 2.0 * sy,
                 radius: [rad - 2.0, 2.0].max,
                 color: is_sel ? th.bg_active : th.bg_hover,
                 camera: @camera, z: @z
@@ -1769,7 +1892,7 @@ module Zenoo
             end
             tcol = (is_sel || is_hov) ? Color::WHITE : th.text_color
             Zenoo::Window.draw_text(
-              rx + 12.0, iy + @item_height * 0.5,
+              rx + 12.0 * sx, iy + ih * 0.5,
               @items[i],
               font: f_font, size: f_size, color: tcol,
               align: :left, valign: :center,
@@ -1781,33 +1904,35 @@ module Zenoo
         Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
 
         if needs_scroll?
-          sb_x = rx + rw - sb_w - 2.0
-          sb_y = ry + 3.0
-          sb_h = [rh - 6.0, 10.0].max
+          sb_x = rx + rw - sb_w - 2.0 * sx
+          sb_y = ry + 3.0 * sy
+          sb_h = [rh - 6.0 * sy, 10.0 * sy].max
           Zenoo::Window.draw_rect(sb_x, sb_y, sb_w, sb_h, radius: sb_w * 0.5, color: Color.new(15, 18, 25, 180), camera: @camera, z: @z)
 
           tot = total_content_height
-          thumb_h = [[(in_h / tot) * sb_h, 20.0].max, sb_h].min
+          thumb_h = [[(inner_height / tot) * sb_h, 20.0 * sy].max, sb_h].min
           ratio = max_scroll > 0.0 ? (@scroll_y / max_scroll) : 0.0
           thumb_y = sb_y + ratio * (sb_h - thumb_h)
           t_col = @dragging_sb ? (th.accent_hover || th.accent_color) : th.accent_color
-          Zenoo::Window.draw_rect(sb_x + 2.0, thumb_y, sb_w - 4.0, thumb_h, radius: (sb_w - 4.0) * 0.5, color: t_col, camera: @camera, z: @z)
+          Zenoo::Window.draw_rect(sb_x + 2.0 * sx, thumb_y, sb_w - 4.0 * sx, thumb_h, radius: (sb_w - 4.0 * sx) * 0.5, color: t_col, camera: @camera, z: @z)
         end
       end
 
       private
 
       def item_index_at(my)
-        rel_y = my - (screen_top + 4.0) + @scroll_y
+        sy = world_scale_y
+        rel_y = (my - (screen_top + 4.0 * sy)) / sy + @scroll_y
         return nil if rel_y < 0.0
         idx = (rel_y / @item_height).to_i
         (idx >= 0 && idx < @items.length) ? idx : nil
       end
 
       def update_sb_from_mouse(my)
-        sb_y = screen_top + 3.0
-        sb_h = [screen_height - 6.0, 10.0].max
-        thumb_h = [[(inner_height / total_content_height) * sb_h, 20.0].max, sb_h].min
+        sy = world_scale_y
+        sb_y = screen_top + 3.0 * sy
+        sb_h = [screen_height - 6.0 * sy, 10.0 * sy].max
+        thumb_h = [[(inner_height / total_content_height) * sb_h, 20.0 * sy].max, sb_h].min
         avail = [sb_h - thumb_h, 1.0].max
         ratio = ((my - (sb_y + thumb_h * 0.5)) / avail).clamp(0.0, 1.0)
         @scroll_y = ratio * max_scroll

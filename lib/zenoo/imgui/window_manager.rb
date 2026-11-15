@@ -6,7 +6,7 @@ module Zenoo
     class WindowState
       attr_accessor :id, :title, :x, :y, :w, :h, :z, :open,
                     :resizable, :min_w, :min_h, :max_w, :max_h,
-                    :collapsed, :expanded_h, :collapsible
+                    :collapsed, :expanded_h, :collapsible, :seen_this_frame
 
       # ウィンドウ状態オブジェクトを初期化する
       #
@@ -37,9 +37,10 @@ module Zenoo
         @min_h       = min_h.to_f
         @max_w       = max_w.to_f
         @max_h       = max_h.to_f
-        @collapsed   = false
-        @expanded_h  = @h
-        @collapsible = !!collapsible
+        @collapsed       = false
+        @expanded_h      = @h
+        @collapsible     = !!collapsible
+        @seen_this_frame = true
       end
     end
 
@@ -70,11 +71,12 @@ module Zenoo
         @last_click_y         = 0.0
       end
 
-      def begin_frame(mouse_x, mouse_y, mouse_down, mouse_push)
+      def begin_frame(mouse_x, mouse_y, mouse_down, mouse_push, overlay_blocked: false)
         # 1. ウィンドウのドラッグ / リサイズ継続処理
         if @resizing_window_id
           ImGui.set_mouse_cursor(:resize_nwse)
-          if mouse_down && (win = @windows[@resizing_window_id])
+          win = @windows[@resizing_window_id]
+          if mouse_down && win && win.open && win.seen_this_frame
             dw = mouse_x - @resize_start_mouse_x
             dh = mouse_y - @resize_start_mouse_y
             new_w = @resize_start_w + dw
@@ -86,7 +88,8 @@ module Zenoo
           end
         elsif @dragging_window_id
           ImGui.set_mouse_cursor(:hand)
-          if mouse_down && (win = @windows[@dragging_window_id])
+          win = @windows[@dragging_window_id]
+          if mouse_down && win && win.open && win.seen_this_frame
             win.x = mouse_x - @drag_offset_x
             win.y = mouse_y - @drag_offset_y
           else
@@ -95,7 +98,9 @@ module Zenoo
         end
 
         # 2. 前フレーム確定ウィンドウ情報に基づくマウス直下の最前面ウィンドウ特定
-        if @resizing_window_id
+        if overlay_blocked
+          @hovered_window_id = nil
+        elsif @resizing_window_id
           @hovered_window_id = @resizing_window_id
         elsif @dragging_window_id
           @hovered_window_id = @dragging_window_id
@@ -103,7 +108,7 @@ module Zenoo
           @hovered_window_id = nil
           @window_order.reverse_each do |wid|
             w = @windows[wid]
-            next unless w && w.open
+            next unless w && w.open && w.seen_this_frame
             if in_rect?(mouse_x, mouse_y, w.x, w.y, w.w, w.h)
               @hovered_window_id = wid
               break
@@ -112,7 +117,7 @@ module Zenoo
         end
 
         # 3. ウィンドウクリック時の最前面化 (Bring to Front)
-        if mouse_push
+        if mouse_push && !overlay_blocked
           if @hovered_window_id
             @active_window_id = @hovered_window_id
             @window_order.delete(@hovered_window_id)
@@ -126,6 +131,7 @@ module Zenoo
         @window_order.each_with_index do |wid, idx|
           if (w = @windows[wid])
             w.z = 100.0 + idx * 100.0
+            w.seen_this_frame = false
           end
         end
 
@@ -140,18 +146,21 @@ module Zenoo
           win = WindowState.new(win_id, title.to_s, def_x, def_y, w.to_f, h.to_f, resizable: resizable, min_w: min_w, min_h: min_h, collapsible: collapsible)
           @windows[win_id] = win
           @window_order.push(win_id)
+          @active_window_id = win_id if @active_window_id.nil?
           win.z = 100.0 + (@window_order.size - 1) * 100.0
         else
+          win.title = title.to_s
           win.resizable = !!resizable
           win.collapsible = !!collapsible
           win.min_w = min_w.to_f if min_w
           win.min_h = min_h.to_f if min_h
+          win.seen_this_frame = true
         end
         win
       end
 
       def active?(win_id)
-        @window_order.last == win_id
+        @active_window_id == win_id
       end
 
       # 最小化ボタンの領域 (タイトルバー右端)
@@ -165,6 +174,7 @@ module Zenoo
       # 最小化ボタンのクリック判定
       def check_collapse_click(win, title_bar_h, mouse_x, mouse_y, mouse_push)
         return false unless win.collapsible
+        return false unless @hovered_window_id == win.id
         bx, by, bw, bh = collapse_button_rect(win, title_bar_h)
         if in_rect?(mouse_x, mouse_y, bx, by, bw, bh)
           if mouse_push
@@ -190,6 +200,7 @@ module Zenoo
       # タイトルバーのダブルクリック検知 (0.3秒以内の連続クリックで最小化トグル)
       def check_title_bar_double_click(win, title_bar_h, mouse_x, mouse_y, current_time)
         return false unless win.collapsible
+        return false unless @hovered_window_id == win.id
         return false unless in_rect?(mouse_x, mouse_y, win.x, win.y, win.w, title_bar_h)
 
         # 最小化ボタンの上ならダブルクリック処理は行わない
@@ -251,11 +262,20 @@ module Zenoo
         end
       end
 
-      def with_window_context(win_id)
+      def push_window_context(win_id)
         prev_win_id = @current_window_id
         @current_window_id = win_id
-        yield
+        prev_win_id
+      end
+
+      def pop_window_context(prev_win_id)
         @current_window_id = prev_win_id
+      end
+
+      def with_window_context(win_id)
+        prev_win_id = push_window_context(win_id)
+        yield
+        pop_window_context(prev_win_id)
       end
 
       private

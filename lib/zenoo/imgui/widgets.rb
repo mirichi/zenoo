@@ -26,12 +26,12 @@ module Zenoo
       # - `id` (`String`): ウィジェット識別 ID
       # - 戻り値: `Boolean`（トグル後のチェック状態）
       def checkbox(label, checked, x: nil, y: nil, w: nil, h: 28.0, id: "")
-        widget_id = id.to_s.empty? ? label.to_s : id.to_s
+        widget_id = resolve_widget_id(label, id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rh = h.to_f
         f_font = @theme.font || Font.default
-        f_size = 15
+        f_size = @theme.font_size.to_i > 0 ? @theme.font_size.to_i : 15
         text_w = f_font.text_width(label.to_s, f_size)
 
         box_size = 20.0
@@ -42,6 +42,7 @@ module Zenoo
         new_checked = !!checked
 
         if @active_id == widget_id
+          Input.consume_mouse!
           if @mouse_rel || !@mouse_down
             new_checked = !checked if hover
             @active_id = nil
@@ -49,6 +50,7 @@ module Zenoo
         elsif @active_id.nil? && hover
           @hot_id = widget_id
           if @mouse_push
+            Input.consume_mouse!
             if @mouse_rel
               new_checked = !checked
             else
@@ -78,12 +80,12 @@ module Zenoo
       # - `id` (`String`): ウィジェット識別 ID
       # - 戻り値: `Boolean`（このフレームでクリックされた場合 `true`）
       def radio(label, active, x: nil, y: nil, w: nil, h: 28.0, id: "")
-        widget_id = id.to_s.empty? ? label.to_s : id.to_s
+        widget_id = resolve_widget_id(label, id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rh = h.to_f
         f_font = @theme.font || Font.default
-        f_size = 15
+        f_size = @theme.font_size.to_i > 0 ? @theme.font_size.to_i : 15
         text_w = f_font.text_width(label.to_s, f_size)
 
         circle_r = 9.0
@@ -115,10 +117,9 @@ module Zenoo
         @layout.advance(rw, rh) if x.nil? && y.nil?
         clicked
       end
-      alias radio_button radio
 
       # ----------------------------------------------------
-      # 3. タブバー (Tabs / Tab Bar)
+      # 3. タブバー (Tabs)
       # ----------------------------------------------------
       # タブバーを描画し、クリック操作を反映した選択インデックスを返す
       #
@@ -131,33 +132,36 @@ module Zenoo
       # - `id` (`String`): ウィジェット識別 ID
       # - 戻り値: `Integer`（更新後の選択インデックス）
       def tabs(labels, selected_index, x: nil, y: nil, w: nil, h: 36.0, id: "")
-        widget_id = id.to_s.empty? ? "tabs_#{labels.join('_')}" : id.to_s
+        widget_id = resolve_widget_id("tabs_#{labels.join('_')}", id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 300.0)
         rh = h.to_f
         count = labels.length
-        return selected_index if count == 0
+        return selected_index if count == 0 || rw <= 0.0
 
         tab_w = rw / count.to_f
 
         new_selected = selected_index.to_i
         hover_idx = nil
 
-        i = 0
-        while i < count
-          tx = rx + i.to_f * tab_w
-          hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, tx, ry, tab_w, rh)
+        if @active_id.nil?
+          i = 0
+          while i < count
+            tx = rx + i.to_f * tab_w
+            hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, tx, ry, tab_w, rh)
 
-          if hover
-            set_mouse_cursor(:hand)
-            hover_idx = i
-            @hot_id = "#{widget_id}_#{i}"
-            if @mouse_push
-              new_selected = i
+            if hover
+              set_mouse_cursor(:hand)
+              hover_idx = i
+              @hot_id = "#{widget_id}_#{i}"
+              if @mouse_push
+                Input.consume_mouse!
+                new_selected = i
+              end
             end
+            i += 1
           end
-          i += 1
         end
 
         # 描画
@@ -166,7 +170,6 @@ module Zenoo
         @layout.advance(rw, rh) if x.nil? && y.nil?
         new_selected
       end
-      alias tab_bar tabs
 
       # ----------------------------------------------------
       # 4. スピンボタン (Spinner / SpinBox)
@@ -186,7 +189,7 @@ module Zenoo
       # - `id` (`String`): ウィジェット識別 ID
       # - 戻り値: `Numeric`（更新後の値）
       def spinner(label, value, min: nil, max: nil, step: 1, x: nil, y: nil, w: nil, h: 36.0, format: nil, id: "")
-        widget_id = id.to_s.empty? ? label.to_s : id.to_s
+        widget_id = resolve_widget_id(label, id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 220.0)
@@ -196,35 +199,43 @@ module Zenoo
 
         btn_w = 32.0
         f_font = @theme.font || Font.default
-        f_size = 14
+        f_size = @theme.font_size.to_i > 0 ? @theme.font_size.to_i : 14
 
-        # ラベルがある場合は上部または左側に描画
-        has_label = !label.to_s.empty?
-        label_w = has_label ? f_font.text_width(label.to_s, f_size) + 12.0 : 0.0
+        min_ctrl_w = btn_w * 2.0 + 30.0
+        if label.to_s.empty?
+          label_w = 0.0
+        else
+          raw_lw = f_font.text_width(label.to_s, f_size) + 12.0
+          max_lw = [rw - min_ctrl_w, 0.0].max
+          label_w = [raw_lw, max_lw].min
+        end
 
         # 操作部分の矩形
         ctrl_x = rx + label_w
-        ctrl_w = [rw - label_w, btn_w * 2.0 + 30.0].max
+        ctrl_w = [rw - label_w, 0.0].max
+        eff_btn_w = (btn_w * 2.0 + 8.0 > ctrl_w) ? [ctrl_w * 0.35, 4.0].max : btn_w
 
         # マイナスボタン領域
         minus_x = ctrl_x
-        minus_hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, minus_x, ry, btn_w, rh)
+        minus_hover = @active_id.nil? && can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, minus_x, ry, eff_btn_w, rh)
 
         # プラスボタン領域
-        plus_x = ctrl_x + ctrl_w - btn_w
-        plus_hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, plus_x, ry, btn_w, rh)
+        plus_x = ctrl_x + ctrl_w - eff_btn_w
+        plus_hover = @active_id.nil? && can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, plus_x, ry, eff_btn_w, rh)
 
         # 入力処理
         set_mouse_cursor(:hand) if minus_hover || plus_hover
         if minus_hover
           @hot_id = "#{widget_id}_minus"
           if @mouse_push
+            Input.consume_mouse!
             cur_val -= st
             cur_val = [cur_val, min].max if min
           end
         elsif plus_hover
           @hot_id = "#{widget_id}_plus"
           if @mouse_push
+            Input.consume_mouse!
             cur_val += st
             cur_val = [cur_val, max].min if max
           end
@@ -242,7 +253,6 @@ module Zenoo
         @layout.advance(rw, rh) if x.nil? && y.nil?
         cur_val
       end
-      alias spinbox spinner
 
       # ----------------------------------------------------
       # 5. スクロールバー (ScrollBar)
@@ -256,12 +266,13 @@ module Zenoo
       # - `y` (`Float | nil`): Y座標（省略時はレイアウトカーソル位置）
       # - `w` (`Float`): 幅（デフォルト `14.0`）
       # - `h` (`Float`): 高さ（デフォルト `150.0`）
+      # - `allow_wheel` (`Boolean`): ホイール操作を受け付けるか（デフォルト `true`）
       # - `id` (`String`): ウィジェット識別 ID
       # - 戻り値: `Float`（更新されたスクロール位置）
-      def scrollbar(value, total_size, view_size, x: nil, y: nil, w: 14.0, h: 150.0, id: "")
-        widget_id = id.to_s.empty? ? "scrollbar_#{x}_#{y}" : id.to_s
+      def scrollbar(value, total_size, view_size, x: nil, y: nil, w: 14.0, h: 150.0, allow_wheel: true, id: "")
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
+        widget_id = resolve_widget_id("scrollbar_#{rx.to_i}_#{ry.to_i}", id)
         rw = w.to_f
         rh = h.to_f
         cur_val = value.to_f
@@ -285,6 +296,7 @@ module Zenoo
         set_mouse_cursor(:hand) if hover_thumb || @active_id == widget_id
 
         if @active_id == widget_id
+          Input.consume_mouse!
           if @mouse_rel || !@mouse_down
             @active_id = nil
           else
@@ -298,6 +310,7 @@ module Zenoo
         elsif @active_id.nil? && hover_track
           @hot_id = widget_id
           if @mouse_push
+            Input.consume_mouse!
             @active_id = widget_id
             track_avail = [rh - thumb_h, 1.0].max
             cur_ratio = (gui_mouse_y - (ry + thumb_h * 0.5)) / track_avail
@@ -308,7 +321,7 @@ module Zenoo
         end
 
         # ホイールスクロール
-        if hover_track && Input.mouse_wheel_y != 0
+        if allow_wheel && hover_track && Input.mouse_wheel_y != 0
           cur_val -= Input.mouse_wheel_y.to_f * 30.0
         end
 
@@ -339,7 +352,7 @@ module Zenoo
       # - `id` (`String`): ウィジェット識別 ID
       # - 戻り値: `Integer`（更新された選択インデックス）
       def listbox(label, selected_index, items, x: nil, y: nil, w: nil, h: nil, id: "")
-        widget_id = id.to_s.empty? ? (label.to_s.empty? ? "listbox_#{items.length}" : label.to_s) : id.to_s
+        widget_id = resolve_widget_id(label.to_s.empty? ? "listbox_#{items.length}" : label, id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 240.0)
@@ -373,35 +386,36 @@ module Zenoo
         scroll_y = [[scroll_y, 0.0].max, max_s].min
         Widgets.scroll_states[widget_id] = scroll_y
 
-        new_selected = selected_index.to_i
+        new_selected = selected_index.nil? ? nil : selected_index.to_i
 
         # クリップ領域内で各アイテムを描画
-        Window.clip(rx + 2.0, list_y + 2.0, content_w, inner_h, local: false) do
-          i = 0
-          len = items.length
-          while i < len
-            it_text = items[i].to_s
-            iy = list_y + pad_y + (i.to_f * item_h) - scroll_y
+        prev_ox, prev_oy = Window.push_clip_scope(rx + 2.0, list_y + 2.0, content_w, inner_h, local: false)
+        i = 0
+        len = items.length
+        while i < len
+          it_text = items[i].to_s
+          iy = list_y + pad_y + (i.to_f * item_h) - scroll_y
 
-            # 画面外カリング (領域内に少しでも掛かっていれば描画)
-            if iy + item_h >= (list_y + 2.0) && iy <= (list_y + list_h - 2.0)
-              it_hover = box_hover && in_rect?(gui_mouse_x, gui_mouse_y, rx + 2.0, iy, content_w, item_h)
-              is_sel = (i == new_selected)
+          # 画面外カリング (領域内に少しでも掛かっていれば描画)
+          if iy + item_h >= (list_y + 2.0) && iy <= (list_y + list_h - 2.0)
+            it_hover = @active_id.nil? && box_hover && in_rect?(gui_mouse_x, gui_mouse_y, rx + 2.0, iy, content_w, item_h)
+            is_sel = (new_selected == i)
 
-              if it_hover
-                set_mouse_cursor(:hand)
-                @hot_id = "#{widget_id}_item_#{i}"
-                if @mouse_push
-                  new_selected = i
-                end
+            if it_hover
+              set_mouse_cursor(:hand)
+              @hot_id = "#{widget_id}_item_#{i}"
+              if @mouse_push
+                Input.consume_mouse!
+                new_selected = i
               end
-
-              # アイテム描画
-              @renderer.draw_listbox_item(rx, iy, content_w, item_h, it_text, is_sel, it_hover, @theme)
             end
-            i += 1
+
+            # アイテム描画
+            @renderer.draw_listbox_item(rx, iy, content_w, item_h, it_text, is_sel, it_hover, @theme)
           end
+          i += 1
         end
+        Window.pop_clip_scope(prev_ox, prev_oy)
 
         # スクロールバー描画 (必要な場合)
         if needs_scroll
@@ -410,7 +424,7 @@ module Zenoo
           sb_h = list_h - 4.0
           Widgets.scroll_states[widget_id] = scrollbar(
             scroll_y, total_content_h, inner_h,
-            x: sb_x, y: sb_y, w: scroll_w, h: sb_h, id: "#{widget_id}_sb"
+            x: sb_x, y: sb_y, w: scroll_w, h: sb_h, allow_wheel: false, id: "#{widget_id}_sb"
           )
         end
 
@@ -418,7 +432,6 @@ module Zenoo
         @layout.advance(rw, total_advance_h) if x.nil? && y.nil?
         new_selected
       end
-      alias list_box listbox
 
       # ----------------------------------------------------
       # 7. ドロップダウンリスト (Dropdown / ComboBox)
@@ -435,7 +448,7 @@ module Zenoo
       # - `id` (`String`): ウィジェット識別 ID
       # - 戻り値: `Integer`（更新された選択インデックス）
       def dropdown(label, selected_index, items, x: nil, y: nil, w: nil, h: 36.0, id: "")
-        widget_id = id.to_s.empty? ? (label.to_s.empty? ? "dropdown_#{items.length}" : label.to_s) : id.to_s
+        widget_id = resolve_widget_id(label.to_s.empty? ? "dropdown_#{items.length}" : label, id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 200.0)
@@ -445,76 +458,93 @@ module Zenoo
         label_h = has_label ? 20.0 : 0.0
         ctrl_y = ry + label_h
 
-        is_open = (Widgets.dropdown_open == widget_id)
+        was_open = (Widgets.dropdown_open == widget_id)
+        if was_open && items.empty?
+          Widgets.dropdown_open = ""
+          was_open = false
+        end
+
         hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ctrl_y, rw, rh)
-        new_selected = selected_index.to_i
+        new_selected = selected_index.nil? ? nil : selected_index.to_i
 
         # 開閉トグル処理
         if hover
           set_mouse_cursor(:hand)
-          @hot_id = widget_id
-          if @mouse_push
-            if is_open
-              Widgets.dropdown_open = ""
-            else
-              Widgets.dropdown_open = widget_id
+          @hot_id = widget_id if @active_id.nil?
+          if @mouse_push && @active_id.nil?
+            Input.consume_mouse!
+            unless items.empty?
+              Widgets.dropdown_open = was_open ? "" : widget_id
+              Widgets.scroll_states["#{widget_id}_pop"] = 0.0 unless was_open
             end
           end
-        elsif @mouse_push && is_open
-          # ポップアップ領域外クリック判定は下部で行う
         end
 
-        # 現在選択中のテキスト
-        sel_text = (items[new_selected] || "").to_s
+        now_open = (Widgets.dropdown_open == widget_id) && !items.empty?
+        item_h = 28.0
+        pad_y = 3.0
+        total_pop_h = items.length.to_f * item_h + pad_y * 2.0
+        pop_h = [total_pop_h, 180.0].min
+        max_pop_scroll = [total_pop_h - pop_h, 0.0].max
+        pop_scroll = [[Widgets.scroll_states["#{widget_id}_pop"] || 0.0, 0.0].max, max_pop_scroll].min
+        hover_idx = nil
 
-        # コントロール本体の描画
-        @renderer.draw_dropdown(rx, ry, rw, rh, label, sel_text, is_open, hover, @theme)
+        sx = rx + Window.__offset_x
+        sy = ctrl_y + rh + 2.0 + Window.__offset_y
 
-        # 開いている場合のポップアップリスト描画
-        if is_open
-          item_h = 28.0
-          pop_h = [items.length.to_f * item_h + 6.0, 180.0].min
-          pop_y = ctrl_y + rh + 2.0
-          pop_hover = in_rect?(gui_mouse_x, gui_mouse_y, rx, pop_y, rw, pop_h)
+        if was_open && now_open
+          @evaluated = true
+          pop_hover = in_rect?(@mouse_x, @mouse_y, sx, sy, rw, pop_h)
+          if pop_hover && max_pop_scroll > 0.0 && Input.mouse_wheel_y != 0
+            pop_scroll -= Input.mouse_wheel_y.to_f * item_h
+            pop_scroll = [[pop_scroll, 0.0].max, max_pop_scroll].min
+          end
 
-          # ポップアップ背景 (最前面 Z + 200.0)
-          pop_z = 500.0
-          @renderer.draw_dropdown_popup_frame(rx, pop_y, rw, pop_h, pop_z, @theme)
-
-          # アイテム描画
-          i = 0
-          len = items.length
-          while i < len
-            iy = pop_y + 3.0 + i.to_f * item_h
-            if iy + item_h <= pop_y + pop_h + 4.0
-              it_hover = in_rect?(gui_mouse_x, gui_mouse_y, rx, iy, rw, item_h)
-              is_sel = (i == new_selected)
-
-              if it_hover
+          if pop_hover
+            i = 0
+            len = items.length
+            while i < len
+              iy = sy + pad_y + i.to_f * item_h - pop_scroll
+              if in_rect?(@mouse_x, @mouse_y, sx, iy, rw, item_h)
+                hover_idx = i
                 set_mouse_cursor(:hand)
                 @hot_id = "#{widget_id}_pop_#{i}"
                 if @mouse_push
+                  Input.consume_mouse!
                   new_selected = i
                   Widgets.dropdown_open = ""
+                  now_open = false
                 end
+                break
               end
-
-              @renderer.draw_dropdown_popup_item(rx, iy, rw, item_h, items[i], is_sel, it_hover, pop_z, @theme)
+              i += 1
             end
-            i += 1
-          end
-
-          # ポップアップ外クリックで閉じる
-          if @mouse_push && !hover && !pop_hover
+          elsif @mouse_push && !hover
             Widgets.dropdown_open = ""
+            now_open = false
           end
+        end
+
+        Widgets.scroll_states["#{widget_id}_pop"] = pop_scroll if now_open || was_open
+
+        # 現在選択中のテキスト
+        sel_text = (new_selected && new_selected >= 0 && new_selected < items.length) ? items[new_selected].to_s : ""
+
+        # コントロール本体の描画
+        @renderer.draw_dropdown(rx, ry, rw, rh, label, sel_text, now_open, hover, @theme)
+
+        if now_open
+          queue_dropdown_overlay({
+            px: sx, py: sy, pw: rw, ph: pop_h,
+            items: items, selected: new_selected,
+            scroll_y: pop_scroll, item_h: item_h, hover_idx: hover_idx
+          })
         end
 
         total_advance_h = label_h + rh
         @layout.advance(rw, total_advance_h) if x.nil? && y.nil?
         new_selected
       end
-      alias combo_box dropdown
 
       # ----------------------------------------------------
       # 8. スクロールビュー (Scroll View コンテナブロック)
@@ -529,87 +559,14 @@ module Zenoo
       # - `content_h` (`Float | nil`): 最小コンテンツ高さの明示指定（省略時は内部要素から自動計測）
       # - `&block`: スクロール領域内に描画するウィジェット構築ブロック
       # - 戻り値: `Float | nil`
-      def scroll_view(title_or_id, x: nil, y: nil, w: nil, h: nil, content_h: nil, &block)
-        widget_id = title_or_id.to_s
-        rx = x ? x.to_f : @layout.cursor_x
-        ry = y ? y.to_f : @layout.cursor_y
-        rw = @layout.resolve_width(w, 300.0)
-
-        # 高さが未指定の場合、またはウィンドウの残り高さを超えている場合は自動フィット
-        avail_h = @layout.available_height
-        rh = if h
-               req_h = h.to_f
-               avail_h ? [[req_h, avail_h - 4.0].min, 60.0].max : req_h
-             elsif avail_h && avail_h > 40.0
-               avail_h - 4.0
-             else
-               200.0
-             end
-
-        pad_y = 6.0
-        clip_h = [rh - 4.0, 1.0].max
-
-        stored_h = Widgets.scroll_states["#{widget_id}_content_h"] || (content_h ? content_h.to_f : rh)
-        tot_h = [stored_h, content_h ? content_h.to_f : 0.0].max
-
-        Widgets.scroll_states[widget_id] ||= 0.0
-        scroll_y = Widgets.scroll_states[widget_id]
-
-        # 最大スクロール量: 最終要素の下端が下枠線からちょうど pad_y 手前に揃う
-        total_range = tot_h + pad_y * 2.0
-        max_s = [total_range - clip_h, 0.0].max
-
-        needs_scroll = max_s > 0.0
-        sb_w = needs_scroll ? 12.0 : 0.0
-        view_w = rw - sb_w - 4.0
-
-        # マウスホイールによるスクロール
-        box_hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ry, rw, rh)
-        if box_hover && Input.mouse_wheel_y != 0
-          scroll_y -= Input.mouse_wheel_y.to_f * 30.0
-        end
-        scroll_y = [[scroll_y, 0.0].max, max_s].min
-        Widgets.scroll_states[widget_id] = scroll_y
-
-        # 背景パネル
-        @renderer.draw_scroll_view_frame(rx, ry, rw, rh, @theme)
-
-        # クリップスコープ開始
-        prev_ox, prev_oy = Window.push_clip_scope(rx + 2.0, ry + 2.0, view_w, clip_h, local: true)
-
-        # レイアウトコンテナ開始 (スクロールオフセット分だけカーソルを上にオフセット)
-        # content_w を view_w - 4.0 に設定することで、左右4pxパディングを保ちつつ
-        # 自動幅ウィジェットがスクロールバーと重ならず綺麗に領域内に収まる
-        start_y = pad_y - scroll_y
-        @layout.push_scope(content_w: view_w - 4.0, cursor_x: 4.0, cursor_y: start_y)
-
-        yield
-
-        # 実際に配置された要素の最下端から純粋なコンテンツ高さを動的計測
-        end_y = @layout.cursor_y
-        sp_y = @layout.spacing_y
-        content_bottom = (end_y > start_y) ? (end_y - sp_y - start_y) : 0.0
-        Widgets.scroll_states["#{widget_id}_content_h"] = content_bottom
-
-        @layout.pop_scope
-        Window.pop_clip_scope(prev_ox, prev_oy)
-
-        # スクロールバー描画
-        if needs_scroll
-          sb_x = rx + rw - sb_w - 2.0
-          sb_y = ry + 2.0
-          sb_h = clip_h
-          Widgets.scroll_states[widget_id] = scrollbar(
-            scroll_y, total_range, clip_h,
-            x: sb_x, y: sb_y, w: sb_w, h: sb_h, id: "#{widget_id}_sb"
-          )
-        end
-
-        @layout.advance(rw, rh) if x.nil? && y.nil?
+      def scroll_view(title_or_id, x: nil, y: nil, w: nil, h: nil, content_h: nil)
+        state = begin_scroll_view(title_or_id, x: x, y: y, w: w, h: h, content_h: content_h)
+        yield if block_given?
+        end_scroll_view(state)
       end
 
       # ----------------------------------------------------
-      # 10. テーブル / リストビュー (Table / ListView)
+      # 10. テーブル / リストビュー (Table)
       # ----------------------------------------------------
       # スクロール・カラム幅指定・行選択・カスタム描画に対応したテーブル（リストビュー）を描画する
       #
@@ -625,16 +582,126 @@ module Zenoo
       # - `id` (`String`): ウィジェット識別 ID
       # - `&block`: 行カスタム描画用ブロック（指定時は `(row, row_index, selected, hovered, x, y, w, row_h)` を渡す）
       # - 戻り値: `Integer | nil`（更新された選択行インデックス）
-      def table(label, columns, rows, selected_index = nil, x: nil, y: nil, w: nil, h: nil, item_height: 20.0, id: "", &block)
-        widget_id = id.to_s.empty? ? (label.to_s.empty? ? "table_#{columns.length}_#{rows.length}" : label.to_s) : id.to_s
+      def table(label, columns, rows, selected_index = nil, x: nil, y: nil, w: nil, h: nil, item_height: 20.0, id: "")
+        state = prepare_table_state(label, columns, rows, selected_index, x, y, w, h, item_height, id)
+        draw_table_chrome(state)
+        new_selected = state[:selected]
+        scroll_y = state[:scroll_y]
+        rx = state[:rx]
+        body_y = state[:body_y]
+        body_h = state[:body_h]
+        content_w = state[:content_w]
+        row_h = state[:row_h]
+        pad_y = state[:pad_y]
+
+        prev_ox, prev_oy = Window.push_clip_scope(rx + 2.0, body_y, content_w, body_h, local: false)
+        i = 0
+        len = rows.length
+        while i < len
+          iy = body_y + pad_y + (i.to_f * row_h) - scroll_y
+          if iy + row_h >= body_y && iy <= (body_y + body_h)
+            it_hover, is_sel, new_selected = eval_table_row(state, i, iy, new_selected)
+            if block_given?
+              yield(rows[i], i, is_sel, it_hover, rx + 2.0, iy, content_w, row_h)
+            else
+              @renderer.draw_table_row(rx + 2.0, iy, content_w, row_h, rows[i], state[:col_widths], is_sel, it_hover, i.even?, @theme)
+            end
+          end
+          i += 1
+        end
+        Window.pop_clip_scope(prev_ox, prev_oy)
+
+        finish_table(state, x, y)
+        new_selected
+      end
+
+      private
+
+      def begin_scroll_view(title_or_id, x: nil, y: nil, w: nil, h: nil, content_h: nil)
+        widget_id = resolve_widget_id(title_or_id, "")
+        rx = x ? x.to_f : @layout.cursor_x
+        ry = y ? y.to_f : @layout.cursor_y
+        rw = @layout.resolve_width(w, 300.0)
+
+        avail_h = @layout.available_height
+        rh = if h
+               req_h = h.to_f
+               avail_h ? [req_h, [avail_h - 4.0, 0.0].max].min : req_h
+             elsif avail_h && avail_h > 40.0
+               avail_h - 4.0
+             else
+               200.0
+             end
+
+        pad_y = 6.0
+        clip_h = [rh - 4.0, 1.0].max
+
+        stored_h = Widgets.scroll_states["#{widget_id}_content_h"] || (content_h ? content_h.to_f : rh)
+        tot_h = [stored_h, content_h ? content_h.to_f : 0.0].max
+
+        Widgets.scroll_states[widget_id] ||= 0.0
+        scroll_y = Widgets.scroll_states[widget_id]
+
+        total_range = tot_h + pad_y * 2.0
+        max_s = [total_range - clip_h, 0.0].max
+
+        needs_scroll = max_s > 0.0
+        sb_w = needs_scroll ? 12.0 : 0.0
+        view_w = rw - sb_w - 4.0
+
+        box_hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, ry, rw, rh)
+        if box_hover && Input.mouse_wheel_y != 0
+          scroll_y -= Input.mouse_wheel_y.to_f * 30.0
+        end
+        scroll_y = [[scroll_y, 0.0].max, max_s].min
+        Widgets.scroll_states[widget_id] = scroll_y
+
+        @renderer.draw_scroll_view_frame(rx, ry, rw, rh, @theme)
+        prev_ox, prev_oy = Window.push_clip_scope(rx + 2.0, ry + 2.0, view_w, clip_h, local: true)
+
+        start_y = pad_y - scroll_y
+        @layout.push_scope(content_w: view_w - 4.0, cursor_x: 4.0, cursor_y: start_y)
+
+        {
+          widget_id: widget_id, rx: rx, ry: ry, rw: rw, rh: rh,
+          start_y: start_y, scroll_y: scroll_y, total_range: total_range,
+          clip_h: clip_h, sb_w: sb_w, needs_scroll: needs_scroll,
+          auto_pos: (x.nil? && y.nil?), prev_ox: prev_ox, prev_oy: prev_oy
+        }
+      end
+
+      def end_scroll_view(state)
+        end_y = @layout.cursor_y
+        sp_y = @layout.spacing_y
+        content_bottom = (end_y > state[:start_y]) ? [end_y - sp_y - state[:start_y], 0.0].max : 0.0
+        Widgets.scroll_states["#{state[:widget_id]}_content_h"] = content_bottom
+
+        @layout.pop_scope
+        Window.pop_clip_scope(state[:prev_ox], state[:prev_oy])
+
+        if state[:needs_scroll]
+          sb_x = state[:rx] + state[:rw] - state[:sb_w] - 2.0
+          sb_y = state[:ry] + 2.0
+          Widgets.scroll_states[state[:widget_id]] = scrollbar(
+            state[:scroll_y], state[:total_range], state[:clip_h],
+            x: sb_x, y: sb_y, w: state[:sb_w], h: state[:clip_h],
+            allow_wheel: false, id: "#{state[:widget_id]}_sb"
+          )
+        end
+
+        @layout.advance(state[:rw], state[:rh]) if state[:auto_pos]
+      end
+
+      def prepare_table_state(label, columns, rows, selected_index, x, y, w, h, item_height, id)
+        base_id = label.to_s.empty? ? "table_#{columns.length}_#{rows.length}" : label
+        widget_id = resolve_widget_id(base_id, id)
         rx = x ? x.to_f : @layout.cursor_x
         ry = y ? y.to_f : @layout.cursor_y
         rw = @layout.resolve_width(w, 280.0)
         row_h = item_height.to_f > 0.0 ? item_height.to_f : 20.0
         header_h = 22.0
 
-        has_label = !label.to_s.empty?
-        label_h = has_label ? 22.0 : 0.0
+        label_h = label.to_s.empty? ? 0.0 : 22.0
         table_y = ry + label_h
         table_h = if h
                     [h.to_f - label_h, 30.0].max
@@ -642,28 +709,46 @@ module Zenoo
                     [rows.length.to_f * row_h + header_h + 8.0, 180.0].min
                   end
 
-        # 外枠描画
-        @renderer.draw_table_frame(rx, ry, rw, table_h, label, @theme)
-
-        # カラム幅の計算
         pad_y = 2.0
         total_content_h = rows.length.to_f * row_h + pad_y * 2.0
         body_y = table_y + header_h + 2.0
         body_h = [table_h - header_h - 6.0, 1.0].max
-
         needs_scroll = total_content_h > body_h
         scroll_w = needs_scroll ? 10.0 : 0.0
         content_w = rw - scroll_w - 4.0
 
-        # カラム情報のパース (col_names, col_widths)
-        col_count = columns.length
+        col_names, col_widths = resolve_table_columns(columns, content_w)
+
+        Widgets.scroll_states[widget_id] ||= 0.0
+        scroll_y = Widgets.scroll_states[widget_id]
+        box_hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, table_y, rw, table_h)
+        if box_hover && Input.mouse_wheel_y != 0
+          scroll_y -= Input.mouse_wheel_y.to_f * row_h * 1.5
+        end
+        max_s = [total_content_h - body_h, 0.0].max
+        scroll_y = [[scroll_y, 0.0].max, max_s].min
+        Widgets.scroll_states[widget_id] = scroll_y
+
+        {
+          widget_id: widget_id, label: label, rx: rx, ry: ry, rw: rw,
+          label_h: label_h, table_y: table_y, table_h: table_h, header_h: header_h,
+          body_y: body_y, body_h: body_h, pad_y: pad_y, row_h: row_h,
+          total_content_h: total_content_h, needs_scroll: needs_scroll,
+          scroll_w: scroll_w, content_w: content_w,
+          col_names: col_names, col_widths: col_widths,
+          scroll_y: scroll_y, box_hover: box_hover,
+          selected: selected_index.nil? ? nil : selected_index.to_i
+        }
+      end
+
+      def resolve_table_columns(columns, content_w)
         col_names = []
         col_widths = []
         fixed_total = 0.0
         flex_count = 0
-
         ci = 0
-        while ci < col_count
+        len = columns.length
+        while ci < len
           col = columns[ci]
           if col.is_a?(Array)
             cname = col[0].to_s
@@ -685,78 +770,49 @@ module Zenoo
           end
           ci += 1
         end
-
-        # 未指定カラムの幅均等分配
         flex_w = flex_count > 0 ? [((content_w - fixed_total) / flex_count.to_f), 20.0].max : 0.0
         ci = 0
-        while ci < col_count
+        while ci < len
           col_widths[ci] ||= flex_w
           ci += 1
         end
+        [col_names, col_widths]
+      end
 
-        # ヘッダー描画
-        @renderer.draw_table_header(rx + 2.0, table_y + 2.0, content_w, header_h, col_names, col_widths, @theme)
+      def draw_table_chrome(state)
+        @renderer.draw_table_frame(state[:rx], state[:ry], state[:rw], state[:table_h], state[:label], @theme)
+        @renderer.draw_table_header(
+          state[:rx] + 2.0, state[:table_y] + 2.0, state[:content_w], state[:header_h],
+          state[:col_names], state[:col_widths], @theme
+        )
+      end
 
-        # スクロールオフセットの計算
-        Widgets.scroll_states[widget_id] ||= 0.0
-        scroll_y = Widgets.scroll_states[widget_id]
-
-        box_hover = can_interact? && in_rect?(gui_mouse_x, gui_mouse_y, rx, table_y, rw, table_h)
-        if box_hover && Input.mouse_wheel_y != 0
-          scroll_y -= Input.mouse_wheel_y.to_f * row_h * 1.5
-        end
-        max_s = [total_content_h - body_h, 0.0].max
-        scroll_y = [[scroll_y, 0.0].max, max_s].min
-        Widgets.scroll_states[widget_id] = scroll_y
-
-        new_selected = selected_index
-
-        # 行の描画 & カリング (Window.clip 内)
-        Window.clip(rx + 2.0, body_y, content_w, body_h, local: false) do
-          i = 0
-          len = rows.length
-          while i < len
-            iy = body_y + pad_y + (i.to_f * row_h) - scroll_y
-
-            # カリング: 領域内に少しでも掛かっていれば描画
-            if iy + row_h >= body_y && iy <= (body_y + body_h)
-              it_hover = box_hover && in_rect?(gui_mouse_x, gui_mouse_y, rx + 2.0, iy, content_w, row_h)
-              is_sel = (i == new_selected)
-
-              if it_hover
-                set_mouse_cursor(:hand)
-                @hot_id = "#{widget_id}_row_#{i}"
-                if @mouse_push
-                  new_selected = i
-                end
-              end
-
-              if block_given?
-                yield(rows[i], i, is_sel, it_hover, rx + 2.0, iy, content_w, row_h)
-              else
-                @renderer.draw_table_row(rx + 2.0, iy, content_w, row_h, rows[i], col_widths, is_sel, it_hover, i.even?, @theme)
-              end
-            end
-            i += 1
+      def eval_table_row(state, i, iy, new_selected)
+        it_hover = @active_id.nil? && state[:box_hover] &&
+                   in_rect?(gui_mouse_x, gui_mouse_y, state[:rx] + 2.0, iy, state[:content_w], state[:row_h])
+        is_sel = (new_selected == i)
+        if it_hover
+          set_mouse_cursor(:hand)
+          @hot_id = "#{state[:widget_id]}_row_#{i}"
+          if @mouse_push
+            Input.consume_mouse!
+            new_selected = i
           end
         end
+        [it_hover, is_sel, new_selected]
+      end
 
-        # スクロールバー描画 (必要な場合)
-        if needs_scroll
-          sb_x = rx + rw - scroll_w - 2.0
-          sb_y = body_y
-          sb_h = body_h
-          Widgets.scroll_states[widget_id] = scrollbar(
-            scroll_y, total_content_h, body_h,
-            x: sb_x, y: sb_y, w: scroll_w, h: sb_h, id: "#{widget_id}_sb"
+      def finish_table(state, x, y)
+        if state[:needs_scroll]
+          sb_x = state[:rx] + state[:rw] - state[:scroll_w] - 2.0
+          Widgets.scroll_states[state[:widget_id]] = scrollbar(
+            state[:scroll_y], state[:total_content_h], state[:body_h],
+            x: sb_x, y: state[:body_y], w: state[:scroll_w], h: state[:body_h],
+            allow_wheel: false, id: "#{state[:widget_id]}_sb"
           )
         end
-
-        total_advance_h = label_h + table_h
-        @layout.advance(rw, total_advance_h) if x.nil? && y.nil?
-        new_selected
+        @layout.advance(state[:rw], state[:label_h] + state[:table_h]) if x.nil? && y.nil?
       end
-      alias list_view table
     end
   end
 end

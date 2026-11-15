@@ -135,7 +135,7 @@ module Zenoo
 
       # このウィジェットのフォーカスを解除する
       #
-      # - 戻り値: `nil`
+      # - 戻り値: `Widget`（`self`）
       def blur!
         UI.clear_focus if focused?
         self
@@ -374,7 +374,7 @@ module Zenoo
       # ルートウィジェットによるポインタ・ホイール・フォーカス入力の一括ディスパッチ
       def process_root_input
         # ImGui (デバッグUI) がマウスを掴んでいる場合は保持モードGUIへの入力を遮断
-        return if defined?(ImGui) && ImGui.mouse_captured?
+        return if ImGui.mouse_captured?
 
         mx = Input.mouse_x.to_f
         my = Input.mouse_y.to_f
@@ -384,10 +384,14 @@ module Zenoo
         wheel_y = Input.mouse_wheel_y.to_f
 
         # 0. 開いているポップアップ (Dropdown等) の優先処理
-        if (pop = UI.open_popup_widget) && !pop.vanished? && pop.visible
+        if (pop = UI.open_popup_widget) && UI.widget_tree_visible?(pop) && pop.enabled
           if pop.handle_popup_input(mx, my, m_push, m_down, m_rel, wheel_y)
             UI.mark_mouse_captured!
-            Input.consume_mouse!
+            Input.consume_mouse! if m_push || m_down || m_rel
+            if (m_rel || !m_down) && (act = UI.active_widget) && act.root.equal?(self)
+              UI.active_widget = nil
+              act.on_pointer_up(mx, my, false)
+            end
             return
           end
         end
@@ -460,13 +464,20 @@ module Zenoo
         :arrow
       end
 
+      def mark_layout_dirty!
+      end
+
+      def ensure_layout_updated
+      end
+
+      def bring_to_front!
+        false
+      end
+
       def bring_ancestor_window_to_front!
         cur = self
         while cur
-          if cur.respond_to?(:bring_to_front!)
-            cur.bring_to_front!
-            break
-          end
+          break if cur.is_a?(Widget) && cur.bring_to_front!
           cur = cur.parent
         end
       end
@@ -521,6 +532,7 @@ module Zenoo
         return if @vanished || !@visible
 
         update_layout_tree unless @parent.is_a?(Widget)
+        ensure_layout_updated
 
         if @on_draw_proc
           @on_draw_proc.call(screen_left, screen_top, screen_width, screen_height, visual_state)
@@ -529,7 +541,6 @@ module Zenoo
         end
 
         if @children
-          perform_layout if respond_to?(:perform_layout) && @auto_layout && @layout_dirty
           if @clip_children
             cx, cy, cw, ch = clip_bounds
             if cw > 0.0 && ch > 0.0
@@ -551,38 +562,32 @@ module Zenoo
       def width=(v)
         old_w = width
         super(v)
-        if width != old_w && @parent.is_a?(Widget) && @parent.respond_to?(:mark_layout_dirty!)
-          @parent.mark_layout_dirty!
-        end
+        @parent.mark_layout_dirty! if width != old_w && @parent.is_a?(Widget)
       end
 
       def height=(v)
         old_h = height
         super(v)
-        if height != old_h && @parent.is_a?(Widget) && @parent.respond_to?(:mark_layout_dirty!)
-          @parent.mark_layout_dirty!
-        end
+        @parent.mark_layout_dirty! if height != old_h && @parent.is_a?(Widget)
       end
 
       def visible=(v)
         old_v = @visible
         super(v)
         if @visible != old_v
-          mark_layout_dirty! if respond_to?(:mark_layout_dirty!)
-          if @parent.is_a?(Widget) && @parent.respond_to?(:mark_layout_dirty!)
-            @parent.mark_layout_dirty!
-          end
+          mark_layout_dirty!
+          @parent.mark_layout_dirty! if @parent.is_a?(Widget)
         end
       end
 
       def __add_child_internal(child)
         super(child)
-        mark_layout_dirty! if respond_to?(:mark_layout_dirty!)
+        mark_layout_dirty!
       end
 
       def __remove_child_internal(child)
         super(child)
-        mark_layout_dirty! if respond_to?(:mark_layout_dirty!)
+        mark_layout_dirty!
       end
     end
   end
