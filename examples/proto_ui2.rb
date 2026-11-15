@@ -394,9 +394,17 @@ module Zenoo
     end
 
     module Draggable
-      attr_accessor :drag_target
       attr_reader :drag_offset_x, :drag_offset_y
       def dragging? = !!@dragging
+
+      def drag_target
+        @has_drag_target ? @drag_target : self
+      end
+
+      def drag_target=(val)
+        @has_drag_target = true
+        @drag_target = val
+      end
 
       def on_drag_start(_mx, _my); end
       def on_drag(_dx, _dy);       end
@@ -422,12 +430,9 @@ module Zenoo
           @prev_drag_y = my
           @drag_offset_x = mx - @drag_start_mx
           @drag_offset_y = my - @drag_start_my
-          if (target = @drag_target)
+          if (target = drag_target)
             target.x += dx
             target.y += dy
-          elsif @drag_target.nil? && !instance_variable_defined?(:@drag_target)
-            self.x += dx
-            self.y += dy
           end
           on_drag(dx, dy)
         end
@@ -871,13 +876,6 @@ module Zenoo
 
       def collider_radius = theme.radius
 
-      def perform_layout
-        max_s = max_scroll_y
-        @scroll_y = max_s if @scroll_y > max_s
-        @scroll_y = 0.0 if @scroll_y < 0.0
-        super
-      end
-
       def draw_self
         th = theme
         bg = pressed? ? th.bg_active : (hovered? ? th.bg_hover : th.bg_normal)
@@ -938,7 +936,7 @@ module Zenoo
         @unit        = unit.to_s
         @on_change_proc = block
         super(x, y, width: width, height: height, **opts)
-        @drag_target = false # 自分自身は動かさず値だけ変える
+        self.drag_target = nil # 自分自身は動かさず値だけ変える
       end
 
       def set_default_collider
@@ -1319,7 +1317,7 @@ module Zenoo
         def initialize(owner_win)
           super(owner_win.width - 16.0, owner_win.height - 16.0, width: 16.0, height: 16.0)
           @owner = owner_win
-          @drag_target = false
+          self.drag_target = nil
         end
 
         def cursor_shape = :resize_nwse
