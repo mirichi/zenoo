@@ -236,6 +236,17 @@ module Zenoo
       middle: 2
     }
 
+    # 左右両側に対応する修飾キーエイリアスのキーコードペア
+    KEY_ALIASES = {
+      shift:   [340, 344],
+      control: [341, 345],
+      ctrl:    [341, 345],
+      alt:     [342, 346],
+      super:   [343, 347],
+      win:     [343, 347],
+      command: [343, 347]
+    }
+
     # キーシンボルまたはキーコードを内部 GLFW キーコードへ解決します。
     #
     # - `key` (`Symbol`, `Integer`): `KEY_MAP` のキーシンボルまたは GLFW キーコード
@@ -258,21 +269,21 @@ module Zenoo
       raise ArgumentError, "Unknown mouse button: #{button.inspect}"
     end
 
+    # 内部用: 単一 GLFW キーコードの押下判定（Dev パッチ等からのマスク適用ポイント）
+    def self.__raw_key_pressed?(code)
+      Native::Input.key_pressed?(code)
+    end
+
     # 押されている状態 (持続)
     #
     # - `key` (`Symbol`, `Integer`): 判定対象のキー（`:space`, `:a`, `:up`, `:shift`, `:ctrl` 等）
     # - 戻り値: `Boolean`
     def self.key_pressed?(key)
-      if key == :shift
-        Native::Input.key_pressed?(340) || Native::Input.key_pressed?(344)
-      elsif key == :ctrl || key == :control
-        Native::Input.key_pressed?(341) || Native::Input.key_pressed?(345)
-      elsif key == :alt
-        Native::Input.key_pressed?(342) || Native::Input.key_pressed?(346)
-      elsif key == :super || key == :win || key == :command
-        Native::Input.key_pressed?(343) || Native::Input.key_pressed?(347)
+      pair = KEY_ALIASES[key]
+      if pair
+        __raw_key_pressed?(pair[0]) || __raw_key_pressed?(pair[1])
       else
-        Native::Input.key_pressed?(resolve_key(key))
+        __raw_key_pressed?(resolve_key(key))
       end
     end
 
@@ -281,14 +292,9 @@ module Zenoo
     # - `key` (`Symbol`, `Integer`): 判定対象のキー
     # - 戻り値: `Boolean`
     def self.key_push?(key)
-      if key == :shift
-        Native::Input.key_push?(340) || Native::Input.key_push?(344)
-      elsif key == :ctrl || key == :control
-        Native::Input.key_push?(341) || Native::Input.key_push?(345)
-      elsif key == :alt
-        Native::Input.key_push?(342) || Native::Input.key_push?(346)
-      elsif key == :super || key == :win || key == :command
-        Native::Input.key_push?(343) || Native::Input.key_push?(347)
+      pair = KEY_ALIASES[key]
+      if pair
+        Native::Input.key_push?(pair[0]) || Native::Input.key_push?(pair[1])
       else
         Native::Input.key_push?(resolve_key(key))
       end
@@ -299,14 +305,9 @@ module Zenoo
     # - `key` (`Symbol`, `Integer`): 判定対象のキー
     # - 戻り値: `Boolean`
     def self.key_release?(key)
-      if key == :shift
-        Native::Input.key_release?(340) || Native::Input.key_release?(344)
-      elsif key == :ctrl || key == :control
-        Native::Input.key_release?(341) || Native::Input.key_release?(345)
-      elsif key == :alt
-        Native::Input.key_release?(342) || Native::Input.key_release?(346)
-      elsif key == :super || key == :win || key == :command
-        Native::Input.key_release?(343) || Native::Input.key_release?(347)
+      pair = KEY_ALIASES[key]
+      if pair
+        Native::Input.key_release?(pair[0]) || Native::Input.key_release?(pair[1])
       else
         Native::Input.key_release?(resolve_key(key))
       end
@@ -317,25 +318,23 @@ module Zenoo
     # - `key` (`Symbol`, `Integer`): 判定対象のキー
     # - 戻り値: `Boolean`
     def self.key_repeat?(key)
-      if key == :shift
-        Native::Input.key_repeat?(340) || Native::Input.key_repeat?(344)
-      elsif key == :ctrl || key == :control
-        Native::Input.key_repeat?(341) || Native::Input.key_repeat?(345)
-      elsif key == :alt
-        Native::Input.key_repeat?(342) || Native::Input.key_repeat?(346)
-      elsif key == :super || key == :win || key == :command
-        Native::Input.key_repeat?(343) || Native::Input.key_repeat?(347)
+      pair = KEY_ALIASES[key]
+      if pair
+        Native::Input.key_repeat?(pair[0]) || Native::Input.key_repeat?(pair[1])
       else
         Native::Input.key_repeat?(resolve_key(key))
       end
     end
 
+    @frame_chars = nil
+
     # フレーム内で入力された文字（UTF-8文字列）の配列
-    # IME 確定文字やキーボード文字入力を取得します。
+    # IME 確定文字やキーボード文字入力を取得します。同一フレーム内では同じ配列（複製）を返します。
     #
     # - 戻り値: `Array<String>`
     def self.input_chars
-      Native::Input.input_chars
+      @frame_chars ||= Native::Input.input_chars
+      @frame_chars.dup
     end
 
     # IME変換候補ウィンドウの位置設定
@@ -405,16 +404,25 @@ module Zenoo
         end
       end
 
-      # 2. 追跡対象がなければ、未消費のアクティブタッチから新たに選定
+      # 2. 追跡対象がなければ、未消費のタッチから新たに選定（active を優先、同フレーム内 DOWN→UP も救済）
+      fallback_released = nil
       i = 0
       len = @touches.length
       while i < len
         t = @touches[i]
-        if t && !t.consumed? && t.active?
-          @mouse_touch_id = t.id
-          return t
+        if t && !t.consumed?
+          if t.active?
+            @mouse_touch_id = t.id
+            return t
+          elsif t.released? && fallback_released.nil?
+            fallback_released = t
+          end
         end
         i += 1
+      end
+      if fallback_released
+        @mouse_touch_id = fallback_released.id
+        return fallback_released
       end
       nil
     end
@@ -591,7 +599,7 @@ module Zenoo
     #
     # - `axis` (`Symbol`, `Integer`): 軸指定（`:lx`, `:ly`, `:rx`, `:ry`, `:lt`, `:rt` 等）
     # - `id` (`Integer`): ゲームパッド番号（デフォルト: 0）
-    # - 戻り値: `Float` スティックは `-1.0 〜 1.0`、トリガーは `0.0 〜 1.0`（環境により `-1.0 〜 1.0`）
+    # - 戻り値: `Float` スティックは `-1.0 〜 1.0`、トリガーは `0.0 〜 1.0`
     def self.gamepad_axis(axis, id = 0)
       Native::Input.gamepad_axis(id.to_i, resolve_gamepad_axis(axis))
     end
@@ -726,11 +734,11 @@ module Zenoo
     # アクションマッピング API (Input Action Map)
     # ==========================================
     @actions = {}
+    @action_prev_masks = {}
     @tracked_gamepad_mask = 1
     @tracked_gamepad_ids = [0]
     @virtual_pad = nil
     @vpad_actions_cur = {}
-    @vpad_actions_prev = {}
     @vpad_rx = 0.0
     @vpad_ry = 0.0
 
@@ -756,7 +764,6 @@ module Zenoo
       @virtual_pad.reset if @virtual_pad
       @virtual_pad = pad
       @vpad_actions_cur.clear
-      @vpad_actions_prev.clear
       @vpad_rx = 0.0
       @vpad_ry = 0.0
     end
@@ -823,11 +830,17 @@ module Zenoo
     # - `stick:` (`Symbol`, `nil`): スティック方向ショートカット（`:up`, `:down`, `:left`, `:right`）
     # - `axes:` (`Array<Array>`, `nil`): アナログ軸バインド `[axis_sym, direction, threshold]`
     def self.define_action(name, keys: nil, gamepad: nil, mouse: nil, stick: nil, axes: nil)
-      act = (@actions[name.to_sym] ||= { keys: [], gamepad: [], mouse: [], axes: [], axis_prev: [] })
+      act = (@actions[name.to_sym] ||= { keys: [], gamepad: [], mouse: [], axes: [] })
       if keys
         Array(keys).each do |k|
-          rk = resolve_key(k)
-          act[:keys] << rk unless act[:keys].include?(rk)
+          pair = KEY_ALIASES[k]
+          if pair
+            act[:keys] << pair[0] unless act[:keys].include?(pair[0])
+            act[:keys] << pair[1] unless act[:keys].include?(pair[1])
+          else
+            rk = resolve_key(k)
+            act[:keys] << rk unless act[:keys].include?(rk)
+          end
         end
       end
       if gamepad
@@ -863,9 +876,12 @@ module Zenoo
     # - `name` (`Symbol`, `nil`): 削除するアクション名（`nil` の場合はすべての定義を削除）
     def self.clear_action(name = nil)
       if name
-        @actions.delete(name.to_sym)
+        sym = name.to_sym
+        @actions.delete(sym)
+        @action_prev_masks.delete(sym)
       else
         @actions.clear
+        @action_prev_masks.clear
       end
     end
 
@@ -884,7 +900,7 @@ module Zenoo
 
       # 1. キーボード
       act[:keys].each do |k|
-        return 1.0 if Native::Input.key_pressed?(k)
+        return 1.0 if __raw_key_pressed?(k)
       end
 
       # 2. ゲームパッドボタン
@@ -892,7 +908,7 @@ module Zenoo
         return 1.0 if Native::Input.gamepad_button_pressed?(id.to_i, b)
       end
 
-      # 3. マウスボタン (タッチ時はエミュレーション経由で判定)
+      # 3. マウスボタン (タッチ・consume_mouse! 経由で判定)
       act[:mouse].each do |m|
         return 1.0 if mouse_pressed?(m)
       end
@@ -935,7 +951,7 @@ module Zenoo
 
       # キーボード
       act[:keys].each do |k|
-        return true if Native::Input.key_pressed?(k)
+        return true if __raw_key_pressed?(k)
       end
 
       # ゲームパッドボタン
@@ -943,95 +959,47 @@ module Zenoo
         return true if Native::Input.gamepad_button_pressed?(id.to_i, b)
       end
 
-      # マウスボタン (タッチ時はエミュレーション経由で判定)
+      # マウスボタン (タッチ・consume_mouse! 経由で判定)
       act[:mouse].each do |m|
         return true if mouse_pressed?(m)
       end
 
       # アナログ軸
       act[:axes].each do |ax_def|
-        axis_name, dir, thresh, _deadzone = ax_def
-        thresh ||= 0.5
-        val = gamepad_axis(axis_name, id)
-        case dir
-        when :positive
-          return true if val >= thresh
-        when :negative
-          return true if val <= -thresh
-        else
-          return true if val >= thresh
-        end
+        return true if __axis_active?(ax_def, id)
       end
 
       false
     end
 
-    # アクションが押された瞬間か (トリガー)
+    # アクションが押された瞬間か (トリガー: 論理アクション単位で OFF → ON になったフレームのみ true)
     #
     # - `name` (`Symbol`): 判定するアクション名
     # - `id` (`Integer`): 対象ゲームパッド番号（デフォルト: 0）
     # - 戻り値: `Boolean`
     def self.action_push?(name, id = 0)
+      pad_id = id.to_i
+      return false if pad_id < 0
       sym = name.to_sym
-      cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
-      prev_vpad = @vpad_actions_prev[sym] || false
-      return true if cur_vpad && !prev_vpad
-
-      act = @actions[sym]
-      return false unless act
-
-      # キーボード
-      act[:keys].each do |k|
-        return true if Native::Input.key_push?(k)
-      end
-
-      # ゲームパッドボタン
-      act[:gamepad].each do |b|
-        return true if Native::Input.gamepad_button_push?(id.to_i, b)
-      end
-
-      # マウスボタン (タッチ時はエミュレーション経由で判定)
-      act[:mouse].each do |m|
-        return true if mouse_push?(m)
-      end
-
-      # アナログ軸の閾値クロス判定 (今フレームで閾値を超え、前フレームでは未超過)
-      return true if __axis_push?(act, id)
-
-      false
+      bit = __track_gamepad_id(pad_id)
+      cur = action_pressed?(sym, pad_id)
+      prev = ((@action_prev_masks[sym] || 0) & bit) != 0
+      cur && !prev
     end
 
-    # アクションが離された瞬間か (リリース)
+    # アクションが離された瞬間か (リリース: 論理アクション単位で ON → OFF になったフレームのみ true)
     #
     # - `name` (`Symbol`): 判定するアクション名
     # - `id` (`Integer`): 対象ゲームパッド番号（デフォルト: 0）
     # - 戻り値: `Boolean`
     def self.action_release?(name, id = 0)
+      pad_id = id.to_i
+      return false if pad_id < 0
       sym = name.to_sym
-      cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
-      prev_vpad = @vpad_actions_prev[sym] || false
-      return true if !cur_vpad && prev_vpad
-
-      act = @actions[sym]
-      return false unless act
-
-      act[:keys].each do |k|
-        return true if Native::Input.key_release?(k)
-      end
-
-      act[:gamepad].each do |b|
-        return true if Native::Input.gamepad_button_release?(id.to_i, b)
-      end
-
-      # マウスボタン (タッチ時はエミュレーション経由で判定)
-      act[:mouse].each do |m|
-        return true if mouse_release?(m)
-      end
-
-      # アナログ軸のリリース判定
-      return true if __axis_release?(act, id)
-
-      false
+      bit = __track_gamepad_id(pad_id)
+      cur = action_pressed?(sym, pad_id)
+      prev = ((@action_prev_masks[sym] || 0) & bit) != 0
+      !cur && prev
     end
 
     def self.__axis_active?(ax_def, pad_id)
@@ -1052,40 +1020,6 @@ module Zenoo
         @tracked_gamepad_ids << pad_id
       end
       bit
-    end
-
-    def self.__axis_push?(act, id)
-      pad_id = id.to_i
-      return false if pad_id < 0
-      bit = __track_gamepad_id(pad_id)
-      axes = act[:axes]
-      prev_masks = (act[:axis_prev] ||= [])
-      idx = 0
-      len = axes.length
-      while idx < len
-        cur_active = __axis_active?(axes[idx], pad_id)
-        prev_active = ((prev_masks[idx] || 0) & bit) != 0
-        return true if cur_active && !prev_active
-        idx += 1
-      end
-      false
-    end
-
-    def self.__axis_release?(act, id)
-      pad_id = id.to_i
-      return false if pad_id < 0
-      bit = __track_gamepad_id(pad_id)
-      axes = act[:axes]
-      prev_masks = (act[:axis_prev] ||= [])
-      idx = 0
-      len = axes.length
-      while idx < len
-        cur_active = __axis_active?(axes[idx], pad_id)
-        prev_active = ((prev_masks[idx] || 0) & bit) != 0
-        return true if !cur_active && prev_active
-        idx += 1
-      end
-      false
     end
 
     # 軸の入力値 (-1.0 .. 1.0)
@@ -1177,7 +1111,6 @@ module Zenoo
       @mouse_touch_id = nil
       @mouse_consumed = false
       @vpad_actions_cur.clear
-      @vpad_actions_prev.clear
       @vpad_rx = 0.0
       @vpad_ry = 0.0
       @virtual_pad.reset if @virtual_pad
@@ -1187,6 +1120,7 @@ module Zenoo
     # フレーム開始時: 終了済みTouchの除去 & Cカーネルからの生イベント反映
     def self.__begin_frame
       @mouse_consumed = false
+      @frame_chars = nil
       @vpad_actions_cur.clear
       @vpad_rx = 0.0
       @vpad_ry = 0.0
@@ -1272,32 +1206,27 @@ module Zenoo
       @virtual_pad.draw if @virtual_pad && @virtual_pad.enabled && @virtual_pad.visible && @virtual_pad.auto_draw
     end
 
-    # 毎フレーム末尾で軸状態を更新 (Window.__update_step から自動呼出し)
-    def self.__update_step
+    def self.__update_action_prev_mask(sym)
       ids = @tracked_gamepad_ids
       id_len = ids.length
-      @actions.each_value do |act|
-        axes = act[:axes]
-        prev_masks = (act[:axis_prev] ||= [])
-        idx = 0
-        len = axes.length
-        while idx < len
-          ax_def = axes[idx]
-          mask = 0
-          j = 0
-          while j < id_len
-            pid = ids[j]
-            mask |= (1 << pid) if __axis_active?(ax_def, pid)
-            j += 1
-          end
-          prev_masks[idx] = mask
-          idx += 1
-        end
+      mask = 0
+      j = 0
+      while j < id_len
+        pid = ids[j]
+        mask |= (1 << pid) if action_pressed?(sym, pid)
+        j += 1
       end
+      @action_prev_masks[sym] = mask
+    end
 
-      @vpad_actions_prev.clear
-      @vpad_actions_cur.each do |sym, val|
-        @vpad_actions_prev[sym] = (val >= 0.5)
+    # 毎フレーム末尾でアクション状態を更新 (Window.__update_step から自動呼出し)
+    def self.__update_step
+      @actions.each_key { |sym| __update_action_prev_mask(sym) }
+      @vpad_actions_cur.each_key do |sym|
+        __update_action_prev_mask(sym) unless @actions.key?(sym)
+      end
+      @action_prev_masks.each_key do |sym|
+        __update_action_prev_mask(sym) unless @actions.key?(sym) || @vpad_actions_cur.key?(sym)
       end
     end
 

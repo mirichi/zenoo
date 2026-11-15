@@ -111,8 +111,8 @@ Window.loop(960, 540, "Zenoo - Input Module All-in-One Showcase") do
   Window.draw_text(165, 318, "R Stick", size: 12, color: Color.new(180, 190, 200))
 
   # トリガー (LT / RT)
-  lt = (Input.gamepad_axis(:lt, 0) + 1.0) * 0.5 # 0.0..1.0
-  rt = (Input.gamepad_axis(:rt, 0) + 1.0) * 0.5
+  lt = Input.gamepad_axis(:lt, 0) # 0.0..1.0
+  rt = Input.gamepad_axis(:rt, 0)
   Window.draw_rect(250, 245, 80, 14, color: Color.new(50, 60, 80), radius: 3.0)
   Window.draw_rect(250, 245, 80 * lt, 14, color: Color.new(120, 200, 255), radius: 3.0)
   Window.draw_text(250, 227, "LT: #{(lt * 100).to_i}%", size: 12, color: Color.new(180, 190, 200))

@@ -440,7 +440,9 @@ module Zenoo
         Zenoo::Dev::Inspector.render_gui if Zenoo::Dev.enabled
 
         ImGui.end_frame
+        Zenoo::Dev.game_block_active = true
         Input.__update_step
+        Zenoo::Dev.game_block_active = false
       end
 
       def __draw_step
@@ -510,6 +512,11 @@ module Zenoo
       end
 
       # キーボード
+      def __raw_key_pressed?(code)
+        return false if Zenoo::Dev.mask_keyboard_input?
+        super
+      end
+
       def key_pressed?(key)
         return false if Zenoo::Dev.mask_keyboard_input?
         super
@@ -533,170 +540,6 @@ module Zenoo
       def input_chars
         return [] if Zenoo::Dev.mask_keyboard_input?
         super
-      end
-
-      # アクションマップ
-      def action_pressed?(name, id = 0)
-        mask_m = Zenoo::Dev.mask_mouse_input?
-        mask_k = Zenoo::Dev.mask_keyboard_input?
-        return super unless mask_m || mask_k
-
-        sym = name.to_sym
-        vpad_val = @vpad_actions_cur[sym] || 0.0
-        return true if vpad_val >= 0.5
-
-        act = @actions[sym]
-        return false unless act
-
-        unless mask_k
-          act[:keys].each do |k|
-            return true if Native::Input.key_pressed?(k)
-          end
-        end
-
-        act[:gamepad].each do |b|
-          return true if Native::Input.gamepad_button_pressed?(id.to_i, b)
-        end
-
-        unless mask_m
-          act[:mouse].each do |m|
-            return true if Native::Input.mouse_pressed?(m)
-          end
-        end
-
-        act[:axes].each do |ax_def|
-          axis_name, dir, thresh, _deadzone = ax_def
-          thresh ||= 0.5
-          val = gamepad_axis(axis_name, id)
-          case dir
-          when :positive
-            return true if val >= thresh
-          when :negative
-            return true if val <= -thresh
-          else
-            return true if val >= thresh
-          end
-        end
-
-        false
-      end
-
-      def action_push?(name, id = 0)
-        mask_m = Zenoo::Dev.mask_mouse_input?
-        mask_k = Zenoo::Dev.mask_keyboard_input?
-        return super unless mask_m || mask_k
-
-        sym = name.to_sym
-        cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
-        prev_vpad = @vpad_actions_prev[sym] || false
-        return true if cur_vpad && !prev_vpad
-
-        act = @actions[sym]
-        return false unless act
-
-        unless mask_k
-          act[:keys].each do |k|
-            return true if Native::Input.key_push?(k)
-          end
-        end
-
-        act[:gamepad].each do |b|
-          return true if Native::Input.gamepad_button_push?(id.to_i, b)
-        end
-
-        unless mask_m
-          act[:mouse].each do |m|
-            return true if Native::Input.mouse_push?(m)
-          end
-        end
-
-        return true if __axis_push?(act, id)
-
-        false
-      end
-
-      def action_release?(name, id = 0)
-        mask_m = Zenoo::Dev.mask_mouse_input?
-        mask_k = Zenoo::Dev.mask_keyboard_input?
-        return super unless mask_m || mask_k
-
-        sym = name.to_sym
-        cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
-        prev_vpad = @vpad_actions_prev[sym] || false
-        return true if !cur_vpad && prev_vpad
-
-        act = @actions[sym]
-        return false unless act
-
-        unless mask_k
-          act[:keys].each do |k|
-            return true if Native::Input.key_release?(k)
-          end
-        end
-
-        act[:gamepad].each do |b|
-          return true if Native::Input.gamepad_button_release?(id.to_i, b)
-        end
-
-        unless mask_m
-          act[:mouse].each do |m|
-            return true if Native::Input.mouse_release?(m)
-          end
-        end
-
-        return true if __axis_release?(act, id)
-
-        false
-      end
-
-      def action_strength(name, id = 0)
-        mask_m = Zenoo::Dev.mask_mouse_input?
-        mask_k = Zenoo::Dev.mask_keyboard_input?
-        return super unless mask_m || mask_k
-
-        sym = name.to_sym
-        vpad_val = @vpad_actions_cur[sym] || 0.0
-        act = @actions[sym]
-        return vpad_val unless act
-
-        max_val = vpad_val
-
-        unless mask_k
-          act[:keys].each do |k|
-            return 1.0 if Native::Input.key_pressed?(k)
-          end
-        end
-
-        act[:gamepad].each do |b|
-          return 1.0 if Native::Input.gamepad_button_pressed?(id.to_i, b)
-        end
-
-        unless mask_m
-          act[:mouse].each do |m|
-            return 1.0 if Native::Input.mouse_pressed?(m)
-          end
-        end
-
-        act[:axes].each do |ax_def|
-          axis_name, dir, _thresh, deadzone = ax_def
-          deadzone ||= 0.2
-          val = gamepad_axis(axis_name, id)
-          raw = case dir
-                when :positive then val > 0.0 ? val : 0.0
-                when :negative then val < 0.0 ? -val : 0.0
-                else val > 0.0 ? val : 0.0
-                end
-
-          strength = if raw <= deadzone
-                       0.0
-                     else
-                       ((raw - deadzone) / (1.0 - deadzone)).clamp(0.0, 1.0)
-                     end
-
-          max_val = strength if strength > max_val
-        end
-
-        max_val
       end
     end
   end

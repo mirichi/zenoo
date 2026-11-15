@@ -149,6 +149,14 @@ void zen__input_install(GLFWwindow* window) {
 // ------------------------------------------
 // フレームごとのポーリング & クリア
 // ------------------------------------------
+// GLFW / Joydev のトリガー軸生値 (-1.0..1.0) を 0.0..1.0 に正規化する
+static float normalize_trigger_axis(float raw) {
+    float v = (raw + 1.0f) * 0.5f;
+    if (v < 0.0f) return 0.0f;
+    if (v > 1.0f) return 1.0f;
+    return v;
+}
+
 void zen__input_poll(void) {
 #ifdef __EMSCRIPTEN__
     for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
@@ -163,7 +171,13 @@ void zen__input_poll(void) {
                 s_gamepad_connected[i] = 1;
                 if (axes) {
                     for (int a = 0; a < ZEN_GAMEPAD_AXIS_COUNT; a++) {
-                        s_gamepad_axes[i][a] = (a < axes_count) ? axes[a] : 0.0f;
+                        if (a >= axes_count) {
+                            s_gamepad_axes[i][a] = 0.0f;
+                        } else if (a == ZEN_GAMEPAD_AXIS_LEFT_TRIGGER || a == ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER) {
+                            s_gamepad_axes[i][a] = normalize_trigger_axis(axes[a]);
+                        } else {
+                            s_gamepad_axes[i][a] = axes[a];
+                        }
                     }
                 }
                 if (buttons) {
@@ -194,10 +208,10 @@ void zen__input_poll(void) {
                         }
                     }
                     if (btn_count > 6 && axes_count <= 4) {
-                        s_gamepad_axes[i][ZEN_GAMEPAD_AXIS_LEFT_TRIGGER] = buttons[6] ? 1.0f : -1.0f;
+                        s_gamepad_axes[i][ZEN_GAMEPAD_AXIS_LEFT_TRIGGER] = buttons[6] ? 1.0f : 0.0f;
                     }
                     if (btn_count > 7 && axes_count <= 5) {
-                        s_gamepad_axes[i][ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER] = buttons[7] ? 1.0f : -1.0f;
+                        s_gamepad_axes[i][ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER] = buttons[7] ? 1.0f : 0.0f;
                     }
 
                     for (int b = 0; b < ZEN_GAMEPAD_BUTTON_COUNT; b++) {
@@ -236,7 +250,11 @@ void zen__input_poll(void) {
                     s_gamepad_buttons_pressed[i][b] = new_state;
                 }
                 for (int a = 0; a < ZEN_GAMEPAD_AXIS_COUNT; a++) {
-                    s_gamepad_axes[i][a] = state.axes[a];
+                    float v = state.axes[a];
+                    if (a == ZEN_GAMEPAD_AXIS_LEFT_TRIGGER || a == ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER) {
+                        v = normalize_trigger_axis(v);
+                    }
+                    s_gamepad_axes[i][a] = v;
                 }
                 continue;
             }
