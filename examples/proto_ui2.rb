@@ -352,6 +352,7 @@ module Zenoo
       def on_wheel(_dy)                = false
       def on_focus;                    end
       def on_blur;                     end
+      def on_focused_update;           end
       def hit_test_popup?(_mx, _my)    = false
       def popup_cursor_shape           = :arrow
       def on_popup_open;               end
@@ -630,6 +631,11 @@ module Zenoo
                       :arrow
                     end
         Zenoo::UI.set_mouse_cursor(cur_shape)
+
+        if @focused_widget && (!@focused_widget.tree_active? || !@focused_widget.stage.equal?(self))
+          set_focus(nil)
+        end
+        @focused_widget&.on_focused_update
 
         super
       end
@@ -1305,6 +1311,375 @@ module Zenoo
       end
     end
 
+    class TextBox < Widget
+      include Focusable
+      attr_accessor :label, :placeholder
+      attr_reader :text, :cursor_pos
+
+      def initialize(text = "", x = 0.0, y = 0.0, width: 220.0, height: nil,
+                     label: "", label_width: nil, placeholder: "", **opts, &block)
+        @text              = text.to_s.dup
+        @label             = label.to_s
+        @label_width       = label_width ? label_width.to_f : nil
+        @placeholder       = placeholder.to_s
+        @cursor_pos        = @text.length
+        @sel_anchor        = nil
+        @dragging_sel      = false
+        @scroll_x          = 0.0
+        @blink_start_frame = UI2.frame
+        @on_change_proc    = block
+        @on_submit_proc    = nil
+        super(x, y, width: width, height: height, **opts)
+      end
+
+      def cursor_shape = :ibeam
+      def on_change(&block) = (@on_change_proc = block; self)
+      def on_submit(&block) = (@on_submit_proc = block; self)
+
+      def text=(val)
+        @text = val.to_s.dup
+        @cursor_pos = @cursor_pos.clamp(0, @text.length)
+        @sel_anchor = nil
+        @scroll_x = 0.0 if @text.empty?
+      end
+
+      def set_default_collider
+        ox, oy, bw, bh, rad = box_local_bounds
+        set_collider(:rect, width: bw, height: bh,
+                     offset_x: ox + bw * 0.5, offset_y: oy + bh * 0.5,
+                     at: :top_left, radius: rad)
+      end
+
+      def sync_collider_shape
+        col = @collider_shape
+        return unless col && col.shape_type == Collision::TYPE_RECT
+        ox, oy, bw, bh, rad = box_local_bounds
+        col.width = bw
+        col.height = bh
+        col.offset_x = ox + bw * 0.5
+        col.offset_y = oy + bh * 0.5
+        col.radius = rad
+      end
+
+      def on_pointer_down(mx, _my)
+        super
+        idx = index_at_mouse_x(mx)
+        shift_down = Input.key_pressed?(:left_shift) || Input.key_pressed?(:right_shift)
+        if shift_down
+          @sel_anchor ||= @cursor_pos
+        else
+          @sel_anchor = idx
+        end
+        @cursor_pos = idx
+        @dragging_sel = true
+        ensure_caret_visible
+        @blink_start_frame = UI2.frame
+      end
+
+      def on_pointer_drag(mx, _my)
+        super
+        return unless @dragging_sel
+        @cursor_pos = index_at_mouse_x(mx)
+        ensure_caret_visible
+        @blink_start_frame = UI2.frame
+      end
+
+      def on_pointer_up(_mx, _my, _inside)
+        @dragging_sel = false
+        @sel_anchor = nil if @sel_anchor == @cursor_pos
+        super
+      end
+
+      def on_focus
+        @blink_start_frame = UI2.frame
+      end
+
+      def on_blur
+        @sel_anchor = nil
+        @dragging_sel = false
+        Input.set_ime_position(-1, -1)
+      end
+
+      def on_focused_update
+        return unless @enabled
+
+        bx, by, bw, bh, = box_screen_rect
+        f_font, f_size = text_font_and_size
+        caret_ox = f_font.text_width(@text[0...@cursor_pos] || "", f_size)
+        ensure_caret_visible_with(caret_ox, bw)
+        pad_x = 8.0 * world_scale_x
+        abs_ime_x = bx + pad_x + caret_ox - @scroll_x + Zenoo::Window.__offset_x
+        abs_ime_y = by + bh + 2.0 + Zenoo::Window.__offset_y
+        Input.set_ime_position(abs_ime_x, abs_ime_y)
+
+        ctrl_down = Input.key_pressed?(:left_control) || Input.key_pressed?(:right_control) ||
+                    Input.key_pressed?(:left_super) || Input.key_pressed?(:right_super)
+        shift_down = Input.key_pressed?(:left_shift) || Input.key_pressed?(:right_shift)
+
+        reset_blink = false
+        text_changed = false
+
+        if ctrl_down && Input.key_push?(:v)
+          clip = Input.clipboard
+          if clip && !clip.empty?
+            clip = clip.gsub(/[\r\n\t]+/, " ")
+            replace_selection(clip)
+            reset_blink = true
+            text_changed = true
+          end
+        elsif ctrl_down && Input.key_push?(:c)
+          Input.clipboard = has_selection? ? selected_text : @text
+        elsif ctrl_down && Input.key_push?(:x)
+          if has_selection?
+            Input.clipboard = selected_text
+            delete_selection!
+            text_changed = true
+          else
+            Input.clipboard = @text
+            unless @text.empty?
+              @text = String.new
+              @cursor_pos = 0
+              text_changed = true
+            end
+          end
+          reset_blink = true
+        elsif ctrl_down && Input.key_push?(:a)
+          @sel_anchor = 0
+          @cursor_pos = @text.length
+          reset_blink = true
+        elsif Input.key_repeat?(:backspace)
+          if delete_selection!
+            reset_blink = true
+            text_changed = true
+          elsif @cursor_pos > 0
+            @text.slice!(@cursor_pos - 1)
+            @cursor_pos -= 1
+            reset_blink = true
+            text_changed = true
+          end
+        elsif Input.key_repeat?(:delete)
+          if delete_selection!
+            reset_blink = true
+            text_changed = true
+          elsif @cursor_pos < @text.length
+            @text.slice!(@cursor_pos)
+            reset_blink = true
+            text_changed = true
+          end
+        elsif Input.key_repeat?(:left)
+          move_caret_left(shift_down)
+          reset_blink = true
+        elsif Input.key_repeat?(:right)
+          move_caret_right(shift_down)
+          reset_blink = true
+        elsif Input.key_push?(:home)
+          shift_down ? (@sel_anchor ||= @cursor_pos) : (@sel_anchor = nil)
+          @cursor_pos = 0
+          reset_blink = true
+        elsif Input.key_push?(:end)
+          shift_down ? (@sel_anchor ||= @cursor_pos) : (@sel_anchor = nil)
+          @cursor_pos = @text.length
+          reset_blink = true
+        elsif Input.key_push?(:enter)
+          @on_submit_proc&.call(@text)
+          blur!
+          return
+        elsif Input.key_push?(:escape)
+          blur!
+          return
+        end
+
+        unless ctrl_down
+          chars = Input.input_chars
+          i = 0
+          len = chars.length
+          while i < len
+            ch = chars[i]
+            if ch.ord >= 32
+              replace_selection(ch)
+              reset_blink = true
+              text_changed = true
+            end
+            i += 1
+          end
+        end
+
+        @blink_start_frame = UI2.frame if reset_blink
+        if text_changed
+          ensure_caret_visible
+          @on_change_proc&.call(@text)
+        elsif reset_blink
+          ensure_caret_visible
+        end
+      end
+
+      def draw_self
+        th = theme
+        unless @label.empty?
+          Zenoo::Window.draw_text(screen_left, screen_top + screen_height * 0.5, @label,
+                                  size: th.font_size, color: th.text_muted, valign: :center, camera: false, z: @z)
+        end
+
+        bx, by, bw, bh, rad = box_screen_rect
+        is_foc = focused?
+        bd = is_foc ? th.accent_color : (hovered? ? th.border_hover : th.track_border)
+        bd_w = is_foc ? 1.5 : 1.0
+        Zenoo::Window.draw_rect(bx, by, bw, bh, radius: rad, color: th.track_bg,
+                                border_width: bd_w, border_color: bd, camera: false, z: @z)
+
+        f_font, f_size = text_font_and_size
+        caret_ox = f_font.text_width(@text[0...@cursor_pos] || "", f_size)
+        ensure_caret_visible_with(caret_ox, bw)
+        pad_x = 8.0 * world_scale_x
+        text_x = bx + pad_x - @scroll_x
+        text_cy = by + bh * 0.5
+
+        prev_ox, prev_oy = Zenoo::Window.push_clip_scope(bx + 2.0, by + 1.0, [bw - 4.0, 0.0].max, [bh - 2.0, 0.0].max, local: false, z: @z)
+        if is_foc && (rng = selection_range)
+          s_x0 = f_font.text_width(@text[0...rng[0]] || "", f_size)
+          s_x1 = f_font.text_width(@text[0...rng[1]] || "", f_size)
+          sel_h = [f_size.to_f + 4.0, bh - 4.0].min
+          Zenoo::Window.draw_rect(text_x + s_x0, by + (bh - sel_h) * 0.5, [s_x1 - s_x0, 1.0].max, sel_h,
+                                  color: [72, 152, 242, 110], camera: false, z: @z)
+        end
+
+        if @text.empty? && !@placeholder.empty?
+          Zenoo::Window.draw_text(text_x, text_cy, @placeholder, size: f_size, color: [120, 132, 155],
+                                  valign: :center, camera: false, z: @z)
+        elsif !@text.empty?
+          Zenoo::Window.draw_text(text_x, text_cy, @text, size: f_size, color: th.text_color,
+                                  valign: :center, camera: false, z: @z)
+        end
+
+        if is_foc && (((UI2.frame - @blink_start_frame) % 60) < 30)
+          caret_h = [f_size.to_f + 4.0, bh - 4.0].min
+          Zenoo::Window.draw_rect(text_x + caret_ox, by + (bh - caret_h) * 0.5, 1.5, caret_h,
+                                  color: th.accent_hover, camera: false, z: @z)
+        end
+        Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
+      end
+
+      private
+
+      def box_local_bounds
+        th = theme
+        rw = width
+        rh = height
+        ox = @label.empty? ? 0.0 : [(@label_width || 110.0), rw * 0.48].min
+        bw = [rw - ox, 1.0].max
+        [ox, 0.0, bw, rh, th.radius]
+      end
+
+      def box_screen_rect
+        ox, oy, bw, bh, rad = box_local_bounds
+        sx = world_scale_x
+        sy = world_scale_y
+        [screen_left + ox * sx, screen_top + oy * sy, bw * sx, bh * sy, rad]
+      end
+
+      def text_font_and_size
+        f_size = (theme.font_size.to_f * world_scale_y).round
+        f_size = 8 if f_size < 8
+        [Font.default, f_size]
+      end
+
+      def has_selection?
+        !@sel_anchor.nil? && @sel_anchor != @cursor_pos
+      end
+
+      def selection_range
+        return nil unless has_selection?
+        @sel_anchor < @cursor_pos ? [@sel_anchor, @cursor_pos] : [@cursor_pos, @sel_anchor]
+      end
+
+      def selected_text
+        rng = selection_range
+        rng ? (@text[rng[0]...rng[1]] || "") : ""
+      end
+
+      def delete_selection!
+        rng = selection_range
+        return false unless rng
+        @text.slice!(rng[0]...rng[1])
+        @cursor_pos = rng[0]
+        @sel_anchor = nil
+        true
+      end
+
+      def replace_selection(str)
+        delete_selection!
+        @text.insert(@cursor_pos, str)
+        @cursor_pos += str.length
+      end
+
+      def move_caret_left(shift_down)
+        if shift_down
+          @sel_anchor ||= @cursor_pos
+          @cursor_pos -= 1 if @cursor_pos > 0
+        elsif has_selection?
+          @cursor_pos = selection_range[0]
+          @sel_anchor = nil
+        elsif @cursor_pos > 0
+          @cursor_pos -= 1
+        end
+      end
+
+      def move_caret_right(shift_down)
+        if shift_down
+          @sel_anchor ||= @cursor_pos
+          @cursor_pos += 1 if @cursor_pos < @text.length
+        elsif has_selection?
+          @cursor_pos = selection_range[1]
+          @sel_anchor = nil
+        elsif @cursor_pos < @text.length
+          @cursor_pos += 1
+        end
+      end
+
+      def ensure_caret_visible
+        bx, _by, bw, _bh, = box_screen_rect
+        f_font, f_size = text_font_and_size
+        caret_ox = f_font.text_width(@text[0...@cursor_pos] || "", f_size)
+        ensure_caret_visible_with(caret_ox, bw)
+      end
+
+      def ensure_caret_visible_with(caret_ox, bw)
+        pad_x = 8.0 * world_scale_x
+        avail_w = [bw - pad_x * 2.0 - 2.0, 10.0].max
+        f_font, f_size = text_font_and_size
+        total_w = f_font.text_width(@text, f_size)
+        max_scroll = [total_w - avail_w, 0.0].max
+        if caret_ox < @scroll_x
+          @scroll_x = caret_ox
+        elsif caret_ox > @scroll_x + avail_w
+          @scroll_x = caret_ox - avail_w
+        end
+        @scroll_x = @scroll_x.clamp(0.0, max_scroll)
+      end
+
+      def index_at_mouse_x(mx)
+        bx, _by, _bw, _bh, = box_screen_rect
+        pad_x = 8.0 * world_scale_x
+        click_x = mx - (bx + pad_x - @scroll_x)
+        f_font, f_size = text_font_and_size
+
+        best_idx = @text.length
+        accum_w = 0.0
+        idx = 0
+        len = @text.length
+        while idx < len
+          char_w = f_font.text_width(@text[idx], f_size)
+          if click_x < accum_w + char_w * 0.5
+            best_idx = idx
+            break
+          end
+          accum_w += char_w
+          idx += 1
+        end
+        best_idx
+      end
+    end
+
     # --------------------------------------------------------------------------
     # 6. 部品合成による Window (Window自体がDraggable + Body + ResizeGrip)
     # --------------------------------------------------------------------------
@@ -1435,6 +1810,7 @@ module Zenoo
       def checkbox(label = "", checked = false, **opts, &block) = add(Checkbox.new(label, checked, **opts, &block))
       def slider(label = "", value = 0.0, min = 0.0, max = 100.0, **opts, &block) = add(Slider.new(label, value, min, max, **opts, &block))
       def dropdown(items = [], selected_index = 0, **opts, &block) = add(Dropdown.new(items, selected_index, **opts, &block))
+      def text_box(text = "", **opts, &block)        = add(TextBox.new(text, **opts, &block))
       def custom(width: 100.0, height: 32.0, **opts, &block) = add(Widget.new(0.0, 0.0, width: width, height: height, **opts)).on_draw(&block)
     end
 
@@ -1612,6 +1988,12 @@ stage.window("Tool Window (:compact default)", 36, 52, width: 344, height: 540, 
     lbl_status.text = "Wave: #{item}"
   end
 
+  win.text_box("Wave A", label: "Preset Name", placeholder: "Enter preset...") do |txt|
+    lbl_status.text = "Preset: #{txt}"
+  end.on_submit do |txt|
+    lbl_status.text = "Submitted: #{txt}"
+  end
+
   win.checkbox("Animate Preview", animate_wave) { |v| animate_wave = v }
   win.slider("Wave Speed", preview_speed, 0.2, 4.0, unit: "x") { |v| preview_speed = v }
   win.slider("Amplitude", wave_amp, 4.0, 28.0, unit: "px") { |v| wave_amp = v }
@@ -1684,8 +2066,11 @@ stage.window("Tool Window (:compact default)", 36, 52, width: 344, height: 540, 
 end
 
 # 右上ウィンドウ: :relaxed テーマを指定した例（同じ Widget / Dropdown も自動でゆったり高さ）
-win2 = stage.window("Game Settings (:relaxed theme)", 410, 52, width: 320, height: 300, resizable: true, theme: :relaxed)
+win2 = stage.window("Game Settings (:relaxed theme)", 410, 52, width: 320, height: 330, resizable: true, theme: :relaxed)
 win2.checkbox("Show Colliders", show_colliders) { |v| show_colliders = v }
+win2.text_box("", placeholder: "Search or type player name...") do |txt|
+  lbl_status.text = "Filter: #{txt}"
+end
 win2.dropdown(["60 FPS", "120 FPS", "240 FPS", "Unlimited"], 0, label: "FPS Cap") { |_i, item| lbl_status.text = "FPS Cap: #{item}" }
 win2.slider("BGM Volume", 75.0, 0.0, 100.0, unit: "%") { |v| lbl_status.text = "BGM: #{v.round}%" }
 win2.add(Zenoo::UI2::Button.new("Apply Settings") { lbl_status.text = "Applied!" })
