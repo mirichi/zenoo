@@ -145,12 +145,12 @@ module Zenoo
           tdx = @touch.x - @ox
           tdy = @touch.y - @oy
           dist = Math.hypot(tdx, tdy)
-          max_r = @radius
+          max_r = @radius > 0.0 ? @radius : 1.0
 
           if dist > max_r
             dir_x = tdx / dist
             dir_y = tdy / dist
-            if @follow && @fixed_x.nil?
+            if @follow && (@fixed_x.nil? || @fixed_y.nil?)
               @ox = @touch.x - dir_x * max_r
               @oy = @touch.y - dir_y * max_r
               @cx = @touch.x
@@ -173,8 +173,15 @@ module Zenoo
 
           if dist > @deadzone
             @moved = true
-            @vx = tdx_c / max_r
-            @vy = tdy_c / max_r
+            if dist > 0.0 && @deadzone > 0.0 && max_r > @deadzone
+              mag = [dist, max_r].min
+              scaled = (mag - @deadzone) / (max_r - @deadzone)
+              @vx = (tdx / dist) * scaled
+              @vy = (tdy / dist) * scaled
+            else
+              @vx = tdx_c / max_r
+              @vy = tdy_c / max_r
+            end
           end
         end
       end
@@ -702,6 +709,9 @@ module Zenoo
 
         @work_touches << @mouse_touch if @mouse_touch
       else
+        if @mouse_touch && @mouse_touch.active?
+          @mouse_touch.__finish(false, @mouse_touch.x, @mouse_touch.y)
+        end
         @mouse_touch = nil
       end
 
@@ -748,7 +758,10 @@ module Zenoo
             bi += 1
           end
 
-          best_btn.pressed = true if best_btn
+          if best_btn
+            best_btn.pressed = true
+            t.consume!
+          end
         end
         ti += 1
       end

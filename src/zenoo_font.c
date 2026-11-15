@@ -40,11 +40,25 @@ struct ZenFont {
 
 // アトラス状態
 static ZenImage* s_atlas_image = NULL;
+static int s_atlas_owned_by_c = 0;
 static int s_atlas_x = 1;
 static int s_atlas_y = 1;
 static int s_atlas_row_h = 0;
+static unsigned int s_atlas_generation = 1;
 static GlyphEntry* s_glyph_hash[HASH_TABLE_SIZE] = {0};
 static int s_next_font_id = 1;
+
+static void clear_glyph_hash(void) {
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        GlyphEntry* entry = s_glyph_hash[i];
+        while (entry) {
+            GlyphEntry* next = entry->next;
+            free(entry);
+            entry = next;
+        }
+        s_glyph_hash[i] = NULL;
+    }
+}
 
 // アトラス初期化
 static void init_atlas_if_needed(void) {
@@ -52,6 +66,7 @@ static void init_atlas_if_needed(void) {
 
     ZenTexture* tex = zen_texture_create(ATLAS_WIDTH, ATLAS_HEIGHT);
     if (!tex) return;
+    tex->format = ZEN_IMAGE_FORMAT_R8;
 
     glBindTexture(GL_TEXTURE_2D, tex->id);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -81,19 +96,23 @@ static void init_atlas_if_needed(void) {
     s_atlas_image->width = ATLAS_WIDTH;
     s_atlas_image->height = ATLAS_HEIGHT;
 
-
+    s_atlas_owned_by_c = 1;
     s_atlas_x = 1;
     s_atlas_y = 1;
     s_atlas_row_h = 0;
 }
 
 void zen_font_set_atlas_image(ZenImage* img) {
-    if (s_atlas_image == img) return;
+    if (!img || s_atlas_image == img) return;
     if (s_atlas_image && (s_atlas_x > 1 || s_atlas_y > 1)) {
         // すでにグリフがアトラスにパッキングされている場合、既存のテクスチャを上書き・巻き戻ししない
         return;
     }
+    if (s_atlas_image && s_atlas_owned_by_c) {
+        zen_image_destroy(s_atlas_image);
+    }
     s_atlas_image = img;
+    s_atlas_owned_by_c = 0;
     s_atlas_x = 1;
     s_atlas_y = 1;
     s_atlas_row_h = 0;
@@ -102,6 +121,10 @@ void zen_font_set_atlas_image(ZenImage* img) {
 ZenImage* zen_font_get_atlas_image(void) {
     init_atlas_if_needed();
     return s_atlas_image;
+}
+
+unsigned int zen_font_atlas_generation(void) {
+    return s_atlas_generation;
 }
 
 // ハッシュ関数
@@ -297,31 +320,29 @@ void zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* 
 #define BITMAP_SIZE_THRESHOLD 36.0f // 36px以下の文字は直接ラスタライズ + ステム強調フィルタで高精細描画
 
 // グリフ取得 (キャッシュにあれば即返却、なければビットマップまたはSDF生成してアトラス転送)
-int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* out_glyph) {
+int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, int mode, float render_scale, ZenGlyph* out_glyph) {
     if (!font || !out_glyph) {
         return 0;
     }
 
     init_atlas_if_needed();
-
-    int force_sdf = 0;
-    int force_bitmap = 0;
-    float actual_size = font_size;
-
-    if (font_size < 0.0f) {
-        force_sdf = 1;
-        actual_size = -font_size;
-    } else if (font_size >= 10000.0f) {
-        force_bitmap = 1;
-        actual_size = font_size - 10000.0f;
+    if (!s_atlas_image || !s_atlas_image->texture) {
+        return 0;
     }
 
-    if (actual_size <= 0.0f) actual_size = 24.0f;
+    float actual_size = (font_size > 0.0f) ? font_size : 24.0f;
+    int use_bitmap = (mode == ZEN_FONT_MODE_BITMAP) ||
+                     (mode != ZEN_FONT_MODE_SDF && actual_size < BITMAP_SIZE_THRESHOLD);
 
-    int use_bitmap = force_bitmap || (!force_sdf && actual_size < BITMAP_SIZE_THRESHOLD);
-    const ZenViewport* vp = zen__viewport();
-    float render_scale = (!zen__gfx_render_target() && vp && vp->scale > 1.0f) ? vp->scale : 1.0f;
-    int pixel_size = use_bitmap ? (int)roundf(actual_size * render_scale) : 0;
+    float eff_scale = render_scale;
+    if (eff_scale <= 0.0f) {
+        const ZenViewport* vp = zen__viewport();
+        eff_scale = (!zen__gfx_render_target() && vp && vp->scale > 1.0f) ? vp->scale : 1.0f;
+    } else if (eff_scale < 1.0f) {
+        eff_scale = 1.0f;
+    }
+
+    int pixel_size = use_bitmap ? (int)roundf(actual_size * eff_scale) : 0;
     if (use_bitmap && pixel_size < 1) pixel_size = 1;
     float inv_render_scale = (use_bitmap && pixel_size > 0) ? (actual_size / (float)pixel_size) : 1.0f;
 
@@ -410,10 +431,20 @@ int zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* 
             }
 
             if (s_atlas_y + pack_h + 1 >= ATLAS_HEIGHT) {
-                fprintf(stderr, "[Zenoo Font] Warning: Texture Atlas Full!\n");
+                fprintf(stderr, "[Zenoo Font] Warning: Texture Atlas Full! Resetting atlas.\n");
+                clear_glyph_hash();
+                s_atlas_generation++;
                 s_atlas_x = 1;
                 s_atlas_y = 1;
                 s_atlas_row_h = 0;
+                unsigned char* clear_buf = (unsigned char*)calloc(1, ATLAS_WIDTH * ATLAS_HEIGHT);
+                if (clear_buf) {
+                    glBindTexture(GL_TEXTURE_2D, s_atlas_image->texture->id);
+                    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ATLAS_WIDTH, ATLAS_HEIGHT, GL_RED, GL_UNSIGNED_BYTE, clear_buf);
+                    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+                    free(clear_buf);
+                }
             }
 
             int dest_x = s_atlas_x;

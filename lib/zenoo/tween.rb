@@ -79,7 +79,7 @@ module Zenoo
       end
 
       # 数値範囲を補間してブロックへ渡す（直接描画やカスタム値更新用）
-      # 例: Tween.value(from: 0.0, to: 1.0, duration: 0.5) { |v| alpha = v }
+      # 例: Tween.value(from: 0, to: 255, duration: 0.5) { |v| alpha = v }
       #
       # - `from:` (`Numeric`): 開始数値
       # - `to:` (`Numeric`): 終了数値
@@ -102,9 +102,13 @@ module Zenoo
       # - `target` (`Object`, `nil`): 停止対象のオブジェクト
       def kill(target)
         return if target.nil?
-        target.kill_tweens if target.respond_to?(:kill_tweens)
-        @active_tweens.each do |t|
+        target.kill_tweens if target.is_a?(Tweenable)
+        list = @active_tweens.dup
+        i = 0
+        while i < list.size
+          t = list[i]
           t.stop if t.involves_target?(target)
+          i += 1
         end
       end
 
@@ -121,8 +125,13 @@ module Zenoo
 
       # 全ての Tween を強制クリア
       def clear
-        @active_tweens.each(&:stop)
+        list = @active_tweens.dup
         @active_tweens.clear
+        i = 0
+        while i < list.size
+          list[i].stop
+          i += 1
+        end
       end
 
       # 対象オブジェクトの全 Tween を最終状態にスキップして完了
@@ -130,12 +139,21 @@ module Zenoo
       # - `target` (`Object`, `nil`): 対象オブジェクト（省略時はグローバル管理下の全 Tween を完了）
       def finish_all(target = nil)
         if target
-          target.finish_tweens if target.respond_to?(:finish_tweens)
-          @active_tweens.each do |t|
+          target.finish_tweens if target.is_a?(Tweenable)
+          list = @active_tweens.dup
+          i = 0
+          while i < list.size
+            t = list[i]
             t.finish if t.involves_target?(target)
+            i += 1
           end
         else
-          @active_tweens.each(&:finish)
+          list = @active_tweens.dup
+          i = 0
+          while i < list.size
+            list[i].finish
+            i += 1
+          end
         end
       end
 
@@ -180,10 +198,12 @@ module Zenoo
         while i < @active_tweens.size
           t = @active_tweens[i]
           t.__update(dt)
-          if t.completed?
-            @active_tweens.delete_at(i)
-          else
-            i += 1
+          if i < @active_tweens.size && @active_tweens[i].equal?(t)
+            if t.completed?
+              @active_tweens.delete_at(i)
+            else
+              i += 1
+            end
           end
         end
       end
@@ -374,13 +394,6 @@ module Zenoo
       self
     end
 
-    # `stop` の別名（この Tween を直ちに中断して登録解除します）。
-    #
-    # - 戻り値: `Tween` (`self`)
-    def kill
-      stop
-    end
-
     # この Tween の進行を一時停止します。
     #
     # - 戻り値: `Tween` (`self`)
@@ -408,8 +421,18 @@ module Zenoo
         when :property
           props = step[:props]
           props.each do |prop, to_val|
-            val = step[:round] ? to_val.round : to_val
-            Tween._set_prop(@target, prop, val)
+            if prop == :color
+              nc = Backend.normalize_color(to_val)
+              Tween._set_prop(@target, :color, [
+                (nc[0] * 255.0).round.clamp(0, 255),
+                (nc[1] * 255.0).round.clamp(0, 255),
+                (nc[2] * 255.0).round.clamp(0, 255),
+                (nc[3] * 255.0).round.clamp(0, 255)
+              ])
+            else
+              val = step[:round] ? to_val.round : to_val
+              Tween._set_prop(@target, prop, val)
+            end
           end
         when :value
           val = step[:to]
@@ -461,10 +484,13 @@ module Zenoo
     def __update(dt)
       return if @completed || @paused
 
+      loop_start_dt = dt
       while !@completed && dt >= 0
         if @step_index >= @steps.size
           handle_loop_completion
           break if @step_index >= @steps.size || @completed
+          break if dt == loop_start_dt
+          loop_start_dt = dt
         end
 
         step = current_step
@@ -509,12 +535,18 @@ module Zenoo
           cur_val = cur_val.round if step[:round]
           Tween._set_prop(@target, prop, cur_val)
         end
+        if (ac = step[:actual_color])
+          apply_color_lerp(ac[0], ac[1], progress)
+        end
 
         if @step_elapsed >= dur
           actual_props.each do |prop, range|
             to_v = range[1]
             final_val = step[:round] ? to_v.round : to_v
             Tween._set_prop(@target, prop, final_val)
+          end
+          if ac
+            apply_color_lerp(ac[0], ac[1], 1.0)
           end
           leftover = dur <= 0 ? dt : (@step_elapsed - dur)
           advance_step
@@ -562,14 +594,34 @@ module Zenoo
       @steps[idx]
     end
 
+    def apply_color_lerp(cf, ct, progress)
+      r = (cf[0] + (ct[0] - cf[0]) * progress).round.clamp(0, 255)
+      g = (cf[1] + (ct[1] - cf[1]) * progress).round.clamp(0, 255)
+      b = (cf[2] + (ct[2] - cf[2]) * progress).round.clamp(0, 255)
+      a = (cf[3] + (ct[3] - cf[3]) * progress).round.clamp(0, 255)
+      Tween._set_prop(@target, :color, [r, g, b, a])
+    end
+
     def init_property_step(step)
       unless step.key?(:initial_props)
         init_map = {}
         from_map = step[:from] || {}
         step[:props].each do |prop, to_val|
-          val_from = from_map[prop]
-          val_from ||= Tween._get_prop(@target, prop)
-          init_map[prop] = [val_from.to_f, to_val.to_f]
+          if prop == :color
+            val_from = from_map[:color]
+            val_from = Tween._get_prop(@target, :color) if val_from.nil?
+            val_from = [255, 255, 255, 255] if val_from.nil?
+            fc = Backend.normalize_color(val_from)
+            tc = Backend.normalize_color(to_val)
+            step[:initial_color] = [
+              [fc[0] * 255.0, fc[1] * 255.0, fc[2] * 255.0, fc[3] * 255.0],
+              [tc[0] * 255.0, tc[1] * 255.0, tc[2] * 255.0, tc[3] * 255.0]
+            ]
+          else
+            val_from = from_map[prop]
+            val_from ||= Tween._get_prop(@target, prop)
+            init_map[prop] = [val_from.to_f, to_val.to_f]
+          end
         end
         step[:initial_props] = init_map
       end
@@ -584,6 +636,10 @@ module Zenoo
         end
       end
       step[:actual_props] = actual_map
+
+      if (ic = step[:initial_color])
+        step[:actual_color] = @yoyo_reverse ? [ic[1], ic[0]] : [ic[0], ic[1]]
+      end
 
       # steps の自動推論
       if step[:steps].nil?
@@ -649,6 +705,7 @@ module Zenoo
           @loop_mode -= 1
           if @loop_mode <= 0
             @completed = true
+            Tween.unregister(self)
             @on_complete&.call(self)
           end
         end
@@ -663,11 +720,10 @@ module Zenoo
         @step_initialized = false
       else
         @completed = true
+        Tween.unregister(self)
         @on_complete&.call(self)
       end
     end
-
-    alias update __update
   end
 
   # ====================================================================
@@ -702,8 +758,13 @@ module Zenoo
     # - 戻り値: `self`
     def kill_tweens
       return self unless @tweens
-      @tweens.each(&:stop)
+      list = @tweens.dup
       @tweens.clear
+      i = 0
+      while i < list.size
+        list[i].stop
+        i += 1
+      end
       self
     end
 
@@ -712,8 +773,13 @@ module Zenoo
     # - 戻り値: `self`
     def finish_tweens
       return self unless @tweens
-      @tweens.each(&:finish)
+      list = @tweens.dup
       @tweens.clear
+      i = 0
+      while i < list.size
+        list[i].finish
+        i += 1
+      end
       self
     end
 

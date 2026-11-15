@@ -38,7 +38,6 @@ module Zenoo
   native_method :raw_set_pixel_rgba, [:int, :int, :int, :int, :int, :int], :nil, "sp_ZenImage_set_pixel_rgba" # 内部用
   native_method :sync, [], :nil, "sp_ZenImage_sync"                # CPU ピクセルバッファ変更を GPU テクスチャへ反映
   native_method :clone, [], :self, "sp_ZenImage_clone"             # 画像の複製を作成
-  native_method :dup, [], :self, "sp_ZenImage_clone"               # 画像の複製を作成
   native_method :save, [:string], :bool, "sp_ZenImage_save"        # 画像をファイル (PNG 等) に保存
 
   # ==========================================
@@ -53,7 +52,7 @@ module Zenoo
   native_method :set_vec3,  [:string, :float, :float, :float], :nil, "sp_ZenShader_set_vec3"       # vec3 uniform 設定: set_vec3(name, x, y, z)
   native_method :set_vec4,  [:string, :float, :float, :float, :float], :nil, "sp_ZenShader_set_vec4" # vec4 uniform 設定: set_vec4(name, x, y, z, w)
   native_method :raw_set_vec4_array, [:string, :int, :string], :nil, "sp_ZenShader_set_vec4_array" # 内部用: vec4配列転送(name, vec4個数, floatバイナリ)
-  native_method :set_mat4,  [:string, :string], :nil, "sp_ZenShader_set_mat4"      # mat4 uniform 設定: set_mat4(name, 16要素floatパック文字列)
+  native_method :raw_set_mat4, [:string, :string], :nil, "sp_ZenShader_set_mat4" # 内部用: mat4 uniform 設定(name, 16要素floatパック文字列)
   native_method :set_texture, [:string, :int, :any], :nil, "sp_ZenShader_set_texture" # テクスチャ uniform バインド: set_texture(name, unit番号, Image)
 
   # ==========================================
@@ -418,6 +417,7 @@ module Zenoo
       native_func :glyph_advance,   [], :float, "sp_zen_font_glyph_advance"   # 次の文字への水平送り幅 (px)
       native_func :glyph_is_bitmap, [], :bool,  "sp_zen_font_glyph_is_bitmap" # カラー絵文字等のビットマップグリフか
       native_func :set_atlas_image, [:any], :nil, "sp_zen_font_set_atlas_image" # 共有フォントアトラス Image を C 側へ登録
+      native_func :atlas_generation, [], :int, "sp_zen_font_atlas_generation"   # アトラス世代番号（満杯リセット時にインクリメント）
     end
 
     # ==========================================
@@ -456,7 +456,7 @@ module Zenoo
   native_method :metrics_ascent,   [:float], :float, "sp_zen_font_metrics_ascent"   # アセント取得(size_px)
   native_method :metrics_descent,  [:float], :float, "sp_zen_font_metrics_descent"  # ディセント取得(size_px)
   native_method :metrics_line_gap, [:float], :float, "sp_zen_font_metrics_line_gap" # 行間取得(size_px)
-  native_method :query_glyph,      [:int, :float], :bool, "sp_zen_font_query_glyph" # グリフ生成＆FontHelper へ結果格納(codepoint, size_px)
+  native_method :query_glyph,      [:int, :float, :int, :float], :bool, "sp_zen_font_query_glyph" # グリフ生成＆FontHelper へ結果格納(codepoint, size_px, mode, r_scale)
 
   # ==========================================
   # 9. Native::Sound (Spinel native_struct)
@@ -480,8 +480,6 @@ module Zenoo
   native_method :pan, [], :float, "sp_ZenSound_get_pan"                       # パン取得
   native_method :seek, [:float], :nil, "sp_ZenSound_seek"                     # 再生位置移動(秒)
   native_method :cursor, [], :float, "sp_ZenSound_get_cursor"                 # 現在再生位置(秒)
-  native_method :time, [], :float, "sp_ZenSound_get_cursor"                   # 現在再生位置(秒)
-  native_method :time=, [:float], :nil, "sp_ZenSound_seek"                    # 再生位置移動(秒)
   native_method :length, [], :float, "sp_ZenSound_get_length"                 # 総再生時間(秒)
   native_method :sample_rate, [], :int, "sp_ZenSound_get_sample_rate"         # サンプルレート (Hz)
   native_method :length_pcm, [], :int, "sp_ZenSound_get_length_pcm"           # 総 PCM フレーム数
@@ -538,6 +536,17 @@ class Zenoo::Native::NativeShader
     count = str.bytesize / 16
     raw_set_vec4_array(name.to_s, count, str) if count > 0
   end
+
+  # 4x4 行列 uniform を転送する
+  #
+  # - `name` (`String | Symbol`): GLSL uniform 変数名
+  # - `mat` (`Array<Float> | String`): 16 要素の数値配列、または 64 バイト以上の float32 パック済みバイナリ文字列
+  # - 戻り値: `nil`
+  def set_mat4(name, mat)
+    str = mat.is_a?(Array) ? mat.pack("f*") : mat.to_s
+    raise ArgumentError, "Expected 16-element Array of floats or 64-byte String for mat4" if str.bytesize < 64
+    raw_set_mat4(name.to_s, str)
+  end
 end
 
 # 内部用: ネイティブメッシュラッパー拡張 (`Zenoo::Mesh` から委譲される)
@@ -575,6 +584,7 @@ class Zenoo::Native::Mesh
   def update_indices(idata, icount = 0)
     s = idata ? idata.to_s : ""
     cnt = icount.to_i > 0 ? icount.to_i : (s.bytesize / 4)
+    raise ArgumentError, "Index buffer too short" if cnt > 0 && s.bytesize < cnt * 4
     raw_update_indices(s, cnt)
   end
 end
@@ -610,9 +620,11 @@ class Zenoo::Native::Font
   #
   # - `cp` (`Integer`): Unicode コードポイント
   # - `size` (`Float`): フォントサイズ（ピクセル）
+  # - `mode` (`Integer`): 0=自動, 1=SDF強制, 2=ビットマップ強制
+  # - `r_scale` (`Float`): レンダーターゲット等の描画スケール倍率
   # - 戻り値: `Array | nil`（`[visible, u0, v0, u1, v1, x0, y0, x1, y1, advance, is_bitmap]`）
-  def get_glyph(cp, size)
-    ok = self.query_glyph(cp.to_i, size.to_f)
+  def get_glyph(cp, size, mode = 0, r_scale = 1.0)
+    ok = self.query_glyph(cp.to_i, size.to_f, mode.to_i, r_scale.to_f)
     return nil unless ok
 
     [
@@ -653,9 +665,13 @@ class Zenoo::Native::Sound
   # - `sample_rate` (`Integer`): サンプルレート (Hz)
   # - 戻り値: `Native::Sound`
   def self.load_pcm(samples_binary, channels, sample_rate)
-    bytes = samples_binary.bytesize
-    frame_count = bytes / 4 / channels
-    new(samples_binary, frame_count, channels, sample_rate)
+    ch = channels.to_i
+    sr = sample_rate.to_i
+    raise ArgumentError, "Invalid channels or sample_rate" if ch <= 0 || sr <= 0
+    str = samples_binary.to_s
+    frame_count = str.bytesize / 4 / ch
+    raise ArgumentError, "Empty samples data" if frame_count <= 0
+    new(str, frame_count, ch, sr)
   end
 end
 

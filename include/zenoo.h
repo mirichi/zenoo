@@ -301,6 +301,7 @@ struct ZenTexture {
     int height;          // 物理テクスチャ高さ
     int ref_count;       // 参照カウンタ (共有している ZenImage の数)
     int filter;          // テクスチャフィルタ (ZEN_FILTER_NEAREST / ZEN_FILTER_LINEAR)
+    int format;          // ピクセルフォーマット (ZEN_IMAGE_FORMAT_RGBA / ZEN_IMAGE_FORMAT_R8)
 };
 typedef struct ZenTexture ZenTexture;
 
@@ -476,13 +477,20 @@ typedef struct {
     int   is_bitmap;      // 直接ラスタライズビットマップなら 1, SDFなら 0
 } ZenGlyph;
 
-ZenFont*  zen_font_load(const char* filepath, int index);
-ZenFont*  zen_font_load_memory(const unsigned char* data, size_t size, int index);
-void      zen_font_destroy(ZenFont* font);
-int       zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, ZenGlyph* out_glyph);
-void      zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* descent, float* line_gap);
-void      zen_font_set_atlas_image(ZenImage* image);
-ZenImage* zen_font_get_atlas_image(void);
+enum ZenFontMode {
+    ZEN_FONT_MODE_AUTO   = 0,
+    ZEN_FONT_MODE_SDF    = 1,
+    ZEN_FONT_MODE_BITMAP = 2
+};
+
+ZenFont*     zen_font_load(const char* filepath, int index);
+ZenFont*     zen_font_load_memory(const unsigned char* data, size_t size, int index);
+void         zen_font_destroy(ZenFont* font);
+int          zen_font_get_glyph(ZenFont* font, int codepoint, float font_size, int mode, float render_scale, ZenGlyph* out_glyph);
+void         zen_font_get_metrics(ZenFont* font, float font_size, float* ascent, float* descent, float* line_gap);
+void         zen_font_set_atlas_image(ZenImage* image);
+ZenImage*    zen_font_get_atlas_image(void);
+unsigned int zen_font_atlas_generation(void);
 
 // ==========================================
 // 6. オーディオ (Audio & Sound) API

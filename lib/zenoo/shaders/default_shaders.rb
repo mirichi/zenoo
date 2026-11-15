@@ -45,10 +45,6 @@ module Zenoo
       }
     GLSL
 
-    # 互換用エイリアス
-    DEFAULT_QUAD_VERTEX = DEFAULT_SPRITE_VERTEX
-    DEFAULT_QUAD_FRAGMENT = DEFAULT_SPRITE_FRAGMENT
-
     # 単色・頂点カラー描画（三角形・ライン・単色パス）用頂点シェーダー（Uniform不要・最軽量）
     FLAT_PRIMITIVE_VERTEX = <<~'GLSL'
       #version 330 core
@@ -159,10 +155,6 @@ module Zenoo
       }
     GLSL
 
-    # 互換用エイリアス
-    PRIMITIVE_VERTEX = FLAT_PRIMITIVE_VERTEX
-    PRIMITIVE_FRAGMENT = FLAT_PRIMITIVE_FRAGMENT
-
     # ====================================================================
     # Tilemap Instancing 用シェーダー (8 floats/tile: pos_size4, uv4)
     # - in_pos_size: x, y, w, h (w < 0.0 の場合は対角反転＝UVのXY軸入れ替え)
@@ -186,16 +178,14 @@ module Zenoo
           vec2 size = vec2(abs(raw_w), in_pos_size.w);
           vec2 local_pos = in_pos_size.xy + unit * size;
 
-          vec2 view_scale = (u_view.z == 0.0 && u_view.w == 0.0) ? vec2(1.0, 1.0) : u_view.zw;
-          vec2 pos = local_pos * view_scale + u_view.xy;
+          vec2 pos = local_pos * u_view.zw + u_view.xy;
 
           vec2 ndc = (pos / u_resolution) * 2.0 - 1.0;
           float flip = (u_flip_y == 0.0) ? -1.0 : u_flip_y;
           ndc.y = ndc.y * flip;
           gl_Position = vec4(ndc, 0.0, 1.0);
 
-          vec4 tint = (u_color.a == 0.0 && u_color.r == 0.0 && u_color.g == 0.0 && u_color.b == 0.0) ? vec4(1.0) : u_color;
-          v_color = tint;
+          v_color = u_color;
 
           vec2 uv_unit = (raw_w < 0.0) ? unit.yx : unit;
           v_uv = in_uv.xy + uv_unit * in_uv.zw;

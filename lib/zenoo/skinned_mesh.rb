@@ -113,7 +113,8 @@ module Zenoo
     end
 
     attr_reader :image, :bones, :weight_map, :div_x, :div_y, :mesh, :x, :y, :anchor
-    attr_accessor :z, :blend, :alpha, :color, :visible, :camera, :weight_mode
+    attr_accessor :z, :blend, :alpha, :color, :visible, :camera
+    attr_reader :weight_mode
 
     # スキニングメッシュを初期化する
     #
@@ -130,7 +131,7 @@ module Zenoo
     # - `blend:` (`Symbol`): ブレンドモード（`:alpha`, `:add` 等）
     # - `alpha:` (`Integer`): 不透明度（`0 〜 255`）
     # - `color:` (`Color`, `Symbol`, `Array<Integer>`): 乗算カラー
-    # - `camera:` (`Boolean`, `Camera`): カメラ変換の追従有無
+    # - `camera:` (`Boolean`): カメラ変換の追従有無
     def initialize(image,
                    bones: [],
                    weight_map: nil,
@@ -166,7 +167,7 @@ module Zenoo
       @color = color
       @visible = true
       @camera = camera.nil? ? true : camera
-      @weight_mode_setting = weight_mode
+      @weight_mode = weight_mode
 
       @bind_poses = []
       @bone_m_data = Array.new(MAX_BONES * 4, 0.0)
@@ -204,7 +205,13 @@ module Zenoo
       @anchor_x, @anchor_y = Collision.parse_anchor(v)
     end
 
-    # 重み画像の設定
+    # ウェイトモードを設定する
+    def weight_mode=(v)
+      @weight_mode = v
+      resolve_weight_mode
+    end
+
+    # ウェイト画像の設定
     #
     # - `img` (`Image`): ウェイトマップ画像
     def weight_map=(img)
@@ -273,21 +280,21 @@ module Zenoo
       segments = @bones.first(bone_count).map do |b|
         ax = b.world_pivot_x
         ay = b.world_pivot_y
-        tx, ty = b.respond_to?(:tip_world_pos) ? b.tip_world_pos : [ax, ay]
+        tx, ty = b.is_a?(Bone) ? b.tip_world_pos : [ax, ay]
         [ax, ay, tx, ty]
       end
 
       # すべてのボーンが親子チェーンとして直列につながっているか、または2ボーンかを判定
-      use_chain = (@weight_mode_setting == :chain) ||
-                  (@weight_mode_setting == :gradient && bone_count == 2) ||
-                  (@weight_mode_setting == :auto && (bone_count == 2 || bone_count > 4 || is_serial_chain?))
+      use_chain = (@weight_mode == :chain) ||
+                  (@weight_mode == :gradient && bone_count == 2) ||
+                  (@weight_mode == :auto && (bone_count == 2 || bone_count > 4 || is_serial_chain?))
 
       if use_chain
         # 末端ボーンが length == 0 かつ子なしの場合は単なる先端マーカなのでスキニング対象から除外
         active_bones = bone_count
         if active_bones > 2
           last_b = @bones[active_bones - 1]
-          if (!last_b.respond_to?(:length) || last_b.length <= 0.0001) && last_b.children.empty?
+          if (!last_b.is_a?(Bone) || last_b.length <= 0.0001) && last_b.children.empty?
             active_bones -= 1
           end
         end
@@ -334,6 +341,8 @@ module Zenoo
       else
         # RGBA 4ボーン逆距離ウェイトマップ
         segments4 = segments.first(4)
+        seg_count = segments4.length
+        weights = [0.0, 0.0, 0.0, 0.0]
 
         h.times do |py|
           v = (py + 0.5) / h.to_f
@@ -342,9 +351,18 @@ module Zenoo
             u = (px + 0.5) / w.to_f
             wx = tl_x + u * img_w
 
-            weights = [0.0, 0.0, 0.0, 0.0]
+            weights[0] = 0.0
+            weights[1] = 0.0
+            weights[2] = 0.0
+            weights[3] = 0.0
             sum = 0.0
-            segments4.each_with_index do |(ax, ay, bx, by), idx|
+            idx = 0
+            while idx < seg_count
+              seg = segments4[idx]
+              ax = seg[0]
+              ay = seg[1]
+              bx = seg[2]
+              by = seg[3]
               dx = bx - ax
               dy = by - ay
               len_sq = dx * dx + dy * dy
@@ -360,6 +378,7 @@ module Zenoo
               wt = 1.0 / (dist_sq + 25.0)**1.5
               weights[idx] = wt
               sum += wt
+              idx += 1
             end
 
             if sum > 0.0
@@ -401,7 +420,7 @@ module Zenoo
       cam = if @camera.is_a?(Camera)
               @camera
             elsif @camera
-              Window.camera_enabled? ? Window.camera : nil
+              Window.active_camera
             else
               nil
             end
@@ -437,7 +456,7 @@ module Zenoo
         u_tint: tint_vec
       }
 
-      @mesh.draw(z: eff_z, blend: eff_blend, shader: eff_shader, image: @image, uniforms: uniforms)
+      @mesh.draw(z: eff_z, blend: eff_blend, shader: eff_shader, image: @image, uniforms: uniforms, camera: false)
     end
 
     private
@@ -452,7 +471,8 @@ module Zenoo
 
     def resolve_weight_mode
       bone_count = [@bones.length, MAX_BONES].min
-      case @weight_mode_setting
+      @active_bone_count = bone_count
+      case @weight_mode
       when :gradient
         @resolved_weight_mode = 1
       when :rgba

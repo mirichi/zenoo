@@ -27,38 +27,46 @@ sp_int sp_zen_get_image_free_count(void) {
 
 sp_ZenImage* sp_ZenImage_new(sp_int cls_id, sp_int w, sp_int h) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
+    ZenImage* img = zen_image_create((int)w, (int)h);
+    if (!img) return NULL;
     sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(s, 0, sizeof(*s));
     s->cls_id = cls_id;
-    s->image = zen_image_create((int)w, (int)h);
+    s->image = img;
     return s;
 }
 
 sp_ZenImage* sp_ZenImage_new_msaa(sp_int cls_id, sp_int w, sp_int h, sp_int samples) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
+    ZenImage* img = zen_image_create_msaa((int)w, (int)h, (int)samples);
+    if (!img) return NULL;
     sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(s, 0, sizeof(*s));
     s->cls_id = cls_id;
-    s->image = zen_image_create_msaa((int)w, (int)h, (int)samples);
+    s->image = img;
     return s;
 }
 
 sp_ZenImage* sp_ZenImage_new_format_internal(sp_int cls_id, sp_int w, sp_int h, sp_int marker, sp_int format) {
     (void)marker;
     zen_set_gc_trigger_callback(spinel_gc_hook);
+    ZenImage* img = zen_image_create_format((int)w, (int)h, (int)format);
+    if (!img) return NULL;
     sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(s, 0, sizeof(*s));
     s->cls_id = cls_id;
-    s->image = zen_image_create_format((int)w, (int)h, (int)format);
+    s->image = img;
     return s;
 }
 
 sp_ZenImage* sp_ZenImage_load(sp_int cls_id, const char* path) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
+    ZenImage* img = zen_image_load(path);
+    if (!img) return NULL;
     sp_ZenImage* s = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(s, 0, sizeof(*s));
     s->cls_id = cls_id;
-    s->image = zen_image_load(path);
+    s->image = img;
     return s;
 }
 
@@ -97,10 +105,12 @@ void sp_ZenImage_reset_render_target(void) {
 sp_ZenImage* sp_ZenImage_sub_image(sp_ZenImage* s, sp_int x, sp_int y, sp_int w, sp_int h) {
     if (!s || !s->image) return NULL;
     zen_set_gc_trigger_callback(spinel_gc_hook);
+    ZenImage* img = zen_image_sub_image(s->image, (int)x, (int)y, (int)w, (int)h);
+    if (!img) return NULL;
     sp_ZenImage* child = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(child, 0, sizeof(*child));
     child->cls_id = s->cls_id;
-    child->image = zen_image_sub_image(s->image, (int)x, (int)y, (int)w, (int)h);
+    child->image = img;
     return child;
 }
 
@@ -190,10 +200,12 @@ void sp_ZenImage_sync(sp_ZenImage* s) {
 sp_ZenImage* sp_ZenImage_clone(sp_ZenImage* s) {
     if (!s || !s->image) return NULL;
     zen_set_gc_trigger_callback(spinel_gc_hook);
+    ZenImage* cloned = zen_image_clone(s->image);
+    if (!cloned) return NULL;
     sp_ZenImage* clone_obj = (sp_ZenImage*)sp_gc_alloc(sizeof(sp_ZenImage), sp_ZenImage_free, NULL);
     memset(clone_obj, 0, sizeof(*clone_obj));
     clone_obj->cls_id = s->cls_id;
-    clone_obj->image = zen_image_clone(s->image);
+    clone_obj->image = cloned;
     return clone_obj;
 }
 
@@ -214,10 +226,12 @@ void sp_ZenShader_free(void* p) {
 }
 
 sp_ZenShader* sp_ZenShader_new(sp_int cls_id, const char* vert, const char* frag) {
+    ZenShader* sh = zen_shader_create(vert, frag);
+    if (!sh) return NULL;
     sp_ZenShader* s = (sp_ZenShader*)sp_gc_alloc(sizeof(sp_ZenShader), sp_ZenShader_free, NULL);
     memset(s, 0, sizeof(*s));
     s->cls_id = cls_id;
-    s->shader = zen_shader_create(vert, frag);
+    s->shader = sh;
     return s;
 }
 
@@ -633,10 +647,7 @@ sp_ZenMesh* sp_ZenMesh_new(
     sp_int icount
 ) {
     zen_set_gc_trigger_callback(spinel_gc_hook);
-    sp_ZenMesh* s = (sp_ZenMesh*)sp_gc_alloc(sizeof(sp_ZenMesh), sp_ZenMesh_free, NULL);
-    memset(s, 0, sizeof(*s));
-    s->cls_id = cls_id;
-    s->mesh = zen_mesh_create(
+    ZenMesh* mesh = zen_mesh_create(
         (int)topology,
         (layout && layout[0]) ? (const uint8_t*)layout : NULL,
         (vbytes > 0 && vdata) ? (const void*)vdata : NULL,
@@ -645,6 +656,11 @@ sp_ZenMesh* sp_ZenMesh_new(
         (icount > 0 && idata) ? (const uint32_t*)idata : NULL,
         (int)icount
     );
+    if (!mesh) return NULL;
+    sp_ZenMesh* s = (sp_ZenMesh*)sp_gc_alloc(sizeof(sp_ZenMesh), sp_ZenMesh_free, NULL);
+    memset(s, 0, sizeof(*s));
+    s->cls_id = cls_id;
+    s->mesh = mesh;
     return s;
 }
 
@@ -759,10 +775,14 @@ void sp_zen_font_set_atlas_image(sp_RbVal image_val) {
     }
 }
 
-sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size) {
+sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size, sp_int mode, double r_scale) {
     if (!s || !s->font) return false;
-    int ok = zen_font_get_glyph(s->font, (int)cp, (float)size, &s_query_glyph_cache);
+    int ok = zen_font_get_glyph(s->font, (int)cp, (float)size, (int)mode, (float)r_scale, &s_query_glyph_cache);
     return ok ? true : false;
+}
+
+sp_int sp_zen_font_atlas_generation(void) {
+    return (sp_int)zen_font_atlas_generation();
 }
 
 sp_bool sp_zen_font_glyph_visible(void)  { return s_query_glyph_cache.visible ? true : false; }

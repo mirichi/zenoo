@@ -56,7 +56,7 @@ void zen_texture_release(ZenTexture* texture) {
     if (!texture) return;
     texture->ref_count--;
     if (texture->ref_count <= 0) {
-        if (texture->id) {
+        if (texture->id && zen__window() != NULL) {
             glDeleteTextures(1, &texture->id);
         }
         free(texture);
@@ -104,22 +104,28 @@ void zen_image_replace_texture(ZenImage* dst, ZenImage* src) {
     if (!dst || !src || !src->texture) return;
     if (dst->texture == src->texture) return;
 
-    if (dst->has_fbo) {
-        glDeleteFramebuffers(1, &dst->fbo);
-        dst->fbo = 0;
-        dst->has_fbo = 0;
+    if (zen__window() != NULL) {
+        if (dst->has_fbo) {
+            glDeleteFramebuffers(1, &dst->fbo);
+        }
+        if (dst->msaa_fbo) {
+            glDeleteFramebuffers(1, &dst->msaa_fbo);
+        }
+        if (dst->msaa_rbo) {
+            glDeleteRenderbuffers(1, &dst->msaa_rbo);
+        }
     }
-    if (dst->msaa_fbo) {
-        glDeleteFramebuffers(1, &dst->msaa_fbo);
-        dst->msaa_fbo = 0;
-    }
-    if (dst->msaa_rbo) {
-        glDeleteRenderbuffers(1, &dst->msaa_rbo);
-        dst->msaa_rbo = 0;
-    }
+    dst->fbo = 0;
+    dst->has_fbo = 0;
+    dst->msaa_fbo = 0;
+    dst->msaa_rbo = 0;
 
     if (dst->texture) {
         zen_texture_release(dst->texture);
+    }
+    if (dst->pixels) {
+        free(dst->pixels);
+        dst->pixels = NULL;
     }
 
     dst->texture = src->texture;
@@ -128,6 +134,8 @@ void zen_image_replace_texture(ZenImage* dst, ZenImage* src) {
     dst->y = src->y;
     dst->width = src->width;
     dst->height = src->height;
+    dst->cpu_dirty = 1;
+    dst->gpu_dirty = 0;
 }
 
 // ------------------------------------------
@@ -140,6 +148,7 @@ ZenImage* zen_image_create_format(int width, int height, int format) {
     if (!tex) return NULL;
     int init_filter = (format == ZEN_IMAGE_FORMAT_R8) ? ZEN_FILTER_LINEAR : s_default_texture_filter;
     tex->filter = init_filter;
+    tex->format = (format == ZEN_IMAGE_FORMAT_R8) ? ZEN_IMAGE_FORMAT_R8 : ZEN_IMAGE_FORMAT_RGBA;
 
     GLint gl_f = (init_filter == ZEN_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
     glBindTexture(GL_TEXTURE_2D, tex->id);
@@ -281,19 +290,21 @@ void zen_image_destroy(ZenImage* image) {
         zen_set_render_target(NULL);
     }
 
-    if (image->has_fbo) {
-        glDeleteFramebuffers(1, &image->fbo);
-        image->fbo = 0;
-        image->has_fbo = 0;
+    if (zen__window() != NULL) {
+        if (image->has_fbo) {
+            glDeleteFramebuffers(1, &image->fbo);
+        }
+        if (image->msaa_fbo) {
+            glDeleteFramebuffers(1, &image->msaa_fbo);
+        }
+        if (image->msaa_rbo) {
+            glDeleteRenderbuffers(1, &image->msaa_rbo);
+        }
     }
-    if (image->msaa_fbo) {
-        glDeleteFramebuffers(1, &image->msaa_fbo);
-        image->msaa_fbo = 0;
-    }
-    if (image->msaa_rbo) {
-        glDeleteRenderbuffers(1, &image->msaa_rbo);
-        image->msaa_rbo = 0;
-    }
+    image->fbo = 0;
+    image->has_fbo = 0;
+    image->msaa_fbo = 0;
+    image->msaa_rbo = 0;
     if (image->texture) {
         zen_texture_release(image->texture);
         image->texture = NULL;
@@ -393,14 +404,31 @@ static void zen__ensure_cpu_pixels(ZenImage* img) {
         int gl_y = th - (img->y + img->height);
         if (gl_y < 0) gl_y = 0;
 
-        uint32_t* temp = (uint32_t*)malloc((size_t)img->width * (size_t)img->height * sizeof(uint32_t));
-        if (temp) {
-            glReadPixels(img->x, gl_y, img->width, img->height, GL_RGBA, GL_UNSIGNED_BYTE, temp);
-            for (int r = 0; r < img->height; r++) {
-                int src_r = img->height - 1 - r;
-                memcpy(&img->pixels[r * img->width], &temp[src_r * img->width], (size_t)img->width * sizeof(uint32_t));
+        if (img->texture->format == ZEN_IMAGE_FORMAT_R8) {
+            unsigned char* temp = (unsigned char*)malloc((size_t)img->width * (size_t)img->height);
+            if (temp) {
+                glPixelStorei(GL_PACK_ALIGNMENT, 1);
+                glReadPixels(img->x, gl_y, img->width, img->height, GL_RED, GL_UNSIGNED_BYTE, temp);
+                glPixelStorei(GL_PACK_ALIGNMENT, 4);
+                for (int r = 0; r < img->height; r++) {
+                    int src_r = img->height - 1 - r;
+                    for (int c = 0; c < img->width; c++) {
+                        uint32_t v = (uint32_t)temp[src_r * img->width + c];
+                        img->pixels[r * img->width + c] = 0xFF000000u | (v << 16) | (v << 8) | v;
+                    }
+                }
+                free(temp);
             }
-            free(temp);
+        } else {
+            uint32_t* temp = (uint32_t*)malloc((size_t)img->width * (size_t)img->height * sizeof(uint32_t));
+            if (temp) {
+                glReadPixels(img->x, gl_y, img->width, img->height, GL_RGBA, GL_UNSIGNED_BYTE, temp);
+                for (int r = 0; r < img->height; r++) {
+                    int src_r = img->height - 1 - r;
+                    memcpy(&img->pixels[r * img->width], &temp[src_r * img->width], (size_t)img->width * sizeof(uint32_t));
+                }
+                free(temp);
+            }
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, prev_fbo);
@@ -412,7 +440,21 @@ void zen_image_sync_to_gpu(ZenImage* img) {
     if (!img || !img->texture || !img->gpu_dirty || !img->pixels) return;
     zen_ensure_context();
     glBindTexture(GL_TEXTURE_2D, img->texture->id);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, img->x, img->y, img->width, img->height, GL_RGBA, GL_UNSIGNED_BYTE, img->pixels);
+    if (img->texture->format == ZEN_IMAGE_FORMAT_R8) {
+        size_t count = (size_t)img->width * (size_t)img->height;
+        unsigned char* temp = (unsigned char*)malloc(count);
+        if (temp) {
+            for (size_t i = 0; i < count; i++) {
+                temp[i] = (unsigned char)(img->pixels[i] & 0xFFu);
+            }
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, img->x, img->y, img->width, img->height, GL_RED, GL_UNSIGNED_BYTE, temp);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            free(temp);
+        }
+    } else {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, img->x, img->y, img->width, img->height, GL_RGBA, GL_UNSIGNED_BYTE, img->pixels);
+    }
     img->gpu_dirty = 0;
 }
 

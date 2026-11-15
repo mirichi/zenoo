@@ -253,6 +253,8 @@ void zen_gamepad_vibrate(int id, float strong, float weak, float duration) {
 
         if (strong < 0.0f) strong = 0.0f; else if (strong > 1.0f) strong = 1.0f;
         if (weak < 0.0f) weak = 0.0f; else if (weak > 1.0f) weak = 1.0f;
+        float dur_ms = duration * 1000.0f;
+        if (dur_ms < 0.0f) dur_ms = 0.0f; else if (dur_ms > 65535.0f) dur_ms = 65535.0f;
 
         struct ff_effect effect;
         memset(&effect, 0, sizeof(effect));
@@ -260,7 +262,7 @@ void zen_gamepad_vibrate(int id, float strong, float weak, float duration) {
         effect.id = s_linux_ff_effect_ids[id];
         effect.u.rumble.strong_magnitude = (unsigned short)(strong * 65535.0f);
         effect.u.rumble.weak_magnitude = (unsigned short)(weak * 65535.0f);
-        effect.replay.length = (unsigned short)(duration * 1000.0f);
+        effect.replay.length = (unsigned short)dur_ms;
         effect.replay.delay = 0;
 
         if (ioctl(fd, EVIOCSFF, &effect) < 0) {

@@ -24,7 +24,7 @@ class AnimatedBox
     @box_size = 36.0
     @label = label.to_s
     @color = color
-    @alpha = 1.0
+    @alpha = 255.0
   end
 
   def x=(v); @x = v.to_f; end

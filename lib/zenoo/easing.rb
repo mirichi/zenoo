@@ -142,21 +142,15 @@ module Zenoo
 
       # Elastic (ゴムのように振動して収束する)
       when :elastic_in, :in_elastic
-        return 0.0 if t == 0.0
-        return 1.0 if t == 1.0
         p = 0.3
         s = p / 4.0
         t -= 1.0
         -(2.0 ** (10.0 * t)) * Math.sin((t - s) * (2.0 * Math::PI) / p)
       when :elastic_out, :out_elastic
-        return 0.0 if t == 0.0
-        return 1.0 if t == 1.0
         p = 0.3
         s = p / 4.0
         (2.0 ** (-10.0 * t)) * Math.sin((t - s) * (2.0 * Math::PI) / p) + 1.0
       when :elastic_in_out, :in_out_elastic
-        return 0.0 if t == 0.0
-        return 1.0 if t == 1.0
         p = 0.3 * 1.5
         s = p / 4.0
         t = t * 2.0 - 1.0

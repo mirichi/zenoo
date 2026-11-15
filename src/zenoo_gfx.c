@@ -62,6 +62,8 @@ static GLuint compile_shader(GLenum type, const char* source) {
         char log[512];
         glGetShaderInfoLog(shader, sizeof(log), NULL, log);
         fprintf(stderr, "[Zenoo GFX] Shader compile error: %s\n", log);
+        glDeleteShader(shader);
+        return 0;
     }
     return shader;
 }
@@ -257,6 +259,7 @@ void zen_set_render_target(ZenImage* target) {
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->texture->id, 0);
             target->has_fbo = s_context_gen;
             target->msaa_fbo = 0;
+            target->msaa_rbo = 0;
         }
 
         // 2. MSAA が有効な場合 (WSLg / Mesa D3D12 環境ではドライバ不具合回避のため通常FBOを使用)
@@ -441,7 +444,7 @@ void zen_shader_destroy(ZenShader* shader) {
     if (s_active_program == shader->program_id) {
         s_active_program = 0;
     }
-    if (shader->program_id) {
+    if (shader->program_id && zen__window() != NULL) {
         glDeleteProgram(shader->program_id);
     }
     free(shader);
@@ -802,6 +805,8 @@ void zen_draw_mesh_instanced(ZenMesh* geom_mesh,
                              ZenImage* texture,
                              ZenShader* shader) {
     if (!shader) return;
+    if (inst_buffer && (inst_buffer->vbo == 0 || inst_buffer->vertex_count <= 0)) return;
+    if (!inst_buffer && inst_layout && inst_layout[0] != 0 && (!inst_data || instance_count <= 0)) return;
 
     // 1. シェーダーと共通Uniformの準備
     GLuint prog = shader->program_id;

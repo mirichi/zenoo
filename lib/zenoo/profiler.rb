@@ -51,23 +51,32 @@ module Zenoo
       def measure(category)
         return yield unless @enabled
 
+        entry = __begin_measure(category)
+        res = yield
+        __end_measure(entry)
+        res
+      end
+
+      def __begin_measure(category)
         cat = category.to_sym
         register_category(cat)
-        t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        t0 = Native::Window.time
         entry = [cat, t0, 0.0]
         @section_stack.push(entry)
-        res = yield
+        entry
+      end
+
+      def __end_measure(entry)
         @section_stack.pop
-        t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        total_ms = (t1 - t0) * 1000.0
+        t1 = Native::Window.time
+        total_ms = (t1 - entry[1]) * 1000.0
         self_ms = total_ms - entry[2]
         self_ms = 0.0 if self_ms < 0.0
-        @current_frame[cat] += self_ms
+        @current_frame[entry[0]] += self_ms
 
         if (parent = @section_stack.last)
           parent[2] += total_ms
         end
-        res
       end
 
       # 手動での計測開始
@@ -77,7 +86,7 @@ module Zenoo
         return unless @enabled
         cat = category.to_sym
         register_category(cat)
-        @start_times[cat] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        @start_times[cat] = Native::Window.time
       end
 
       # 手動での計測終了
@@ -88,7 +97,7 @@ module Zenoo
         cat = category.to_sym
         t0 = @start_times.delete(cat)
         return unless t0
-        t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        t1 = Native::Window.time
         @current_frame[cat] += (t1 - t0) * 1000.0
       end
 
@@ -165,7 +174,7 @@ module Zenoo
       def last_total_ms
         last = @history.last
         return 0.0 unless last
-        last.values.sum
+        __sum_hash_values(last)
       end
 
       # 直近 N フレームにおける平均時間 { category => ms }
@@ -176,13 +185,18 @@ module Zenoo
         return {} if @history.empty?
         recent = @history.last(samples)
         result = Hash.new(0.0)
-        recent.each do |frame|
-          frame.each do |cat, ms|
+        i = 0
+        len = recent.length
+        while i < len
+          recent[i].each do |cat, ms|
             result[cat] += ms
           end
+          i += 1
         end
-        count = recent.size.to_f
-        result.transform_values! { |v| v / count }
+        count = len.to_f
+        result.each_key do |cat|
+          result[cat] /= count
+        end
         result
       end
 
@@ -192,7 +206,16 @@ module Zenoo
       # - 戻り値: `Float`
       def max_total_ms(samples = 60)
         return 0.0 if @history.empty?
-        @history.last(samples).map { |f| f.values.sum }.max || 0.0
+        recent = @history.last(samples)
+        max_v = 0.0
+        i = 0
+        len = recent.length
+        while i < len
+          tot = __sum_hash_values(recent[i])
+          max_v = tot if tot > max_v
+          i += 1
+        end
+        max_v
       end
 
       # 履歴のリセット
@@ -200,9 +223,17 @@ module Zenoo
         @history.clear
         @current_frame.clear
         @start_times.clear
+        @section_stack.clear
+        @frame_count = 0
       end
 
       private
+
+      def __sum_hash_values(hash)
+        total = 0.0
+        hash.each_value { |v| total += v }
+        total
+      end
 
       def register_category(cat)
         @registered_categories << cat unless @registered_categories.include?(cat)

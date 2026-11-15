@@ -79,7 +79,6 @@ module Zenoo
           return unless @show_colliders
 
           ObjectSpace.each_object(Zenoo::Sprite) do |sprite|
-            next unless sprite.respond_to?(:collider)
             col = sprite.collider
             next unless col
 
@@ -87,35 +86,64 @@ module Zenoo
             border_col = is_selected ? COL_COL_SEL_BD : COL_COL_NORM_BD
             bg_col = is_selected ? COL_COL_SEL_BG : COL_COL_NORM_BG
 
-            if col.respond_to?(:radius) && col.radius > 0 && (!col.respond_to?(:half_w) || col.half_w == 0)
-              cx = col.respond_to?(:center_x) ? col.center_x : sprite.x
-              cy = col.respond_to?(:center_y) ? col.center_y : sprite.y
-              Window.draw_circle(cx, cy, col.radius, color: bg_col, border_width: 1.5, border_color: border_col)
-            elsif col.respond_to?(:half_w) && col.half_w > 0
-              cx = col.respond_to?(:center_x) ? col.center_x : sprite.x
-              cy = col.respond_to?(:center_y) ? col.center_y : sprite.y
-              w = col.half_w * 2.0
-              h = col.half_h * 2.0
-              rot = col.respond_to?(:angle) ? col.angle : sprite.angle
-              Window.draw_rect(
-                cx - col.half_w, cy - col.half_h, w, h,
-                angle: rot,
-                color: bg_col,
-                border_width: 1.5,
-                border_color: border_col,
-                radius: col.respond_to?(:radius) ? col.radius : 0.0
-              )
-            else
-              w = sprite.width * sprite.scale_x.abs
-              h = sprite.height * sprite.scale_y.abs
-              Window.draw_rect(
-                sprite.x - w * 0.5, sprite.y - h * 0.5, w, h,
-                angle: sprite.angle,
-                color: bg_col,
-                border_width: 1.0,
-                border_color: border_col
-              )
+            case col.shape_type
+            when Zenoo::Collision::TYPE_CIRCLE
+              cx = col.center_x
+              cy = col.center_y
+              if col.is_true_circle
+                rx = ry = col.effective_radius
+              else
+                rx = col.radius_x * col.scale_x.abs
+                ry = col.radius_y * col.scale_y.abs
+              end
+              Window.draw_circle(cx, cy, rx, ry, angle: col.angle, color: bg_col, border_width: 1.5, border_color: border_col)
+            when Zenoo::Collision::TYPE_RECT
+              if col.is_rounded
+                cx = col.center_x
+                cy = col.center_y
+                w = col.width * col.scale_x.abs
+                h = col.height * col.scale_y.abs
+                Window.draw_rect(
+                  cx - w * 0.5, cy - h * 0.5, w, h,
+                  angle: col.angle,
+                  pivot: :center,
+                  color: bg_col,
+                  border_width: 1.5,
+                  border_color: border_col,
+                  radius: col.radius
+                )
+              elsif (verts = col.world_vertices)
+                draw_polygon_outline(verts, bg_col, border_col)
+              end
+            when Zenoo::Collision::TYPE_POLYGON
+              if (verts = col.world_vertices)
+                draw_polygon_outline(verts, bg_col, border_col)
+              end
+            when Zenoo::Collision::TYPE_POINT
+              Window.draw_circle(col.center_x, col.center_y, 3.0, color: border_col)
             end
+          end
+        end
+
+        def draw_polygon_outline(verts, bg_col, border_col)
+          len = verts.length
+          return if len < 3
+
+          p0 = verts[0]
+          i = 1
+          while i < len - 1
+            p1 = verts[i]
+            p2 = verts[i + 1]
+            Window.draw_triangle(p0[0], p0[1], p1[0], p1[1], p2[0], p2[1], color: bg_col)
+            i += 1
+          end
+
+          i = 0
+          while i < len
+            a = verts[i]
+            b = verts[(i + 1) % len]
+            Window.draw_line(a[0], a[1], b[0], b[1], color: border_col, width: 1.5)
+            i += 1
           end
         end
 
@@ -280,7 +308,7 @@ module Zenoo
           global_rows = [
             ["Program ($0)", File.basename($0.to_s)],
             ["Ruby Version", RUBY_VERSION],
-            ["Engine", defined?(RUBY_ENGINE) ? RUBY_ENGINE : "CRuby"],
+            ["Engine", RUBY_ENGINE],
             ["Dev Mode", Dev.enabled ? "Active (Hot-reload)" : "Disabled"]
           ]
           ImGui.table(

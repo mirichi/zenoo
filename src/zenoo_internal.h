@@ -24,6 +24,9 @@
 #ifndef GL_UNPACK_ALIGNMENT
 #define GL_UNPACK_ALIGNMENT 0x0CF5
 #endif
+#ifndef GL_PACK_ALIGNMENT
+#define GL_PACK_ALIGNMENT 0x0D05
+#endif
 
 #define ZEN_MAX_GAMEPADS 4
 

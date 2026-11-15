@@ -39,13 +39,14 @@ module Zenoo
     # 予約されたシーン操作
     # ------------------------------------------------------------------
     class Op
-      attr_reader :kind, :scene, :below, :fade
+      attr_reader :kind, :scene, :below, :fade, :color
 
-      def initialize(kind, scene, below, fade)
+      def initialize(kind, scene, below, fade, color = :black)
         @kind = kind   # :change / :push / :pop
         @scene = scene
         @below = below
         @fade = fade.to_f
+        @color = color
       end
     end
 
@@ -93,7 +94,11 @@ module Zenoo
       # スタック上の現在シーンの実行、`below:` に応じた下層シーンの再生／更新、フェード演出、予約済み遷移の適用を行います。
       def call
         # ループ開始前に予約された最初のシーンなどを反映
-        __apply(@pending) if @stack.empty? && !@pending.empty? && @fade_state == :none
+        if @stack.empty? && !@pending.empty? && @fade_state == :none
+          ops = @pending
+          @pending = []
+          __apply(ops)
+        end
 
         q = Backend.active_queue
         start = q.queue_count
@@ -101,13 +106,15 @@ module Zenoo
 
         # フェードアウト中: シーンは一切動かさず、直前の画面を再投入して暗転させる
         if @fade_state == :out
-          @fade_source.__replay if @fade_source
+          __replay_layer(@stack.length - 1) if @fade_source && !@stack.empty?
           @fade_t += dt
           ratio = @fade_half > 0.0 ? @fade_t / @fade_half : 1.0
           ratio = 1.0 if ratio > 1.0
           __draw_fade(ratio)
           if ratio >= 1.0
-            __apply(@fade_ops)
+            ops = @fade_ops
+            @fade_ops = []
+            __apply(ops)
             @fade_source = nil
             @fade_state = :in
             @fade_t = 0.0
@@ -116,7 +123,26 @@ module Zenoo
         end
 
         top = @stack.last
-        __run_layer(@stack.length - 1) if top
+        top_start = top ? __run_layer(@stack.length - 1, start) : start
+
+        has_pending = !@pending.empty?
+        fade = 0.0
+        fade_color = :black
+        needs_capture = false
+
+        if has_pending
+          @pending.each do |op|
+            if op.fade > 0.0 && op.fade >= fade
+              fade = op.fade
+              fade_color = op.color
+            end
+            needs_capture = true if op.kind == :push && op.below != :hide
+          end
+          needs_capture = true if fade > 0.0
+
+          # 下に残る / フェードで見せるシーンの見た目を、フェードイン幕より前の描画コマンドから記録
+          top.__capture(q, top_start) if needs_capture && top
+        end
 
         # フェードイン中: 新しいシーンは動かしつつ、上に重ねた幕を薄くしていく
         if @fade_state == :in
@@ -127,26 +153,13 @@ module Zenoo
           @fade_state = :none if ratio >= 1.0
         end
 
-        return if @pending.empty?
-
-        # このフレームに予約された操作を適用
-        fade = 0.0
-        needs_capture = false
-        @pending.each do |op|
-          if op.fade > fade
-            fade = op.fade
-          end
-          needs_capture = true if op.kind == :push && op.below != :hide
-        end
-        needs_capture = true if fade > 0.0
-
-        # 下に残る / フェードで見せるシーンの見た目を、このフレームの描画コマンドから記録
-        top.__capture(q, start) if needs_capture && top
+        return unless has_pending
 
         if fade > 0.0 && top
           @fade_ops = @pending
           @pending = []
           @fade_source = top
+          @fade_color = Backend.normalize_color(fade_color)
           @fade_state = :out
           @fade_t = 0.0
           @fade_half = fade * 0.5
@@ -215,8 +228,7 @@ module Zenoo
       # 内部処理
       # ----------------------------------------------------------------
       def __request(kind, scene, below, fade, color)
-        @fade_color = Backend.normalize_color(color) if fade.to_f > 0.0
-        @pending << Op.new(kind, scene, below, fade)
+        @pending << Op.new(kind, scene, below, fade, color)
         nil
       end
 
@@ -246,20 +258,35 @@ module Zenoo
       end
 
       # i 番目のシーンを実行 (下のシーンは below 指定に従って表示・実行)
-      def __run_layer(i)
+      def __run_layer(i, base_start)
         s = @stack[i]
+        layer_start = base_start
         if i > 0
+          q = Backend.active_queue
           below = s.__below
           if below == :live
-            __run_layer(i - 1)
+            child_start = __run_layer(i - 1, base_start)
+            @stack[i - 1].__capture(q, child_start)
           elsif below == :freeze
-            @stack[i - 1].__replay
+            __replay_layer(i - 1)
           end
           # 下の階層の描画をこの時点で GPU へ確定発行 (Z オーダーの完全分離・突き抜け防止)
-          Backend.active_queue.flush
+          q.flush
+          layer_start = q.queue_count
         end
         s.__tick
         s.call
+        layer_start
+      end
+
+      def __replay_layer(i)
+        return if i < 0
+        s = @stack[i]
+        if i > 0 && s.__below != :hide
+          __replay_layer(i - 1)
+          Backend.active_queue.flush
+        end
+        s.__replay
       end
 
       def __draw_fade(ratio)

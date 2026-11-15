@@ -34,7 +34,8 @@ module Zenoo
     def initialize(x: 0.0, y: 0.0, zoom: 1.0, offset_x: nil, offset_y: nil, width: nil, height: nil, target: nil, smooth_speed: 0.0, bounds: nil, target_offset_x: 0.0, target_offset_y: 0.0)
       @x = x.to_f
       @y = y.to_f
-      @zoom = zoom.to_f
+      z = zoom.to_f
+      @zoom = z.abs < 0.0001 ? (z < 0.0 ? -0.0001 : 1.0) : z
       @offset_x = offset_x ? offset_x.to_f : nil
       @offset_y = offset_y ? offset_y.to_f : nil
       @width = width ? width.to_f : nil
@@ -81,7 +82,8 @@ module Zenoo
     #
     # - `v` (`Numeric`): 拡大率 (`1.0` で等倍)
     def zoom=(v)
-      @zoom = v.to_f
+      z = v.to_f
+      @zoom = z.abs < 0.0001 ? (z < 0.0 ? -0.0001 : 1.0) : z
       clamp_to_bounds!
       @view = nil
     end
@@ -159,6 +161,7 @@ module Zenoo
     def update(dt = 1.0 / 60.0)
       # 1. ターゲット自動追従
       if @target
+        valid = true
         tx = 0.0
         ty = 0.0
         if @target.is_a?(Array)
@@ -167,20 +170,24 @@ module Zenoo
         elsif @target.respond_to?(:x) && @target.respond_to?(:y)
           tx = @target.x.to_f
           ty = @target.y.to_f
+        else
+          valid = false
         end
 
-        if @smooth_speed > 0.0
-          # 滑らかな補間 (Lerp)
-          rate = [dt * @smooth_speed * 10.0, 1.0].min
-          @x += (tx + @target_offset_x - @x) * rate
-          @y += (ty + @target_offset_y - @y) * rate
-        else
-          # 即時追従
-          @x = tx + @target_offset_x
-          @y = ty + @target_offset_y
+        if valid
+          if @smooth_speed > 0.0
+            # 滑らかな補間 (Lerp)
+            rate = [dt * @smooth_speed * 10.0, 1.0].min
+            @x += (tx + @target_offset_x - @x) * rate
+            @y += (ty + @target_offset_y - @y) * rate
+          else
+            # 即時追従
+            @x = tx + @target_offset_x
+            @y = ty + @target_offset_y
+          end
+          clamp_to_bounds!
+          @view = nil
         end
-        clamp_to_bounds!
-        @view = nil
       elsif @bounds
         clamp_to_bounds!
       end

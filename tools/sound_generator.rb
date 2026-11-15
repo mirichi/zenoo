@@ -15,6 +15,7 @@ require_relative '../lib/zenoo'
 class RetroSynth
   TWO_PI = Math::PI * 2.0
   SAMPLE_RATE = 44100
+  WAVE_SYMS = [:square, :sawtooth, :sine, :triangle, :noise].freeze
 
   attr_accessor :wave_type      # 0: Square, 1: Sawtooth, 2: Sine, 3: Triangle, 4: Noise
   attr_accessor :base_freq      # 基本周波数 (Hz)
@@ -212,7 +213,7 @@ class RetroSynth
   # PCM波形合成 (SoundEffect.synthesize_pcm で完全一本化)
   def synthesize(sample_rate = @sample_rate)
     SoundEffect.synthesize_pcm(
-      wave:        @wave_type,
+      wave:        WAVE_SYMS[@wave_type] || :square,
       freq:        @base_freq,
       min_freq:    @min_freq,
       slide:       @slide,
@@ -236,7 +237,7 @@ class RetroSynth
   # Zenoo::Sound インスタンスを生成 (SoundEffect.synthesize を呼び出し)
   def generate_sound(sample_rate = @sample_rate)
     SoundEffect.synthesize(
-      wave:        @wave_type,
+      wave:        WAVE_SYMS[@wave_type] || :square,
       freq:        @base_freq,
       min_freq:    @min_freq,
       slide:       @slide,

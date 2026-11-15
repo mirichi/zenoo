@@ -19,7 +19,7 @@ module Zenoo
       # - 戻り値: `Zenoo::Sound`
       def tone(frequency, duration = 0.5, type: :sine, volume: 1.0, attack: 0.005, release: 0.01, sample_rate: 44100)
         total_frames = (duration * sample_rate).to_i
-        return Sound.from_pcm([], sample_rate: sample_rate) if total_frames <= 0
+        return Sound.from_pcm([0.0], channels: 1, sample_rate: sample_rate) if total_frames <= 0
 
         attack_frames = (attack * sample_rate).to_i
         release_frames = (release * sample_rate).to_i
@@ -37,12 +37,9 @@ module Zenoo
           sample = calculate_waveform(phase, type)
 
           # エンベロープ (クリックノイズ低減)
-          env = 1.0
-          if i < attack_frames && attack_frames > 0
-            env = i.to_f / attack_frames
-          elsif i >= total_frames - release_frames && release_frames > 0
-            env = (total_frames - i).to_f / release_frames
-          end
+          att_env = (i < attack_frames && attack_frames > 0) ? (i.to_f / attack_frames) : 1.0
+          rel_env = (i >= total_frames - release_frames && release_frames > 0) ? ((total_frames - i).to_f / release_frames) : 1.0
+          env = att_env * rel_env
 
           samples[i] = sample * vol * env
           i += 1
@@ -64,7 +61,7 @@ module Zenoo
       # - 戻り値: `Zenoo::Sound`
       def sweep(freq_start, freq_end, duration = 0.5, type: :sine, volume: 1.0, attack: 0.005, release: 0.01, sample_rate: 44100)
         total_frames = (duration * sample_rate).to_i
-        return Sound.from_pcm([], sample_rate: sample_rate) if total_frames <= 0
+        return Sound.from_pcm([0.0], channels: 1, sample_rate: sample_rate) if total_frames <= 0
 
         attack_frames = (attack * sample_rate).to_i
         release_frames = (release * sample_rate).to_i
@@ -73,7 +70,7 @@ module Zenoo
         f0 = freq_start.to_f
         f1 = freq_end.to_f
         vol = volume.to_f
-        dur = duration.to_f
+        dur = [duration.to_f, 1e-6].max
 
         i = 0
         while i < total_frames
@@ -83,12 +80,9 @@ module Zenoo
 
           sample = calculate_waveform(phase, type)
 
-          env = 1.0
-          if i < attack_frames && attack_frames > 0
-            env = i.to_f / attack_frames
-          elsif i >= total_frames - release_frames && release_frames > 0
-            env = (total_frames - i).to_f / release_frames
-          end
+          att_env = (i < attack_frames && attack_frames > 0) ? (i.to_f / attack_frames) : 1.0
+          rel_env = (i >= total_frames - release_frames && release_frames > 0) ? ((total_frames - i).to_f / release_frames) : 1.0
+          env = att_env * rel_env
 
           samples[i] = sample * vol * env
           i += 1
@@ -107,7 +101,7 @@ module Zenoo
       # - 戻り値: `Zenoo::Sound`
       def noise(duration = 0.5, volume: 1.0, attack: 0.002, release: 0.1, sample_rate: 44100)
         total_frames = (duration * sample_rate).to_i
-        return Sound.from_pcm([], sample_rate: sample_rate) if total_frames <= 0
+        return Sound.from_pcm([0.0], channels: 1, sample_rate: sample_rate) if total_frames <= 0
 
         attack_frames = (attack * sample_rate).to_i
         release_frames = (release * sample_rate).to_i
@@ -121,12 +115,9 @@ module Zenoo
           # -1.0 .. 1.0 の一様乱数
           sample = rng.rand * 2.0 - 1.0
 
-          env = 1.0
-          if i < attack_frames && attack_frames > 0
-            env = i.to_f / attack_frames
-          elsif i >= total_frames - release_frames && release_frames > 0
-            env = (total_frames - i).to_f / release_frames
-          end
+          att_env = (i < attack_frames && attack_frames > 0) ? (i.to_f / attack_frames) : 1.0
+          rel_env = (i >= total_frames - release_frames && release_frames > 0) ? ((total_frames - i).to_f / release_frames) : 1.0
+          env = att_env * rel_env
 
           samples[i] = sample * vol * env
           i += 1
@@ -143,7 +134,7 @@ module Zenoo
       # - 戻り値: `Zenoo::Sound`
       def create(duration, sample_rate: 44100)
         total_frames = (duration * sample_rate).to_i
-        return Sound.from_pcm([], sample_rate: sample_rate) if total_frames <= 0
+        return Sound.from_pcm([0.0], channels: 1, sample_rate: sample_rate) if total_frames <= 0
 
         samples = Array.new(total_frames)
         i = 0
@@ -226,11 +217,11 @@ module Zenoo
         lpf_cut   = lpf_cutoff.to_f
 
         wave_type = case wave
-                    when :square, 0 then 0
-                    when :sawtooth, :saw, 1 then 1
-                    when :sine, 2 then 2
-                    when :triangle, :tri, 3 then 3
-                    when :noise, 4 then 4
+                    when :square then 0
+                    when :sawtooth then 1
+                    when :sine then 2
+                    when :triangle then 3
+                    when :noise then 4
                     else 0
                     end
 

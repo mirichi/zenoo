@@ -1474,7 +1474,14 @@ void zen_js_eval(const char* code) {
 
 double zen_js_eval_num(const char* code) {
     if (!code || !code[0]) return 0.0;
-    return emscripten_run_script_int(code);
+    return EM_ASM_DOUBLE({
+        try {
+            var v = Number(eval(UTF8ToString($0)));
+            return isFinite(v) ? v : 0.0;
+        } catch (e) {
+            return 0.0;
+        }
+    }, code);
 }
 
 const char* zen_js_eval_str(const char* code) {

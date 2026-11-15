@@ -144,10 +144,14 @@ module Zenoo
       dy = ty.to_f - y0.to_f
       dist = Math.sqrt(dx * dx + dy * dy)
 
-      l1 = len1.to_f
-      l2 = len2.to_f
+      l1 = len1.to_f.abs
+      l2 = len2.to_f.abs
+      return [Math.atan2(dy, dx) * (180.0 / Math::PI), 0.0] if l1 <= 0.0001 || l2 <= 0.0001
+
       max_dist = l1 + l2 - 0.001
       min_dist = (l1 - l2).abs + 0.001
+      return [Math.atan2(dy, dx) * (180.0 / Math::PI), 0.0] if min_dist > max_dist
+
       dist = dist.clamp(min_dist, max_dist)
 
       base_angle = Math.atan2(dy, dx)
@@ -178,8 +182,8 @@ module Zenoo
     def self.solve_two_bone(upper, lower, tx, ty, bend: 1.0, tip_bone: nil, tip_angle: nil)
       x0 = upper.world_pivot_x
       y0 = upper.world_pivot_y
-      len1 = upper.length * upper.world_scale_x
-      len2 = lower.length * lower.world_scale_x
+      len1 = upper.length * upper.world_scale_x.abs
+      len2 = lower.length * lower.world_scale_x.abs
 
       u_deg, l_deg = calc_two_bone(x0, y0, tx, ty, len1, len2, bend: bend)
       upper.world_angle = u_deg
@@ -214,7 +218,7 @@ module Zenoo
     # - 戻り値: `Array<Bone>`（`bones`）
     def self.solve_fabrik(bones, tx, ty, iterations: 4)
       n = bones.length
-      return if n == 0
+      return bones if n == 0
 
       root = bones[0]
       root_x = root.world_pivot_x
@@ -231,7 +235,7 @@ module Zenoo
         b = bones[i]
         px[i] = b.world_pivot_x
         py[i] = b.world_pivot_y
-        seg_l = b.length * b.world_scale_x
+        seg_l = (b.length * b.world_scale_x).abs
         seg_l = 1.0 if seg_l <= 0.0001
         lens[i] = seg_l
         total_len += seg_l
@@ -329,7 +333,7 @@ module Zenoo
       mid_foot_x = (tx1 + tx2) * 0.5
       foot_dx = tx2 - tx1
       foot_dy = ty2 - ty1
-      ground_slope_deg = Math.atan2(foot_dy, foot_dx.abs > 0.001 ? foot_dx : 1.0) * (180.0 / Math::PI)
+      ground_slope_deg = foot_dx.abs > 0.001 ? Math.atan2(foot_dy, foot_dx) * (180.0 / Math::PI) : 0.0
       hip_angle = ground_slope_deg * tilt_ratio
 
       max_x_offset = max_reach * 0.65
@@ -359,15 +363,15 @@ module Zenoo
       # 2. 足の引っ張り（引き下げ）: 足元が遠すぎて届かないとき腰を引き下げる
       dist_1 = Math.hypot(tx1 - hl_x, ty1 - hip_y)
       if dist_1 > max_reach
-        dx = [(hl_x - tx1).abs, max_reach - 1.0].min
-        dy_max = Math.sqrt(max_reach * max_reach - dx * dx)
+        dx = [(hl_x - tx1).abs, [max_reach - 1.0, 0.0].max].min
+        dy_max = Math.sqrt([max_reach * max_reach - dx * dx, 0.0].max)
         hip_y = [hip_y, ty1 - dy_max].max
       end
 
       dist_2 = Math.hypot(tx2 - hr_x, ty2 - hip_y)
       if dist_2 > max_reach
-        dx = [(hr_x - tx2).abs, max_reach - 1.0].min
-        dy_max = Math.sqrt(max_reach * max_reach - dx * dx)
+        dx = [(hr_x - tx2).abs, [max_reach - 1.0, 0.0].max].min
+        dy_max = Math.sqrt([max_reach * max_reach - dx * dx, 0.0].max)
         hip_y = [hip_y, ty2 - dy_max].max
       end
 
@@ -413,7 +417,7 @@ module Zenoo
     # - `joint_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 関節サークルの色
     # - `joint_border_width:` (`Float`): 関節サークルの枠線幅
     # - `joint_border_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 関節サークルの枠線色
-    # - `camera:` (`Boolean`, `Camera`): カメラ変換の追従有無
+    # - `camera:` (`Boolean`): カメラ変換の追従有無
     # - `z:` (`Float`): 描画深度 Z
     def draw_capsule(width: 12.0, color: :white, core_width: 0.0, core_color: nil,
                      joint_radius: 0.0, joint_color: nil, joint_border_width: 2.0, joint_border_color: nil,
@@ -423,7 +427,7 @@ module Zenoo
       tx = tip_world_x
       ty = tip_world_y
 
-      Window.draw_line(wx, wy, tx, ty, color: color, width: width, cap: :round, camera: camera, z: z)
+      Window.draw_line(wx, wy, tx, ty, color: color, width: width, cap: :round, camera: camera, z: z) if width > 0.0
       if core_color && core_width > 0.0
         Window.draw_line(wx, wy, tx, ty, color: core_color, width: core_width, cap: :round, camera: camera, z: z)
       end
@@ -448,7 +452,7 @@ module Zenoo
     # - `joint_radius:` (`Float`, `nil`): 関節サークルの半径（省略時は `joint_color` 指定時に太さ比で自動決定）
     # - `joint_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 関節サークルの色
     # - `joint_border_color:` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 関節サークルの枠線色
-    # - `camera:` (`Boolean`, `Camera`): カメラ変換の追従有無
+    # - `camera:` (`Boolean`): カメラ変換の追従有無
     # - `z:` (`Float`): 描画深度 Z
     def self.draw_chain(bones, width: nil, start_width: 16.0, end_width: 8.0,
                         color: :white, core_ratio: 0.0, core_color: nil,
@@ -496,7 +500,7 @@ module Zenoo
     # - `width:` (`Float`): ボーン線分の太さ
     # - `joint_radius:` (`Float`): 関節点の半径
     # - `recursive:` (`Boolean`): 子ボーンも再帰的に描画するか
-    # - `camera:` (`Boolean`, `Camera`): カメラ変換の追従有無
+    # - `camera:` (`Boolean`): カメラ変換の追従有無
     # - `z:` (`Float`): 描画深度 Z
     def draw_debug(color: :cyan, joint_color: :yellow, width: 3.0, joint_radius: 5.0, recursive: true, camera: true, z: 1000.0)
       wx = world_pivot_x
@@ -505,17 +509,20 @@ module Zenoo
       if @children && !@children.empty?
         if @length > 0.0001
           tx, ty = tip_world_pos
-          Window.draw_line(wx, wy, tx, ty, color: color, width: width, cap: :round, camera: camera, z: z)
+          Window.draw_line(wx, wy, tx, ty, color: color, width: width, cap: :round, camera: camera, z: z) if width > 0.0
           Window.draw_circle(tx, ty, joint_radius * 0.7, color: color, camera: camera, z: z + 0.01)
         end
-        @children.each do |ch|
+        i = 0
+        while i < @children.length
+          ch = @children[i]
+          i += 1
           next unless ch.is_a?(Sprite)
           cwx = ch.world_pivot_x
           cwy = ch.world_pivot_y
           if @length <= 0.0001
-            Window.draw_line(wx, wy, cwx, cwy, color: color, width: width, cap: :round, camera: camera, z: z)
+            Window.draw_line(wx, wy, cwx, cwy, color: color, width: width, cap: :round, camera: camera, z: z) if width > 0.0
           else
-            Window.draw_line(wx, wy, cwx, cwy, color: [180, 180, 220, 120], width: width * 0.6, cap: :round, camera: camera, z: z - 0.01)
+            Window.draw_line(wx, wy, cwx, cwy, color: [180, 180, 220, 120], width: width * 0.6, cap: :round, camera: camera, z: z - 0.01) if width > 0.0
           end
           if recursive && ch.is_a?(Bone)
             ch.draw_debug(color: color, joint_color: joint_color, width: width, joint_radius: joint_radius, recursive: true, camera: camera, z: z)
@@ -523,7 +530,7 @@ module Zenoo
         end
       elsif @length > 0.0001
         tx, ty = tip_world_pos
-        Window.draw_line(wx, wy, tx, ty, color: color, width: width, cap: :round, camera: camera, z: z)
+        Window.draw_line(wx, wy, tx, ty, color: color, width: width, cap: :round, camera: camera, z: z) if width > 0.0
         Window.draw_circle(tx, ty, joint_radius * 0.7, color: color, camera: camera, z: z + 0.01)
       end
 

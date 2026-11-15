@@ -175,7 +175,8 @@ module Zenoo
           dst.set(
             src.target, src.z, src.order,
             src.pipeline, src.data, src.count,
-            src.image, src.shader, src.uniforms, src.blend, src.clip
+            src.image, src.shader, src.uniforms, src.blend, src.clip,
+            src.mesh, src.inst_buffer
           )
           i += 1
         end
@@ -202,7 +203,7 @@ module Zenoo
         end
 
         # F5キーで強制リロード
-        if Input.key_pressed?(:f5)
+        if Input.key_push?(:f5)
           reload_all
         end
 
@@ -351,9 +352,11 @@ module Zenoo
         @in_dev_loop = true
         begin
           super
-        ensure
+        rescue Exception => e
           @in_dev_loop = false
+          raise e
         end
+        @in_dev_loop = false
       end
 
       def __step_frame
@@ -365,9 +368,39 @@ module Zenoo
       def __update_step
         if Zenoo::Dev.enabled && Zenoo::Dev.current_error
           # エラー発生中は通常のゲームロジック・GUI更新を一時停止
-          # ただし入力（F5等）の更新は維持
+          # ただし入力（F5等）の更新および ImGui/UI のフレーム整合性は維持
+          Input.__begin_frame
+          ImGui.begin_frame
+          UI.begin_frame
+          UI.end_frame
+          ImGui.end_frame
           Input.__update_step
           return
+        end
+
+        # ブラウザの可視状態チェック (タブ非表示時の自動ポーズ＆BGM停止)
+        if @auto_pause && Native::Window.wasm?
+          is_visible = Browser.visible?
+          if !is_visible && !@paused
+            @paused = true
+            Audio.pause_all
+            i = 0
+            while i < @pause_handlers.length
+              @pause_handlers[i].call
+              i += 1
+            end
+            return
+          elsif is_visible && @paused
+            @paused = false
+            Audio.resume_all
+            i = 0
+            while i < @resume_handlers.length
+              @resume_handlers[i].call
+              i += 1
+            end
+          elsif !is_visible
+            return # ポーズ中はゲーム内ロジックを進行させない
+          end
         end
 
         is_paused = Zenoo::Dev.enabled && Zenoo::Dev::Inspector.pause_game
@@ -387,14 +420,14 @@ module Zenoo
               @main_loop_block.call
               Input.__draw_virtual_pad
             end
+            Zenoo::Dev.game_block_active = false
           rescue ScriptError, StandardError => e
+            Zenoo::Dev.game_block_active = false
             if Zenoo::Dev.enabled
               Zenoo::Dev.handle_exception(e)
             else
               raise e
             end
-          ensure
-            Zenoo::Dev.game_block_active = false
           end
         end
 
@@ -508,7 +541,11 @@ module Zenoo
         mask_k = Zenoo::Dev.mask_keyboard_input?
         return super unless mask_m || mask_k
 
-        act = @actions[name.to_sym]
+        sym = name.to_sym
+        vpad_val = @vpad_actions_cur[sym] || 0.0
+        return true if vpad_val >= 0.5
+
+        act = @actions[sym]
         return false unless act
 
         unless mask_k
@@ -549,7 +586,12 @@ module Zenoo
         mask_k = Zenoo::Dev.mask_keyboard_input?
         return super unless mask_m || mask_k
 
-        act = @actions[name.to_sym]
+        sym = name.to_sym
+        cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
+        prev_vpad = @vpad_actions_prev[sym] || false
+        return true if cur_vpad && !prev_vpad
+
+        act = @actions[sym]
         return false unless act
 
         unless mask_k
@@ -578,7 +620,12 @@ module Zenoo
         mask_k = Zenoo::Dev.mask_keyboard_input?
         return super unless mask_m || mask_k
 
-        act = @actions[name.to_sym]
+        sym = name.to_sym
+        cur_vpad = (@vpad_actions_cur[sym] || 0.0) >= 0.5
+        prev_vpad = @vpad_actions_prev[sym] || false
+        return true if !cur_vpad && prev_vpad
+
+        act = @actions[sym]
         return false unless act
 
         unless mask_k
@@ -607,10 +654,12 @@ module Zenoo
         mask_k = Zenoo::Dev.mask_keyboard_input?
         return super unless mask_m || mask_k
 
-        act = @actions[name.to_sym]
-        return 0.0 unless act
+        sym = name.to_sym
+        vpad_val = @vpad_actions_cur[sym] || 0.0
+        act = @actions[sym]
+        return vpad_val unless act
 
-        max_val = 0.0
+        max_val = vpad_val
 
         unless mask_k
           act[:keys].each do |k|

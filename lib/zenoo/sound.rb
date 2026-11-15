@@ -10,6 +10,7 @@ module Zenoo
       voice: 1.0
     }
     @active_sounds = []
+    @paused_sounds = []
     @audio_time = 0.0
     @audio_frame = 0
     @oneshot_cache = {}
@@ -43,18 +44,13 @@ module Zenoo
         Native::Audio.master_volume = vol.to_f
       end
 
-      # バス音量取得 / 設定 (引数が2つの場合は設定)
+      # バス音量取得
       #
       # - `bus` (`Symbol`): バス名（`:master`, `:bgm`, `:se`, `:voice`）
-      # - `vol` (`Float`, `nil`): 設定する音量（省略時は現在の音量を返す）
       # - 戻り値: `Float`
-      def bus_volume(bus = :master, vol = nil)
-        if vol.nil?
-          b = bus.to_sym
-          @bus_volumes[b] || 1.0
-        else
-          set_bus_volume(bus, vol)
-        end
+      def bus_volume(bus = :master)
+        b = bus.to_sym
+        @bus_volumes[b] || 1.0
       end
 
       # バス音量設定
@@ -77,20 +73,6 @@ module Zenoo
         v
       end
 
-      # バス音量セッター（単一引数 / 多重代入 / 2引数呼び出し対応）
-      #
-      # - `bus_or_args` (`Array`, `Hash`, `Symbol`): `[bus, vol]` 配列、`{ bus => vol }` ハッシュ、または第2引数と併用するバス名
-      # - `vol` (`Float`, `nil`): バス名指定時の音量
-      def bus_volume=(bus_or_args, vol = nil)
-        if vol
-          set_bus_volume(bus_or_args, vol)
-        elsif bus_or_args.is_a?(Array) && bus_or_args.length >= 2
-          set_bus_volume(bus_or_args[0], bus_or_args[1])
-        elsif bus_or_args.is_a?(Hash)
-          bus_or_args.each { |k, val| set_bus_volume(k, val) }
-        end
-      end
-
       # フレーム毎のオーディオ更新 (フェード制御・タイマー更新)
       #
       # - `dt` (`Float`, `nil`): 経過時間（秒、省略時は `Window.delta_time`）
@@ -105,8 +87,8 @@ module Zenoo
           s = @active_sounds[i]
           if s
             s.__update_fade(frame_dt)
-            # フェードも終了し再生もしていなければ追跡リストから除外
-            if !s.fading? && !s.playing?
+            # フェードも終了し再生も一時停止もしていなければ追跡リストから除外
+            if !s.fading? && !s.playing? && !s.paused?
               @active_sounds.delete_at(i)
               next
             end
@@ -124,35 +106,40 @@ module Zenoo
         sound = @oneshot_cache[key]
         unless sound
           sound = Sound.load(path, bus: bus, stream: stream)
-          sound.max_polyphony = max_polyphony
-          sound.min_interval = min_interval
-          sound.dedup_frame = dedup_frame
-          sound.polyphony_behavior = polyphony_behavior
           @oneshot_cache[key] = sound
         end
+        sound.max_polyphony = max_polyphony
+        sound.min_interval = min_interval
+        sound.dedup_frame = dedup_frame
+        sound.polyphony_behavior = polyphony_behavior
         sound
       end
 
       # 再生中の全サウンドを一時停止
       def pause_all
+        @paused_sounds.clear
         i = 0
         len = @active_sounds.length
         while i < len
           s = @active_sounds[i]
-          s.pause if s && s.playing?
+          if s && s.playing?
+            s.pause
+            @paused_sounds << s if s.paused?
+          end
           i += 1
         end
       end
 
-      # 一時停止中のサウンドを再開
+      # `pause_all` で一時停止したサウンドを再開
       def resume_all
         i = 0
-        len = @active_sounds.length
+        len = @paused_sounds.length
         while i < len
-          s = @active_sounds[i]
-          s.play if s && !s.playing?
+          s = @paused_sounds[i]
+          s.__resume_from_pause if s && s.paused?
           i += 1
         end
+        @paused_sounds.clear
       end
 
       # オーディオサブシステムを初期化する
@@ -199,14 +186,14 @@ module Zenoo
       # - `dedup_frame:` (`Boolean`): 同一フレーム内の重複再生を抑制するか
       # - `polyphony_behavior:` (`Symbol`): 上限到達時の挙動（`:stop_oldest` または `:drop`）
       # - 戻り値: `Zenoo::Sound`
-      def load(path, bus: :se, stream: false, loop: false,
+      def load(path, bus: :se, stream: false, loop: nil,
                loop_start: nil, loop_end: nil,
                loop_start_sample: nil, loop_end_sample: nil,
                max_polyphony: nil, min_interval: 0.0, dedup_frame: true,
                polyphony_behavior: :stop_oldest)
         sound = new(path, stream: stream)
         sound.bus = bus
-        sound.looping = loop if loop
+        sound.looping = loop unless loop.nil?
 
         if loop_start_sample || loop_end_sample
           sound.set_loop_points_pcm(loop_start_sample || 0, loop_end_sample || 0)
@@ -300,6 +287,8 @@ module Zenoo
       @voices = [@native]
       @voice_times = [0.0]
       @voice_frames = [0]
+      @paused = false
+      @paused_voices = []
     end
 
     def __set_pcm_data(samples, channels, sample_rate)
@@ -312,34 +301,22 @@ module Zenoo
     #
     # - 戻り値: `self`
     def play
-      cur_frame = Audio.frame_count
-      cur_time = Audio.time
+      __start_voice(check_cooldown: true, reset_fade: true)
+    end
 
-      # 1. 同一フレーム内の重複抑制
-      if @dedup_frame && @last_play_frame == cur_frame
-        return self
+    # 一時停止状態から再生を再開する内部ヘルパー
+    def __resume_from_pause
+      return self unless @paused
+
+      @paused = false
+      i = 0
+      while i < @paused_voices.length
+        v = @paused_voices[i]
+        v.play if v
+        i += 1
       end
-
-      # 2. 最小発音間隔チェック (クールダウン)
-      if @min_interval > 0.0 && (cur_time - @last_play_time) < @min_interval
-        return self
-      end
-
-      # 3. 再生ボイスの確保 (ポリフォニー制御)
-      voice = __acquire_voice(cur_time, cur_frame)
-      return self unless voice
-
-      @last_play_frame = cur_frame
-      @last_play_time = cur_time
-      @fade_speed = 0.0
-      @fade_volume = 1.0
-
-      __update_voice_volume(voice)
-
-      # 再生中の場合は先頭へシークしてリトリガー
-      voice.seek(0.0) if voice.playing?
-      voice.play
-
+      @paused_voices.clear
+      __update_volume
       Audio.__register_sound(self)
       self
     end
@@ -349,6 +326,8 @@ module Zenoo
     # - 戻り値: `self`
     def stop
       @fade_speed = 0.0
+      @paused = false
+      @paused_voices.clear
       i = 0
       while i < @voices.length
         @voices[i].stop
@@ -362,12 +341,25 @@ module Zenoo
     # - 戻り値: `self`
     def pause
       @fade_speed = 0.0
+      @paused_voices.clear
       i = 0
       while i < @voices.length
-        @voices[i].pause
+        v = @voices[i]
+        if v.playing?
+          v.pause
+          @paused_voices << v
+        end
         i += 1
       end
+      @paused = !@paused_voices.empty?
       self
+    end
+
+    # 一時停止中かどうか
+    #
+    # - 戻り値: `Boolean`
+    def paused?
+      @paused
     end
 
     # フェードイン再生
@@ -377,13 +369,24 @@ module Zenoo
     # - 戻り値: `self`
     def fade_in(duration = 1.0, target_volume: nil)
       @base_volume = target_volume.to_f if target_volume
-      @fade_volume = 0.0
       @fade_target = 1.0
       sec = [duration.to_f, 0.001].max
-      @fade_speed = 1.0 / sec
       @fade_stop_on_complete = false
-      __update_volume
-      play unless playing?
+      if @paused
+        @fade_volume = 0.0
+        @fade_speed = 1.0 / sec
+        __update_volume
+        __resume_from_pause
+      elsif !playing?
+        @fade_volume = 0.0
+        @fade_speed = 1.0 / sec
+        __update_volume
+        __start_voice(check_cooldown: false, reset_fade: false)
+      else
+        diff = 1.0 - @fade_volume
+        @fade_speed = diff > 0.0 ? (diff / sec) : 0.0
+        __update_volume
+      end
       Audio.__register_sound(self)
       self
     end
@@ -394,15 +397,61 @@ module Zenoo
     # - `stop_on_complete:` (`Boolean`): 完了時に完全停止するか（`false` の場合は一時停止）
     # - 戻り値: `self`
     def fade_out(duration = 1.0, stop_on_complete: true)
-      return self unless playing?
+      return self unless playing? || @paused
+
+      if @fade_volume <= 0.0
+        @fade_speed = 0.0
+        stop_on_complete ? stop : pause
+        return self
+      end
+
       @fade_target = 0.0
       sec = [duration.to_f, 0.001].max
-      cur = @fade_volume > 0.0 ? @fade_volume : 1.0
-      @fade_speed = -(cur / sec)
+      @fade_speed = -(@fade_volume / sec)
       @fade_stop_on_complete = stop_on_complete
       Audio.__register_sound(self)
       self
     end
+
+    def __start_voice(check_cooldown:, reset_fade:)
+      cur_frame = Audio.frame_count
+      cur_time = Audio.time
+
+      if check_cooldown
+        # 1. 同一フレーム内の重複抑制
+        if @dedup_frame && @last_play_frame == cur_frame
+          return self
+        end
+
+        # 2. 最小発音間隔チェック (クールダウン)
+        if @min_interval > 0.0 && (cur_time - @last_play_time) < @min_interval
+          return self
+        end
+      end
+
+      # 3. 再生ボイスの確保 (ポリフォニー制御)
+      voice = __acquire_voice(cur_time, cur_frame)
+      return self unless voice
+
+      @paused = false
+      @paused_voices.clear
+      @last_play_frame = cur_frame
+      @last_play_time = cur_time
+      if reset_fade
+        @fade_speed = 0.0
+        @fade_volume = 1.0
+      end
+
+      __update_voice_volume(voice)
+
+      # 再生中の場合は先頭へシークしてリトリガー
+      voice.seek(0.0) if voice.playing?
+      voice.play
+
+      Audio.__register_sound(self)
+      self
+    end
+    private :__start_voice
 
     # フェード中かどうか
     #

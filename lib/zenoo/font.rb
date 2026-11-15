@@ -41,7 +41,7 @@ module Zenoo
     end
 
     # グリフの取得 (Ruby側でキャッシュして C拡張呼び出しと配列生成を最小化)
-    # 返り値: [visible, u0, v0, u1, v1, x0, y0, x1, y1, advance_x] または nil
+    # 返り値: `[visible, u0, v0, u1, v1, x0, y0, x1, y1, advance_x, is_bitmap]` または `nil`
     #
     # - `char_or_cp` (`String`, `Integer`): 対象文字（1文字の文字列）または Unicode コードポイント
     # - `size` (`Numeric`): フォントサイズ（ピクセル単位、デフォルト: 24.0）
@@ -49,25 +49,27 @@ module Zenoo
     # - `r_scale` (`Numeric`): レンダーターゲット等の描画スケール倍率（デフォルト: 1.0）
     def get_glyph(char_or_cp, size = 24.0, sdf = nil, r_scale = 1.0)
       Font.atlas_image # アトラス画像が初回グリフ要求時に確実に登録・一元化されることを保証
-      cp = char_or_cp.is_a?(String) ? char_or_cp.ord : char_or_cp.to_i
-      sdf_flag = (sdf == true ? 1 : (sdf.nil? ? 0 : 2))
-      # 31bit正のFixnum内に収まるビットパック (Wasm 32bit環境でオーバーフローゼロ)
-      # [cp: 16bit] [size: 10bit] [sdf: 2bit] [r_scale: 3bit] = 31bit
-      cp_16 = (cp ^ (cp >> 16)) & 0xFFFF
-      sz_10 = (size.to_f * 2.0).to_i & 0x3FF
-      r_3   = (r_scale.to_f * 2.0).to_i & 0x7
-      key   = (cp_16 << 15) | (sz_10 << 5) | (sdf_flag << 3) | r_3
-
-      @glyph_cache[key] ||= begin
-        s = size.to_f
-        actual_s = s
-        if sdf == true
-          actual_s = -s
-        elsif sdf == false
-          actual_s = s + 10000.0
-        end
-        @native.get_glyph(cp, actual_s)
+      gen = Native::FontHelper.atlas_generation
+      if @atlas_generation != gen
+        @glyph_cache.clear
+        @advance_cache.clear
+        @atlas_generation = gen
       end
+      cp = char_or_cp.is_a?(String) ? char_or_cp.ord : char_or_cp.to_i
+      mode = (sdf == true ? 1 : (sdf.nil? ? 0 : 2))
+      s = size.to_f
+      s = 24.0 if s <= 0.0
+      r_s = r_scale.to_f
+      r_s = 1.0 if r_s <= 0.0
+      by_mode = (@glyph_cache[mode] ||= {})
+      by_cp = (by_mode[cp] ||= {})
+      by_size = (by_cp[s] ||= {})
+      g = by_size[r_s]
+      if g.nil? && !by_size.key?(r_s)
+        g = @native.get_glyph(cp, s, mode, r_s)
+        by_size[r_s] = g
+      end
+      g
     end
 
     # 1文字の送り幅 (advance_x) の取得 (キャッシュ対応)
@@ -193,7 +195,7 @@ module Zenoo
         "../../assets/fonts/#{filename}",
         "/assets/fonts/#{filename}"
       ]
-      candidates << File.expand_path("../../assets/fonts/#{filename}", __dir__) if defined?(__dir__) && __dir__
+      candidates << File.expand_path("../../assets/fonts/#{filename}", __dir__) if __dir__
       candidates.each do |p|
         return p if File.exist?(p)
       end

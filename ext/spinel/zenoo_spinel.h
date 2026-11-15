@@ -50,6 +50,7 @@ sp_int sp_zen_image_get_default_filter(void);
 void sp_ZenImage_replace_texture(sp_ZenImage* dst, sp_ZenImage* src);
 sp_int sp_ZenImage_get_pixel(sp_ZenImage* s, sp_int x, sp_int y);
 void sp_ZenImage_set_pixel(sp_ZenImage* s, sp_int x, sp_int y, sp_int color);
+void sp_ZenImage_set_pixel_rgba(sp_ZenImage* s, sp_int x, sp_int y, sp_int r, sp_int g, sp_int b, sp_int a);
 void sp_ZenImage_sync(sp_ZenImage* s);
 sp_ZenImage* sp_ZenImage_clone(sp_ZenImage* s);
 sp_bool sp_ZenImage_save(sp_ZenImage* s, const char* path);
@@ -196,7 +197,8 @@ void sp_ZenFont_free(void* p);
 sp_ZenFont* sp_ZenFont_load(sp_int cls_id, const char* path, sp_int index);
 void sp_zen_font_set_atlas_image(sp_RbVal image_val);
 
-sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size);
+sp_bool sp_zen_font_query_glyph(sp_ZenFont* s, sp_int cp, double size, sp_int mode, double r_scale);
+sp_int  sp_zen_font_atlas_generation(void);
 sp_bool sp_zen_font_glyph_visible(void);
 double  sp_zen_font_glyph_u0(void);
 double  sp_zen_font_glyph_v0(void);

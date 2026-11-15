@@ -311,7 +311,7 @@ static VALUE image_set_pixel(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_color)
     TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
     int x = NUM2INT(rb_x);
     int y = NUM2INT(rb_y);
-    uint32_t col = (uint32_t)NUM2ULONG(rb_color);
+    uint32_t col = (uint32_t)NUM2LL(rb_color);
     zen_image_set_pixel(img, x, y, col);
     return self;
 }
@@ -345,6 +345,10 @@ static VALUE image_set_pixels(VALUE self, VALUE rb_buf) {
     TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
     if (!img) return self;
     StringValue(rb_buf);
+    long required = (long)((size_t)img->width * (size_t)img->height * sizeof(uint32_t));
+    if (RSTRING_LEN(rb_buf) < required) {
+        rb_raise(rb_eArgError, "Pixel buffer too short (expected %ld bytes, got %ld)", required, RSTRING_LEN(rb_buf));
+    }
     zen_image_set_pixels(img, (const uint32_t*)RSTRING_PTR(rb_buf));
     return self;
 }
@@ -536,15 +540,20 @@ static VALUE font_s_load(int argc, VALUE* argv, VALUE klass) {
     return TypedData_Wrap_Struct(klass, &zenoo_font_data_type, font);
 }
 
-static VALUE font_get_glyph(VALUE self, VALUE rb_cp, VALUE rb_size) {
+static VALUE font_get_glyph(int argc, VALUE* argv, VALUE self) {
+    VALUE rb_cp, rb_size, rb_mode, rb_r_scale;
+    rb_scan_args(argc, argv, "22", &rb_cp, &rb_size, &rb_mode, &rb_r_scale);
+
     ZenFont* font;
     TypedData_Get_Struct(self, ZenFont, &zenoo_font_data_type, font);
 
     int cp = NUM2INT(rb_cp);
     float size = (float)NUM2DBL(rb_size);
+    int mode = NIL_P(rb_mode) ? ZEN_FONT_MODE_AUTO : NUM2INT(rb_mode);
+    float r_scale = NIL_P(rb_r_scale) ? 1.0f : (float)NUM2DBL(rb_r_scale);
 
     ZenGlyph g;
-    int ok = zen_font_get_glyph(font, cp, size, &g);
+    int ok = zen_font_get_glyph(font, cp, size, mode, r_scale, &g);
     if (!ok) {
         return Qnil;
     }
@@ -587,15 +596,18 @@ static VALUE font_helper_s_set_atlas_image(VALUE klass, VALUE rb_img) {
     return Qnil;
 }
 
+static VALUE font_helper_s_atlas_generation(VALUE klass) {
+    (void)klass;
+    return UINT2NUM(zen_font_atlas_generation());
+}
+
 static VALUE font_s_atlas_image(VALUE klass) {
     (void)klass;
     if (rb_const_defined(rb_mZenoo, rb_intern("Font"))) {
         VALUE cFont = rb_const_get(rb_mZenoo, rb_intern("Font"));
         return rb_funcall(cFont, rb_intern("atlas_image"), 0);
     }
-    ZenImage* img = zen_font_get_atlas_image();
-    if (!img) return Qnil;
-    return TypedData_Wrap_Struct(rb_cNativeImage, &zenoo_image_data_type, img);
+    return Qnil;
 }
 
 // ==========================================
@@ -628,6 +640,9 @@ static VALUE win_init(int argc, VALUE* argv, VALUE self) {
     int h = NUM2INT(rb_h);
     const char* title = NIL_P(rb_title) ? "Zenoo" : StringValueCStr(rb_title);
     int fullscreen = RTEST(rb_fullscreen);
+    if (!fullscreen && (w <= 0 || h <= 0)) {
+        rb_raise(rb_eArgError, "Window width and height must be positive");
+    }
     int win_w = NIL_P(rb_win_w) ? 0 : NUM2INT(rb_win_w);
     int win_h = NIL_P(rb_win_h) ? 0 : NUM2INT(rb_win_h);
     double init_scale = NIL_P(rb_scale) ? 1.0 : NUM2DBL(rb_scale);
@@ -826,7 +841,7 @@ static VALUE win_update(VALUE self) {
 
 static VALUE win_clear(VALUE self, VALUE rb_color) {
     (void)self;
-    zen_clear((uint32_t)NUM2UINT(rb_color));
+    zen_clear((uint32_t)NUM2LL(rb_color));
     return Qnil;
 }
 
@@ -1247,12 +1262,35 @@ static VALUE renderer_set_blend_mode(VALUE self, VALUE rb_mode) {
 static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout, VALUE rb_divisors, VALUE rb_base_vertex_count, VALUE rb_data, VALUE rb_count, VALUE rb_tex, VALUE rb_shader) {
     (void)self;
     int topology = NUM2INT(rb_topology);
-    const uint8_t* layout = (const uint8_t*)StringValuePtr(rb_layout);
-    const uint8_t* divisors = NIL_P(rb_divisors) ? NULL : (const uint8_t*)StringValuePtr(rb_divisors);
+    StringValue(rb_layout);
+    const uint8_t* layout = (const uint8_t*)RSTRING_PTR(rb_layout);
+    long layout_len = RSTRING_LEN(rb_layout);
+    int stride = 0;
+    long attr_count = 0;
+    for (long i = 0; i < layout_len && layout[i] != 0; i++) {
+        stride += (int)layout[i] * (int)sizeof(float);
+        attr_count++;
+    }
+    if (stride <= 0) {
+        rb_raise(rb_eArgError, "Invalid vertex layout");
+    }
+    const uint8_t* divisors = NULL;
+    if (!NIL_P(rb_divisors)) {
+        StringValue(rb_divisors);
+        if (RSTRING_LEN(rb_divisors) < attr_count) {
+            rb_raise(rb_eArgError, "Divisors length shorter than layout");
+        }
+        divisors = (const uint8_t*)RSTRING_PTR(rb_divisors);
+    }
     int base_vertex_count = NUM2INT(rb_base_vertex_count);
     Check_Type(rb_data, T_STRING);
-    const void* data = (const void*)RSTRING_PTR(rb_data);
     int count = NUM2INT(rb_count);
+    if (count <= 0) return Qnil;
+    long min_bytes = (long)stride * (long)count;
+    if (RSTRING_LEN(rb_data) < min_bytes) {
+        rb_raise(rb_eArgError, "Draw buffer data too short");
+    }
+    const void* data = (const void*)RSTRING_PTR(rb_data);
 
     ZenImage* img = NULL;
     if (rb_obj_is_kind_of(rb_tex, rb_cNativeImage)) {
@@ -1280,13 +1318,30 @@ static VALUE renderer_draw_mesh(VALUE self, VALUE rb_geom_mesh, VALUE rb_inst_bu
         TypedData_Get_Struct(rb_inst_buffer, ZenMesh, &zenoo_mesh_data_type, inst_buffer);
     }
 
-    const uint8_t* inst_layout = NIL_P(rb_inst_layout) ? NULL : (const uint8_t*)StringValuePtr(rb_inst_layout);
+    const uint8_t* inst_layout = NULL;
+    int inst_stride = 0;
+    if (!NIL_P(rb_inst_layout)) {
+        StringValue(rb_inst_layout);
+        long l_len = RSTRING_LEN(rb_inst_layout);
+        if (l_len > 0) {
+            inst_layout = (const uint8_t*)RSTRING_PTR(rb_inst_layout);
+            for (long i = 0; i < l_len && inst_layout[i] != 0; i++) {
+                inst_stride += (int)inst_layout[i] * (int)sizeof(float);
+            }
+        }
+    }
+    int inst_count = NUM2INT(rb_inst_count);
     const void* inst_data = NULL;
     if (!NIL_P(rb_inst_data)) {
         Check_Type(rb_inst_data, T_STRING);
+        if (inst_stride > 0 && inst_count > 0) {
+            long min_bytes = (long)inst_stride * (long)inst_count;
+            if (RSTRING_LEN(rb_inst_data) < min_bytes) {
+                rb_raise(rb_eArgError, "Instance data buffer too short");
+            }
+        }
         inst_data = (const void*)RSTRING_PTR(rb_inst_data);
     }
-    int inst_count = NUM2INT(rb_inst_count);
 
     ZenImage* img = NULL;
     if (rb_obj_is_kind_of(rb_tex, rb_cNativeImage)) {
@@ -1824,12 +1879,10 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeImage, "raw_set_pixels", image_set_pixels, 1);
     rb_define_method(rb_cNativeImage, "sync", image_sync, 0);
     rb_define_method(rb_cNativeImage, "clone", image_clone, 0);
-    rb_define_method(rb_cNativeImage, "dup", image_clone, 0);
     rb_define_method(rb_cNativeImage, "save", image_save, 1);
 
     // 4. NativeShader (Zenoo::Native::NativeShader)
     rb_cNativeShader = rb_define_class_under(rb_mNative, "NativeShader", rb_cObject);
-    rb_define_const(rb_mNative, "Shader", rb_cNativeShader);
     rb_define_alloc_func(rb_cNativeShader, shader_allocate);
     rb_define_method(rb_cNativeShader, "initialize", shader_init, 2);
     rb_define_method(rb_cNativeShader, "set_int", shader_set_int, 2);
@@ -1865,11 +1918,12 @@ void Init_zenoo(void) {
     rb_define_alloc_func(rb_cNativeFont, font_allocate);
     rb_define_singleton_method(rb_cNativeFont, "load", font_s_load, -1);
     rb_define_singleton_method(rb_cNativeFont, "atlas_image", font_s_atlas_image, 0);
-    rb_define_method(rb_cNativeFont, "get_glyph", font_get_glyph, 2);
+    rb_define_method(rb_cNativeFont, "get_glyph", font_get_glyph, -1);
     rb_define_method(rb_cNativeFont, "metrics", font_get_metrics, 1);
 
     VALUE mFontHelper = rb_define_module_under(rb_mNative, "FontHelper");
     rb_define_singleton_method(mFontHelper, "set_atlas_image", font_helper_s_set_atlas_image, 1);
+    rb_define_singleton_method(mFontHelper, "atlas_generation", font_helper_s_atlas_generation, 0);
 
     // 7. Sound (Zenoo::Native::Sound)
     rb_cNativeSound = rb_define_class_under(rb_mNative, "Sound", rb_cObject);
@@ -1890,8 +1944,6 @@ void Init_zenoo(void) {
     rb_define_method(rb_cNativeSound, "pan", sound_get_pan, 0);
     rb_define_method(rb_cNativeSound, "seek", sound_seek, 1);
     rb_define_method(rb_cNativeSound, "cursor", sound_get_cursor, 0);
-    rb_define_method(rb_cNativeSound, "time", sound_get_cursor, 0);
-    rb_define_method(rb_cNativeSound, "time=", sound_seek, 1);
     rb_define_method(rb_cNativeSound, "length", sound_get_length, 0);
     rb_define_method(rb_cNativeSound, "sample_rate", sound_get_sample_rate, 0);
     rb_define_method(rb_cNativeSound, "length_pcm", sound_get_length_pcm, 0);

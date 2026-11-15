@@ -113,10 +113,10 @@ module Zenoo
       new(((r1 + m) * 255.0).round, ((g1 + m) * 255.0).round, ((b1 + m) * 255.0).round, a)
     end
 
-    # HEXコード (0xFF5500 または "#FF5500" / "FF5500") から Color を生成します。
+    # HEXコード (`0xRRGGBBAA` または `"#RRGGBB"` / `"#RRGGBBAA"`) から Color を生成します。
     #
-    # - `val` (`Integer, String`): 16進数カラー値 (7文字以上の文字列で `#RRGGBBAA` を指定した場合は末尾2桁をアルファ値として使用)
-    # - `a` (`Integer`): 不透明度 (`0..255`、デフォルト: `255`)
+    # - `val` (`Integer, String`): 16進数カラー値（整数は `0xRRGGBBAA`、7文字以上の文字列は `#RRGGBBAA` として末尾2桁をアルファ値に使用）
+    # - `a` (`Integer`): 6桁文字列指定時の不透明度 (`0..255`、デフォルト: `255`)
     def self.hex(val, a = 255)
       if val.is_a?(String)
         str = val.to_s
@@ -129,7 +129,7 @@ module Zenoo
         end
       else
         v = val.to_i
-        new((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF, a)
+        new((v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
       end
     end
 

@@ -107,6 +107,12 @@ class Zenoo::Image
   # - `target` (`Image`): 描画先となるオフスクリーン `Image`（`sub_image` も指定可）
   # - `&block`: 描画コマンド（`Window.draw_*` 等）を記述するブロック
   def self.render_to(target)
+    state = __begin_render_to(target)
+    yield
+    __end_render_to(state)
+  end
+
+  def self.__begin_render_to(target)
     is_sub = target.sub_image?
     old_target = Zenoo::Backend.current_target
     Zenoo::Backend.current_target = target
@@ -115,6 +121,8 @@ class Zenoo::Image
     old_camera = Zenoo::Window.camera
     Zenoo::Window.camera = nil
 
+    prev_ox = 0.0
+    prev_oy = 0.0
     if is_sub
       prev_ox = Zenoo::Window.__offset_x
       prev_oy = Zenoo::Window.__offset_y
@@ -122,16 +130,17 @@ class Zenoo::Image
       Zenoo::Window.__offset_y = target.y.to_f
       Zenoo::Backend.push_clip([target.x.to_f, target.y.to_f, target.width.to_f, target.height.to_f], 0.0)
     end
+    [is_sub, old_target, old_camera, prev_ox, prev_oy]
+  end
 
-    yield
-
-    if is_sub
+  def self.__end_render_to(state)
+    if state[0]
       Zenoo::Backend.pop_clip
-      Zenoo::Window.__offset_x = prev_ox
-      Zenoo::Window.__offset_y = prev_oy
+      Zenoo::Window.__offset_x = state[3]
+      Zenoo::Window.__offset_y = state[4]
     end
-    Zenoo::Window.camera = old_camera
-    Zenoo::Backend.current_target = old_target
+    Zenoo::Window.camera = state[2]
+    Zenoo::Backend.current_target = state[1]
   end
 
   # 画像のクリア (引数省略時は透明色 [0, 0, 0, 0])
@@ -140,7 +149,11 @@ class Zenoo::Image
   # - 戻り値: `Image` (`self`)
   def clear(color = :clear)
     Zenoo::Image.render_to(self) do
-      Zenoo::Window.clear(color)
+      if sub_image?
+        Zenoo::Window.draw_rect(0.0, 0.0, width.to_f, height.to_f, color: color, blend: :none)
+      else
+        Zenoo::Window.clear(color)
+      end
     end
     self
   end
@@ -182,9 +195,9 @@ class Zenoo::Image
 
     # この画像の拡大・縮小時のテクスチャ補間フィルタを設定します。
     #
-    # - `val` (`Symbol`, `Integer`): `:nearest`（または `0`、ドット絵向け）または `:linear`（または `1`、滑らか補間）
+    # - `val` (`Symbol`): `:nearest`（ドット絵向け）または `:linear`（滑らか補間）
     def texture_filter=(val)
-      self.raw_texture_filter = (val == :nearest || val == 0) ? 0 : 1
+      self.raw_texture_filter = (val == :nearest) ? 0 : 1
     end
 
     # 新規作成される画像にデフォルトで適用されるテクスチャ補間フィルタを取得します。
@@ -196,9 +209,9 @@ class Zenoo::Image
 
     # 新規作成される画像のデフォルトのテクスチャ補間フィルタを設定します。
     #
-    # - `val` (`Symbol`, `Integer`): `:nearest`（または `0`）または `:linear`（または `1`）
+    # - `val` (`Symbol`): `:nearest` または `:linear`
     def self.default_texture_filter=(val)
-      self.raw_default_texture_filter = (val == :nearest || val == 0) ? 0 : 1
+      self.raw_default_texture_filter = (val == :nearest) ? 0 : 1
     end
   end
 end

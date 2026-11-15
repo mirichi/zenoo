@@ -569,7 +569,8 @@ module Zenoo
     @pending_images = []
     @clip_stack = []        # ClipContext のスタック
     @clip_context_pool = [] # 再利用可能な ClipContext プール
-    @batch_buffer = String.new(encoding: Encoding::BINARY) # バッチ結合用再利用バッファ (Mesh等の元データを破壊しない)
+    @batch_buffers = []     # 再入可能なバッチ結合用再利用バッファプール (Mesh等の元データを破壊しない)
+    @exec_depth = 0
     @skip_ondemand_flush = false
 
     # 現在有効なシザークリップ矩形 `[x, y, w, h]` を返す（未クリップ時は `nil`）
@@ -841,6 +842,7 @@ module Zenoo
     #
     # - 戻り値: `nil`
     def self.flush_screen
+      @exec_depth = 0
       @screen_queue.flush
       flush_pending_images
       Native::Renderer.set_blend_mode(BlendMode::ALPHA)
@@ -915,16 +917,33 @@ module Zenoo
     end
 
     def self.__execute_commands_internal(pool, count)
-      $last_draw_calls = 0
+      depth = @exec_depth
+      @exec_depth = depth + 1
+      batch_buf = (@batch_buffers[depth] ||= String.new(encoding: Encoding::BINARY))
+
+      $last_draw_calls = 0 if depth == 0
       active_gl_clip = :initial
 
       i = 0
       while i < count
         cmd = pool[i]
 
-        # 0. 描画元テクスチャに未消化キューがあれば先にフラッシュ (オンデマンド描画)
-        if !@skip_ondemand_flush && cmd.image && has_pending_draws?(cmd.image)
-          flush_image(cmd.image)
+        # 0. 描画元テクスチャ / uniform テクスチャに未消化キューがあれば先にフラッシュ (オンデマンド描画)
+        if !@skip_ondemand_flush
+          flushed_dep = false
+          if cmd.image && has_pending_draws?(cmd.image)
+            flush_image(cmd.image)
+            flushed_dep = true
+          end
+          if cmd.uniforms
+            cmd.uniforms.each_value do |v|
+              if v.is_a?(Zenoo::Image) && has_pending_draws?(v)
+                flush_image(v)
+                flushed_dep = true
+              end
+            end
+          end
+          active_gl_clip = :initial if flushed_dep
         end
 
         cur_pipeline = cmd.pipeline
@@ -961,9 +980,7 @@ module Zenoo
           batched = false
           while next_idx < count
             ncmd = pool[next_idx]
-            if ncmd.image && has_pending_draws?(ncmd.image)
-              flush_image(ncmd.image)
-            end
+            break if !@skip_ondemand_flush && ncmd.image && has_pending_draws?(ncmd.image)
 
             n_shader = ncmd.shader || ncmd.pipeline.default_shader
             same_image = (ncmd.image == cur_image) ||
@@ -978,11 +995,11 @@ module Zenoo
                ncmd.blend == cur_blend &&
                ncmd.clip == cur_clip
               unless batched
-                @batch_buffer.clear
-                @batch_buffer << cur_data
+                batch_buf.clear
+                batch_buf << cur_data
                 batched = true
               end
-              @batch_buffer << ncmd.data
+              batch_buf << ncmd.data
               cur_count += ncmd.count
               unless @skip_ondemand_flush
                 ncmd.data = nil
@@ -1000,7 +1017,7 @@ module Zenoo
               break
             end
           end
-          final_data = @batch_buffer if batched
+          final_data = batch_buf if batched
         end
 
         Native::Renderer.set_blend_mode(cur_blend)
@@ -1048,6 +1065,7 @@ module Zenoo
 
       # ループ完了後にシザーをリセット
       Native::Renderer.reset_scissor if active_gl_clip != :initial
+      @exec_depth = depth
     end
   end
 end
