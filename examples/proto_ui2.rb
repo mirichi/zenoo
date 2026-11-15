@@ -8,7 +8,7 @@ require_relative '../lib/zenoo'
 # コンセプト:
 #   - Sprite ベースの保持モード一本化（Stage が入力・フォーカス・ホバーを統括）
 #   - 薄い Widget 基底クラス + include による機能合成 (Clickable / Draggable / Focusable / Scrollable)
-#   - Theme が「配色」と「密度・寸法（高さ/余白/フォントサイズ/スライダー形式）」の両方を管理
+#   - Theme が「配色」と「密度・寸法（高さ/余白/フォントサイズ）」の両方を管理
 #   - ツール標準は適度にコンパクトな 1 段コントロール、Theme 差し替えでゆったり UI にも対応
 #   - Builder DSL (win.vbox { |b| b.button(...) }) の書き味を維持
 # ==============================================================================
@@ -25,7 +25,7 @@ module Zenoo
                     :text_color, :text_muted, :accent_color, :accent_hover,
                     :track_bg, :track_border,
                     :font_size, :control_height, :header_height,
-                    :padding, :gap, :radius, :slider_style
+                    :padding, :gap, :radius
 
       def initialize(preset = :compact, **overrides)
         if preset == :relaxed
@@ -59,7 +59,6 @@ module Zenoo
         @padding        = 8.0
         @gap            = 3.0
         @radius         = 4.0
-        @slider_style   = :inline
       end
 
       # ゲーム設定画面など向けのゆったりテーマ
@@ -71,7 +70,6 @@ module Zenoo
         @padding        = 14.0
         @gap            = 10.0
         @radius         = 7.0
-        @slider_style   = :stacked
       end
     end
 
@@ -926,20 +924,18 @@ module Zenoo
       end
     end
 
-    class Slider < Widget
+    class SliderBase < Widget
       include Draggable
       attr_reader :value, :min, :max
 
       def initialize(label = "", value = 0.0, min = 0.0, max = 100.0, x = 0.0, y = 0.0,
-                     width: 220.0, height: nil, style: nil, label_width: nil, format: nil, unit: "", **opts, &block)
-        @label       = label.to_s
-        @min         = min.to_f
-        @max         = max.to_f
-        @value       = value.to_f.clamp(@min, @max)
-        @style       = style
-        @label_width = label_width ? label_width.to_f : nil
-        @format      = format
-        @unit        = unit.to_s
+                     width: 220.0, height: nil, format: nil, unit: "", **opts, &block)
+        @label          = label.to_s
+        @min            = min.to_f
+        @max            = max.to_f
+        @value          = value.to_f.clamp(@min, @max)
+        @format         = format
+        @unit           = unit.to_s
         @on_change_proc = block
         super(x, y, width: width, height: height, **opts)
         self.drag_target = nil # 自分自身は動かさず値だけ変える
@@ -963,14 +959,8 @@ module Zenoo
         col.radius = rad
       end
 
-      def slider_style = @style || theme.slider_style
       def cursor_shape = :hand
       def on_change(&block) = (@on_change_proc = block; self)
-
-      def height
-        return @height if @height
-        slider_style == :stacked ? (theme.control_height + 6.0) : theme.control_height
-      end
 
       def value=(v)
         nv = v.to_f.clamp(@min, @max)
@@ -990,44 +980,16 @@ module Zenoo
         update_value_from_x(mx) if dragging?
       end
 
-      def draw_self
-        th = theme
-        lx = screen_left
-        ty = screen_top
-        rw = screen_width
-        rh = screen_height
-        ratio = (@max > @min) ? (@value - @min) / (@max - @min) : 0.0
-        val_str = format_value
-
-        if slider_style == :stacked
-          draw_stacked(th, lx, ty, rw, rh, ratio, val_str)
-        else
-          draw_inline(th, lx, ty, rw, rh, ratio, val_str)
-        end
-      end
-
       private
+
+      def value_ratio
+        (@max > @min) ? (@value - @min) / (@max - @min) : 0.0
+      end
 
       def format_value
         s = @format ? sprintf(@format, @value) : sprintf("%.2f", @value).sub(/\.?0+$/, "")
         s = "0" if s == "-0"
         @unit.empty? ? s : "#{s}#{@unit}"
-      end
-
-      def track_local_bounds
-        th = theme
-        rw = width
-        rh = height
-        if slider_style == :inline
-          ox = @label.empty? ? 0.0 : [(@label_width || 110.0), rw * 0.48].min
-          tw = [rw - ox, 1.0].max
-          bar_y = 2.0
-          bar_h = [rh - 4.0, 12.0].max
-          [ox, bar_y, tw, bar_h, th.radius]
-        else
-          bar_y = th.font_size + 2.0
-          [0.0, bar_y, [rw, 1.0].max, 17.0, 4.0]
-        end
       end
 
       def track_rect_bounds
@@ -1036,8 +998,37 @@ module Zenoo
         [screen_left + ox * sx, tw * sx]
       end
 
-      # 1段インライン型: 左ラベル + 右ゲージバー(中に現在値表示)
-      def draw_inline(th, lx, ty, _rw, rh, ratio, val_str)
+      def update_value_from_x(mx)
+        tx, tw = track_rect_bounds
+        ratio = ((mx - tx) / [tw, 1.0].max).clamp(0.0, 1.0)
+        self.value = @min + (@max - @min) * ratio
+      end
+    end
+
+    # 1段インライン型スライダー: 左ラベル + 右ゲージバー(中に現在値表示)
+    class Slider < SliderBase
+      def initialize(label = "", value = 0.0, min = 0.0, max = 100.0, x = 0.0, y = 0.0,
+                     width: 220.0, height: nil, label_width: nil, format: nil, unit: "", **opts, &block)
+        @label_width = label_width ? label_width.to_f : nil
+        super(label, value, min, max, x, y, width: width, height: height, format: format, unit: unit, **opts, &block)
+      end
+
+      def track_local_bounds
+        th = theme
+        rw = width
+        rh = height
+        ox = @label.empty? ? 0.0 : [(@label_width || 110.0), rw * 0.48].min
+        tw = [rw - ox, 1.0].max
+        bar_y = 2.0
+        bar_h = [rh - 4.0, 12.0].max
+        [ox, bar_y, tw, bar_h, th.radius]
+      end
+
+      def draw_self
+        th = theme
+        lx = screen_left
+        ty = screen_top
+        rh = screen_height
         ox, bar_y_off, tw, bar_h, rad = track_local_bounds
         sx = world_scale_x
         sy = world_scale_y
@@ -1045,6 +1036,8 @@ module Zenoo
         tw_s = tw * sx
         bar_y = ty + bar_y_off * sy
         bar_h_s = bar_h * sy
+        ratio = value_ratio
+        val_str = format_value
 
         unless @label.empty?
           Zenoo::Window.draw_text(lx, ty + rh * 0.5, @label, size: th.font_size, color: th.text_muted, valign: :center, camera: false, z: @z)
@@ -1059,7 +1052,6 @@ module Zenoo
           Zenoo::Window.draw_rect(tx, bar_y, fill_w, bar_h_s, radius: rad, color: fill_col, camera: false, z: @z)
         end
 
-        # つまみの目印ライン
         if tw_s > 8.0
           kx = (tx + fill_w).clamp(tx + 2.0, tx + tw_s - 2.0)
           Zenoo::Window.draw_line(kx, bar_y + 2.0, kx, bar_y + bar_h_s - 2.0, color: [245, 250, 255, 220], width: 2.0, camera: false, z: @z)
@@ -1068,23 +1060,38 @@ module Zenoo
         Zenoo::Window.draw_text(tx + tw_s - 6.0, ty + rh * 0.5, val_str,
                                 size: [th.font_size - 1, 10].max, color: th.text_color, align: :right, valign: :center, camera: false, z: @z)
       end
+    end
 
-      # 2段スタック型: 上にラベル&数値、下にトラック&丸ツマミ
-      def draw_stacked(th, lx, ty, rw, _rh, ratio, val_str)
+    # 2段スタック型スライダー: 上にラベル&数値、下にトラック&丸ツマミ
+    class StackedSlider < SliderBase
+      def height
+        @height || (theme.control_height + 6.0)
+      end
+
+      def track_local_bounds
+        th = theme
+        bar_y = th.font_size + 2.0
+        [0.0, bar_y, [width, 1.0].max, 17.0, 4.0]
+      end
+
+      def draw_self
+        th = theme
+        lx = screen_left
+        ty = screen_top
+        rw = screen_width
+        sy = world_scale_y
+        ratio = value_ratio
+        val_str = format_value
+
         Zenoo::Window.draw_text(lx, ty, @label, size: th.font_size - 1, color: th.text_color, camera: false, z: @z)
         Zenoo::Window.draw_text(lx + rw, ty, val_str, size: th.font_size - 1, color: th.accent_hover, align: :right, camera: false, z: @z)
 
-        track_y = ty + th.font_size + 7.0
-        Zenoo::Window.draw_rect(lx, track_y, rw, 7, radius: 3.5, color: th.track_bg, border_width: 1, border_color: th.track_border, camera: false, z: @z)
-        Zenoo::Window.draw_rect(lx, track_y, rw * ratio, 7, radius: 3.5, color: th.accent_color, camera: false, z: @z)
+        track_y = ty + (th.font_size + 7.0) * sy
+        bar_h = 7.0 * sy
+        Zenoo::Window.draw_rect(lx, track_y, rw, bar_h, radius: 3.5, color: th.track_bg, border_width: 1, border_color: th.track_border, camera: false, z: @z)
+        Zenoo::Window.draw_rect(lx, track_y, rw * ratio, bar_h, radius: 3.5, color: th.accent_color, camera: false, z: @z)
         knob_col = (hovered? || dragging?) ? th.accent_hover : th.text_color
-        Zenoo::Window.draw_circle(lx + rw * ratio, track_y + 3.5, 6.5, color: knob_col, camera: false, z: @z)
-      end
-
-      def update_value_from_x(mx)
-        tx, tw = track_rect_bounds
-        ratio = ((mx - tx) / [tw, 1.0].max).clamp(0.0, 1.0)
-        self.value = @min + (@max - @min) * ratio
+        Zenoo::Window.draw_circle(lx + rw * ratio, track_y + bar_h * 0.5, 6.5 * sy, color: knob_col, camera: false, z: @z)
       end
     end
 
@@ -1809,6 +1816,7 @@ module Zenoo
       def button(label = "Button", **opts, &block)      = add(Button.new(label, **opts, &block))
       def checkbox(label = "", checked = false, **opts, &block) = add(Checkbox.new(label, checked, **opts, &block))
       def slider(label = "", value = 0.0, min = 0.0, max = 100.0, **opts, &block) = add(Slider.new(label, value, min, max, **opts, &block))
+      def stacked_slider(label = "", value = 0.0, min = 0.0, max = 100.0, **opts, &block) = add(StackedSlider.new(label, value, min, max, **opts, &block))
       def dropdown(items = [], selected_index = 0, **opts, &block) = add(Dropdown.new(items, selected_index, **opts, &block))
       def text_box(text = "", **opts, &block)        = add(TextBox.new(text, **opts, &block))
       def custom(width: 100.0, height: 32.0, **opts, &block) = add(Widget.new(0.0, 0.0, width: width, height: height, **opts)).on_draw(&block)
@@ -2072,7 +2080,7 @@ win2.text_box("", placeholder: "Search or type player name...") do |txt|
   lbl_status.text = "Filter: #{txt}"
 end
 win2.dropdown(["60 FPS", "120 FPS", "240 FPS", "Unlimited"], 0, label: "FPS Cap") { |_i, item| lbl_status.text = "FPS Cap: #{item}" }
-win2.slider("BGM Volume", 75.0, 0.0, 100.0, unit: "%") { |v| lbl_status.text = "BGM: #{v.round}%" }
+win2.stacked_slider("BGM Volume", 75.0, 0.0, 100.0, unit: "%") { |v| lbl_status.text = "BGM: #{v.round}%" }
 win2.add(Zenoo::UI2::Button.new("Apply Settings") { lbl_status.text = "Applied!" })
 
 # 下辺反転テスト用の配置ドロップダウン (画面下端近くで開くと自動で上向きに展開)
