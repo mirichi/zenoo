@@ -459,32 +459,6 @@ module Zenoo
       @pivot_y || 0.5
     end
 
-    # ピボットの正規化 X 座標を設定します。
-    #
-    # - `v` (`Numeric`): 正規化 X 座標（`0.0 〜 1.0`）
-    def pivot_x=(v)
-      vf = v.to_f
-      return if @pivot_x == vf
-      @pivot_x = vf
-      @pivot = [@pivot_x, pivot_y]
-      @world_transform.dirty = true if @world_transform
-      @collider_shape&.dirty_geom!
-      dirty_children_pos! if @children
-    end
-
-    # ピボットの正規化 Y 座標を設定します。
-    #
-    # - `v` (`Numeric`): 正規化 Y 座標（`0.0 〜 1.0`）
-    def pivot_y=(v)
-      vf = v.to_f
-      return if @pivot_y == vf
-      @pivot_y = vf
-      @pivot = [pivot_x, @pivot_y]
-      @world_transform.dirty = true if @world_transform
-      @collider_shape&.dirty_geom!
-      dirty_children_pos! if @children
-    end
-
     # 現在設定されているアンカー（座標 `(x, y)` に配置する自身上の基準点）を返します。
     #
     # - 戻り値: `Symbol`, `Array<Float>`
@@ -502,32 +476,6 @@ module Zenoo
       @anchor = stored
       @anchor_x = ax
       @anchor_y = ay
-      @world_transform.dirty = true if @world_transform
-      @collider_shape&.dirty_pos!
-      dirty_children_pos! if @children
-    end
-
-    # アンカーの正規化 X 座標を設定します（`0.0` = 左端 〜 `1.0` = 右端）。
-    #
-    # - `v` (`Numeric`): 正規化 X 座標
-    def anchor_x=(v)
-      vf = v.to_f
-      return if @anchor_x == vf
-      @anchor_x = vf
-      @anchor = [@anchor_x, anchor_y]
-      @world_transform.dirty = true if @world_transform
-      @collider_shape&.dirty_pos!
-      dirty_children_pos! if @children
-    end
-
-    # アンカーの正規化 Y 座標を設定します（`0.0` = 上端 〜 `1.0` = 下端）。
-    #
-    # - `v` (`Numeric`): 正規化 Y 座標
-    def anchor_y=(v)
-      vf = v.to_f
-      return if @anchor_y == vf
-      @anchor_y = vf
-      @anchor = [anchor_x, @anchor_y]
       @world_transform.dirty = true if @world_transform
       @collider_shape&.dirty_pos!
       dirty_children_pos! if @children

@@ -360,26 +360,6 @@ module Zenoo
         dirty_pos!
       end
 
-      # X 方向の配置アンカー比率を設定する
-      #
-      # - `val` (`Float`): 横方向アンカー位置（`0.0`〜`1.0`）
-      def anchor_x=(val)
-        vf = val.to_f
-        return if @anchor_x == vf
-        @anchor_x = vf
-        dirty_pos!
-      end
-
-      # Y 方向の配置アンカー比率を設定する
-      #
-      # - `val` (`Float`): 縦方向アンカー位置（`0.0`〜`1.0`）
-      def anchor_y=(val)
-        vf = val.to_f
-        return if @anchor_y == vf
-        @anchor_y = vf
-        dirty_pos!
-      end
-
       # 親 Sprite 上のコライダー中心配置先 (取得)
       #
       # - 戻り値: `Symbol` | `Array<Float>`
