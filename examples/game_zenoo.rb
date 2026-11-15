@@ -1341,7 +1341,7 @@ class Game
     # 1. 通常弾 vs 敵 (Sprite.check: Sweep and Prune による一括高速判定)
     Sprite.check(@bullets, @enemies) do |b, e|
       b.vanish!
-      damage_enemy(e, b.damage, Color::YELLOW)
+      damage_enemy(e, b.damage, Color::YELLOW, b.x, b.y)
     end
 
     # 2. ミサイル直撃 vs 敵 (Sprite.check)
@@ -1351,7 +1351,7 @@ class Game
 
     # 3. オービター刃 vs 敵 (Sprite.check)
     Sprite.check(@player.orbiters, @enemies) do |orb, e|
-      damage_enemy(e, orb.damage, Color::CYAN)
+      damage_enemy(e, orb.damage, Color::CYAN, orb.x, orb.y)
     end
 
     # 4. 自機 vs 敵 (Sprite.check)
@@ -1454,13 +1454,13 @@ class Game
     @vfx.emit_player_death(@player.x, @player.y)
   end
 
-  def damage_enemy(e, dmg, text_color)
+  def damage_enemy(e, dmg, text_color, hit_x = e.x, hit_y = e.y)
     e.hp -= dmg
     e.flash = 3
     @sfx.play(Sfx::HIT, 3)
     spawn_damage_text(DamageText.new(e.x, e.y - e.radius, dmg, text_color))
     # 被弾スパーク
-    @vfx.emit_hit(e.x, e.y, text_color)
+    @vfx.emit_hit(hit_x, hit_y, text_color)
 
     if e.hp <= 0
       e.vanish!
@@ -1517,7 +1517,7 @@ class Game
       # 2% の確率で回復ハートをドロップ
       @items << Item.new(e.x, e.y, 0, 1) if rand(100) < 2
       add_shake(3.0)
-      add_hitstop(3)
+      add_hitstop(1)
       @sfx.play(Sfx::EXPLODE, 4)
     else
       # 通常・チビ撃破
@@ -1752,11 +1752,11 @@ class Game
     Window.camera(@camera) do
       draw_grid
       @items.each { |i| i.draw if i.x >= cull_l && i.x <= cull_r && i.y >= cull_t && i.y <= cull_b }
-      @vfx.draw
       @enemies.each { |e| e.draw if e.x >= cull_l && e.x <= cull_r && e.y >= cull_t && e.y <= cull_b }
       @bullets.each { |b| b.draw if b.x >= cull_l && b.x <= cull_r && b.y >= cull_t && b.y <= cull_b }
       @missiles.each(&:draw)
       @player.draw unless @player_dead
+      @vfx.draw
       @damage_texts.each { |d| d.draw if d.x >= cull_l && d.x <= cull_r && d.y >= cull_t && d.y <= cull_b }
     end
 
