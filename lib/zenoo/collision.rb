@@ -83,14 +83,26 @@ module Zenoo
 
     # アンカー解釈共通ヘルパー
     def self.parse_anchor(val)
-      return [val[0].to_f, (val[1] || val[0]).to_f] if val.is_a?(Array)
-      ALIGN_MAP[val] || [0.0, 0.0]
+      return [0.0, 0.0] if val.nil?
+      if val.is_a?(Array)
+        raise ArgumentError, "anchor array must not be empty" if val.empty?
+        return [val[0].to_f, (val[1] || val[0]).to_f]
+      end
+      res = ALIGN_MAP[val]
+      raise ArgumentError, "Unknown anchor: #{val.inspect}" unless res
+      res
     end
 
     # ピボット解釈共通ヘルパー
     def self.parse_pivot(val)
-      return [val[0].to_f, (val[1] || val[0]).to_f] if val.is_a?(Array)
-      ALIGN_MAP[val] || [0.5, 0.5]
+      return [0.5, 0.5] if val.nil?
+      if val.is_a?(Array)
+        raise ArgumentError, "pivot array must not be empty" if val.empty?
+        return [val[0].to_f, (val[1] || val[0]).to_f]
+      end
+      res = ALIGN_MAP[val]
+      raise ArgumentError, "Unknown pivot: #{val.inspect}" unless res
+      res
     end
 
     # 幾何形状の基底クラス (ポリモーフィック静的型解決用共通インターフェース)
@@ -169,6 +181,7 @@ module Zenoo
       def dirty_pos!; @dirty_pos = true; end
       def dirty_geom!; @dirty_geom = true; @dirty_pos = true; end
       def dirty_angle!; dirty_geom!; end
+      def dirty_size!; dirty_geom!; end
 
       # 現在の X 座標を返す（親がある場合は親の `world_x`）
       #
@@ -501,7 +514,6 @@ module Zenoo
 
     # 円 / 楕円 (楕円は不等半径・不等スケールの Circle として包含)
     class Circle < Shape
-      attr_reader :radius_x, :radius_y
       attr_reader :bounding_radius, :is_true_circle, :effective_radius
 
       # 円または楕円形状を生成する
@@ -529,10 +541,32 @@ module Zenoo
 
       def shape_type; TYPE_CIRCLE; end
 
+      # X 半径を取得する（親があり X・Y ともに `0` の場合は親短辺の半分、X のみ `0` の場合は親幅の半分）
+      #
+      # - 戻り値: `Float`
+      def radius_x
+        if @parent && @radius_x == 0.0
+          @radius_y == 0.0 ? [@parent.width, @parent.height].min * 0.5 : @parent.width * 0.5
+        else
+          @radius_x
+        end
+      end
+
+      # Y 半径を取得する（親があり X・Y ともに `0` の場合は親短辺の半分、Y のみ `0` の場合は親高さの半分）
+      #
+      # - 戻り値: `Float`
+      def radius_y
+        if @parent && @radius_y == 0.0
+          @radius_x == 0.0 ? [@parent.width, @parent.height].min * 0.5 : @parent.height * 0.5
+        else
+          @radius_y
+        end
+      end
+
       # X 半径を取得する
       #
       # - 戻り値: `Float`
-      def radius; @radius_x; end
+      def radius; radius_x; end
 
       # X / Y 半径を同じ値で一括設定する
       #
@@ -583,13 +617,15 @@ module Zenoo
 
         if @dirty_geom
           @dirty_geom = false
-          w = @radius_x * 2.0
-          h = @radius_y * 2.0
+          cur_rx = radius_x
+          cur_ry = radius_y
+          w = cur_rx * 2.0
+          h = cur_ry * 2.0
 
           sx = cur_sx.abs
           sy = cur_sy.abs
-          eff_rx = @radius_x * sx
-          eff_ry = @radius_y * sy
+          eff_rx = cur_rx * sx
+          eff_ry = cur_ry * sy
 
           # 真円判定: 実効半径が等しい場合 (回転不変のため三角関数・行列計算をスキップ)
           if (eff_rx - eff_ry).abs < 0.0001
@@ -599,8 +635,8 @@ module Zenoo
           else
             @is_true_circle = false
             @bounding_radius = eff_rx > eff_ry ? eff_rx : eff_ry
-            @rx2 = @radius_x * @radius_x
-            @ry2 = @radius_y * @radius_y
+            @rx2 = cur_rx * cur_rx
+            @ry2 = cur_ry * cur_ry
           end
 
           # 回転不変判定: 真円かつ中心が親/自身の回転ピボット上にある場合
@@ -643,8 +679,10 @@ module Zenoo
             @center_x = cx
             @center_y = cy
           else
-            w = @radius_x * 2.0
-            h = @radius_y * 2.0
+            cur_rx = radius_x
+            cur_ry = radius_y
+            w = cur_rx * 2.0
+            h = cur_ry * 2.0
             tl_x = @x - @anchor_x * w
             tl_y = @y - @anchor_y * h
             wpv_x = tl_x + @pivot_x * w

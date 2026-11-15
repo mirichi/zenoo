@@ -68,13 +68,13 @@ module Zenoo
 
       def play(sprite, name, reset: false, keep_frame: false)
         sym = name&.to_sym
-        return unless @animations.key?(sym)
+        data = sym ? @animations[sym] : nil
+        raise ArgumentError, "Unknown animation: #{name.inspect}" unless data
 
-        if !reset && @current_name == sym && !@finished
+        if !reset && @current_name == sym && !@finished && @current_data.equal?(data)
           return
         end
 
-        data = @animations[sym]
         @current_name = sym
         @current_data = data
         @finished = false
@@ -140,6 +140,8 @@ module Zenoo
       end
     end
 
+    EMPTY_CHILDREN = [].freeze
+
     attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image, :parent
     attr_accessor :blend, :shader, :uniforms, :camera
 
@@ -198,10 +200,19 @@ module Zenoo
     end
 
     # ライフサイクル管理 (消滅)
-    # スプライトに消滅フラグを立て、実行中の全 Tween を停止します（`Sprite.clean` で配列から一括除去されます）。
+    # スプライトに消滅フラグを立て、実行中の全 Tween を停止します（子スプライトにも再帰的に伝搬し、`Sprite.clean` で配列から一括除去されます）。
     def vanish!
+      return if @vanished
       @vanished = true
-      kill_tweens
+      Tween.kill(self)
+      if (ch = @children)
+        i = 0
+        len = ch.length
+        while i < len
+          ch[i].vanish!
+          i += 1
+        end
+      end
     end
 
     # `vanish!` によって消滅済みとしてマークされているかどうかを返します。
@@ -296,7 +307,7 @@ module Zenoo
     # - `name` (`Symbol`, `String`, `nil`): 確認したいアニメーション名（省略時は何らかのアニメーションが再生中かを判定）
     # - 戻り値: `Boolean`
     def playing?(name = nil)
-      return false unless @animator
+      return false unless @animator && !@animator.finished
       if name
         @animator.current_name == name.to_sym
       else
@@ -423,9 +434,10 @@ module Zenoo
     #
     # - `v` (`Symbol`, `Array<Numeric>`): `:center`, `:top_left`, `:bottom_center` 等、または正規化座標 `[px, py]`
     def pivot=(v)
-      return if @pivot == v
-      @pivot = v
       pv = Collision.parse_pivot(v)
+      stored = v.is_a?(Array) ? v.dup : (v || :center)
+      return if @pivot == stored && @pivot_x == pv[0] && @pivot_y == pv[1]
+      @pivot = stored
       @pivot_x = pv[0]
       @pivot_y = pv[1]
       @world_transform.dirty = true if @world_transform
@@ -477,22 +489,17 @@ module Zenoo
     #
     # - 戻り値: `Symbol`, `Array<Float>`
     def anchor
-      @anchor || if (@anchor_x - 0.0).abs < 0.0001 && (@anchor_y - 0.0).abs < 0.0001
-        :top_left
-      elsif (@anchor_x - 0.5).abs < 0.0001 && (@anchor_y - 0.5).abs < 0.0001
-        :center
-      else
-        [@anchor_x, @anchor_y]
-      end
+      @anchor
     end
 
     # 座標 `(x, y)` に配置する自身上の基準点（アンカー）を設定します。
     #
     # - `v` (`Symbol`, `Array<Numeric>`): `:top_left`, `:center`, `:bottom_center` 等、または正規化座標 `[ax, ay]`
     def anchor=(v)
-      return if @anchor == v
-      @anchor = v
       ax, ay = Collision.parse_anchor(v)
+      stored = v.is_a?(Array) ? v.dup : (v || :top_left)
+      return if @anchor == stored && @anchor_x == ax && @anchor_y == ay
+      @anchor = stored
       @anchor_x = ax
       @anchor_y = ay
       @world_transform.dirty = true if @world_transform
@@ -558,11 +565,7 @@ module Zenoo
       return if old_w == new_w && old_h == new_h
 
       @world_transform.dirty = true if @world_transform
-      if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
-        @collider_shape.dirty_size!
-      else
-        @collider_shape&.dirty_geom!
-      end
+      @collider_shape&.dirty_size!
       dirty_children_pos! if @children
     end
 
@@ -595,7 +598,7 @@ module Zenoo
     #
     # - 戻り値: `Array<Sprite>`
     def children
-      @children ||= []
+      @children || EMPTY_CHILDREN
     end
 
     # 子スプライトを追加します（`child.parent = self` と同等）。
@@ -853,11 +856,7 @@ module Zenoo
       return if old_w == width
 
       @world_transform.dirty = true if @world_transform
-      if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
-        @collider_shape.dirty_size!
-      else
-        @collider_shape&.dirty_geom!
-      end
+      @collider_shape&.dirty_size!
       dirty_children_pos! if @children
     end
 
@@ -879,11 +878,7 @@ module Zenoo
       return if old_h == height
 
       @world_transform.dirty = true if @world_transform
-      if @collider_shape.is_a?(Collision::Rect) && @collider_shape.parent
-        @collider_shape.dirty_size!
-      else
-        @collider_shape&.dirty_geom!
-      end
+      @collider_shape&.dirty_size!
       dirty_children_pos! if @children
     end
 
@@ -919,7 +914,7 @@ module Zenoo
 
       case type
       when :circle
-        rx = (radius_x || radius || (width ? width.to_f * 0.5 : [self.width, self.height].min * 0.5)).to_f
+        rx = (radius_x || radius || (width ? width.to_f * 0.5 : 0.0)).to_f
         ry = (radius_y || radius || (height ? height.to_f * 0.5 : rx)).to_f
         @collider_shape = Collision::Circle.new(0.0, 0.0, rx, ry, offset_x: ox, offset_y: oy, at: at_v, parent: self)
       when :rect
@@ -933,6 +928,8 @@ module Zenoo
         @collider_shape = Collision::Polygon.new(vertices || [], offset_x: ox, offset_y: oy, at: at_v, parent: self)
       when :default
         @collider_shape = Collision::Rect.new(offset_x: ox, offset_y: oy, at: at_v, parent: self)
+      else
+        raise ArgumentError, "Unknown collider type: #{type.inspect}"
       end
       self
     end
@@ -941,6 +938,8 @@ module Zenoo
     #
     # - `shape` (`Collision::Shape`, `nil`): 設定するコライダー図形（`nil` で解除）
     def collider=(shape)
+      return if @collider_shape.equal?(shape)
+      @collider_shape.parent = nil if @collider_shape && @collider_shape.parent.equal?(self)
       @collider_shape = shape
       if shape
         shape.parent = self
@@ -963,11 +962,10 @@ module Zenoo
     # - 戻り値: `Boolean`
     def collide?(other)
       return false if @vanished || other.nil?
-      return other.collide?(self) if other.is_a?(Tilemap)
       return false if other.respond_to?(:vanished?) && other.vanished?
 
       # 1. 自分自身のコライダー判定
-      if @collider_shape && collide_self?(other)
+      if self.collider && collide_self?(other)
         return true
       end
 
@@ -994,6 +992,8 @@ module Zenoo
         Collision.check(col_a, other)
       elsif other.is_a?(Sprite)
         other.collide_any_shape?(col_a)
+      elsif other.is_a?(Tilemap)
+        other.collide?(col_a)
       else
         col_b = other.respond_to?(:collider) ? other.collider : nil
         col_b ? Collision.check(col_a, col_b) : false
@@ -1003,7 +1003,7 @@ module Zenoo
     # 相手のシェイプ1個と自分自身または子孫コライダーのいずれかが衝突しているか (高速走査用)
     def collide_any_shape?(shape)
       return false if @vanished
-      return true if @collider_shape && Collision.check(collider, shape)
+      return true if (col = self.collider) && Collision.check(col, shape)
 
       if (ch = @children)
         i = 0
@@ -1031,7 +1031,7 @@ module Zenoo
     # 衝突部位の再帰的収集ヘルパー
     def collect_hit_parts(other, result)
       # 1. 自分自身が衝突しているか
-      if @collider_shape && !@vanished && collide_self?(other)
+      if self.collider && !@vanished && collide_self?(other)
         result << self
       end
 
@@ -1316,8 +1316,7 @@ module Zenoo
       while i < len
         sp = sprites[i]
         if sp
-          is_vanished = sp.respond_to?(:vanished?) && sp.vanished?
-          unless is_vanished
+          unless sp.vanished?
             sprites[write_idx] = sp if write_idx != i
             write_idx += 1
           end
