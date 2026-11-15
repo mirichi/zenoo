@@ -56,7 +56,7 @@ module Zenoo
         @font_size      = 14
         @control_height = 24.0
         @header_height  = 26.0
-        @padding        = 5.0
+        @padding        = 8.0
         @gap            = 3.0
         @radius         = 4.0
         @slider_style   = :inline
@@ -77,8 +77,15 @@ module Zenoo
 
     @frame = 0
     @theme = Theme.new(:compact)
+    @point_collider = Collision::Point.new(anchor: :center, pivot: :center)
     class << self
       attr_accessor :frame
+
+      def point_collider(px, py)
+        @point_collider.x = px.to_f
+        @point_collider.y = py.to_f
+        @point_collider
+      end
 
       def theme(preset = nil, **overrides)
         if preset.is_a?(Theme)
@@ -100,7 +107,8 @@ module Zenoo
     # 1. 最小基底クラス: Widget < Sprite
     # --------------------------------------------------------------------------
     class Widget < Sprite
-      attr_accessor :enabled, :interactive, :clip_children, :flex
+      attr_reader :interactive
+      attr_accessor :enabled, :clip_children, :flex
 
       def initialize(x = 0.0, y = 0.0, width: 100.0, height: nil,
                      anchor: :top_left, pivot: :center, z: 0.0, camera: false,
@@ -108,11 +116,35 @@ module Zenoo
                      flex: nil, theme: nil, **opts)
         super(x, y, nil, width: width, height: height, anchor: anchor, pivot: pivot, z: z, camera: camera, **opts)
         @enabled       = enabled
-        @interactive   = interactive
+        @interactive   = !!interactive
         @clip_children = clip_children
         @flex          = flex ? flex.to_f : nil
         @theme         = theme.is_a?(Symbol) ? Theme.new(theme) : theme
         @on_draw_proc  = nil
+        set_default_collider if @interactive
+      end
+
+      def interactive=(v)
+        @interactive = !!v
+        set_default_collider if @interactive && !@collider_shape
+      end
+
+      def collider_radius = nil
+      def sync_collider_shape
+        col = @collider_shape
+        return unless col && col.shape_type == Collision::TYPE_RECT
+        if (rad = collider_radius)
+          col.radius = rad
+        end
+      end
+
+      def set_default_collider
+        rad = collider_radius
+        if rad && rad > 0.0
+          set_collider(:rect, radius: rad)
+        else
+          set_collider(:default)
+        end
       end
 
       def theme
@@ -121,8 +153,31 @@ module Zenoo
 
       def theme=(val)
         @theme = val.is_a?(Symbol) ? Theme.new(val) : val
+        dirty_world_geom!
         mark_layout_dirty!
       end
+
+      def dirty_world_geom!
+        super
+        if (col = @collider_shape)
+          col.dirty_size!
+          sync_collider_shape
+        end
+      end
+
+      def tree_active?
+        cur = self
+        while cur
+          return false if cur.vanished? || !cur.visible
+          return false if cur.is_a?(Widget) && !cur.enabled
+          cur = cur.parent
+        end
+        true
+      end
+
+      def popup_open?  = (st = stage) ? st.popup_open?(self) : false
+      def open_popup!  = (stage&.open_popup(self); self)
+      def close_popup! = (stage&.close_popup(self); self)
 
       def stage
         cur = self
@@ -201,33 +256,19 @@ module Zenoo
         super if @image
       end
 
-      # 自身への当たり判定 (回転なしなら高速 AABB、回転ありなら逆変換)
+      # 自身への当たり判定 (Sprite の Collider による統合判定: 矩形/角丸/円/多角形/回転/拡大縮小対応)
       def hit_test_self?(px, py)
         return false if @vanished || !@visible || !@enabled || !@interactive
-
-        if world_angle == 0.0
-          l = screen_left
-          t = screen_top
-          px >= l && px <= (l + screen_width) && py >= t && py <= (t + screen_height)
-        else
-          dx = px - world_pivot_x
-          dy = py - world_pivot_y
-          cos = world_cos
-          sin = world_sin
-          rx = dx * cos + dy * sin
-          ry = -dx * sin + dy * cos
-          sx = world_scale_x
-          sy = world_scale_y
-          lx = (sx.abs > 0.0001 ? rx / sx : rx) + @pivot_x * width
-          ly = (sy.abs > 0.0001 ? ry / sy : ry) + @pivot_y * height
-          lx >= 0.0 && lx <= width && ly >= 0.0 && ly <= height
-        end
+        col = self.collider
+        return false unless col
+        Collision.check(UI2.point_collider(px, py), col)
       end
 
       # 手前(配列末尾)から奥(配列先頭)へ最前面のヒット対象を探索
       def find_hit(px, py)
         return nil if @vanished || !@visible || !@enabled
 
+        ensure_layout
         if (ch_list = @children)
           can_enter_children = true
           if @clip_children
@@ -255,13 +296,19 @@ module Zenoo
       def width=(v)
         old_w = width
         super(v)
-        @parent.mark_layout_dirty! if width != old_w && @parent.is_a?(Widget)
+        if width != old_w
+          sync_collider_shape
+          @parent.mark_layout_dirty! if @parent.is_a?(Widget)
+        end
       end
 
       def height=(v)
         old_h = height
         super(v)
-        @parent.mark_layout_dirty! if height != old_h && @parent.is_a?(Widget)
+        if height != old_h
+          sync_collider_shape
+          @parent.mark_layout_dirty! if @parent.is_a?(Widget)
+        end
       end
 
       def visible=(v)
@@ -305,6 +352,14 @@ module Zenoo
       def on_wheel(_dy)                = false
       def on_focus;                    end
       def on_blur;                     end
+      def hit_test_popup?(_mx, _my)    = false
+      def popup_cursor_shape           = :arrow
+      def on_popup_open;               end
+      def on_popup_close;              end
+      def on_popup_move(_mx, _my);     end
+      def on_popup_down(_mx, _my);     end
+      def on_popup_wheel(_dy)          = false
+      def draw_popup;                  end
     end
 
     # --------------------------------------------------------------------------
@@ -432,7 +487,7 @@ module Zenoo
     # 3. 司令塔: Stage (UI ツリーのルート)
     # --------------------------------------------------------------------------
     class Stage < Widget
-      attr_reader :hovered_widget, :active_widget, :focused_widget
+      attr_reader :hovered_widget, :active_widget, :focused_widget, :popup_widget
 
       def initialize(width: nil, height: nil, theme: nil)
         @auto_w = width.nil?
@@ -441,16 +496,37 @@ module Zenoo
         @hovered_widget = nil
         @active_widget  = nil
         @focused_widget = nil
+        @popup_widget   = nil
       end
 
-      def hovered?(w) = @hovered_widget.equal?(w)
-      def focused?(w) = @focused_widget.equal?(w)
+      def hovered?(w)    = @hovered_widget.equal?(w)
+      def focused?(w)    = @focused_widget.equal?(w)
+      def popup_open?(w) = @popup_widget.equal?(w)
 
       def set_focus(w)
         return if @focused_widget.equal?(w)
         @focused_widget&.on_blur
         @focused_widget = w
         @focused_widget&.on_focus
+      end
+
+      def open_popup(w)
+        return if @popup_widget.equal?(w)
+        if @popup_widget
+          old = @popup_widget
+          @popup_widget = nil
+          old.on_popup_close
+        end
+        @popup_widget = w
+        w&.on_popup_open
+      end
+
+      def close_popup(w = nil)
+        return unless @popup_widget
+        return if w && !@popup_widget.equal?(w)
+        old = @popup_widget
+        @popup_widget = nil
+        old.on_popup_close
       end
 
       def update
@@ -460,11 +536,18 @@ module Zenoo
         self.width  = Zenoo::Window.width.to_f  if @auto_w && Zenoo::Window.width > 0
         self.height = Zenoo::Window.height.to_f if @auto_h && Zenoo::Window.height > 0
 
+        if @popup_widget && (!@popup_widget.tree_active? || !@popup_widget.stage.equal?(self) || Input.key_push?(:escape))
+          close_popup
+        end
+
         mx = Input.mouse_x.to_f
         my = Input.mouse_y.to_f
         down = Input.mouse_pressed?(:left)
         push = Input.mouse_push?(:left)
         rel  = Input.mouse_release?(:left)
+        wheel = Input.mouse_wheel_y.to_f
+
+        pop_over = false
 
         if @active_widget
           Input.consume_mouse!
@@ -478,39 +561,80 @@ module Zenoo
             @active_widget.on_pointer_drag(mx, my)
           end
         else
-          hit = find_hit(mx, my)
-          update_hover(hit)
-
-          if hit
-            wheel = Input.mouse_wheel_y.to_f
-            if wheel != 0.0
-              cur = hit
-              while cur && cur.is_a?(Widget)
-                break if cur.on_wheel(wheel)
-                cur = cur.parent
+          pop = @popup_widget
+          pop_consumed = false
+          if pop
+            if pop.hit_test_popup?(mx, my)
+              pop_over = true
+              pop_consumed = true
+              update_hover(nil)
+              pop.on_popup_move(mx, my)
+              pop.on_popup_wheel(wheel) if wheel != 0.0
+              if push
+                Input.consume_mouse!
+                pop.on_popup_down(mx, my)
+              end
+            else
+              pop.on_popup_move(mx, my)
+              if push
+                clicked_owner = pop.hit_test_self?(mx, my)
+                close_popup
+                if clicked_owner
+                  Input.consume_mouse!
+                  pop_consumed = true
+                end
               end
             end
+          end
 
-            if push
-              Input.consume_mouse!
-              bring_ancestor_to_front(hit)
-              set_focus(hit.can_focus? ? hit : nil)
-              @active_widget = hit
-              hit.on_pointer_down(mx, my)
-              if rel
-                @active_widget = nil
-                hit.on_pointer_up(mx, my, true)
+          unless pop_consumed
+            hit = find_hit(mx, my)
+            update_hover(hit)
+
+            if hit
+              if wheel != 0.0
+                cur = hit
+                while cur && cur.is_a?(Widget)
+                  break if cur.on_wheel(wheel)
+                  cur = cur.parent
+                end
               end
+
+              if push
+                Input.consume_mouse!
+                bring_ancestor_to_front(hit)
+                set_focus(hit.can_focus? ? hit : nil)
+                @active_widget = hit
+                hit.on_pointer_down(mx, my)
+                if rel
+                  @active_widget = nil
+                  hit.on_pointer_up(mx, my, true)
+                end
+              end
+            elsif push
+              set_focus(nil)
             end
-          elsif push
-            set_focus(nil)
           end
         end
 
-        cur_shape = @hovered_widget ? @hovered_widget.cursor_shape : :arrow
+        cur_shape = if pop_over && @popup_widget
+                      @popup_widget.popup_cursor_shape
+                    elsif @hovered_widget
+                      @hovered_widget.cursor_shape
+                    else
+                      :arrow
+                    end
         Zenoo::UI.set_mouse_cursor(cur_shape)
 
         super
+      end
+
+      def draw
+        return if @vanished || !@visible
+        super
+        if (pop = @popup_widget) && pop.tree_active?
+          pop.draw_popup
+        end
       end
 
       private
@@ -663,6 +787,7 @@ module Zenoo
             oy = is_row ? cross_pos : cursor
             c.x = ox - pax + c.anchor_x * c.width
             c.y = oy - pay + c.anchor_y * c.height
+            c.ensure_layout
 
             cursor += (is_row ? c.width : c.height) + g
           end
@@ -691,6 +816,15 @@ module Zenoo
       def initialize(x = 0.0, y = 0.0, padding: nil, gap: nil, **opts, &block)
         init_scrollable
         super(x, y, padding: padding, gap: gap, clip_children: true, interactive: true, **opts, &block)
+      end
+
+      def collider_radius = theme.radius
+
+      def perform_layout
+        max_s = max_scroll_y
+        @scroll_y = max_s if @scroll_y > max_s
+        @scroll_y = 0.0 if @scroll_y < 0.0
+        super
       end
 
       def draw_self
@@ -733,6 +867,15 @@ module Zenoo
         @label = label.to_s
         super(x, y, width: width, height: height, **opts)
         on_click(&block) if block
+      end
+
+      def collider_radius = theme.radius
+
+      def perform_layout
+        max_s = max_scroll_y
+        @scroll_y = max_s if @scroll_y > max_s
+        @scroll_y = 0.0 if @scroll_y < 0.0
+        super
       end
 
       def draw_self
@@ -784,17 +927,36 @@ module Zenoo
       attr_reader :value, :min, :max
 
       def initialize(label = "", value = 0.0, min = 0.0, max = 100.0, x = 0.0, y = 0.0,
-                     width: 220.0, height: nil, style: nil, format: nil, unit: "", **opts, &block)
-        @label  = label.to_s
-        @min    = min.to_f
-        @max    = max.to_f
-        @value  = value.to_f.clamp(@min, @max)
-        @style  = style
-        @format = format
-        @unit   = unit.to_s
+                     width: 220.0, height: nil, style: nil, label_width: nil, format: nil, unit: "", **opts, &block)
+        @label       = label.to_s
+        @min         = min.to_f
+        @max         = max.to_f
+        @value       = value.to_f.clamp(@min, @max)
+        @style       = style
+        @label_width = label_width ? label_width.to_f : nil
+        @format      = format
+        @unit        = unit.to_s
         @on_change_proc = block
         super(x, y, width: width, height: height, **opts)
         @drag_target = false # 自分自身は動かさず値だけ変える
+      end
+
+      def set_default_collider
+        ox, oy, tw, th_b, rad = track_local_bounds
+        set_collider(:rect, width: tw, height: th_b,
+                     offset_x: ox + tw * 0.5, offset_y: oy + th_b * 0.5,
+                     at: :top_left, radius: rad)
+      end
+
+      def sync_collider_shape
+        col = @collider_shape
+        return unless col && col.shape_type == Collision::TYPE_RECT
+        ox, oy, tw, th_b, rad = track_local_bounds
+        col.width = tw
+        col.height = th_b
+        col.offset_x = ox + tw * 0.5
+        col.offset_y = oy + th_b * 0.5
+        col.radius = rad
       end
 
       def slider_style = @style || theme.slider_style
@@ -848,43 +1010,58 @@ module Zenoo
         @unit.empty? ? s : "#{s}#{@unit}"
       end
 
-      def track_rect_bounds
-        lx = screen_left
-        rw = screen_width
-        if slider_style == :inline && !@label.empty?
-          lbl_w = [rw * 0.42, 72.0].max
-          lbl_w = rw * 0.55 if lbl_w > rw * 0.55
-          [lx + lbl_w, rw - lbl_w]
+      def track_local_bounds
+        th = theme
+        rw = width
+        rh = height
+        if slider_style == :inline
+          ox = @label.empty? ? 0.0 : [(@label_width || 110.0), rw * 0.48].min
+          tw = [rw - ox, 1.0].max
+          bar_y = 2.0
+          bar_h = [rh - 4.0, 12.0].max
+          [ox, bar_y, tw, bar_h, th.radius]
         else
-          [lx, rw]
+          bar_y = th.font_size + 2.0
+          [0.0, bar_y, [rw, 1.0].max, 17.0, 4.0]
         end
       end
 
+      def track_rect_bounds
+        ox, _oy, tw, _bh, _rad = track_local_bounds
+        sx = world_scale_x
+        [screen_left + ox * sx, tw * sx]
+      end
+
       # 1段インライン型: 左ラベル + 右ゲージバー(中に現在値表示)
-      def draw_inline(th, lx, ty, rw, rh, ratio, val_str)
-        tx, tw = track_rect_bounds
+      def draw_inline(th, lx, ty, _rw, rh, ratio, val_str)
+        ox, bar_y_off, tw, bar_h, rad = track_local_bounds
+        sx = world_scale_x
+        sy = world_scale_y
+        tx = lx + ox * sx
+        tw_s = tw * sx
+        bar_y = ty + bar_y_off * sy
+        bar_h_s = bar_h * sy
+
         unless @label.empty?
           Zenoo::Window.draw_text(lx, ty + rh * 0.5, @label, size: th.font_size, color: th.text_muted, valign: :center, camera: false, z: @z)
         end
 
-        bar_y = ty + 2.0
-        bar_h = [rh - 4.0, 12.0].max
         bd = (hovered? || dragging?) ? th.border_hover : th.track_border
-        Zenoo::Window.draw_rect(tx, bar_y, tw, bar_h, radius: th.radius, color: th.track_bg, border_width: 1.0, border_color: bd, camera: false, z: @z)
+        Zenoo::Window.draw_rect(tx, bar_y, tw_s, bar_h_s, radius: rad, color: th.track_bg, border_width: 1.0, border_color: bd, camera: false, z: @z)
 
-        fill_w = tw * ratio
+        fill_w = tw_s * ratio
         if fill_w > 1.0
           fill_col = (hovered? || dragging?) ? th.accent_hover : th.accent_color
-          Zenoo::Window.draw_rect(tx, bar_y, fill_w, bar_h, radius: th.radius, color: fill_col, camera: false, z: @z)
+          Zenoo::Window.draw_rect(tx, bar_y, fill_w, bar_h_s, radius: rad, color: fill_col, camera: false, z: @z)
         end
 
         # つまみの目印ライン
-        if tw > 8.0
-          kx = (tx + fill_w).clamp(tx + 2.0, tx + tw - 2.0)
-          Zenoo::Window.draw_line(kx, bar_y + 2.0, kx, bar_y + bar_h - 2.0, color: [245, 250, 255, 220], width: 2.0, camera: false, z: @z)
+        if tw_s > 8.0
+          kx = (tx + fill_w).clamp(tx + 2.0, tx + tw_s - 2.0)
+          Zenoo::Window.draw_line(kx, bar_y + 2.0, kx, bar_y + bar_h_s - 2.0, color: [245, 250, 255, 220], width: 2.0, camera: false, z: @z)
         end
 
-        Zenoo::Window.draw_text(tx + tw - 6.0, ty + rh * 0.5, val_str,
+        Zenoo::Window.draw_text(tx + tw_s - 6.0, ty + rh * 0.5, val_str,
                                 size: [th.font_size - 1, 10].max, color: th.text_color, align: :right, valign: :center, camera: false, z: @z)
       end
 
@@ -904,6 +1081,229 @@ module Zenoo
         tx, tw = track_rect_bounds
         ratio = ((mx - tx) / [tw, 1.0].max).clamp(0.0, 1.0)
         self.value = @min + (@max - @min) * ratio
+      end
+    end
+
+    class Dropdown < Widget
+      attr_accessor :label
+      attr_reader :items, :selected_index, :popup_collider
+
+      def initialize(items = [], selected_index = 0, x = 0.0, y = 0.0,
+                     width: 200.0, height: nil, label: "", max_items: 8, **opts, &block)
+        @items          = items.map(&:to_s)
+        @selected_index = (@items.empty? || selected_index.nil? || selected_index.to_i < 0) ? -1 : selected_index.to_i.clamp(0, @items.length - 1)
+        @label          = label.to_s
+        @max_items      = [max_items.to_i, 1].max
+        @hover_item_idx = nil
+        @scroll_index   = 0
+        @on_change_proc = block
+        @popup_collider = Collision::Rect.new(0.0, 0.0, 100.0, 20.0, anchor: :top_left, pivot: :center)
+        super(x, y, width: width, height: height, **opts)
+      end
+
+      def cursor_shape       = :hand
+      def popup_cursor_shape = :hand
+      def collider_radius    = theme.radius
+      def on_change(&block)  = (@on_change_proc = block; self)
+      def selected_item      = (@selected_index >= 0) ? @items[@selected_index] : nil
+
+      def items=(val)
+        @items = val.map(&:to_s)
+        if @items.empty?
+          @selected_index = -1
+          @scroll_index = 0
+          close_popup! if popup_open?
+        else
+          @selected_index = @selected_index.clamp(0, @items.length - 1) if @selected_index >= 0
+          clamp_scroll!
+        end
+        @items
+      end
+
+      def selected_index=(idx)
+        if idx.nil? || idx.to_i < 0 || @items.empty?
+          @selected_index = -1
+        else
+          @selected_index = idx.to_i.clamp(0, @items.length - 1)
+        end
+      end
+
+      def on_pointer_down(_mx, _my)
+        super
+        popup_open? ? close_popup! : open_popup! unless @items.empty?
+      end
+
+      def on_popup_open
+        @hover_item_idx = nil
+        ensure_selected_visible
+        compute_popup_layout
+      end
+
+      def on_popup_close
+        @hover_item_idx = nil
+      end
+
+      def hit_test_popup?(mx, my)
+        return false if @items.empty?
+        compute_popup_layout
+        Collision.check(UI2.point_collider(mx, my), @popup_collider)
+      end
+
+      def on_popup_move(mx, my)
+        unless hit_test_popup?(mx, my)
+          @hover_item_idx = nil
+          return
+        end
+        _px, py, _pw, _ph, item_h, pad, vis_count = compute_popup_layout
+        row = ((my - (py + pad)) / item_h).floor
+        if row >= 0 && row < vis_count
+          idx = @scroll_index + row
+          @hover_item_idx = (idx < @items.length) ? idx : nil
+        else
+          @hover_item_idx = nil
+        end
+      end
+
+      def on_popup_wheel(dy)
+        max_scroll = [@items.length - @max_items, 0].max
+        return false if max_scroll <= 0
+        @scroll_index = (@scroll_index + (dy > 0.0 ? -1 : 1)).clamp(0, max_scroll)
+        true
+      end
+
+      def on_popup_down(mx, my)
+        on_popup_move(mx, my)
+        return unless @hover_item_idx
+        old = @selected_index
+        @selected_index = @hover_item_idx
+        close_popup!
+        @on_change_proc&.call(@selected_index, selected_item) if @selected_index != old
+      end
+
+      def draw_self
+        th = theme
+        rx = screen_left
+        ry = screen_top
+        rw = screen_width
+        rh = screen_height
+        is_open = popup_open?
+
+        bg = (hovered? || is_open) ? th.bg_hover : th.bg_normal
+        bd = is_open ? th.accent_color : (hovered? ? th.border_hover : th.border_normal)
+        Zenoo::Window.draw_rect(rx, ry, rw, rh, radius: th.radius, color: bg, border_width: 1.0, border_color: bd, camera: false, z: @z)
+
+        tx = rx + 8.0
+        ty = ry + rh * 0.5
+        sel_str = (selected_item || "").to_s
+        if @label.empty?
+          Zenoo::Window.draw_text(tx, ty, sel_str, size: th.font_size, color: th.text_color, valign: :center, camera: false, z: @z) unless sel_str.empty?
+        else
+          prefix = "#{@label}: "
+          Zenoo::Window.draw_text(tx, ty, prefix, size: th.font_size, color: th.text_muted, valign: :center, camera: false, z: @z)
+          pw = Font.default ? Font.default.text_width(prefix, th.font_size) : prefix.length * th.font_size * 0.55
+          Zenoo::Window.draw_text(tx + pw, ty, sel_str, size: th.font_size, color: th.text_color, valign: :center, camera: false, z: @z) unless sel_str.empty?
+        end
+
+        ax = rx + rw - 14.0
+        ay = ty
+        acol = (hovered? || is_open) ? th.accent_hover : th.text_muted
+        if is_open
+          Zenoo::Window.draw_triangle(ax, ay + 2.5, ax + 8.0, ay + 2.5, ax + 4.0, ay - 2.5, color: acol, camera: false, z: @z)
+        else
+          Zenoo::Window.draw_triangle(ax, ay - 2.5, ax + 8.0, ay - 2.5, ax + 4.0, ay + 2.5, color: acol, camera: false, z: @z)
+        end
+      end
+
+      def draw_popup
+        return if @items.empty?
+        th = theme
+        px, py, pw, ph, item_h, pad, vis_count = compute_popup_layout
+        pop_z = 9000.0
+
+        Zenoo::Window.draw_rect(px, py, pw, ph,
+                                radius: th.radius + 1.0, color: th.win_bg,
+                                border_width: 1.5, border_color: th.accent_color,
+                                shadow_blur: 10.0, shadow_color: [0, 0, 0, 160], camera: false, z: pop_z)
+
+        has_scroll = @items.length > @max_items
+        item_w = pw - pad * 2.0 - (has_scroll ? 7.0 : 0.0)
+        row = 0
+        while row < vis_count
+          idx = @scroll_index + row
+          break if idx >= @items.length
+          iy = py + pad + row * item_h
+          is_sel = (idx == @selected_index)
+          is_hov = (idx == @hover_item_idx)
+
+          if is_sel || is_hov
+            col = is_hov ? th.bg_hover : th.bg_active
+            Zenoo::Window.draw_rect(px + pad, iy, item_w, item_h, radius: [th.radius - 1.0, 2.0].max, color: col, camera: false, z: pop_z + 1.0)
+          end
+          if is_sel
+            Zenoo::Window.draw_rect(px + pad + 2.0, iy + 3.0, 3.0, item_h - 6.0, radius: 1.5, color: th.accent_color, camera: false, z: pop_z + 2.0)
+          end
+
+          tcol = (is_sel || is_hov) ? [255, 255, 255] : th.text_color
+          Zenoo::Window.draw_text(px + pad + 9.0, iy + item_h * 0.5, @items[idx],
+                                  size: th.font_size, color: tcol, valign: :center, camera: false, z: pop_z + 2.0)
+          row += 1
+        end
+
+        if has_scroll
+          track_x = px + pw - pad - 4.0
+          track_y = py + pad
+          track_h = ph - pad * 2.0
+          thumb_h = [track_h * (vis_count.to_f / @items.length), 14.0].max
+          max_s = @items.length - @max_items
+          ratio = max_s > 0 ? (@scroll_index.to_f / max_s) : 0.0
+          thumb_y = track_y + (track_h - thumb_h) * ratio
+          Zenoo::Window.draw_rect(track_x, thumb_y, 3.0, thumb_h, radius: 1.5, color: th.accent_color, camera: false, z: pop_z + 2.0)
+        end
+      end
+
+      private
+
+      def clamp_scroll!
+        max_s = [@items.length - @max_items, 0].max
+        @scroll_index = @scroll_index.clamp(0, max_s)
+      end
+
+      def ensure_selected_visible
+        return if @selected_index < 0
+        if @selected_index < @scroll_index
+          @scroll_index = @selected_index
+        elsif @selected_index >= @scroll_index + @max_items
+          @scroll_index = @selected_index - @max_items + 1
+        end
+        clamp_scroll!
+      end
+
+      def compute_popup_layout
+        th = theme
+        item_h = [th.control_height - 2.0, 20.0].max
+        pad = 3.0
+        vis_count = [@items.length, @max_items].min
+        ph = vis_count * item_h + pad * 2.0
+        pw = [screen_width, 110.0].max
+
+        win_w = Zenoo::Window.width.to_f
+        win_h = Zenoo::Window.height.to_f
+        px = screen_left
+        px = [px, win_w - pw - 4.0].min if win_w > 0.0
+        px = 4.0 if px < 4.0
+
+        below_y = screen_top + screen_height + 2.0
+        above_y = screen_top - ph - 2.0
+        py = (win_h > 0.0 && below_y + ph > win_h - 4.0 && above_y >= 4.0) ? above_y : below_y
+
+        @popup_collider.x = px
+        @popup_collider.y = py
+        @popup_collider.width = pw
+        @popup_collider.height = ph
+        @popup_collider.radius = th.radius + 1.0
+        @popup_collider.update_cache if @popup_collider.dirty?
+
+        [px, py, pw, ph, item_h, pad, vis_count]
       end
     end
 
@@ -970,6 +1370,7 @@ module Zenoo
 
       def cursor_shape = :arrow
       def bring_to_front_on_click? = true
+      def collider_radius = theme.radius + 2.0
 
       def resize_to(new_w, new_h)
         nw = [new_w.to_f, @min_w].max
@@ -982,6 +1383,7 @@ module Zenoo
           @grip.x = nw - @grip.width
           @grip.y = nh - @grip.height
         end
+        @body.ensure_layout
       end
 
       def resize_by(dx, dy)
@@ -1034,6 +1436,7 @@ module Zenoo
       def button(label = "Button", **opts, &block)      = add(Button.new(label, **opts, &block))
       def checkbox(label = "", checked = false, **opts, &block) = add(Checkbox.new(label, checked, **opts, &block))
       def slider(label = "", value = 0.0, min = 0.0, max = 100.0, **opts, &block) = add(Slider.new(label, value, min, max, **opts, &block))
+      def dropdown(items = [], selected_index = 0, **opts, &block) = add(Dropdown.new(items, selected_index, **opts, &block))
       def custom(width: 100.0, height: 32.0, **opts, &block) = add(Widget.new(0.0, 0.0, width: width, height: height, **opts)).on_draw(&block)
     end
 
@@ -1055,6 +1458,8 @@ class ColorTileButton < Zenoo::UI2::Widget
     @tile_color = col
   end
 
+  def collider_radius = 5.0
+
   def draw_self
     bd = hovered? ? [255, 255, 255] : [80, 95, 120]
     dy = pressed? ? 1.5 : 0.0
@@ -1063,43 +1468,151 @@ class ColorTileButton < Zenoo::UI2::Widget
   end
 end
 
+class CirclePadButton < Zenoo::UI2::Widget
+  include Zenoo::UI2::Clickable
+
+  def initialize(label, x, y, size: 72.0, color: [64, 128, 190])
+    @label = label
+    @btn_color = color
+    super(x, y, width: size, height: size, pivot: :center)
+    set_collider(:circle)
+  end
+
+  def draw_self
+    cx = screen_left + screen_width * 0.5
+    cy = screen_top + screen_height * 0.5 + (pressed? ? 1.5 : 0.0)
+    r  = [screen_width, screen_height].min * 0.5
+    bd = hovered? ? [255, 255, 255] : [110, 175, 245]
+    Zenoo::Window.draw_circle(cx, cy, r, color: @btn_color, border_width: 2.0, border_color: bd, camera: false)
+    Zenoo::Window.draw_text(cx, cy, hovered? ? "HOVER" : @label, size: 12, color: :white, align: :center, valign: :center, camera: false)
+  end
+end
+
+class DiamondButton < Zenoo::UI2::Widget
+  include Zenoo::UI2::Clickable
+
+  def initialize(label, x, y, size: 76.0, color: [165, 92, 130])
+    @label = label
+    @btn_color = color
+    @half = size * 0.5
+    super(x, y, width: size, height: size, pivot: :center)
+    set_collider(:polygon, vertices: [[0.0, -@half], [@half, 0.0], [0.0, @half], [-@half, 0.0]])
+  end
+
+  def draw_self
+    cx = screen_left + screen_width * 0.5
+    cy = screen_top + screen_height * 0.5 + (pressed? ? 1.5 : 0.0)
+    h  = @half
+    bd = hovered? ? [255, 255, 255] : [220, 160, 190]
+    Zenoo::Window.draw_triangle(cx, cy - h, cx + h, cy, cx - h, cy, color: @btn_color, camera: false)
+    Zenoo::Window.draw_triangle(cx - h, cy, cx + h, cy, cx, cy + h, color: @btn_color, camera: false)
+    Zenoo::Window.draw_line(cx, cy - h, cx + h, cy, color: bd, width: 2.0, camera: false)
+    Zenoo::Window.draw_line(cx + h, cy, cx, cy + h, color: bd, width: 2.0, camera: false)
+    Zenoo::Window.draw_line(cx, cy + h, cx - h, cy, color: bd, width: 2.0, camera: false)
+    Zenoo::Window.draw_line(cx - h, cy, cx, cy - h, color: bd, width: 2.0, camera: false)
+    Zenoo::Window.draw_text(cx, cy, hovered? ? "HOVER" : @label, size: 12, color: :white, align: :center, valign: :center, camera: false)
+  end
+end
+
 class DraggableCard < Zenoo::UI2::Widget
   include Zenoo::UI2::Clickable
   include Zenoo::UI2::Draggable
 
-  def initialize(title, x, y, color:)
+  def initialize(title, x, y, color:, angle: 0.0)
     super(x, y, width: 105, height: 130, pivot: :center)
+    self.angle = angle
     @title = title
     @card_color = color
   end
 
   def bring_to_front_on_click? = true
+  def collider_radius = 8.0
 
   def draw_self
     bd = dragging? ? [255, 220, 90] : (hovered? ? [140, 210, 255] : [80, 95, 125])
     Zenoo::Window.draw_rect(screen_left, screen_top, screen_width, screen_height,
                             radius: 8, color: @card_color, border_width: 2, border_color: bd,
+                            angle: world_angle, pivot: :center,
                             shadow_blur: dragging? ? 14.0 : 5.0, shadow_color: [0, 0, 0, 150], camera: false)
-    Zenoo::Window.draw_text(screen_left + screen_width * 0.5, screen_top + 18, @title,
-                            size: 13, color: :white, align: :center, camera: false)
-    Zenoo::Window.draw_text(screen_left + screen_width * 0.5, screen_top + 70, dragging? ? "DRAG" : (hovered? ? "HOVER" : "IDLE"),
+    cx = screen_left + screen_width * 0.5
+    cy = screen_top + screen_height * 0.5
+    Zenoo::Window.draw_text(cx, cy - 24, @title, size: 13, color: :white, align: :center, camera: false)
+    Zenoo::Window.draw_text(cx, cy + 8, dragging? ? "DRAG" : (hovered? ? "HOVER" : "IDLE"),
                             size: 11, color: [200, 220, 245], align: :center, camera: false)
+  end
+end
+
+def draw_debug_shape(col, hovered)
+  return unless col
+  fill   = hovered ? [255, 210, 60, 48] : [60, 230, 140, 26]
+  border = hovered ? [255, 220, 90, 220] : [70, 240, 155, 190]
+  case col.shape_type
+  when Zenoo::Collision::TYPE_CIRCLE
+    rx = col.is_true_circle ? col.effective_radius : col.radius_x * col.scale_x.abs
+    ry = col.is_true_circle ? col.effective_radius : col.radius_y * col.scale_y.abs
+    Zenoo::Window.draw_circle(col.center_x, col.center_y, rx, ry, angle: col.angle,
+                              color: fill, border_width: 1.5, border_color: border, camera: false, z: 9500.0)
+  when Zenoo::Collision::TYPE_RECT
+    if col.is_rounded
+      cx = col.center_x
+      cy = col.center_y
+      w = col.width * col.scale_x.abs
+      h = col.height * col.scale_y.abs
+      Zenoo::Window.draw_rect(cx - w * 0.5, cy - h * 0.5, w, h,
+                              angle: col.angle, pivot: :center,
+                              color: fill, border_width: 1.5, border_color: border,
+                              radius: col.radius, camera: false, z: 9500.0)
+      return
+    end
+  end
+
+  if (col.shape_type == Zenoo::Collision::TYPE_RECT || col.shape_type == Zenoo::Collision::TYPE_POLYGON) &&
+     (verts = col.world_vertices) && verts.length >= 3
+    i = 0
+    len = verts.length
+    while i < len
+      a = verts[i]
+      b = verts[(i + 1) % len]
+      Zenoo::Window.draw_line(a[0], a[1], b[0], b[1], color: border, width: 1.5, camera: false, z: 9500.0)
+      i += 1
+    end
+  end
+end
+
+def draw_debug_colliders(node, stage)
+  return if node.vanished? || !node.visible
+  if node.is_a?(Zenoo::UI2::Widget) && node.collider
+    draw_debug_shape(node.collider, stage.hovered?(node))
+  end
+  ch = node.children
+  i = 0
+  while i < ch.length
+    draw_debug_colliders(ch[i], stage)
+    i += 1
   end
 end
 
 # --- UI ツリー構築 ---
 stage = Zenoo::UI2::Stage.new
 selected_color = [230, 90, 90]
+wave_type      = "Sine"
 preview_speed  = 1.2
 wave_amp       = 16.0
 wave_freq      = 0.40
 animate_wave   = true
+show_colliders = true
 
 lbl_status = nil
 
-# 左ウィンドウ: デフォルトの :compact テーマ (1段スライダーでスッキリ高密度)
-stage.window("Tool Window (:compact default)", 40, 56, width: 340, height: 470, resizable: true) do |win|
+# 左ウィンドウ: デフォルトの :compact テーマ (1段コントロールで高密度)
+stage.window("Tool Window (:compact default)", 36, 52, width: 344, height: 540, resizable: true) do |win|
   lbl_status = win.label("Status: Ready", color: [130, 210, 255])
+
+  win.dropdown(["Sine", "Triangle", "Square", "Sawtooth", "Pulse", "Noise", "Abs Sine", "Cosine", "Step", "Ripple"],
+               0, label: "Wave", max_items: 6) do |_idx, item|
+    wave_type = item
+    lbl_status.text = "Wave: #{item}"
+  end
 
   win.checkbox("Animate Preview", animate_wave) { |v| animate_wave = v }
   win.slider("Wave Speed", preview_speed, 0.2, 4.0, unit: "x") { |v| preview_speed = v }
@@ -1107,7 +1620,7 @@ stage.window("Tool Window (:compact default)", 40, 56, width: 340, height: 470, 
   win.slider("Frequency", wave_freq, 0.1, 1.0) { |v| wave_freq = v }
 
   win.label("Custom Class Widget (Palette):")
-  win.hbox(gap: 6, height: 28, align: :center) do |row|
+  win.hbox(padding: 0, gap: 6, height: 28, align: :center) do |row|
     [[230, 90, 90], [90, 200, 120], [80, 150, 240], [240, 200, 70]].each do |col|
       tile = ColorTileButton.new(col)
       tile.on_click do |btn|
@@ -1127,13 +1640,37 @@ stage.window("Tool Window (:compact default)", 40, 56, width: 340, height: 470, 
     wave_phase += 0.05 * preview_speed if animate_wave
     Zenoo::Window.draw_rect(w.screen_left, w.screen_top, w.screen_width, w.screen_height,
                             radius: 4, color: [16, 20, 28], border_width: 1, border_color: [60, 70, 95], camera: false)
-    steps = 24
+    steps = 28
     step_w = w.screen_width / steps
     i = 0
     while i < steps
+      ph = wave_phase + i * wave_freq
+      val = case wave_type
+            when "Triangle"
+              (2.0 / Math::PI) * Math.asin(Math.sin(ph))
+            when "Square"
+              Math.sin(ph) >= 0.0 ? 1.0 : -1.0
+            when "Sawtooth"
+              t = (ph / (Math::PI * 2.0)) % 1.0
+              2.0 * t - 1.0
+            when "Pulse"
+              Math.sin(ph) >= 0.6 ? 1.0 : -0.6
+            when "Noise"
+              Math.sin(ph * 7.3) * Math.cos(ph * 13.7)
+            when "Abs Sine"
+              Math.sin(ph).abs * 2.0 - 1.0
+            when "Cosine"
+              Math.cos(ph)
+            when "Step"
+              (Math.sin(ph) * 3.0).round / 3.0
+            when "Ripple"
+              Math.sin(ph * 1.5) * Math.cos(ph * 0.35)
+            else
+              Math.sin(ph)
+            end
       px = w.screen_left + i * step_w + 6.0
-      py = w.screen_top + w.screen_height * 0.5 + Math.sin(wave_phase + i * wave_freq) * wave_amp
-      Zenoo::Window.draw_circle(px, py, 3.0, color: selected_color, camera: false)
+      py = w.screen_top + w.screen_height * 0.5 + val * wave_amp
+      Zenoo::Window.draw_circle(px, py, 2.8, color: selected_color, camera: false)
       i += 1
     end
   end
@@ -1148,28 +1685,47 @@ stage.window("Tool Window (:compact default)", 40, 56, width: 340, height: 470, 
   end
 end
 
-# 右上ウィンドウ: :relaxed テーマを指定した例（同じ Builder / 同じクラスで自動的にゆったり表示）
-win2 = stage.window("Game Settings (:relaxed theme)", 410, 56, width: 310, height: 245, resizable: true, theme: :relaxed)
-win2.label("Same widgets, :relaxed theme!")
-win2.checkbox("Fullscreen", false) { |v| lbl_status.text = "Fullscreen: #{v}" }
+# 右上ウィンドウ: :relaxed テーマを指定した例（同じ Widget / Dropdown も自動でゆったり高さ）
+win2 = stage.window("Game Settings (:relaxed theme)", 410, 52, width: 320, height: 300, resizable: true, theme: :relaxed)
+win2.checkbox("Show Colliders", show_colliders) { |v| show_colliders = v }
+win2.dropdown(["60 FPS", "120 FPS", "240 FPS", "Unlimited"], 0, label: "FPS Cap") { |_i, item| lbl_status.text = "FPS Cap: #{item}" }
 win2.slider("BGM Volume", 75.0, 0.0, 100.0, unit: "%") { |v| lbl_status.text = "BGM: #{v.round}%" }
 win2.add(Zenoo::UI2::Button.new("Apply Settings") { lbl_status.text = "Applied!" })
 
-card1 = DraggableCard.new("Card A", 450, 390, color: [48, 64, 96])
+# 下辺反転テスト用の配置ドロップダウン (画面下端近くで開くと自動で上向きに展開)
+bottom_dd = Zenoo::UI2::Dropdown.new(["Bottom Flip A", "Bottom Flip B", "Bottom Flip C", "Bottom Flip D"], 0, 760, 588, width: 220, label: "Bottom")
+bottom_dd.on_change { |_i, item| lbl_status.text = "Bottom: #{item}" }
+stage << bottom_dd
+
+# コライダー形状デモ: 円形 / 多角形 / 回転矩形 (OBB)
+circle_btn = CirclePadButton.new("CIRCLE", 790, 120)
+circle_btn.on_click { lbl_status.text = "Circle Collider clicked!" }
+diamond_btn = DiamondButton.new("POLYGON", 890, 120)
+diamond_btn.on_click { lbl_status.text = "Polygon Collider clicked!" }
+stage << circle_btn << diamond_btn
+
+card1 = DraggableCard.new("Card A", 450, 410, color: [48, 64, 96])
 card1.on_click { lbl_status.text = "Card A clicked!" }
-card2 = DraggableCard.new("Card B", 580, 410, color: [86, 52, 86])
-card2.on_click { lbl_status.text = "Card B clicked!" }
+card2 = DraggableCard.new("Card B (14deg)", 590, 425, color: [86, 52, 86], angle: 14.0)
+card2.on_click { lbl_status.text = "Card B (rotated OBB) clicked!" }
 stage << card1 << card2
 
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame = 0
 
-Window.loop(1024, 640, "Zenoo UI2 Compact & Theme Prototype") do
+Window.loop(1024, 640, "Zenoo UI2 Collider HitTest & Dropdown Prototype") do
   Window.clear([18, 22, 30])
-  Window.draw_text(40, 18, "UI2 Prototype: :compact (1-row Slider) vs :relaxed Theme", size: 16, color: :white)
+  Window.draw_text(36, 18, "UI2 Prototype: Sprite Collider HitTest & Dropdown Popup", size: 16, color: :white)
 
   stage.update
   stage.draw
+
+  if show_colliders
+    draw_debug_colliders(stage, stage)
+    if (pop = stage.popup_widget).is_a?(Zenoo::UI2::Dropdown)
+      draw_debug_shape(pop.popup_collider, true)
+    end
+  end
 
   frame += 1
   break if test_max > 0 && frame >= test_max
