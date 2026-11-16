@@ -142,16 +142,16 @@ module Zenoo
         @game_block_active
       end
 
-      # ユーザーのゲームブロック実行中かつインスペクタが表示されており、インスペクタ等のGUIがマウスを捕捉している場合はマスク
+      # ユーザーのゲームブロック実行中かつインスペクタが表示されており、インスペクタがマウスを捕捉している場合はマスク
       def mask_mouse_input?
         return false unless @enabled && @game_block_active && Inspector.visible
-        Zenoo::ImGui.mouse_captured? || !Zenoo::ImGui.hovered_window_id.nil?
+        Inspector.capturing_pointer?
       end
 
-      # ユーザーのゲームブロック実行中かつインスペクタが表示されており、GUI要素（テキスト入力等）にフォーカスがある場合はマスク
+      # ユーザーのゲームブロック実行中かつインスペクタが表示されており、インスペクタにキーボードフォーカスがある場合はマスク
       def mask_keyboard_input?
         return false unless @enabled && @game_block_active && Inspector.visible
-        !Zenoo::ImGui.focus_id.nil?
+        Inspector.capturing_keyboard?
       end
 
       # 画面キューのコマンド群をスナップショットとして保持
@@ -368,12 +368,10 @@ module Zenoo
       def __update_step
         if Zenoo::Dev.enabled && Zenoo::Dev.current_error
           # エラー発生中は通常のゲームロジック・GUI更新を一時停止
-          # ただし入力（F5等）の更新および ImGui/UI のフレーム整合性は維持
+          # ただし入力（F5等）の更新および UI のフレーム整合性は維持
           Input.__begin_frame
-          ImGui.begin_frame
           UI.begin_frame
           UI.end_frame
-          ImGui.end_frame
           Input.__update_step
           return
         end
@@ -410,8 +408,8 @@ module Zenoo
         Audio.update(delta_time)
         Tween.__update_step(delta_time) if @current_frame_ran_game
         Input.__begin_frame
-        ImGui.begin_frame
         UI.begin_frame
+        Zenoo::Dev::Inspector.update_gui if Zenoo::Dev.enabled
         Input.__update_virtual_pad if @current_frame_ran_game
         if @main_loop_block
           begin
@@ -431,15 +429,13 @@ module Zenoo
           end
         end
 
-        UI.end_frame
-
         # ゲームブロック直後: インスペクタGUIがキューに積まれる前に純粋なゲーム画面のスナップショットを取得！
         Zenoo::Dev.capture_screen_snapshot if Zenoo::Dev.enabled && @current_frame_ran_game
 
         # F12 インスペクタ GUI の描画
-        Zenoo::Dev::Inspector.render_gui if Zenoo::Dev.enabled
+        Zenoo::Dev::Inspector.draw_gui if Zenoo::Dev.enabled
 
-        ImGui.end_frame
+        UI.end_frame
         Zenoo::Dev.game_block_active = true
         Input.__update_step
         Zenoo::Dev.game_block_active = false

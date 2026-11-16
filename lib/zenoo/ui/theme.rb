@@ -2,239 +2,63 @@
 
 module Zenoo
   module UI
-    # UI ウィジェットの配色・角丸・フォントなどの見た目（テーマ）を管理するクラス
+    # UI 全体の配色と密度（フォントサイズ・標準高さ・余白・角丸）を保持するテーマ設定
     class Theme
-      @custom_presets = {}
-
-      class << self
-        attr_reader :custom_presets
-
-        # カスタムテーマプリセットを登録する
-        #
-        # - `name` (`Symbol | String`): 登録するプリセット名
-        # - `base` (`Symbol`): ベースとなる既存プリセット名（デフォルト `:modern_dark`）
-        # - `attrs` (`Hash`): ベースから上書きするテーマ属性（`#configure` と同じキーワード引数）
-        # - 戻り値: `Hash`
-        def register(name, base: :modern_dark, **attrs)
-          @custom_presets[name.to_sym] = { base: base, attrs: attrs }
-        end
-      end
-
       attr_accessor :bg_normal, :bg_hover, :bg_active,
-                    :border_normal, :border_hover, :border_active,
-                    :shadow_normal, :shadow_hover, :shadow_active,
-                    :win_bg, :win_title_bg, :win_title_bg_active,
-                    :win_border_normal, :win_border_active,
-                    :text_color, :text_disabled,
-                    :accent_color, :accent_hover, :track_bg, :track_border,
-                    :corner_radius, :font_size, :font
+                    :border_normal, :border_hover,
+                    :win_bg, :win_border, :win_border_active,
+                    :text_color, :text_muted, :accent_color, :accent_hover,
+                    :track_bg, :track_border,
+                    :font_size, :control_height, :header_height,
+                    :padding, :gap, :radius
 
       # テーマを初期化する
       #
-      # - `preset` (`Symbol`): 初期適用するプリセット名（`:modern_dark`, `:tool_dark`, `:cyber`, または `Theme.register` で登録した名前）
-      # - `overrides` (`Hash`): プリセット適用後に上書きするテーマ属性
-      # - 戻り値: `Theme`
-      def initialize(preset = :modern_dark, **overrides)
-        apply_preset(preset)
-        configure(**overrides) unless overrides.empty?
-      end
-
-      # テーマの配色・角丸・フォント設定をまとめて上書きする（色・透明度は `0..255` 基準）
-      #
-      # - `bg_normal` (`Color | Symbol | Array | nil`): 通常時の背景色
-      # - `bg_hover` (`Color | Symbol | Array | nil`): ホバー時の背景色
-      # - `bg_active` (`Color | Symbol | Array | nil`): 押下・アクティブ時の背景色
-      # - `border_normal` (`Array | nil`): 通常時の枠線設定 `[太さ, 色]`
-      # - `border_hover` (`Array | nil`): ホバー時の枠線設定 `[太さ, 色]`
-      # - `border_active` (`Array | nil`): アクティブ時の枠線設定 `[太さ, 色]`
-      # - `shadow_normal` (`Array | nil`): 通常時の影設定 `[ぼかし半径, 色]`
-      # - `shadow_hover` (`Array | nil`): ホバー時の影設定 `[ぼかし半径, 色]`
-      # - `shadow_active` (`Array | nil`): アクティブ時の影設定 `[ぼかし半径, 色]`
-      # - `win_bg` (`Color | Symbol | Array | nil`): `Window` コンテナの背景色
-      # - `win_title_bg` (`Color | Symbol | Array | nil`): 非アクティブな `Window` タイトルバー背景色
-      # - `win_title_bg_active` (`Color | Symbol | Array | nil`): アクティブな `Window` タイトルバー背景色
-      # - `win_border_normal` (`Array | nil`): 非アクティブな `Window` の枠線設定 `[太さ, 色]`
-      # - `win_border_active` (`Array | nil`): アクティブな `Window` の枠線設定 `[太さ, 色]`
-      # - `text_color` (`Color | Symbol | Array | nil`): 通常テキスト色
-      # - `text_disabled` (`Color | Symbol | Array | nil`): 無効状態テキスト色
-      # - `accent_color` (`Color | Symbol | Array | nil`): アクセントカラー（選択・ゲージ塗り・フォーカス枠など）
-      # - `accent_hover` (`Color | Symbol | Array | nil`): ホバー時のアクセントカラー
-      # - `track_bg` (`Color | Symbol | Array | nil`): スライダーやスクロールバーのトラック背景色
-      # - `track_border` (`Array | nil`): トラックの枠線設定 `[太さ, 色]`
-      # - `corner_radius` (`Float | nil`): 角丸半径（ピクセル単位）
-      # - `font_size` (`Integer | nil`): 標準フォントサイズ（ピクセル単位）
-      # - `font` (`Font | nil`): 標準フォント
-      # - 戻り値: `Theme`（`self`）
-      def configure(
-        bg_normal: nil, bg_hover: nil, bg_active: nil,
-        border_normal: nil, border_hover: nil, border_active: nil,
-        shadow_normal: nil, shadow_hover: nil, shadow_active: nil,
-        win_bg: nil, win_title_bg: nil, win_title_bg_active: nil,
-        win_border_normal: nil, win_border_active: nil,
-        text_color: nil, text_disabled: nil,
-        accent_color: nil, accent_hover: nil, track_bg: nil, track_border: nil,
-        corner_radius: nil, font_size: nil, font: nil
-      )
-        self.bg_normal     = normalize_color(bg_normal) unless bg_normal.nil?
-        self.bg_hover      = normalize_color(bg_hover) unless bg_hover.nil?
-        self.bg_active     = normalize_color(bg_active) unless bg_active.nil?
-        self.border_normal = normalize_pair(border_normal) unless border_normal.nil?
-        self.border_hover  = normalize_pair(border_hover) unless border_hover.nil?
-        self.border_active = normalize_pair(border_active) unless border_active.nil?
-        self.shadow_normal = normalize_pair(shadow_normal) unless shadow_normal.nil?
-        self.shadow_hover  = normalize_pair(shadow_hover) unless shadow_hover.nil?
-        self.shadow_active = normalize_pair(shadow_active) unless shadow_active.nil?
-        self.win_bg        = normalize_color(win_bg) unless win_bg.nil?
-        self.win_title_bg  = normalize_color(win_title_bg) unless win_title_bg.nil?
-        self.win_title_bg_active = normalize_color(win_title_bg_active) unless win_title_bg_active.nil?
-        self.win_border_normal   = normalize_pair(win_border_normal) unless win_border_normal.nil?
-        self.win_border_active   = normalize_pair(win_border_active) unless win_border_active.nil?
-        self.text_color    = normalize_color(text_color) unless text_color.nil?
-        self.text_disabled = normalize_color(text_disabled) unless text_disabled.nil?
-        self.accent_color  = normalize_color(accent_color) unless accent_color.nil?
-        self.accent_hover  = normalize_color(accent_hover) unless accent_hover.nil?
-        self.track_bg      = normalize_color(track_bg) unless track_bg.nil?
-        self.track_border  = normalize_pair(track_border) unless track_border.nil?
-        self.corner_radius = corner_radius.to_f unless corner_radius.nil?
-        self.font_size     = font_size.to_i unless font_size.nil?
-        self.font          = font unless font.nil?
-        self
-      end
-
-      # 指定したプリセットをテーマに適用する
-      #
-      # - `preset` (`Symbol`): プリセット名（`:modern_dark`, `:tool_dark`, `:cyber`, または `Theme.register` で登録した名前）
-      # - 戻り値: `nil`
-      def apply_preset(preset, visited = nil)
-        sym = preset.to_sym
-        if visited
-          return if visited.include?(sym)
-          visited << sym
-        end
-        custom = Theme.custom_presets[sym]
-        if !custom.nil?
-          visited ||= [sym]
-          apply_preset(custom[:base], visited)
-          configure(**custom[:attrs])
-        elsif sym == :cyber
-          apply_cyber
-        elsif sym == :tool_dark
-          apply_tool_dark
+      # - `preset` (`Symbol`): 密度プリセット（`:compact` または `:relaxed`）
+      # - `overrides` (`Hash`): 上書きする属性名と値
+      def initialize(preset = :compact, **overrides)
+        if preset == :relaxed
+          apply_relaxed
         else
-          apply_modern_dark
+          apply_compact
         end
+        overrides.each { |k, v| public_send(:"#{k}=", v) }
       end
 
-      # モダン・リッチダークテーマ (デフォルト)
-      def apply_modern_dark
-        @font           = nil
-        @bg_normal      = Color.new(42, 48, 62, 235)
-        @bg_hover       = Color.new(58, 68, 88, 245)
-        @bg_active      = Color.new(74, 88, 118, 255)
+      # ツール向けの引き締まった標準テーマを適用する
+      def apply_compact
+        @bg_normal         = [40, 46, 60]
+        @bg_hover          = [54, 64, 84]
+        @bg_active         = [68, 84, 114]
+        @border_normal     = [74, 86, 110]
+        @border_hover      = [110, 175, 245]
+        @win_bg            = [24, 28, 38, 242]
+        @win_border        = [68, 80, 106]
+        @win_border_active = [105, 165, 245]
+        @text_color        = [236, 240, 248]
+        @text_muted        = [180, 192, 212]
+        @accent_color      = [72, 152, 242]
+        @accent_hover      = [105, 180, 255]
+        @track_bg          = [18, 22, 30]
+        @track_border      = [58, 68, 88]
 
-        @win_bg              = Color.new(26, 30, 40, 242)
-        @win_title_bg        = Color.new(36, 42, 56, 245)
-        @win_title_bg_active = Color.new(46, 56, 78, 255)
-        @win_border_normal   = [1.5, Color.new(68, 78, 100, 200)]
-        @win_border_active   = [1.5, Color.new(95, 165, 255, 240)]
+        @font_size      = 14
+        @control_height = 24.0
+        @header_height  = 26.0
+        @padding        = 8.0
+        @gap            = 3.0
+        @radius         = 4.0
+      end
 
-        @border_normal  = [1.0, Color.new(82, 94, 120, 200)]
-        @border_hover   = [1.5, Color.new(110, 175, 255, 240)]
-        @border_active  = [2.0, Color.new(140, 210, 255, 255)]
-
-        @shadow_normal  = [8.0, Color.new(0, 0, 0, 120)]
-        @shadow_hover   = [12.0, Color.new(40, 120, 255, 90)]
-        @shadow_active  = [4.0, Color.new(0, 0, 0, 160)]
-
-        @text_color     = Color.new(240, 244, 250)
-        @text_disabled  = Color.new(115, 122, 138)
-
-        @accent_color   = Color.new(75, 155, 250)
-        @accent_hover   = Color.new(110, 185, 255)
-        @track_bg       = Color.new(20, 24, 32, 230)
-        @track_border   = [1.0, Color.new(60, 70, 90, 180)]
-
-        @corner_radius  = 6.0
+      # ゲーム設定画面など向けのゆったりテーマを適用する
+      def apply_relaxed
+        apply_compact
         @font_size      = 15
-      end
-
-      # ツール・デバッグ向けのフラットなグレースケールテーマ
-      def apply_tool_dark
-        @font           = nil
-        @bg_normal      = Color.new(46, 46, 50, 240)
-        @bg_hover       = Color.new(62, 62, 68, 245)
-        @bg_active      = Color.new(78, 78, 86, 255)
-
-        @win_bg              = Color.new(30, 30, 32, 245)
-        @win_title_bg        = Color.new(42, 42, 45, 240)
-        @win_title_bg_active = Color.new(52, 52, 58, 255)
-        @win_border_normal   = [1.0, Color.new(65, 65, 70, 200)]
-        @win_border_active   = [1.0, Color.new(120, 120, 130, 240)]
-
-        @border_normal  = [1.0, Color.new(90, 95, 105, 220)]
-        @border_hover   = [1.0, Color.new(145, 150, 165, 240)]
-        @border_active  = [1.5, Color.new(190, 195, 210, 255)]
-
-        @shadow_normal  = [4.0, Color.new(0, 0, 0, 100)]
-        @shadow_hover   = [6.0, Color.new(0, 0, 0, 140)]
-        @shadow_active  = [2.0, Color.new(0, 0, 0, 160)]
-
-        @text_color     = Color.new(235, 235, 235)
-        @text_disabled  = Color.new(110, 110, 115)
-
-        @accent_color   = Color.new(175, 180, 195)
-        @accent_hover   = Color.new(215, 220, 235)
-        @track_bg       = Color.new(32, 32, 36, 230)
-        @track_border   = [1.0, Color.new(70, 75, 85, 180)]
-
-        @corner_radius  = 4.0
-        @font_size      = 15
-      end
-
-      # サイバー・ゲーム風テーマ
-      def apply_cyber
-        @font           = nil
-        @win_bg              = Color.new(22, 26, 36, 245)
-        @win_title_bg        = Color.new(28, 32, 44, 230)
-        @win_title_bg_active = Color.new(35, 45, 65, 230)
-        @win_border_normal   = [1.5, Color.new(60, 70, 90, 180)]
-        @win_border_active   = [2.0, Color.new(0, 200, 255, 220)]
-
-        @bg_normal      = Color.new(40, 44, 52, 230)
-        @bg_hover       = Color.new(55, 60, 72, 245)
-        @bg_active      = Color.new(70, 80, 100, 255)
-
-        @border_normal  = [1.0, Color.new(80, 88, 104, 180)]
-        @border_hover   = [1.5, Color.new(0, 210, 255, 230)]
-        @border_active  = [2.0, Color.new(0, 255, 200, 255)]
-
-        @shadow_normal  = [6.0, Color.new(0, 0, 0, 120)]
-        @shadow_hover   = [12.0, Color.new(0, 180, 255, 100)]
-        @shadow_active  = [4.0, Color.new(0, 0, 0, 180)]
-
-        @text_color     = Color::WHITE
-        @text_disabled  = Color.new(120, 120, 130)
-
-        @accent_color   = Color.new(0, 195, 255)
-        @accent_hover   = Color.new(50, 220, 255)
-        @track_bg       = Color.new(25, 28, 35, 220)
-        @track_border   = [1.0, Color.new(60, 65, 80, 150)]
-
-        @corner_radius  = 8.0
-        @font_size      = 16
-      end
-
-      private
-
-      def normalize_color(val)
-        return val if val.is_a?(Color)
-        return Color.new(*val) if val.is_a?(Array)
-        val
-      end
-
-      def normalize_pair(val)
-        return val unless val.is_a?(Array)
-        [val[0], normalize_color(val[1])]
+        @control_height = 34.0
+        @header_height  = 34.0
+        @padding        = 14.0
+        @gap            = 10.0
+        @radius         = 7.0
       end
     end
   end

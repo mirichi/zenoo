@@ -1126,6 +1126,10 @@ class Game
     @shockwave_shader = nil
     @collision_mode = :exact # :exact (Collision GJK) または :simple (円判定)
     @show_profiler = false
+    @profiler_stage = UI::Stage.new(width: 1280, height: 720)
+    @profiler_stage.window("Profiler [F3 / TAB]", 20, 50, width: 320, height: 270) do |w|
+      w.profile_graph(width: 296, flex: 1, max_ms: 33.33)
+    end
     @crt_time = 0.0
     reset_world
   end
@@ -1628,9 +1632,8 @@ class Game
   def draw_profiler_gui
     if @show_profiler
       Profiler.measure(:gui) do
-        ImGui.window("Profiler [F3 / TAB]", x: 20, y: 50, w: 320, h: 270) do
-          ImGui.profile_graph(w: 290, h: 80, max_ms: 33.33)
-        end
+        @profiler_stage.update
+        @profiler_stage.draw
       end
     end
   end

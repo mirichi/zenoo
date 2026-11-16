@@ -144,6 +144,15 @@ def calc_foot_trajectory(cycle, phase, hip_world_x, scroll_x, stride_half, swing
 end
 
 # ----------------------------------------------------
+# UI 初期化 (画面右上コントロールパネル)
+# ----------------------------------------------------
+ui_stage = UI::Stage.new
+ui_win   = ui_stage.panel(SCREEN_WIDTH - 280, 16, width: 264, height: 184, padding: 10, gap: 6, title: "パラメータ調整 (Mouse Controls)")
+sl_spd   = ui_win.stacked_slider("速度 (Speed)", target_speed, -180.0, 550.0, unit: " px/s", format: "%.0f") { |v| target_speed = v }
+sl_hip   = ui_win.stacked_slider("腰の高さ (Hip Y)", base_hip_y, 280.0, 410.0, unit: " px", format: "%.0f") { |v| base_hip_y = v }
+sl_rough = ui_win.stacked_slider("地面起伏 (Roughness)", roughness, 0.0, 2.5, format: "%.2f") { |v| roughness = v }
+
+# ----------------------------------------------------
 # メインループ
 # ----------------------------------------------------
 Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK") do
@@ -183,7 +192,7 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
 
   # 剣の振り下ろしトリガー（肩中心の Expo In 居合一閃 Tween）
   # マウスクリック時はGUI操作中(スライダー等)の誤爆を防止
-  mouse_attack = Input.mouse_push?(:left) && !ImGui.mouse_captured?
+  mouse_attack = Input.mouse_push?(:left) && !UI.mouse_captured?
   if (Input.key_push?(:space) || mouse_attack) && !is_slashing
     is_slashing = true
     slash_trail.clear
@@ -499,21 +508,11 @@ Window.loop(SCREEN_WIDTH, SCREEN_HEIGHT, "Zenoo - Procedural Runner & Sword IK")
   Window.draw_text(26, 148, "[A][D] Speed | [W][S] Pelvis Height | [0..3] Preset", size: 12, color: [110, 140, 180])
 
   # --------------------------------------------------
-  # 8. 画面右上コントロールスライダー (ImGui)
+  # 8. 画面右上コントロールスライダー (UI)
   # --------------------------------------------------
-  ImGui.panel("パラメータ調整 (Mouse Controls)", x: SCREEN_WIDTH - 280, y: 16, w: 264, h: 222, spacing_y: 6) do
-    # 1. 移動速度
-    new_spd = ImGui.slider("速度 (Speed)", target_speed, -180.0, 550.0, unit: " px/s", format: "%.0f")
-    target_speed = new_spd if (new_spd - target_speed).abs > 0.01
-
-    # 2. 腰の高さ (280..410)
-    new_hip_y = ImGui.slider("腰の高さ (Hip Y)", base_hip_y, 280.0, 410.0, unit: " px", format: "%.0f")
-    base_hip_y = new_hip_y if (new_hip_y - base_hip_y).abs > 0.01
-
-    # 3. 地面の起伏 (0.0..2.5)
-    new_rough = ImGui.slider("地面起伏 (Roughness)", roughness, 0.0, 2.5, format: "%.2f")
-    if (new_rough - roughness).abs > 0.001
-      roughness = new_rough
-    end
-  end
+  sl_spd.value   = target_speed unless sl_spd.dragging?
+  sl_hip.value   = base_hip_y   unless sl_hip.dragging?
+  sl_rough.value = roughness    unless sl_rough.dragging?
+  ui_stage.update
+  ui_stage.draw
 end

@@ -144,7 +144,7 @@ class CoordsSimulator
   end
 
   def build_ui
-    @stage = UI::Stage.new
+    @stage = UI::Stage.new(width: 1280, height: 720, theme: UI::Theme.new(:compact, padding: 10, gap: 5))
 
     @btn_anchors = []
     @btn_pivots  = []
@@ -154,41 +154,42 @@ class CoordsSimulator
     # ----------------------------------------------------
     # パネル 1: スプライト操作 & パラメータモニター
     # ----------------------------------------------------
-    @panel_ctrl = @stage.panel(
-      20, 15, width: 350, height: 690,
-      title: "Controls & Monitor"
-    ) do |win|
-      win.label("Sprite & Collision Coords", size: 15, color: Color::WHITE)
+    @panel_ctrl = @stage.panel(20, 15, width: 350, height: 690, title: "Controls & Monitor") do |win|
+      win.label("Sprite & Collision Coords", size: 15, color: :white)
 
       # 衝突ステータスバナー (custom on_draw)
-      @banner = win.custom(height: 34) do |bx, by, bw, bh|
-        bg_col = @is_hit ? Color.new(220, 50, 70, 220) : Color.new(30, 45, 65, 200)
-        bd_col = @is_hit ? Color.new(255, 100, 120, 255) : Color.new(60, 85, 120, 200)
-        Window.draw_rect(bx, by, bw, bh, radius: 6.0, color: bg_col, border_width: 1.5, border_color: bd_col)
+      @banner = win.custom(height: 34) do |w|
+        bx = w.screen_left
+        by = w.screen_top
+        bw = w.screen_width
+        bh = w.screen_height
+        bg_col = @is_hit ? [220, 50, 70, 220] : [30, 45, 65, 200]
+        bd_col = @is_hit ? [255, 100, 120, 255] : [60, 85, 120, 200]
+        Window.draw_rect(bx, by, bw, bh, radius: 6.0, color: bg_col, border_width: 1.5, border_color: bd_col, camera: false)
         txt = @is_hit ? "COLLISION DETECTED! (HIT)" : "NO COLLISION (CLEAR)"
-        tcol = @is_hit ? Color::WHITE : Color.new(120, 230, 160)
-        Window.draw_text(bx + 12, by + 8, txt, size: 13, color: tcol)
+        tcol = @is_hit ? :white : [120, 230, 160]
+        Window.draw_text(bx + 12, by + 8, txt, size: 13, color: tcol, camera: false)
       end
 
-      win.label("=== Transform & Collider Sliders ===", size: 13, color: Color.new(255, 205, 85))
+      win.label("=== Transform & Collider Sliders ===", size: 13, color: [255, 205, 85])
 
-      @sl_scale_x = win.slider("Sprite Scale X", 1.0, 0.2, 2.5, step: 0.05, unit: "x")
+      @sl_scale_x = win.slider("Sprite Scale X", 1.0, 0.2, 2.5, label_width: 120, format: "%.2f", unit: "x")
       @sl_scale_x.on_change { |v| @sprite.scale_x = v if @sprite }
 
-      @sl_scale_y = win.slider("Sprite Scale Y", 1.0, 0.2, 2.5, step: 0.05, unit: "x")
+      @sl_scale_y = win.slider("Sprite Scale Y", 1.0, 0.2, 2.5, label_width: 120, format: "%.2f", unit: "x")
       @sl_scale_y.on_change { |v| @sprite.scale_y = v if @sprite }
 
-      @sl_offset_x = win.slider("Collider Offset X", 0.0, -80.0, 80.0, step: 1.0, unit: "px")
+      @sl_offset_x = win.slider("Collider Offset X", 0.0, -80.0, 80.0, label_width: 120, format: "%.0f", unit: "px")
       @sl_offset_x.on_change do |v|
         @sprite.collider.offset_x = v if @sprite && @sprite.collider
       end
 
-      @sl_offset_y = win.slider("Collider Offset Y", 0.0, -80.0, 80.0, step: 1.0, unit: "px")
+      @sl_offset_y = win.slider("Collider Offset Y", 0.0, -80.0, 80.0, label_width: 120, format: "%.0f", unit: "px")
       @sl_offset_y.on_change do |v|
         @sprite.collider.offset_y = v if @sprite && @sprite.collider
       end
 
-      win.divider(height: 6)
+      win.divider
 
       win.label("=== Realtime Parameters ===", size: 13, color: Color.new(160, 205, 255))
       @lbl_pos    = win.label("World Pos (x, y) : -", size: 12, color: Color.new(255, 120, 130))
@@ -208,25 +209,22 @@ class CoordsSimulator
     # ----------------------------------------------------
     # パネル 2: プリセット切替 & 操作ガイド
     # ----------------------------------------------------
-    @panel_presets = @stage.panel(
-      910, 15, width: 350, height: 690,
-      title: "Presets & Guide"
-    ) do |win|
+    @panel_presets = @stage.panel(910, 15, width: 350, height: 690, title: "Presets & Guide") do |win|
       # 1. Anchor 切替
-      win.label("[ 1. Anchor (配置基準) ]  キー [1]", size: 13, color: Color.new(100, 235, 150))
-      win.hbox(height: 28, gap: 6) do |row|
+      win.label("[ 1. Anchor (配置基準) ]  キー [1]", size: 13, color: [100, 235, 150])
+      win.hbox(padding: 0, height: 28, gap: 6) do |row|
         @btn_anchors << row.button("中央", flex: 1) { select_anchor(0) }
         @btn_anchors << row.button("足元", flex: 1) { select_anchor(1) }
         @btn_anchors << row.button("左上", flex: 1) { select_anchor(2) }
       end
-      win.hbox(height: 28, gap: 6) do |row|
+      win.hbox(padding: 0, height: 28, gap: 6) do |row|
         @btn_anchors << row.button("右上", flex: 1) { select_anchor(3) }
         @btn_anchors << row.button("右下", flex: 1) { select_anchor(4) }
       end
 
       # 2. Pivot 切替
-      win.label("[ 2. Pivot (回転軸) ]    キー [2]", size: 13, color: Color.new(255, 220, 90))
-      win.hbox(height: 28, gap: 6) do |row|
+      win.label("[ 2. Pivot (回転軸) ]    キー [2]", size: 13, color: [255, 220, 90])
+      win.hbox(padding: 0, height: 28, gap: 6) do |row|
         @btn_pivots << row.button("中央", flex: 1) { select_pivot(0) }
         @btn_pivots << row.button("足元", flex: 1) { select_pivot(1) }
         @btn_pivots << row.button("左上", flex: 1) { select_pivot(2) }
@@ -234,8 +232,8 @@ class CoordsSimulator
       end
 
       # 3. Collider At 切替
-      win.label("[ 3. Collider At (配置先) ] キー [3]", size: 13, color: Color.new(255, 150, 200))
-      win.hbox(height: 28, gap: 6) do |row|
+      win.label("[ 3. Collider At (配置先) ] キー [3]", size: 13, color: [255, 150, 200])
+      win.hbox(padding: 0, height: 28, gap: 6) do |row|
         @btn_ats << row.button("中央", flex: 1) { select_at(0) }
         @btn_ats << row.button("足元", flex: 1) { select_at(1) }
         @btn_ats << row.button("頭上", flex: 1) { select_at(2) }
@@ -243,18 +241,18 @@ class CoordsSimulator
       end
 
       # 4. Collider Shape 切替
-      win.label("[ 4. Collider 形状 (全5種) ]  キー [4]", size: 13, color: Color.new(160, 210, 255))
-      win.hbox(height: 28, gap: 6) do |row|
+      win.label("[ 4. Collider 形状 (全5種) ]  キー [4]", size: 13, color: [160, 210, 255])
+      win.hbox(padding: 0, height: 28, gap: 6) do |row|
         @btn_shapes << row.button("矩形", flex: 1) { select_shape(0) }
         @btn_shapes << row.button("角丸", flex: 1) { select_shape(1) }
         @btn_shapes << row.button("真円", flex: 1) { select_shape(2) }
       end
-      win.hbox(height: 28, gap: 6) do |row|
+      win.hbox(padding: 0, height: 28, gap: 6) do |row|
         @btn_shapes << row.button("縦長楕円", flex: 1) { select_shape(3) }
         @btn_shapes << row.button("縦長6角形", flex: 1) { select_shape(4) }
       end
 
-      win.divider(height: 6)
+      win.divider
 
       # 操作ガイド
       win.label("=== 操作ガイド ===", size: 13, color: Color.new(255, 215, 120))

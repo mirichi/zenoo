@@ -11,24 +11,17 @@
 
 require_relative '../lib/zenoo'
 
-WIDTH  = 1280
-HEIGHT = 720
+WIDTH    = 1280
+HEIGHT   = 720
 CANVAS_W = 810.0
 
 system = ParticleSystem.preset(:fire, CANVAS_W * 0.5, HEIGHT * 0.55)
 selected_layer = 0
-tab_index = 0
 bg_mode = 0 # 0: Dark Navy, 1: Pitch Black, 2: Slate Grid
 show_gizmo = true
 
-SHAPE_LIST       = [:circle, :box, :spark, :ring, :star, :diamond, :soft].freeze
-SHAPE_LABELS     = ["Circle (Glow)", "Box (Square)", "Spark (Line)", "Ring (Wave)", "Star (Kirakira)", "Diamond", "Soft Smoke"].freeze
 SPAWN_SHAPE_LIST = [:point, :circle, :ring, :box, :line].freeze
 SPAWN_LABELS     = ["Point (点)", "Circle (円内)", "Ring (円周)", "Box (矩形)", "Line (線分)"].freeze
-CURVE_LIST       = [:linear, :sine, :ease_out, :ease_in].freeze
-CURVE_LABELS     = ["Linear (線形)", "Sine (山なり)", "EaseOut (急→緩)", "EaseIn (緩→急)"].freeze
-BLEND_LIST       = [:add, :alpha, :multiply].freeze
-BLEND_LABELS     = ["Add (加算発光)", "Alpha (通常半透明)", "Multiply (乗算)"].freeze
 
 # 放出範囲ギズモの描画ヘルパー
 def draw_emitter_gizmo(em)
@@ -92,29 +85,371 @@ def generate_ruby_code(system)
   lines.join("\n")
 end
 
+# -------------------------------------------------------------------
+# 右側 UI コントロールパネル (保持モード UI)
+# -------------------------------------------------------------------
+stage = UI::Stage.new(width: WIDTH, height: HEIGHT, theme: UI::Theme.new(:compact, padding: 8, gap: 4))
+
+current_em = -> {
+  selected_layer = selected_layer.clamp(0, [system.emitters.length - 1, 0].max)
+  system.emitters[selected_layer]
+}
+
+layer_btns       = []
+pages            = []
+spawn_radios     = []
+shape_btns       = {}
+blend_btns       = {}
+curve_btns       = {}
+grp_circle       = nil
+grp_box          = nil
+grp_line         = nil
+sl_ring_thick    = nil
+export_lines_box = nil
+btn_copy_code    = nil
+copy_feedback_frames = 0
+
+# UI 同期用コントロール参照
+ctrls = {}
+
+rebuild_export = lambda do
+  return unless export_lines_box
+  export_lines_box.children.dup.each { |c| c.parent = nil }
+  generate_ruby_code(system).each_line do |line|
+    s = line.chomp
+    col = s.strip.start_with?("#") ? [120, 210, 255] : [220, 230, 240]
+    export_lines_box.label(s, size: 12, color: col)
+  end
+end
+
+sync_ui = lambda do
+  em = current_em.call
+  4.times do |idx|
+    btn = layer_btns[idx]
+    if idx < system.emitters.length
+      btn.visible = true
+      btn.label   = "L#{idx + 1}:#{system.emitters[idx].shape}"
+      btn.active  = (idx == selected_layer)
+    else
+      btn.visible = false
+    end
+  end
+  return unless em
+
+  ctrls[:emitting].checked    = em.emitting
+  ctrls[:local_space].checked = em.local_space
+  ctrls[:loop_mode].checked   = em.loop_mode
+  ctrls[:show_gizmo].checked  = show_gizmo
+
+  ctrls[:emission_rate].value = em.emission_rate
+  ctrls[:burst_count].value   = em.burst_count
+  ctrls[:lifetime].value      = em.lifetime
+  ctrls[:lifetime_var].value  = em.lifetime_var
+
+  SPAWN_SHAPE_LIST.each_with_index { |sp, i| spawn_radios[i].checked = (em.spawn_shape == sp) }
+  grp_circle.visible = (em.spawn_shape == :circle || em.spawn_shape == :ring)
+  grp_box.visible    = (em.spawn_shape == :box)
+  grp_line.visible   = (em.spawn_shape == :line)
+
+  ctrls[:spawn_radius].value       = em.spawn_radius
+  ctrls[:spawn_inner_radius].value = em.spawn_inner_radius
+  ctrls[:radial_circle].checked    = em.radial_direction
+  ctrls[:spawn_width].value        = em.spawn_width
+  ctrls[:spawn_height].value       = em.spawn_height
+  ctrls[:radial_box].checked       = em.radial_direction
+  ctrls[:line_length].value        = em.spawn_width
+
+  ctrls[:speed].value        = em.speed
+  ctrls[:speed_var].value    = em.speed_var
+  ctrls[:angle].value        = em.angle
+  ctrls[:spread].value       = em.spread
+  ctrls[:gravity_x].value    = em.gravity_x
+  ctrls[:gravity_y].value    = em.gravity_y
+  ctrls[:drag].value         = em.drag
+  ctrls[:radial_accel].value = em.radial_accel
+  ctrls[:tangential].value   = em.tangential_accel
+  ctrls[:wobble_amp].value   = em.wobble_amp
+  ctrls[:wobble_freq].value  = em.wobble_freq
+  ctrls[:spin].value         = em.spin
+  ctrls[:spin_var].value     = em.spin_var
+  ctrls[:align_vel].checked  = em.align_to_velocity
+  ctrls[:stretch].value      = em.stretch
+
+  shape_btns.each { |sym, b| b.active = (em.shape == sym) }
+  blend_btns.each { |sym, b| b.active = (em.blend == sym) }
+  curve_btns.each { |sym, b| b.active = (em.size_curve == sym) }
+  sl_ring_thick.visible = (em.shape == :ring)
+  sl_ring_thick.value   = em.ring_thickness
+
+  ctrls[:start_size].value    = em.start_size
+  ctrls[:end_size].value      = em.end_size
+  ctrls[:size_var].value      = em.size_var
+  ctrls[:fade_in].value       = em.fade_in
+  ctrls[:fade_out].value      = em.fade_out
+  ctrls[:color_mid_pos].value = em.color_mid_pos
+  ctrls[:color_var].value     = em.color_var
+
+  h = em.to_h
+  [:start_color, :mid_color, :end_color].each do |ck|
+    rgba = h[ck]
+    ctrls[:"#{ck}_lbl"].color = [rgba[0], rgba[1], rgba[2], 255]
+    4.times { |ci| ctrls[:"#{ck}_#{ci}"].value = rgba[ci] }
+  end
+
+  rebuild_export.call if pages[4]&.visible
+end
+
+stage.panel(820, 10, width: 450, height: 700, title: "GPU Particle Inspector") do |win|
+  win.hbox(padding: 0, gap: 4, height: 26) do |row|
+    4.times do |idx|
+      layer_btns << row.button("L#{idx + 1}", flex: 1) do
+        selected_layer = idx
+        sync_ui.call
+      end
+    end
+  end
+
+  win.hbox(padding: 0, gap: 6, height: 26) do |row|
+    row.button("+ Add Layer", flex: 1) do
+      if system.emitters.length < 4
+        act = current_em.call
+        new_em = system.add_emitter(max_particles: 2000)
+        new_em.configure(**act.to_h) if act
+        selected_layer = system.emitters.length - 1
+        sync_ui.call
+      end
+    end
+    row.button("Duplicate", flex: 1) do
+      if system.emitters.length < 4 && (act = current_em.call)
+        new_em = system.add_emitter(max_particles: act.max_particles)
+        new_em.configure(**act.to_h)
+        selected_layer = system.emitters.length - 1
+        sync_ui.call
+      end
+    end
+    row.button("- Remove", flex: 1) do
+      if system.emitters.length > 1
+        system.remove_emitter(selected_layer)
+        selected_layer = [selected_layer - 1, 0].max
+        sync_ui.call
+      end
+    end
+  end
+
+  scroller = nil
+  win.tabs(["Presets", "Spawn", "Physics", "Visuals", "Export"], 0, height: 28) do |idx, _|
+    pages.each_with_index { |pg, pi| pg.visible = (pi == idx) }
+    scroller.scroll_y = 0.0 if scroller
+    rebuild_export.call if idx == 4
+  end
+
+  scroller = win.scroll_view(flex: 1, padding: 6, gap: 5) do |sv|
+    # Tab 0: Presets & Global Controls
+    pages << sv.vbox(padding: 0, gap: 5) do |p0|
+      p0.label("=== Multi-Layer Rich Presets ===", size: 15, color: [255, 205, 80])
+      preset_rows = [
+        [["Campfire (炎+煙+火花)", :fire, 1],        ["Explosion (4層大爆発)", :explosion, 1]],
+        [["Magic Galaxy (銀河渦)", :magic_galaxy, 0], ["Charge Aura (集束溜め)", :charge_aura, 0]],
+        [["Welding Sparks (火花)", :sparks, 0],       ["Blizzard (吹雪ボックス)", :blizzard, 0]],
+        [["Star Fountain (星噴水)", :star_fountain, 0], ["Cyber Portal (渦ポータル)", :cyber_portal, 0]]
+      ]
+      preset_rows.each do |pair|
+        p0.hbox(padding: 0, gap: 6, height: 26) do |row|
+          pair.each do |lbl, psym, sel|
+            row.button(lbl, flex: 1) do
+              system.apply_preset(psym)
+              selected_layer = sel
+              sync_ui.call
+            end
+          end
+        end
+      end
+
+      p0.divider
+      p0.label("=== Playback & Trigger ===", size: 15, color: [100, 220, 255])
+      p0.hbox(padding: 0, gap: 6, height: 28) do |row|
+        row.button("BURST ALL! (Space)", flex: 1) { system.burst }
+        row.button("Clear All Particles", flex: 1) { system.clear }
+      end
+
+      ctrls[:emitting]    = p0.checkbox("Layer Emitting (連続放出)", true) { |v| current_em.call.emitting = v }
+      ctrls[:local_space] = p0.checkbox("Local Space (エミッター移動に追従)", false) { |v| current_em.call.local_space = v }
+      ctrls[:loop_mode]   = p0.checkbox("GPU Infinite Loop Mode (CPU転送ゼロ)", false) do |v|
+        em = current_em.call
+        em.loop_mode = v
+        em.fill_loop_pool!(em.max_particles) if v
+      end
+      ctrls[:show_gizmo] = p0.checkbox("Show Emitter Gizmo (放出範囲表示)", show_gizmo) { |v| show_gizmo = v }
+
+      p0.divider
+      p0.label("=== Background Theme ===", size: 15, color: [255, 205, 80])
+      p0.hbox(padding: 0, gap: 8, height: 24, align: :center) do |row|
+        row.radio_button("Navy",  true,  group: :bg) { bg_mode = 0 }
+        row.radio_button("Black", false, group: :bg) { bg_mode = 1 }
+        row.radio_button("Slate", false, group: :bg) { bg_mode = 2 }
+      end
+    end
+
+    # Tab 1: Spawn & Timing
+    pages << sv.vbox(padding: 0, gap: 5, visible: false) do |p1|
+      p1.label("=== Emission Rate & Lifetime ===", size: 15, color: [255, 205, 80])
+      ctrls[:emission_rate] = p1.slider("Emit Rate (p/s)", 0.0, 0.0, 2000.0, format: "%.0f", label_width: 130) { |v| current_em.call.emission_rate = v }
+      ctrls[:burst_count]   = p1.slider("Burst Count", 1.0, 1.0, 1000.0, format: "%.0f", label_width: 130) { |v| current_em.call.burst_count = v.round.to_i }
+      ctrls[:lifetime]      = p1.slider("Lifetime (s)", 1.0, 0.1, 6.0, format: "%.2f", label_width: 130) { |v| current_em.call.lifetime = v }
+      ctrls[:lifetime_var]  = p1.slider("Lifetime Var (s)", 0.0, 0.0, 2.5, format: "%.2f", label_width: 130) { |v| current_em.call.lifetime_var = v }
+
+      p1.divider
+      p1.label("=== Spawn Shape (放出領域) ===", size: 15, color: [100, 220, 255])
+      p1.vbox(padding: 0, gap: 2) do |rb_box|
+        SPAWN_LABELS.each_with_index do |lbl, idx|
+          sp_sym = SPAWN_SHAPE_LIST[idx]
+          spawn_radios << rb_box.radio_button(lbl, false, group: :spawn_shape) do
+            current_em.call.spawn_shape = sp_sym
+            sync_ui.call
+          end
+        end
+      end
+
+      grp_circle = p1.vbox(padding: 0, gap: 4, visible: false) do |g|
+        ctrls[:spawn_radius]       = g.slider("Outer Radius", 1.0, 1.0, 350.0, format: "%.0f", label_width: 130) { |v| current_em.call.spawn_radius = v }
+        ctrls[:spawn_inner_radius] = g.slider("Inner Radius", 0.0, 0.0, 300.0, format: "%.0f", label_width: 130) { |v| current_em.call.spawn_inner_radius = v }
+        ctrls[:radial_circle]      = g.checkbox("Radial Direction (中心から放射/集束)", false) { |v| current_em.call.radial_direction = v }
+      end
+      grp_box = p1.vbox(padding: 0, gap: 4, visible: false) do |g|
+        ctrls[:spawn_width]  = g.slider("Box Width", 10.0, 4.0, 800.0, format: "%.0f", label_width: 130) { |v| current_em.call.spawn_width = v }
+        ctrls[:spawn_height] = g.slider("Box Height", 10.0, 4.0, 600.0, format: "%.0f", label_width: 130) { |v| current_em.call.spawn_height = v }
+        ctrls[:radial_box]   = g.checkbox("Radial Direction (中心から外向き)", false) { |v| current_em.call.radial_direction = v }
+      end
+      grp_line = p1.vbox(padding: 0, gap: 4, visible: false) do |g|
+        ctrls[:line_length] = g.slider("Line Length", 10.0, 10.0, 800.0, format: "%.0f", label_width: 130) { |v| current_em.call.spawn_width = v }
+      end
+    end
+
+    # Tab 2: Motion & Physics
+    pages << sv.vbox(padding: 0, gap: 5, visible: false) do |p2|
+      p2.label("=== Initial Velocity ===", size: 15, color: [255, 205, 80])
+      ctrls[:speed]     = p2.slider("Speed (負で集束)", 0.0, -500.0, 800.0, format: "%.0f", label_width: 130) { |v| current_em.call.speed = v }
+      ctrls[:speed_var] = p2.slider("Speed Variance", 0.0, 0.0, 400.0, format: "%.0f", label_width: 130) { |v| current_em.call.speed_var = v }
+      ctrls[:angle]     = p2.slider("Angle (deg)", 0.0, 0.0, 360.0, format: "%.0f", label_width: 130) { |v| current_em.call.angle = v }
+      ctrls[:spread]    = p2.slider("Spread (deg)", 0.0, 0.0, 360.0, format: "%.0f", label_width: 130) { |v| current_em.call.spread = v }
+
+      p2.divider
+      p2.label("=== GPU Forces (飛翔中の粒子に即反映) ===", size: 15, color: [100, 220, 255])
+      ctrls[:gravity_x]    = p2.slider("Gravity X (風)", 0.0, -600.0, 600.0, format: "%.0f", label_width: 130) { |v| current_em.call.gravity_x = v }
+      ctrls[:gravity_y]    = p2.slider("Gravity Y (重力)", 0.0, -800.0, 800.0, format: "%.0f", label_width: 130) { |v| current_em.call.gravity_y = v }
+      ctrls[:drag]         = p2.slider("Air Drag", 0.0, 0.0, 8.0, format: "%.2f", label_width: 130) { |v| current_em.call.drag = v }
+      ctrls[:radial_accel] = p2.slider("Radial Accel", 0.0, -400.0, 400.0, format: "%.0f", label_width: 130) { |v| current_em.call.radial_accel = v }
+      ctrls[:tangential]   = p2.slider("Vortex Swirl", 0.0, -400.0, 400.0, format: "%.0f", label_width: 130) { |v| current_em.call.tangential_accel = v }
+
+      p2.divider
+      p2.label("=== Turbulence & Orientation ===", size: 15, color: [255, 205, 80])
+      ctrls[:wobble_amp]  = p2.slider("Wobble Amp", 0.0, 0.0, 80.0, format: "%.0f", label_width: 130) { |v| current_em.call.wobble_amp = v }
+      ctrls[:wobble_freq] = p2.slider("Wobble Freq", 1.0, 0.5, 15.0, format: "%.1f", label_width: 130) { |v| current_em.call.wobble_freq = v }
+      ctrls[:spin]        = p2.slider("Spin Speed", 0.0, -720.0, 720.0, format: "%.0f", label_width: 130) { |v| current_em.call.spin = v }
+      ctrls[:spin_var]    = p2.slider("Spin Variance", 0.0, 0.0, 720.0, format: "%.0f", label_width: 130) { |v| current_em.call.spin_var = v }
+      ctrls[:align_vel]   = p2.checkbox("Align to Velocity (進行方向を向く)", false) { |v| current_em.call.align_to_velocity = v }
+      ctrls[:stretch]     = p2.slider("Velocity Stretch", 1.0, 1.0, 6.0, format: "%.1f", label_width: 130) { |v| current_em.call.stretch = v }
+    end
+
+    # Tab 3: Visuals, Size Curve & 3-Point Color
+    pages << sv.vbox(padding: 0, gap: 5, visible: false) do |p3|
+      p3.label("=== Procedural SDF Shape & Blend ===", size: 15, color: [255, 205, 80])
+      [[:circle, "Circle"], [:box, "Box"], [:spark, "Spark"], [:ring, "Ring"]].tap do |row_items|
+        p3.hbox(padding: 0, gap: 4, height: 24) do |row|
+          row_items.each do |sym, lbl|
+            shape_btns[sym] = row.button(lbl, flex: 1) { current_em.call.shape = sym; sync_ui.call }
+          end
+        end
+      end
+      [[:star, "Star"], [:diamond, "Diamond"], [:soft, "Soft Smoke"]].tap do |row_items|
+        p3.hbox(padding: 0, gap: 4, height: 24) do |row|
+          row_items.each do |sym, lbl|
+            shape_btns[sym] = row.button(lbl, flex: 1) { current_em.call.shape = sym; sync_ui.call }
+          end
+        end
+      end
+
+      sl_ring_thick = p3.slider("Ring Thickness", 0.2, 0.04, 0.6, format: "%.2f", label_width: 130, visible: false) { |v| current_em.call.ring_thickness = v }
+
+      p3.hbox(padding: 0, gap: 4, height: 24) do |row|
+        [[:add, "Add"], [:alpha, "Alpha"], [:multiply, "Multiply"]].each do |sym, lbl|
+          blend_btns[sym] = row.button(lbl, flex: 1) { current_em.call.blend = sym; sync_ui.call }
+        end
+      end
+
+      p3.divider
+      p3.label("=== Size & Easing Curve ===", size: 15, color: [100, 220, 255])
+      ctrls[:start_size] = p3.slider("Start Size", 10.0, 1.0, 250.0, format: "%.0f", label_width: 130) { |v| current_em.call.start_size = v }
+      ctrls[:end_size]   = p3.slider("End Size", 0.0, 0.0, 350.0, format: "%.0f", label_width: 130) { |v| current_em.call.end_size = v }
+      ctrls[:size_var]   = p3.slider("Size Variance", 0.0, 0.0, 0.9, format: "%.2f", label_width: 130) { |v| current_em.call.size_var = v }
+
+      p3.hbox(padding: 0, gap: 4, height: 24) do |row|
+        [[:linear, "Linear"], [:sine, "Sine"], [:ease_out, "EaseOut"], [:ease_in, "EaseIn"]].each do |sym, lbl|
+          curve_btns[sym] = row.button(lbl, flex: 1) { current_em.call.size_curve = sym; sync_ui.call }
+        end
+      end
+
+      p3.divider
+      p3.label("=== 3-Point Color Gradient & Fade ===", size: 15, color: [255, 205, 80])
+      ctrls[:fade_in]       = p3.slider("Alpha Fade-In", 0.1, 0.0, 0.5, format: "%.2f", label_width: 130) { |v| current_em.call.fade_in = v }
+      ctrls[:fade_out]      = p3.slider("Alpha Fade-Out", 0.3, 0.0, 0.8, format: "%.2f", label_width: 130) { |v| current_em.call.fade_out = v }
+      ctrls[:color_mid_pos] = p3.slider("Mid Color Timing", 0.5, 0.1, 0.9, format: "%.2f", label_width: 130) { |v| current_em.call.color_mid_pos = v }
+      ctrls[:color_var]     = p3.slider("Brightness Var", 0.0, 0.0, 0.4, format: "%.2f", label_width: 130) { |v| current_em.call.color_var = v }
+
+      [[:start_color, "Start Color (RGBA)"], [:mid_color, "Mid Color (RGBA)"], [:end_color, "End Color (RGBA)"]].each do |ck, title|
+        ctrls[:"#{ck}_lbl"] = p3.label(title, size: 13, color: [255, 255, 255])
+        ch_names = ["R", "G", "B", "A"]
+        4.times do |ci|
+          ctrls[:"#{ck}_#{ci}"] = p3.slider("#{title.split.first} #{ch_names[ci]}", 255.0, 0.0, 255.0, format: "%.0f", label_width: 100) do |v|
+            em = current_em.call
+            arr = em.to_h[ck].dup
+            arr[ci] = v.round.to_i
+            em.public_send(:"#{ck}=", arr)
+            ctrls[:"#{ck}_lbl"].color = [arr[0], arr[1], arr[2], 255]
+          end
+        end
+      end
+    end
+
+    # Tab 4: Code Export
+    pages << sv.vbox(padding: 0, gap: 6, visible: false) do |p4|
+      p4.label("=== Ruby Code Export ===", size: 15, color: [255, 205, 80])
+      btn_copy_code = p4.button("Copy Ruby Code to Clipboard", height: 28) do
+        Input.clipboard = generate_ruby_code(system)
+        copy_feedback_frames = 120
+        btn_copy_code.label = "Copied to Clipboard!"
+      end
+      export_lines_box = p4.vbox(padding: 0, gap: 2)
+    end
+  end
+end
+
+sync_ui.call
+
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame_count = 0
-copy_feedback_timer = 0.0
 
 Window.loop(WIDTH, HEIGHT, "Zenoo - 2D GPU Particle Designer & Editor") do
   dt = Window.delta_time
-  copy_feedback_timer -= dt if copy_feedback_timer > 0.0
+  if copy_feedback_frames > 0
+    copy_feedback_frames -= 1
+    btn_copy_code.label = "Copy Ruby Code to Clipboard" if copy_feedback_frames == 0
+  end
+
   mx = Input.mouse_x.to_f
   my = Input.mouse_y.to_f
 
-  # -------------------------------------------------------------------
   # 1. 背景とグリッドの描画
-  # -------------------------------------------------------------------
   case bg_mode
   when 0
-    Window.clear(Color.new(14, 16, 24))
-    grid_col = Color.new(26, 30, 42)
+    Window.clear([14, 16, 24])
+    grid_col = [26, 30, 42]
   when 1
-    Window.clear(Color.new(4, 4, 6))
-    grid_col = Color.new(15, 15, 20)
+    Window.clear([4, 4, 6])
+    grid_col = [15, 15, 20]
   when 2
-    Window.clear(Color.new(38, 42, 50))
-    grid_col = Color.new(54, 58, 68)
+    Window.clear([38, 42, 50])
+    grid_col = [54, 58, 68]
   end
 
   gx = 0.0
@@ -128,300 +463,30 @@ Window.loop(WIDTH, HEIGHT, "Zenoo - 2D GPU Particle Designer & Editor") do
     gy += 40.0
   end
 
-  # -------------------------------------------------------------------
   # 2. キャンバス操作 (マウス左ドラッグで移動、右クリック/SpaceでBurst)
-  # -------------------------------------------------------------------
-  if mx < CANVAS_W && !ImGui.mouse_captured?
-    if Input.mouse_pressed?(:left)
-      system.move_to(mx, my)
-    end
-    if Input.mouse_push?(:right)
-      system.burst(nil, x: mx, y: my)
-    end
+  if mx < CANVAS_W && !UI.mouse_captured?
+    system.move_to(mx, my) if Input.mouse_pressed?(:left)
+    system.burst(nil, x: mx, y: my) if Input.mouse_push?(:right)
   end
   system.burst if Input.key_push?(:space)
 
-  # -------------------------------------------------------------------
   # 3. GPU パーティクル更新 & 描画
-  # -------------------------------------------------------------------
   system.update(dt)
   system.draw
 
-  selected_layer = [[selected_layer, 0].max, system.emitters.length - 1].min
-  active_em = system.emitters[selected_layer]
-
+  active_em = current_em.call
   draw_emitter_gizmo(active_em) if show_gizmo && active_em
 
-  # -------------------------------------------------------------------
   # 4. キャンバス上部ステータスオーバーレイ
-  # -------------------------------------------------------------------
-  Window.draw_rect(16.0, 12.0, 780.0, 58.0, radius: 8.0, color: Color.new(12, 16, 26, 210), border_width: 1.0, border_color: Color.new(60, 90, 140, 150), z: 50.0)
-  Window.draw_text(28.0, 18.0, "Zenoo GPU Particle Studio (InstanceBuffer Stateless Engine)", size: 19, color: Color::WHITE, z: 51.0)
+  Window.draw_rect(16.0, 12.0, 780.0, 58.0, radius: 8.0, color: [12, 16, 26, 210], border_width: 1.0, border_color: [60, 90, 140, 150], z: 50.0)
+  Window.draw_text(28.0, 18.0, "Zenoo GPU Particle Studio (InstanceBuffer Stateless Engine)", size: 19, color: :white, z: 51.0)
   info_str = "FPS: #{Window.fps.round(1)}  |  Layers (DrawCalls): #{system.emitters.length}  |  Active Particles: #{system.alive_count} / #{system.max_particles}  |  [Drag] Move  [RightClick / Space] Burst"
-  Window.draw_text(28.0, 44.0, info_str, size: 13, color: Color.new(130, 220, 255), z: 51.0)
+  Window.draw_text(28.0, 44.0, info_str, size: 13, color: [130, 220, 255], z: 51.0)
 
-  # -------------------------------------------------------------------
-  # 5. 右側 ImGui コントロールパネル
-  # -------------------------------------------------------------------
-  ImGui.window("GPU Particle Inspector", x: 820, y: 10, w: 450, h: 700, resizable: false, collapsible: false) do
-    # --- レイヤー管理バー ---
-    ImGui.row(cols: 4, spacing: 4) do
-      system.emitters.each_with_index do |em, idx|
-        if ImGui.button("L#{idx + 1}:#{em.shape}", h: 28.0, active: (selected_layer == idx), id: "layer_sel_#{idx}")
-          selected_layer = idx
-        end
-      end
-    end
-    ImGui.spacer(2)
-    ImGui.row(cols: 3, spacing: 6) do
-      if ImGui.button("+ Add Layer", h: 28.0) && system.emitters.length < 4
-        new_em = system.add_emitter(max_particles: 2000)
-        new_em.configure(**active_em.to_h) if active_em
-        selected_layer = system.emitters.length - 1
-      end
-      if ImGui.button("Duplicate", h: 28.0) && system.emitters.length < 4 && active_em
-        new_em = system.add_emitter(max_particles: active_em.max_particles)
-        new_em.configure(**active_em.to_h)
-        selected_layer = system.emitters.length - 1
-      end
-      if ImGui.button("- Remove", h: 28.0) && system.emitters.length > 1
-        system.remove_emitter(selected_layer)
-        selected_layer = [selected_layer - 1, 0].max
-      end
-    end
-
-    selected_layer = [[selected_layer, 0].max, system.emitters.length - 1].min
-    em = system.emitters[selected_layer]
-
-    ImGui.spacer(4)
-    tab_index = ImGui.tabs(["Presets", "Spawn", "Physics", "Visuals", "Export"], tab_index, h: 32.0)
-    ImGui.spacer(4)
-
-    ImGui.scroll_view("particle_inspector_scroll", h: 555.0) do
-      case tab_index
-      when 0 # Presets & Global Controls
-        ImGui.label("=== Multi-Layer Rich Presets ===", size: 15, color: Color.new(255, 205, 80))
-        ImGui.spacer(4)
-
-        ImGui.row(cols: 2, spacing: 6) do
-          if ImGui.button("🔥 Campfire (炎+煙+火花)")
-            system.apply_preset(:fire)
-            selected_layer = 1
-          end
-          if ImGui.button("💥 Explosion (4層大爆発)")
-            system.apply_preset(:explosion)
-            selected_layer = 1
-          end
-        end
-        ImGui.spacer(4)
-        ImGui.row(cols: 2, spacing: 6) do
-          if ImGui.button("🌀 Magic Galaxy (銀河渦)")
-            system.apply_preset(:magic_galaxy)
-            selected_layer = 0
-          end
-          if ImGui.button("⚡ Charge Aura (集束溜め)")
-            system.apply_preset(:charge_aura)
-            selected_layer = 0
-          end
-        end
-        ImGui.spacer(4)
-        ImGui.row(cols: 2, spacing: 6) do
-          if ImGui.button("✨ Welding Sparks (火花)")
-            system.apply_preset(:sparks)
-            selected_layer = 0
-          end
-          if ImGui.button("❄️ Blizzard (吹雪ボックス)")
-            system.apply_preset(:blizzard)
-            selected_layer = 0
-          end
-        end
-        ImGui.spacer(4)
-        ImGui.row(cols: 2, spacing: 6) do
-          if ImGui.button("🌟 Star Fountain (星噴水)")
-            system.apply_preset(:star_fountain)
-            selected_layer = 0
-          end
-          if ImGui.button("💠 Cyber Portal (渦ポータル)")
-            system.apply_preset(:cyber_portal)
-            selected_layer = 0
-          end
-        end
-
-        ImGui.spacer(8)
-        ImGui.divider
-        ImGui.label("=== Playback & Trigger ===", size: 15, color: Color.new(100, 220, 255))
-        ImGui.row(cols: 2, spacing: 6) do
-          system.burst if ImGui.button("💥 BURST ALL! (Space)")
-          system.clear if ImGui.button("Clear All Particles")
-        end
-
-        ImGui.spacer(4)
-        em.emitting    = ImGui.checkbox("Layer Emitting (連続放出)", em.emitting, id: "chk_emit")
-        em.local_space = ImGui.checkbox("Local Space (エミッター移動に全粒子が追従)", em.local_space, id: "chk_local")
-        if ImGui.checkbox("GPU Infinite Loop Mode (CPU転送完全ゼロ)", em.loop_mode, id: "chk_loop") != em.loop_mode
-          em.loop_mode = !em.loop_mode
-          em.fill_loop_pool!(em.max_particles) if em.loop_mode
-        end
-        show_gizmo = ImGui.checkbox("Show Emitter Gizmo (放出範囲ガイド表示)", show_gizmo, id: "chk_gizmo")
-
-        ImGui.spacer(6)
-        ImGui.divider
-        ImGui.label("=== Background Theme ===", size: 15, color: Color.new(255, 205, 80))
-        ImGui.row(cols: 3, spacing: 4) do
-          bg_mode = 0 if ImGui.radio("Navy", bg_mode == 0, id: "bg_0")
-          bg_mode = 1 if ImGui.radio("Black", bg_mode == 1, id: "bg_1")
-          bg_mode = 2 if ImGui.radio("Slate", bg_mode == 2, id: "bg_2")
-        end
-
-      when 1 # Spawn & Timing
-        ImGui.label("=== Emission Rate & Lifetime ===", size: 15, color: Color.new(255, 205, 80))
-        em.emission_rate = ImGui.slider("Emit Rate (p/s)", em.emission_rate, 0.0, 2000.0, step: 5.0)
-        em.burst_count   = ImGui.slider("Burst Count", em.burst_count, 1.0, 1000.0, step: 1.0, format: "%d").to_i
-        em.lifetime      = ImGui.slider("Lifetime (s)", em.lifetime, 0.1, 6.0, step: 0.05)
-        em.lifetime_var  = ImGui.slider("Lifetime Var (s)", em.lifetime_var, 0.0, 2.5, step: 0.05)
-
-        ImGui.spacer(6)
-        ImGui.divider
-        ImGui.label("=== Spawn Shape (放出領域) ===", size: 15, color: Color.new(100, 220, 255))
-        SPAWN_LABELS.each_with_index do |lbl, idx|
-          sp_sym = SPAWN_SHAPE_LIST[idx]
-          if ImGui.radio(lbl, em.spawn_shape == sp_sym, id: "sp_shape_#{idx}")
-            em.spawn_shape = sp_sym
-          end
-        end
-
-        case em.spawn_shape
-        when :circle, :ring
-          em.spawn_radius       = ImGui.slider("Outer Radius", em.spawn_radius, 1.0, 350.0, step: 1.0)
-          em.spawn_inner_radius = ImGui.slider("Inner Radius / Thick", em.spawn_inner_radius, 0.0, 300.0, step: 1.0)
-          em.radial_direction   = ImGui.checkbox("Radial Direction (中心から放射/集束)", em.radial_direction)
-        when :box
-          em.spawn_width      = ImGui.slider("Box Width", em.spawn_width, 4.0, 800.0, step: 4.0)
-          em.spawn_height     = ImGui.slider("Box Height", em.spawn_height, 4.0, 600.0, step: 4.0)
-          em.radial_direction = ImGui.checkbox("Radial Direction (中心から外向き)", em.radial_direction)
-        when :line
-          em.spawn_width      = ImGui.slider("Line Length", em.spawn_width, 10.0, 800.0, step: 5.0)
-        end
-
-      when 2 # Motion & Physics (GPU Real-time Uniforms!)
-        ImGui.label("=== Initial Velocity ===", size: 15, color: Color.new(255, 205, 80))
-        em.speed     = ImGui.slider("Speed (負で中心へ集束)", em.speed, -500.0, 800.0, step: 5.0)
-        em.speed_var = ImGui.slider("Speed Variance", em.speed_var, 0.0, 400.0, step: 5.0)
-        em.angle     = ImGui.slider("Angle (deg)", em.angle, 0.0, 360.0, step: 1.0)
-        em.spread    = ImGui.slider("Spread (deg)", em.spread, 0.0, 360.0, step: 1.0)
-
-        ImGui.spacer(6)
-        ImGui.divider
-        ImGui.label("=== GPU Forces (飛翔中の粒子にも即時反映!) ===", size: 15, color: Color.new(100, 220, 255))
-        em.gravity_x        = ImGui.slider("Gravity X (風)", em.gravity_x, -600.0, 600.0, step: 5.0)
-        em.gravity_y        = ImGui.slider("Gravity Y (重力/浮力)", em.gravity_y, -800.0, 800.0, step: 5.0)
-        em.drag             = ImGui.slider("Air Drag (空気抵抗)", em.drag, 0.0, 8.0, step: 0.05)
-        em.radial_accel     = ImGui.slider("Radial Accel (斥力/引力)", em.radial_accel, -400.0, 400.0, step: 5.0)
-        em.tangential_accel = ImGui.slider("Vortex Swirl (渦回転)", em.tangential_accel, -400.0, 400.0, step: 5.0)
-
-        ImGui.spacer(6)
-        ImGui.divider
-        ImGui.label("=== Turbulence & Orientation ===", size: 15, color: Color.new(255, 205, 80))
-        em.wobble_amp        = ImGui.slider("Wobble Amp (揺らぎ幅)", em.wobble_amp, 0.0, 80.0, step: 1.0)
-        em.wobble_freq       = ImGui.slider("Wobble Freq (周波数)", em.wobble_freq, 0.5, 15.0, step: 0.2)
-        em.spin              = ImGui.slider("Spin Speed (deg/s)", em.spin, -720.0, 720.0, step: 10.0)
-        em.spin_var          = ImGui.slider("Spin Variance", em.spin_var, 0.0, 720.0, step: 10.0)
-        em.align_to_velocity = ImGui.checkbox("Align to Velocity (進行方向を向く)", em.align_to_velocity)
-        em.stretch           = ImGui.slider("Velocity Stretch (伸縮)", em.stretch, 1.0, 6.0, step: 0.1)
-
-      when 3 # Visuals, Size Curve & 3-Point Color
-        ImGui.label("=== Procedural SDF Shape & Blend ===", size: 15, color: Color.new(255, 205, 80))
-        ImGui.row(cols: 2, spacing: 4) do
-          em.shape = :circle  if ImGui.radio("Circle (Glow)", em.shape == :circle,  id: "sh_0")
-          em.shape = :box     if ImGui.radio("Box (Square)",  em.shape == :box,     id: "sh_1")
-        end
-        ImGui.row(cols: 2, spacing: 4) do
-          em.shape = :spark   if ImGui.radio("Spark (Line)",  em.shape == :spark,   id: "sh_2")
-          em.shape = :ring    if ImGui.radio("Ring (Wave)",   em.shape == :ring,    id: "sh_3")
-        end
-        ImGui.row(cols: 2, spacing: 4) do
-          em.shape = :star    if ImGui.radio("Star (Sparkle)", em.shape == :star,    id: "sh_4")
-          em.shape = :diamond if ImGui.radio("Diamond",        em.shape == :diamond, id: "sh_5")
-        end
-        em.shape = :soft if ImGui.radio("Soft Smoke (Gaussian)", em.shape == :soft, id: "sh_6")
-
-        if em.shape == :ring
-          em.ring_thickness = ImGui.slider("Ring Thickness", em.ring_thickness, 0.04, 0.6, step: 0.01)
-        end
-
-        ImGui.spacer(4)
-        ImGui.row(cols: 3, spacing: 4) do
-          em.blend = :add      if ImGui.radio("Add",      em.blend == :add,      id: "bl_add")
-          em.blend = :alpha    if ImGui.radio("Alpha",    em.blend == :alpha,    id: "bl_alp")
-          em.blend = :multiply if ImGui.radio("Multiply", em.blend == :multiply, id: "bl_mul")
-        end
-
-        ImGui.spacer(6)
-        ImGui.divider
-        ImGui.label("=== Size & Easing Curve ===", size: 15, color: Color.new(100, 220, 255))
-        em.start_size = ImGui.slider("Start Size", em.start_size, 1.0, 250.0, step: 1.0)
-        em.end_size   = ImGui.slider("End Size", em.end_size, 0.0, 350.0, step: 1.0)
-        em.size_var   = ImGui.slider("Size Variance", em.size_var, 0.0, 0.9, step: 0.05)
-
-        ImGui.row(cols: 2, spacing: 4) do
-          em.size_curve = :linear   if ImGui.radio("Linear",        em.size_curve == :linear,   id: "cv_0")
-          em.size_curve = :sine     if ImGui.radio("Sine (山なり)", em.size_curve == :sine,     id: "cv_1")
-        end
-        ImGui.row(cols: 2, spacing: 4) do
-          em.size_curve = :ease_out if ImGui.radio("EaseOut",       em.size_curve == :ease_out, id: "cv_2")
-          em.size_curve = :ease_in  if ImGui.radio("EaseIn",        em.size_curve == :ease_in,  id: "cv_3")
-        end
-
-        ImGui.spacer(6)
-        ImGui.divider
-        ImGui.label("=== 3-Point Color Gradient & Fade ===", size: 15, color: Color.new(255, 205, 80))
-        em.fade_in       = ImGui.slider("Alpha Fade-In Ratio", em.fade_in, 0.0, 0.5, step: 0.02)
-        em.fade_out      = ImGui.slider("Alpha Fade-Out Ratio", em.fade_out, 0.0, 0.8, step: 0.02)
-        em.color_mid_pos = ImGui.slider("Mid Color Timing", em.color_mid_pos, 0.1, 0.9, step: 0.05)
-        em.color_var     = ImGui.slider("Brightness Variance", em.color_var, 0.0, 0.4, step: 0.02)
-
-        sc = em.to_h[:start_color]
-        ImGui.label("Start Color (RGBA)", size: 13, color: Color.new(sc[0], sc[1], sc[2], 255))
-        sr = ImGui.slider("Start R", sc[0], 0, 255, step: 1, format: "%d").to_i
-        sg = ImGui.slider("Start G", sc[1], 0, 255, step: 1, format: "%d").to_i
-        sb = ImGui.slider("Start B", sc[2], 0, 255, step: 1, format: "%d").to_i
-        sa = ImGui.slider("Start A", sc[3], 0, 255, step: 1, format: "%d").to_i
-        em.start_color = [sr, sg, sb, sa]
-
-        mc = em.to_h[:mid_color]
-        ImGui.label("Mid Color (RGBA)", size: 13, color: Color.new(mc[0], mc[1], mc[2], 255))
-        mr = ImGui.slider("Mid R", mc[0], 0, 255, step: 1, format: "%d").to_i
-        mg = ImGui.slider("Mid G", mc[1], 0, 255, step: 1, format: "%d").to_i
-        mb = ImGui.slider("Mid B", mc[2], 0, 255, step: 1, format: "%d").to_i
-        ma = ImGui.slider("Mid A", mc[3], 0, 255, step: 1, format: "%d").to_i
-        em.mid_color = [mr, mg, mb, ma]
-
-        ec = em.to_h[:end_color]
-        ImGui.label("End Color (RGBA)", size: 13, color: Color.new(ec[0], ec[1], ec[2], 255))
-        er = ImGui.slider("End R", ec[0], 0, 255, step: 1, format: "%d").to_i
-        eg = ImGui.slider("End G", ec[1], 0, 255, step: 1, format: "%d").to_i
-        eb = ImGui.slider("End B", ec[2], 0, 255, step: 1, format: "%d").to_i
-        ea = ImGui.slider("End A", ec[3], 0, 255, step: 1, format: "%d").to_i
-        em.end_color = [er, eg, eb, ea]
-
-      when 4 # Code Export
-        ImGui.label("=== Ruby Code Export ===", size: 15, color: Color.new(255, 205, 80))
-        code_text = generate_ruby_code(system)
-        if ImGui.button(copy_feedback_timer > 0.0 ? "✅ Copied to Clipboard!" : "📋 Copy Ruby Code to Clipboard")
-          Input.clipboard = code_text
-          copy_feedback_timer = 2.0
-        end
-        ImGui.spacer(6)
-        code_text.each_line do |line|
-          col = line.strip.start_with?("#") ? Color.new(120, 210, 255) : Color.new(220, 230, 240)
-          ImGui.label(line.chomp, size: 12, color: col)
-        end
-      end
-    end
-  end
+  # 5. 右側 UI パネル
+  stage.update
+  stage.draw
 
   frame_count += 1
   break if test_max > 0 && frame_count >= test_max
 end
-
-puts "GPU Particle Editor test completed (#{frame_count} frames)."

@@ -2,185 +2,106 @@
 
 require_relative 'ui/theme'
 require_relative 'ui/widget'
-require_relative 'ui/widgets'
 require_relative 'ui/containers'
+require_relative 'ui/widgets'
 require_relative 'ui/builder'
 
 module Zenoo
-  # Sprite ベースの保持モード (Retained Mode) UI システム
+  # Sprite ベースの保持モード UI システム
   module UI
     Widget.include(Builder)
-    @theme             = Theme.new
-    @active_widget     = nil
-    @focused_widget    = nil
-    @hovered_widget    = nil
-    @open_popup_widget = nil
-    @mouse_captured    = false
-    @prev_captured     = false
-    @requested_cursor  = nil
-    @blink_time        = 0.0
-    @hit_test_point    = nil
+
+    @theme            = Theme.new(:compact)
+    @frame            = 0
+    @point_collider   = Collision::Point.new(anchor: :center, pivot: :center)
+    @mouse_captured   = false
+    @prev_captured    = false
+    @pointer_claimed  = false
+    @requested_cursor = nil
+    @cursor_dirty     = false
+    @focused_stage    = nil
 
     class << self
-      attr_accessor :active_widget, :hovered_widget, :open_popup_widget, :blink_time
-      attr_reader :focused_widget, :requested_cursor
+      attr_accessor :frame
 
-      # 点判定用の再利用 Point コライダー (GC 圧迫防止)
-      def hit_test_point
-        @hit_test_point ||= Collision::Point.new(0.0, 0.0)
+      # 当たり判定用の再利用 Point コライダーを返す
+      def point_collider(px, py)
+        @point_collider.x = px.to_f
+        @point_collider.y = py.to_f
+        @point_collider
       end
 
-      # テーマの取得・設定・上書きを行う
-      #
-      # - `preset` (`Symbol | nil`): 適用するテーマプリセット名（`:modern_dark`, `:tool_dark`, `:cyber`, または `Theme.register` で登録した名前。省略時は現在のテーマを変更しない）
-      # - `overrides` (`Hash`): 上書きするテーマ属性（キーワード引数で `Theme#configure` と同じ属性を指定可能）
-      # - 戻り値: `Theme`（現在適用されているテーマオブジェクト）
+      # グローバルテーマを取得・設定する
       def theme(preset = nil, **overrides)
-        if preset.nil? && overrides.empty?
-          @theme
+        if preset.is_a?(Theme)
+          @theme = preset
+          overrides.each { |k, v| @theme.public_send(:"#{k}=", v) } unless overrides.empty?
         elsif preset.is_a?(Symbol)
           @theme = Theme.new(preset, **overrides)
-        elsif preset.is_a?(Theme)
-          @theme = preset
-          @theme.configure(**overrides) unless overrides.empty?
-          @theme
-        else
-          @theme.configure(**overrides)
+        elsif !overrides.empty?
+          overrides.each { |k, v| @theme.public_send(:"#{k}=", v) }
         end
+        @theme
       end
 
-      # テーマを直接設定する
-      #
-      # - `val` (`Symbol | Theme`): プリセット名のシンボルまたは `Theme` インスタンス
-      # - 戻り値: `Symbol | Theme`
       def theme=(val)
         @theme = val.is_a?(Symbol) ? Theme.new(val) : val
       end
 
-      # 現在フォーカスされているウィジェットを設定する
-      #
-      # - `w` (`Widget | nil`): フォーカスを与えるウィジェット（`nil` で解除）
-      # - 戻り値: `Widget | nil`
-      def focused_widget=(w)
-        return if @focused_widget.equal?(w)
-        old = @focused_widget
-        @focused_widget = w
-        @blink_time = 0.0
-        old.on_blur if old
-        if w
-          w.on_focus
-        else
-          Input.set_ime_position(-1, -1)
+      # 複数 Stage 間でポインタ消費状態をマーク・参照する
+      def claim_pointer!
+        @pointer_claimed = true
+        @mouse_captured  = true
+      end
+
+      def pointer_claimed?
+        @pointer_claimed
+      end
+
+      # UI が現在ポインタ入力を捕捉しているかを返す
+      def mouse_captured?
+        @mouse_captured || @prev_captured
+      end
+
+      # 複数 Stage 間でキーボードフォーカスを排他管理する
+      def notify_focus(stage, widget)
+        if widget
+          if @focused_stage && !@focused_stage.equal?(stage)
+            @focused_stage.set_focus(nil)
+          end
+          @focused_stage = stage
+        elsif @focused_stage.equal?(stage)
+          @focused_stage = nil
         end
       end
 
-      # 現在のウィジェットフォーカスを解除する
-      #
-      # - 戻り値: `nil`
-      def clear_focus
-        self.focused_widget = nil
+      def has_keyboard_focus?
+        !@focused_stage.nil? && !@focused_stage.focused_widget.nil?
       end
 
-      # このフレームで要求するマウスカーソル形状を設定する
-      #
-      # - `shape` (`Symbol`): カーソル形状（`:arrow`, `:hand`, `:ibeam`, `:resize_nwse` 等）
-      # - 戻り値: `Symbol`
+      # このフレームで希望するマウスカーソル形状を設定する
       def set_mouse_cursor(shape)
         @requested_cursor = shape
       end
 
-      # このフレームで UI がマウス入力を捕捉したことを記録する
-      #
-      # - 戻り値: `true`
-      def mark_mouse_captured!
-        @mouse_captured = true
-      end
-
-      # UI が現在マウス入力を捕捉しているかを返す
-      #
-      # - 戻り値: `Boolean`
-      def mouse_captured?
-        @mouse_captured || @prev_captured || !@active_widget.nil? || !@hovered_widget.nil?
-      end
-
-      # テキストボックス等のウィジェットがキーボードフォーカスを持っているかを返す
-      #
-      # - 戻り値: `Boolean`
-      def has_keyboard_focus?
-        !@focused_widget.nil?
-      end
-
-      # UI のフレーム開始処理を行う（`Window.loop` 内で毎フレーム自動呼び出し）
-      #
-      # - 戻り値: `nil`
+      # フレーム開始時の状態リセット（Window.loop 内から自動呼び出し）
       def begin_frame
-        @prev_captured = @mouse_captured || !@active_widget.nil? || !@hovered_widget.nil?
-        @mouse_captured = false
-        @hovered_widget = nil
+        @frame += 1
+        @prev_captured    = @mouse_captured
+        @mouse_captured   = false
+        @pointer_claimed  = false
         @requested_cursor = nil
-        @blink_time += Zenoo::Window.delta_time
-
-        if @active_widget && (!widget_tree_visible?(@active_widget) || !@active_widget.enabled)
-          @active_widget = nil
-        end
-
-        if @focused_widget && (!widget_tree_visible?(@focused_widget) || !@focused_widget.enabled)
-          self.focused_widget = nil
-        end
-
-        if @open_popup_widget && (!widget_tree_visible?(@open_popup_widget) || !@open_popup_widget.enabled)
-          pop = @open_popup_widget
-          @open_popup_widget = nil
-          pop.close_popup!
-        end
       end
 
-      # UI のフレーム終了処理（ポップアップ入力・カーソル適用等）を行う（`Window.loop` 内で自動呼び出し）
-      #
-      # - 戻り値: `nil`
+      # フレーム終了時のカーソル反映（Window.loop 内から自動呼び出し）
       def end_frame
-        # 開いているポップアップの最前面オーバーレイ描画
-        if (pop = @open_popup_widget)
-          if widget_tree_visible?(pop) && pop.enabled
-            pop.draw_popup_overlay
-          else
-            @open_popup_widget = nil
-            pop.close_popup!
-          end
+        if @requested_cursor
+          Zenoo::Window.cursor = @requested_cursor
+          @cursor_dirty = (@requested_cursor != :arrow)
+        elsif @cursor_dirty
+          Zenoo::Window.cursor = :arrow
+          @cursor_dirty = false
         end
-
-        # マウスボタンが離されたらドラッグ状態を解除（process_root_input が走ったフレームは処理済み）
-        if @active_widget && !@mouse_captured && !Input.mouse_pressed?(:left)
-          w = @active_widget
-          @active_widget = nil
-          w.on_pointer_up(Input.mouse_x.to_f, Input.mouse_y.to_f, false)
-        end
-      end
-
-      def widget_tree_visible?(w)
-        cur = w
-        while cur.is_a?(Widget)
-          return false if cur.vanished? || !cur.visible
-          return false if cur != w && cur.is_a?(UI::Window) && cur.collapsed
-          cur = cur.parent
-        end
-        true
-      end
-
-      # ウィジェットツリーまたは配列を一括更新する
-      #
-      # - `widgets` (`Widget | Array<Widget> | nil`): 更新対象のルートウィジェットまたは配列（省略時は何もしない）
-      # - 戻り値: `nil`
-      def update(widgets = nil)
-        Sprite.update(widgets)
-      end
-
-      # ウィジェットツリーまたは配列を一括描画する
-      #
-      # - `widgets` (`Widget | Array<Widget> | nil`): 描画対象のルートウィジェットまたは配列（省略時は何もしない）
-      # - 戻り値: `nil`
-      def draw(widgets = nil)
-        Sprite.draw(widgets)
       end
     end
   end

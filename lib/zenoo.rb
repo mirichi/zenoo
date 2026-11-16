@@ -29,7 +29,6 @@ require_relative 'zenoo/virtual_pad'
 require_relative 'zenoo/browser'
 require_relative 'zenoo/window'
 require_relative 'zenoo/canvas'
-require_relative 'zenoo/imgui'
 require_relative 'zenoo/sound'
 require_relative 'zenoo/sound_effect'
 require_relative 'zenoo/easing'
@@ -63,7 +62,6 @@ ParticleSystem  = Zenoo::ParticleSystem
 Shader        = Zenoo::Shader
 Color         = Zenoo::Color
 Font          = Zenoo::Font
-ImGui         = Zenoo::ImGui
 UI            = Zenoo::UI
 Audio         = Zenoo::Audio
 Sound         = Zenoo::Sound

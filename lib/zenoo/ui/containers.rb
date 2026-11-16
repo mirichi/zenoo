@@ -2,196 +2,229 @@
 
 module Zenoo
   module UI
-    # ==========================================================================
-    # Stage (ルートキャンバス: 画面全体を覆う透明な親コンテナ)
-    # ==========================================================================
-    # 画面全体をルートとする全画面 UI コンテナ（常にウィンドウサイズへ追従する）
+    # UI ツリーのルートとなる管理ステージ（入力・ホバー・フォーカス・ポップアップを統括）
     class Stage < Widget
-      # 全画面ルートステージを初期化する
-      #
-      # - `width` (`Float | nil`): 幅（省略時は `Zenoo::Window.width`）
-      # - `height` (`Float | nil`): 高さ（省略時は `Zenoo::Window.height`）
-      # - `theme` (`Theme | Symbol | nil`): ステージ全体に適用するテーマ
-      # - 戻り値: `Stage`
+      attr_reader :hovered_widget, :active_widget, :focused_widget, :popup_widget
+
       def initialize(width: nil, height: nil, theme: nil)
-        @auto_width  = width.nil?
-        @auto_height = height.nil?
-        w = @auto_width ? 1280.0 : width.to_f
-        h = @auto_height ? 720.0 : height.to_f
-        super(0.0, 0.0, width: w, height: h, anchor: :top_left, interactive: false, theme: theme)
+        @auto_w = width.nil?
+        @auto_h = height.nil?
+        super(0.0, 0.0, width: width || Zenoo::Window.width, height: height || Zenoo::Window.height, interactive: false, theme: theme)
+        @hovered_widget = nil
+        @active_widget  = nil
+        @focused_widget = nil
+        @popup_widget   = nil
       end
 
-      def update_self
-        # 画面サイズに自動追従（サイズ未指定軸のみ）
-        win_w = Zenoo::Window.width.to_f
-        win_h = Zenoo::Window.height.to_f
-        self.width  = win_w if @auto_width && win_w > 0.0 && width != win_w
-        self.height = win_h if @auto_height && win_h > 0.0 && height != win_h
+      def hovered?(w)    = @hovered_widget.equal?(w)
+      def focused?(w)    = @focused_widget.equal?(w)
+      def popup_open?(w) = @popup_widget.equal?(w)
+
+      # このステージがいずれかのポインタ状態（ドラッグ/ホバー/ポップアップ）を保持しているか
+      def capturing_pointer?
+        !@active_widget.nil? || !@hovered_widget.nil? || !@popup_widget.nil?
       end
 
-      def draw_self
-        # ステージ自身は背景を描画しない
+      def set_focus(w)
+        return if @focused_widget.equal?(w)
+        @focused_widget&.on_blur
+        @focused_widget = w
+        UI.notify_focus(self, @focused_widget)
+        @focused_widget&.on_focus
+      end
+
+      def open_popup(w)
+        return if @popup_widget.equal?(w)
+        if @popup_widget
+          old = @popup_widget
+          @popup_widget = nil
+          old.on_popup_close
+        end
+        @popup_widget = w
+        w&.on_popup_open
+      end
+
+      def close_popup(w = nil)
+        return unless @popup_widget
+        return if w && !@popup_widget.equal?(w)
+        old = @popup_widget
+        @popup_widget = nil
+        old.on_popup_close
+      end
+
+      def update
+        return if @vanished || !@visible
+
+        self.width  = Zenoo::Window.width.to_f  if @auto_w && Zenoo::Window.width > 0
+        self.height = Zenoo::Window.height.to_f if @auto_h && Zenoo::Window.height > 0
+
+        if @popup_widget && (!@popup_widget.tree_active? || !@popup_widget.stage.equal?(self) || Input.key_push?(:escape))
+          close_popup
+        end
+
+        mx = Input.mouse_x.to_f
+        my = Input.mouse_y.to_f
+        down  = Input.mouse_pressed?(:left)
+        push  = Input.mouse_push?(:left)
+        rel   = Input.mouse_release?(:left)
+        wheel = Input.mouse_wheel_y.to_f
+
+        if UI.pointer_claimed?
+          if @active_widget
+            act = @active_widget
+            @active_widget = nil
+            act.on_pointer_up(mx, my, false)
+          end
+          update_hover(nil)
+          close_popup if push
+        else
+          process_pointer(mx, my, down, push, rel, wheel)
+        end
+
+        if @focused_widget && (!@focused_widget.tree_active? || !@focused_widget.stage.equal?(self))
+          set_focus(nil)
+        end
+        @focused_widget&.on_focused_update
+
+        super
+      end
+
+      def draw
+        return if @vanished || !@visible
+        super
+        if (pop = @popup_widget) && pop.tree_active?
+          pop.draw_popup
+        end
+      end
+
+      private
+
+      def process_pointer(mx, my, down, push, rel, wheel)
+        pop_over = false
+        claimed  = false
+
+        if @active_widget
+          claimed = true
+          Input.consume_mouse!
+          inside = @active_widget.hit_test_self?(mx, my)
+          update_hover(inside ? @active_widget : nil)
+          if rel || !down
+            act = @active_widget
+            @active_widget = nil
+            act.on_pointer_up(mx, my, inside)
+          else
+            @active_widget.on_pointer_drag(mx, my)
+          end
+        else
+          pop = @popup_widget
+          pop_consumed = false
+          if pop
+            if pop.hit_test_popup?(mx, my)
+              pop_over = true
+              pop_consumed = true
+              claimed = true
+              update_hover(nil)
+              pop.on_popup_move(mx, my)
+              pop.on_popup_wheel(wheel) if wheel != 0.0
+              if push
+                Input.consume_mouse!
+                pop.on_popup_down(mx, my)
+              end
+            else
+              pop.on_popup_move(mx, my)
+              if push
+                clicked_owner = pop.hit_test_self?(mx, my)
+                close_popup
+                if clicked_owner
+                  Input.consume_mouse!
+                  pop_consumed = true
+                  claimed = true
+                end
+              end
+            end
+          end
+
+          unless pop_consumed
+            hit = find_hit(mx, my)
+            update_hover(hit)
+
+            if hit
+              claimed = true
+              hit.on_pointer_move(mx, my)
+              if wheel != 0.0
+                cur = hit
+                while cur && cur.is_a?(Widget)
+                  break if cur.on_wheel(wheel)
+                  cur = cur.parent
+                end
+              end
+
+              if push
+                Input.consume_mouse!
+                bring_ancestor_to_front(hit)
+                set_focus(hit.can_focus? ? hit : nil)
+                @active_widget = hit
+                hit.on_pointer_down(mx, my)
+                if rel
+                  @active_widget = nil
+                  hit.on_pointer_up(mx, my, true)
+                end
+              end
+            elsif push
+              set_focus(nil)
+            end
+          end
+        end
+
+        return unless claimed
+        UI.claim_pointer!
+        cur_shape = if pop_over && @popup_widget
+                      @popup_widget.popup_cursor_shape
+                    elsif @hovered_widget
+                      @hovered_widget.cursor_shape
+                    else
+                      :arrow
+                    end
+        UI.set_mouse_cursor(cur_shape)
+      end
+
+      def update_hover(new_hit)
+        return if @hovered_widget.equal?(new_hit)
+        @hovered_widget&.on_pointer_leave
+        @hovered_widget = new_hit
+        @hovered_widget&.on_pointer_enter
+      end
+
+      def bring_ancestor_to_front(w)
+        cur = w
+        while cur && cur.is_a?(Widget)
+          if cur.bring_to_front_on_click? && cur.parent.is_a?(Widget)
+            cur.parent.bring_child_to_front!(cur)
+          end
+          cur = cur.parent
+        end
       end
     end
 
-    # ==========================================================================
-    # Box (軽量 Flexbox レイアウトコンテナ)
-    # - direction: :column (縦並び) / :row (横並び)
-    # - padding: 内側余白 (Float または [x, y] または [left, top, right, bottom])
-    # - gap: 子要素間のスペース
-    # - align: 交差軸の揃え (:start, :center, :end, :stretch)
-    # - justify: 主軸の揃え (:start, :center, :end, :space_between)
-    # ==========================================================================
-    # 縦・横方向の Flexbox 風自動レイアウトおよびクリッピングに対応した汎用コンテナ
+    # 縦/横の自動レイアウトコンテナ
     class Box < Widget
-      attr_reader :direction, :gap, :align, :justify, :pad_left, :pad_top, :pad_right, :pad_bottom, :header_height, :explicit_width, :explicit_height
-      attr_accessor :auto_layout
+      attr_reader :direction, :align
 
-      # 汎用レイアウトコンテナを初期化する
-      #
-      # - `x` (`Float`): X座標（デフォルト `0.0`）
-      # - `y` (`Float`): Y座標（デフォルト `0.0`）
-      # - `width` (`Float | nil`): 幅（省略時は `200.0`、`explicit_width` が `false` になる）
-      # - `height` (`Float | nil`): 高さ（省略時は `200.0`、`explicit_height` が `false` になる）
-      # - `direction` (`Symbol`): 子要素の並び方向（`:column` または `:row`、デフォルト `:column`）
-      # - `padding` (`Float | Array<Float>`): 内側余白（デフォルト `0.0`）
-      # - `gap` (`Float`): 子要素間の間隔（デフォルト `8.0`）
-      # - `align` (`Symbol`): 交差軸方向の子要素整列（`:start`, `:center`, `:end`, `:stretch`）
-      # - `justify` (`Symbol`): 主軸方向の子要素配置（`:start`, `:center`, `:end`, `:space_between`）
-      # - `auto_layout` (`Boolean`): 自動レイアウトを有効にするか（デフォルト `true`）
-      # - `clip` (`Boolean`): 子要素をコンテナ領域でクリッピングするか（デフォルト `false`）
-      # - `interactive` (`Boolean`): 当たり判定の対象とするか（デフォルト `false`）
-      # - `parent` (`Widget | Sprite | nil`): 親ウィジェット
-      # - `opts` (`Hash`): `Widget#initialize` に渡す追加オプション
-      # - `&block`: 子ウィジェット構築用ブロック（`self` を渡す）
-      # - 戻り値: `Box`
-      def initialize(x = 0.0, y = 0.0, width: nil, height: nil,
-                     direction: :column, padding: 0.0, gap: 8.0,
-                     align: :stretch, justify: :start,
-                     auto_layout: true, clip: false,
-                     interactive: false, parent: nil, **opts, &block)
-        @direction     = direction
-        @gap           = gap.to_f
-        @align         = align
-        @justify       = justify
-        @auto_layout   = auto_layout
-        @header_height = 0.0
-        @layout_dirty  = true
-        @explicit_width  = !width.nil?
-        @explicit_height = !height.nil?
-        parse_padding(padding)
-
-        w = width ? width.to_f : 200.0
-        h = height ? height.to_f : 200.0
-        super(x, y, width: w, height: h, interactive: interactive, parent: parent, **opts)
-        @clip_children = clip
-        update_header_height
-
+      def initialize(x = 0.0, y = 0.0, width: 200.0, height: 200.0,
+                     direction: :column, padding: nil, gap: nil, align: :stretch,
+                     clip_children: false, interactive: false, **opts, &block)
+        @direction    = direction
+        @explicit_gap = gap ? gap.to_f : nil
+        @explicit_pad = padding ? padding.to_f : nil
+        @align        = align
+        @layout_dirty = true
+        super(x, y, width: width, height: height, clip_children: clip_children, interactive: interactive, **opts)
         yield(self) if block
       end
 
-      def update_header_height
-      end
+      def gap     = @explicit_gap || theme.gap
+      def padding = @explicit_pad || theme.padding
 
-      # 子要素の合計高さ（パディング・ギャップ込み）を算出する
-      #
-      # - 戻り値: `Float`
-      def content_height
-        tot = @pad_top + @pad_bottom + @header_height
-        ch_list = @children
-        return tot unless ch_list
-
-        vis_count = 0
-        h_sum = 0.0
-        i = 0
-        len = ch_list.length
-        while i < len
-          c = ch_list[i]
-          if c.is_a?(Widget) && c.visible && !c.vanished?
-            vis_count += 1
-            h_sum = @direction == :column ? (h_sum + c.height) : [h_sum, c.height].max
-          end
-          i += 1
-        end
-        tot + h_sum + ((@direction == :column && vis_count > 1) ? @gap * (vis_count - 1) : 0.0)
-      end
-
-      # 子要素の合計幅（パディング・ギャップ込み）を算出する
-      #
-      # - 戻り値: `Float`
-      def content_width
-        tot = @pad_left + @pad_right
-        ch_list = @children
-        return tot unless ch_list
-
-        vis_count = 0
-        w_sum = 0.0
-        i = 0
-        len = ch_list.length
-        while i < len
-          c = ch_list[i]
-          if c.is_a?(Widget) && c.visible && !c.vanished?
-            vis_count += 1
-            w_sum = @direction == :row ? (w_sum + c.width) : [w_sum, c.width].max
-          end
-          i += 1
-        end
-        tot + w_sum + ((@direction == :row && vis_count > 1) ? @gap * (vis_count - 1) : 0.0)
-      end
-
-      # コンテナ内側の余白（パディング）を設定する
-      #
-      # - `val` (`Float | Array<Float>`): 全方向共通値、`[上下, 左右]`、または `[上, 右, 下, 左]`
-      # - 戻り値: `true`
-      def padding=(val)
-        parse_padding(val)
-        mark_layout_dirty!
-      end
-
-      # 子要素の並び方向を設定する
-      #
-      # - `val` (`Symbol`): `:column`（縦並び）または `:row`（横並び）
-      # - 戻り値: `true | nil`
-      def direction=(val)
-        return if @direction == val
-        @direction = val
-        mark_layout_dirty!
-      end
-
-      # 子要素間の間隔（ギャップ）を設定する
-      #
-      # - `val` (`Float`): ピクセル間隔
-      # - 戻り値: `true | nil`
-      def gap=(val)
-        vf = val.to_f
-        return if @gap == vf
-        @gap = vf
-        mark_layout_dirty!
-      end
-
-      # 交差軸方向の子要素整列方法を設定する
-      #
-      # - `val` (`Symbol`): `:start`, `:center`, `:end`, `:stretch` のいずれか
-      # - 戻り値: `true | nil`
-      def align=(val)
-        return if @align == val
-        @align = val
-        mark_layout_dirty!
-      end
-
-      # 主軸方向の子要素配置方法を設定する
-      #
-      # - `val` (`Symbol`): `:start`, `:center`, `:end`, `:space_between` のいずれか
-      # - 戻り値: `true | nil`
-      def justify=(val)
-        return if @justify == val
-        @justify = val
-        mark_layout_dirty!
-      end
-
-      # レイアウト再計算フラグを立てる（次フレームの更新／描画時に再配置される）
-      #
-      # - 戻り値: `true`
       def mark_layout_dirty!
         @layout_dirty = true
       end
@@ -208,1053 +241,374 @@ module Zenoo
         @layout_dirty = true if height != old_h
       end
 
-      def ensure_layout_updated
-        perform_layout if @auto_layout && @layout_dirty
+      def scroll_offset_y
+        0.0
       end
 
-      def update_layout_tree
-        ensure_layout_updated
+      def top_padding    = padding
+      def right_padding  = padding
+      def bottom_padding = padding
+
+      def ensure_layout
+        perform_layout if @layout_dirty
+      end
+
+      def update
+        ensure_layout
         super
       end
 
-      # 子ウィジェットの自動レイアウト計算を即時に実行する
-      #
-      # - 戻り値: `Boolean`
+      def content_height
+        tp = top_padding
+        bp = bottom_padding
+        g  = gap
+        return tp + bp unless @children
+        sum = 0.0
+        count = 0
+        i = 0
+        while i < @children.length
+          c = @children[i]
+          if c.is_a?(Widget) && c.visible && !c.vanished?
+            count += 1
+            sum = (@direction == :column) ? (sum + c.height) : [sum, c.height].max
+          end
+          i += 1
+        end
+        tp + bp + sum + ((@direction == :column && count > 1) ? g * (count - 1) : 0.0)
+      end
+
       def perform_layout
         @layout_dirty = false
-        ch_list = @children
-        return unless ch_list && !ch_list.empty?
+        ch = @children
+        return unless ch && !ch.empty?
 
-        # レイアウト対象の可視・非消滅ウィジェットを収集
+        lp  = padding
+        rp  = right_padding
+        tp  = top_padding
+        bp  = bottom_padding
+        g   = gap
+        inner_w = [width - lp - rp, 0.0].max
+        inner_h = [height - tp - bp, 0.0].max
+        is_row = (@direction == :row)
+        main_avail  = is_row ? inner_w : inner_h
+        cross_avail = is_row ? inner_h : inner_w
+
         vis_count = 0
+        fixed_main = 0.0
+        total_flex = 0.0
         i = 0
-        len = ch_list.length
-        while i < len
-          c = ch_list[i]
+        while i < ch.length
+          c = ch[i]
           if c.is_a?(Widget) && c.visible && !c.vanished?
             vis_count += 1
+            if @align == :stretch
+              is_row ? (c.height = cross_avail) : (c.width = cross_avail)
+            end
+            if c.flex && c.flex > 0.0
+              total_flex += c.flex
+            else
+              fixed_main += is_row ? c.width : c.height
+            end
           end
           i += 1
         end
         return if vis_count == 0
 
-        inner_x = @pad_left
-        inner_y = @pad_top + @header_height
-        inner_w = [width - @pad_left - @pad_right, 0.0].max
-        inner_h = [height - @pad_top - @pad_bottom - @header_height, 0.0].max
+        gaps = vis_count > 1 ? g * (vis_count - 1) : 0.0
+        rem = [main_avail - fixed_main - gaps, 0.0].max
 
-        is_row = (@direction == :row)
-        main_avail  = is_row ? inner_w : inner_h
-        cross_avail = is_row ? inner_h : inner_w
-        total_gaps  = (vis_count > 1) ? (@gap * (vis_count - 1).to_f) : 0.0
+        cursor = (is_row ? lp : tp) - (is_row ? 0.0 : scroll_offset_y)
+        pax = @anchor_x * width
+        pay = @anchor_y * height
 
-        # 1. 固定サイズ合計と flex 合計を算出 + 交差軸の :stretch 適用
-        fixed_main = 0.0
-        total_flex = 0.0
         i = 0
-        while i < len
-          c = ch_list[i]
+        while i < ch.length
+          c = ch[i]
           if c.is_a?(Widget) && c.visible && !c.vanished?
-            c_align = c.align_self || @align
-            if c_align == :stretch
-              if is_row
-                c.height = cross_avail if c.height != cross_avail
-              else
-                c.width = cross_avail if c.width != cross_avail
-              end
+            if c.flex && c.flex > 0.0 && total_flex > 0.0
+              alloc = rem * (c.flex / total_flex)
+              is_row ? (c.width = alloc) : (c.height = alloc)
             end
 
-            if c.flex && c.flex > 0.0
-              total_flex += c.flex
-            else
-              fixed_main += (is_row ? c.width : c.height)
+            c_cross = is_row ? c.height : c.width
+            cross_pos = is_row ? tp : lp
+            if @align == :center
+              cross_pos += (cross_avail - c_cross) * 0.5
+            elsif @align == :end
+              cross_pos += (cross_avail - c_cross)
             end
+
+            ox = is_row ? cursor : cross_pos
+            oy = is_row ? cross_pos : cursor
+            c.x = ox - pax + c.anchor_x * c.width
+            c.y = oy - pay + c.anchor_y * c.height
+            c.ensure_layout
+
+            cursor += (is_row ? c.width : c.height) + g
           end
           i += 1
         end
 
-        rem_main = [main_avail - fixed_main - total_gaps, 0.0].max
-
-        # 2. flex 子要素の主軸サイズを確定
-        if total_flex > 0.0
-          i = 0
-          while i < len
-            c = ch_list[i]
-            if c.is_a?(Widget) && c.visible && !c.vanished? && c.flex && c.flex > 0.0
-              alloc = rem_main * (c.flex / total_flex)
-              if is_row
-                c.width = alloc
-              else
-                c.height = alloc
-              end
-            end
-            i += 1
-          end
-          rem_main = 0.0
-        end
-
-        # 3. justify (主軸の開始位置とギャップ)
-        cursor_main = is_row ? inner_x : inner_y
-        step_gap = @gap
-        if total_flex <= 0.0 && rem_main > 0.0
-          case @justify
-          when :center
-            cursor_main += rem_main * 0.5
-          when :end
-            cursor_main += rem_main
-          when :space_between
-            if vis_count > 1
-              step_gap = @gap + (rem_main / (vis_count - 1).to_f)
-            end
-          end
-        end
-
-        # 4. 各子要素のローカル座標 (x, y) を設定
-        # Sprite の親子変換式: lx = (p.anchor_x - p.pivot_x)*pw + child.x
-        # 親の左上からのオフセット ox, oy に対し、子の左上を合わせるには:
-        # child.x = ox - p.anchor_x * pw + child.anchor_x * cw
-        pw = width
-        ph = height
-        pax = @anchor_x * pw
-        pay = @anchor_y * ph
-
-        i = 0
-        while i < len
-          c = ch_list[i]
-          if c.is_a?(Widget) && c.visible && !c.vanished?
-            c_align = c.align_self || @align
-            if c.is_a?(Box) && c_align != :stretch
-              if is_row && !c.explicit_height
-                c.height = c.content_height
-              elsif !is_row && !c.explicit_width
-                c.width = c.content_width
-              end
-            end
-            cw = c.width
-            ch = c.height
-
-            cross_pos = is_row ? inner_y : inner_x
-            c_cross_size = is_row ? ch : cw
-            case c_align
-            when :center
-              cross_pos += (cross_avail - c_cross_size) * 0.5
-            when :end
-              cross_pos += (cross_avail - c_cross_size)
-            end
-
-            ox = is_row ? cursor_main : cross_pos
-            oy = is_row ? cross_pos : cursor_main
-
-            c.x = ox - pax + c.anchor_x * cw
-            c.y = oy - pay + c.anchor_y * ch
-
-            cursor_main += (is_row ? cw : ch) + step_gap
-          end
-          i += 1
-        end
-
-        # @layout_dirty が子のサイズ変更で再度立った場合はクリア
         @layout_dirty = false
-      end
-
-      private
-
-      def parse_padding(pad)
-        if pad.is_a?(Array)
-          if pad.length == 2
-            @pad_left = @pad_right = pad[0].to_f
-            @pad_top = @pad_bottom = pad[1].to_f
-          elsif pad.length >= 4
-            @pad_left   = pad[0].to_f
-            @pad_top    = pad[1].to_f
-            @pad_right  = pad[2].to_f
-            @pad_bottom = pad[3].to_f
-          else
-            @pad_left = @pad_top = @pad_right = @pad_bottom = (pad[0] || 0.0).to_f
-          end
-        else
-          v = pad ? pad.to_f : 0.0
-          @pad_left = @pad_top = @pad_right = @pad_bottom = v
-        end
       end
     end
 
-    # VBox (縦並び Flexbox ショートカット)
+    # 縦積みレイアウトコンテナ
     class VBox < Box
-      # 縦並びコンテナを初期化する
-      #
-      # - `x` (`Float`): X座標（デフォルト `0.0`）
-      # - `y` (`Float`): Y座標（デフォルト `0.0`）
-      # - `opts` (`Hash`): `Box#initialize` に渡すキーワードオプション
-      # - `&block`: 子ウィジェット構築用ブロック
-      # - 戻り値: `VBox`
       def initialize(x = 0.0, y = 0.0, **opts, &block)
         super(x, y, direction: :column, **opts, &block)
       end
     end
 
-    # HBox (横並び Flexbox ショートカット)
+    # 横並びレイアウトコンテナ
     class HBox < Box
-      # 横並びコンテナを初期化する
-      #
-      # - `x` (`Float`): X座標（デフォルト `0.0`）
-      # - `y` (`Float`): Y座標（デフォルト `0.0`）
-      # - `opts` (`Hash`): `Box#initialize` に渡すキーワードオプション
-      # - `&block`: 子ウィジェット構築用ブロック
-      # - 戻り値: `HBox`
       def initialize(x = 0.0, y = 0.0, **opts, &block)
         super(x, y, direction: :row, **opts, &block)
       end
     end
 
-    # ==========================================================================
-    # Panel (SDF カード背景 + タイトル + Flexbox レイアウトを持つコンテナ)
-    # ==========================================================================
-    class Panel < Box
-      attr_reader :title
-      attr_accessor :bg_color, :border_color, :border_width, :shadow_blur, :shadow_color, :title_size, :title_color
+    # スクロール可能な縦積みコンテナ
+    class ScrollView < VBox
+      include Scrollable
+      SB_WIDTH = 10.0
 
-      # パネルを初期化する
-      #
-      # - `x` (`Float`): X座標（デフォルト `0.0`）
-      # - `y` (`Float`): Y座標（デフォルト `0.0`）
-      # - `width` (`Float`): 幅（デフォルト `320.0`）
-      # - `height` (`Float`): 高さ（デフォルト `240.0`）
-      # - `title` (`String`): 上部ヘッダーに表示するタイトル文字列
-      # - `padding` (`Float | Array<Float>`): 内側余白（デフォルト `14.0`）
-      # - `gap` (`Float`): 子要素間の間隔（デフォルト `8.0`）
-      # - `direction` (`Symbol`): 子要素の並び方向（デフォルト `:column`）
-      # - `align` (`Symbol`): 交差軸整列（デフォルト `:stretch`）
-      # - `justify` (`Symbol`): 主軸配置（デフォルト `:start`）
-      # - `auto_layout` (`Boolean`): 自動レイアウトを有効にするか（デフォルト `true`）
-      # - `clip` (`Boolean`): クリッピングを有効にするか（デフォルト `false`）
-      # - `bg_color` (`Color | Symbol | Array | nil`): 背景色（`0..255` 基準、省略時はテーマ準拠）
-      # - `border_color` (`Color | Symbol | Array | nil`): 枠線色（`0..255` 基準、省略時はテーマ準拠）
-      # - `border_width` (`Float | nil`): 枠線太さ（ピクセル単位）
-      # - `radius` (`Float | nil`): 角丸半径（ピクセル単位）
-      # - `shadow_blur` (`Float | nil`): ドロップシャドウのぼかし半径
-      # - `shadow_color` (`Color | Symbol | Array | nil`): ドロップシャドウ色（`0..255` 基準）
-      # - `title_size` (`Integer`): タイトル文字列のフォントサイズ（デフォルト `16`）
-      # - `title_color` (`Color | Symbol | Array | nil`): タイトル文字色（`0..255` 基準）
-      # - `interactive` (`Boolean`): 当たり判定の対象とするか（デフォルト `true`）
-      # - `opts` (`Hash`): `Box#initialize` に渡す追加オプション
-      # - `&block`: 子ウィジェット構築用ブロック
-      # - 戻り値: `Panel`
-      def initialize(x = 0.0, y = 0.0, width: 320.0, height: 240.0,
-                     title: "", padding: 14.0, gap: 8.0,
-                     direction: :column, align: :stretch, justify: :start,
-                     auto_layout: true, clip: false,
-                     bg_color: nil, border_color: nil, border_width: nil,
-                     radius: nil, shadow_blur: nil, shadow_color: nil,
-                     title_size: 16, title_color: nil,
-                     interactive: true, **opts, &block)
-        @title        = title.to_s
-        @bg_color     = bg_color
-        @border_color = border_color
-        @border_width = border_width
-        @shadow_blur  = shadow_blur
-        @shadow_color = shadow_color
-        @title_size   = title_size.to_i
-        @title_color  = title_color
-
-        super(x, y, width: width, height: height,
-              direction: direction, padding: padding, gap: gap,
-              align: align, justify: justify,
-              auto_layout: auto_layout, clip: clip,
-              radius: radius, interactive: interactive, **opts, &block)
+      def initialize(x = 0.0, y = 0.0, padding: nil, gap: nil, **opts, &block)
+        init_scrollable
+        @dragging_sb   = false
+        @hover_sb      = false
+        @sb_drag_off_y = 0.0
+        super(x, y, padding: padding, gap: gap, clip_children: true, interactive: true, **opts, &block)
       end
 
-      # パネルのタイトル文字列を変更しヘッダー高さとレイアウトを更新する
-      #
-      # - `val` (`String`): 新しいタイトル文字列
-      # - 戻り値: `true`
-      def title=(val)
-        @title = val.to_s
-        update_header_height
-        mark_layout_dirty!
+      def collider_radius = theme.radius
+      def cursor_shape    = (@hover_sb || @dragging_sb) ? :hand : :arrow
+      def right_padding   = padding + (max_scroll_y > 0.0 ? SB_WIDTH : 0.0)
+
+      def perform_layout
+        max_s = max_scroll_y
+        @scroll_y = max_s if @scroll_y > max_s
+        @scroll_y = 0.0 if @scroll_y < 0.0
+        super
       end
 
-      def update_header_height
-        @header_height = @title.empty? ? 0.0 : (@title_size.to_f + 10.0)
-      end
-
-      def clip_bounds
-        l = screen_left
-        t = screen_top
-        w = screen_width
-        h = screen_height
-        [l + 2.0, t + @header_height + 2.0, [w - 4.0, 0.0].max, [h - @header_height - 4.0, 0.0].max]
-      end
-
-      def draw_self
-        th = theme
-        rx = screen_left
-        ry = screen_top
-        rw = screen_width
-        rh = screen_height
-
-        b_cfg = th.win_border_normal || th.border_normal
-        s_cfg = th.shadow_normal
-
-        rad   = @radius ? @radius.to_f : (th.corner_radius || 6.0).to_f
-        bg    = @bg_color || th.win_bg || th.bg_normal
-        bw    = @border_width ? @border_width.to_f : (b_cfg ? b_cfg[0].to_f : 1.0)
-        bc    = @border_color || (b_cfg ? b_cfg[1] : nil)
-        sblur = @shadow_blur ? @shadow_blur.to_f : (s_cfg ? s_cfg[0].to_f : 0.0)
-        scol  = @shadow_color || (s_cfg ? s_cfg[1] : nil)
-
-        Zenoo::Window.draw_rect(
-          rx, ry, rw, rh,
-          radius: rad,
-          color: bg,
-          border_width: bw,
-          border_color: bc,
-          shadow_blur: sblur,
-          shadow_color: scol,
-          image: @image,
-          angle: world_angle,
-          camera: @camera,
-          z: @z
-        )
-
-        unless @title.empty?
-          f_font = th.font || Font.default
-          tcol = @title_color || th.text_color
-          t_size = (@title_size.to_f * world_scale_y).to_i
-          t_size = 8 if t_size < 8
-          Zenoo::Window.draw_text(
-            rx + @pad_left * world_scale_x, ry + @pad_top * 0.75 * world_scale_y,
-            @title,
-            font: f_font, size: t_size, color: tcol,
-            camera: @camera, z: @z
-          )
-        end
-      end
-    end
-
-    # ==========================================================================
-    # Window (ドラッグ移動・リサイズ・折りたたみ・最前面化に対応したフローティングウィンドウ)
-    # ==========================================================================
-    class Window < Panel
-      attr_accessor :resizable, :collapsible, :draggable, :min_width, :min_height
-      attr_reader :collapsed, :title_bar_height
-
-      # フローティングウィンドウを初期化する
-      #
-      # - `title` (`String`): タイトルバー文字列（デフォルト `"Window"`）
-      # - `x` (`Float`): X座標（デフォルト `60.0`）
-      # - `y` (`Float`): Y座標（デフォルト `60.0`）
-      # - `width` (`Float`): 幅（デフォルト `340.0`）
-      # - `height` (`Float`): 高さ（デフォルト `260.0`）
-      # - `padding` (`Float | Array<Float>`): 内側余白（デフォルト `12.0`）
-      # - `gap` (`Float`): 子要素間の間隔（デフォルト `8.0`）
-      # - `direction` (`Symbol`): 子要素の並び方向（デフォルト `:column`）
-      # - `align` (`Symbol`): 交差軸整列（デフォルト `:stretch`）
-      # - `justify` (`Symbol`): 主軸配置（デフォルト `:start`）
-      # - `auto_layout` (`Boolean`): 自動レイアウトを有効にするか（デフォルト `true`）
-      # - `clip` (`Boolean`): 子要素のクリッピングを有効にするか（デフォルト `true`）
-      # - `resizable` (`Boolean`): 右下グリップでのリサイズを許可するか（デフォルト `false`）
-      # - `collapsible` (`Boolean`): 折りたたみボタンとダブルクリック折りたたみを許可するか（デフォルト `true`）
-      # - `draggable` (`Boolean`): タイトルバーのドラッグ移動を許可するか（デフォルト `true`）
-      # - `min_width` (`Float`): リサイズ時の最小幅（デフォルト `140.0`）
-      # - `min_height` (`Float`): リサイズ時の最小高さ（デフォルト `90.0`）
-      # - `opts` (`Hash`): `Panel#initialize` に渡す追加オプション
-      # - `&block`: 子ウィジェット構築用ブロック
-      # - 戻り値: `Window`
-      def initialize(title = "Window", x = 60.0, y = 60.0, width: 340.0, height: 260.0,
-                     padding: 12.0, gap: 8.0,
-                     direction: :column, align: :stretch, justify: :start,
-                     auto_layout: true, clip: true,
-                     resizable: false, collapsible: true, draggable: true,
-                     min_width: 140.0, min_height: 90.0,
-                     **opts, &block)
-        @title_bar_height = 34.0
-        @resizable        = resizable
-        @collapsible      = collapsible
-        @draggable        = draggable
-        @min_width        = min_width.to_f
-        @min_height       = min_height.to_f
-        @collapsed        = false
-        @expanded_height  = height.to_f
-
-        @drag_mode        = nil # :move, :resize, :collapse_btn
-        @drag_start_mx    = 0.0
-        @drag_start_my    = 0.0
-        @drag_orig_x      = 0.0
-        @drag_orig_y      = 0.0
-        @drag_orig_w      = 0.0
-        @drag_orig_h      = 0.0
-        @last_click_time  = -10.0
-        @btn_hover        = false
-
-        super(x, y, width: width, height: height,
-              title: title, padding: padding, gap: gap,
-              direction: direction, align: align, justify: justify,
-              auto_layout: auto_layout, clip: clip,
-              interactive: true, **opts, &block)
-      end
-
-      def title_bar_height=(val)
-        vf = val.to_f
-        return if @title_bar_height == vf
-        @title_bar_height = vf
-        update_header_height
-        self.height = @title_bar_height if @collapsed
-        mark_layout_dirty!
-      end
-
-      def update_header_height
-        @header_height = @title_bar_height
-      end
-
-      # ウィンドウの折りたたみ状態を設定する
-      #
-      # - `val` (`Boolean`): `true` でタイトルバーのみに折り畳み、`false` で元の高さに展開する
-      # - 戻り値: `Float | nil`
-      def collapsed=(val)
-        v = !!val
-        return if @collapsed == v
-        @collapsed = v
-        if @collapsed
-          @expanded_height = [height, @min_height].max
-          self.height = @title_bar_height
-        else
-          self.height = [@expanded_height, @min_height].max
-        end
-      end
-
-      # ウィンドウの折りたたみ状態を反転する
-      #
-      # - 戻り値: `Float | nil`
-      def toggle_collapse!
-        self.collapsed = !@collapsed
-      end
-
-      # このウィンドウが兄弟内で最前面（アクティブ）かを返す
-      #
-      # - 戻り値: `Boolean`
-      def active_window?
-        return true unless @parent
-        ch = @parent.children
-        return true unless ch
-        ch.last.equal?(self)
-      end
-
-      # 親の children 配列の末尾に移動させ、描画順とヒットテストを最前面にする
-      #
-      # - 戻り値: `Boolean`
-      def bring_to_front!
-        return true unless (p = @parent)
-        ch = p.children
-        return true unless ch && ch.length > 1
-        if !ch.last.equal?(self)
-          ch.delete(self)
-          ch << self
-        end
-        true
-      end
-
-      def clip_bounds
-        return [0.0, 0.0, 0.0, 0.0] if @collapsed
-        l = screen_left
-        t = screen_top
-        w = screen_width
-        h = screen_height
-        [l + 2.0, t + @title_bar_height + 2.0, [w - 4.0, 0.0].max, [h - @title_bar_height - 4.0, 0.0].max]
-      end
-
-      def find_hit_widget(px, py)
+      def find_hit(px, py)
         return nil if @vanished || !@visible || !@enabled
-        return nil unless point_in_ancestor_clips?(px, py)
-
-        # リサイズハンドルまたはタイトルバー上のボタンは子要素より優先してウィンドウ自身が受け取る
-        return self if @collapsible && in_collapse_button?(px, py)
-        if !@collapsed && @resizable && in_resize_grip?(px, py)
+        ensure_layout
+        if max_scroll_y > 0.0 && in_scrollbar_track?(px, py)
           return self
         end
-
-        unless @collapsed
-          if (ch_list = @children)
-            cx, cy, cw, ch = clip_bounds
-            if !@clip_children || (px >= cx && px <= (cx + cw) && py >= cy && py <= (cy + ch))
-              i = ch_list.length - 1
-              while i >= 0
-                c = ch_list[i]
-                if c.is_a?(Widget) && !c.vanished?
-                  hit = c.find_hit_widget(px, py)
-                  return hit if hit
-                end
-                i -= 1
-              end
-            end
-          end
-        end
-
-        return self if hit_test_self?(px, py)
-        nil
+        super
       end
 
-      def set_hovered_state(val)
-        @hovered = val
-        @btn_hover = false
-        return unless val && @enabled && @interactive
+      def on_pointer_move(mx, my)
+        @hover_sb = max_scroll_y > 0.0 && in_scrollbar_track?(mx, my)
+      end
 
-        mx = Input.mouse_x.to_f
-        my = Input.mouse_y.to_f
-        if @collapsible && in_collapse_button?(mx, my)
-          @btn_hover = true
-          UI.set_mouse_cursor(:hand)
-        elsif !@collapsed && @resizable && in_resize_grip?(mx, my)
-          UI.set_mouse_cursor(:resize_nwse)
-        elsif @draggable && in_title_bar?(mx, my)
-          UI.set_mouse_cursor(:hand)
-        else
-          UI.set_mouse_cursor(:arrow)
-        end
+      def on_pointer_leave
+        @hover_sb = false
       end
 
       def on_pointer_down(mx, my)
         super
-        bring_to_front!
-
-        if @collapsible && in_collapse_button?(mx, my)
-          @drag_mode = :collapse_btn
-          return
-        end
-
-        if !@collapsed && @resizable && in_resize_grip?(mx, my)
-          @drag_mode = :resize
-          @drag_start_mx = mx
-          @drag_start_my = my
-          @drag_orig_w = width
-          @drag_orig_h = height
-          return
-        end
-
-        if in_title_bar?(mx, my)
-          now = Zenoo::Window.real_time
-          if @collapsible && (now - @last_click_time) < 0.32
-            toggle_collapse!
-            @last_click_time = -10.0
-            @drag_mode = nil
-            return
-          end
-          @last_click_time = now
-
-          if @draggable
-            @drag_mode = :move
-            @drag_start_mx = mx
-            @drag_start_my = my
-            @drag_orig_x = @x
-            @drag_orig_y = @y
-          end
+        return unless max_scroll_y > 0.0 && in_scrollbar_track?(mx, my)
+        _tx, ty, _tw, th, thumb_y, thumb_h = scrollbar_metrics
+        @dragging_sb = true
+        if my >= thumb_y && my <= thumb_y + thumb_h
+          @sb_drag_off_y = my - thumb_y
         else
-          @drag_mode = nil
-        end
-      end
-
-      def on_pointer_drag(mx, my)
-        case @drag_mode
-        when :move
-          UI.set_mouse_cursor(:hand)
-          psx = @parent ? @parent.world_scale_x : 1.0
-          psy = @parent ? @parent.world_scale_y : 1.0
-          dx = (mx - @drag_start_mx) / (psx.abs > 0.0001 ? psx : 1.0)
-          dy = (my - @drag_start_my) / (psy.abs > 0.0001 ? psy : 1.0)
-          self.x = @drag_orig_x + dx
-          self.y = @drag_orig_y + dy
-        when :resize
-          UI.set_mouse_cursor(:resize_nwse)
-          psx = world_scale_x
-          psy = world_scale_y
-          dw = (mx - @drag_start_mx) / (psx.abs > 0.0001 ? psx : 1.0)
-          dh = (my - @drag_start_my) / (psy.abs > 0.0001 ? psy : 1.0)
-          self.width  = [@drag_orig_w + dw, @min_width].max
-          self.height = [@drag_orig_h + dh, @min_height].max
-          @expanded_height = height
-        end
-      end
-
-      def on_pointer_up(mx, my, inside)
-        if @drag_mode == :collapse_btn && in_collapse_button?(mx, my)
-          toggle_collapse!
-        end
-        @drag_mode = nil
-        super
-      end
-
-      def draw
-        return if @vanished || !@visible
-
-        update_layout_tree unless @parent.is_a?(Widget)
-        ensure_layout_updated unless @collapsed
-
-        if @on_draw_proc
-          @on_draw_proc.call(screen_left, screen_top, screen_width, screen_height, visual_state)
-        else
-          draw_self
-        end
-
-        if !@collapsed && @children
-          if @clip_children
-            cx, cy, cw, ch = clip_bounds
-            if cw > 0.0 && ch > 0.0
-              prev_ox, prev_oy = Zenoo::Window.push_clip_scope(cx, cy, cw, ch, local: false, z: @z)
-              draw_children
-              Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
-            end
-          else
-            draw_children
-          end
-        end
-      end
-
-      def draw_self
-        th = theme
-        wx = screen_left
-        wy = screen_top
-        ww = screen_width
-        wh = screen_height
-        sy = world_scale_y
-        sx = world_scale_x
-        th_bar = @title_bar_height * sy
-        is_act = active_window?
-
-        border_cfg = is_act ? (th.win_border_active || th.border_active) : (th.win_border_normal || th.border_normal)
-        bw = border_cfg ? border_cfg[0].to_f : 1.5
-        bc = border_cfg ? border_cfg[1] : th.accent_color
-
-        shadow_cfg = is_act ? th.shadow_active : th.shadow_normal
-        sblur = shadow_cfg ? shadow_cfg[0].to_f : 0.0
-        scol  = shadow_cfg ? shadow_cfg[1] : nil
-        win_bg = @bg_color || th.win_bg || th.bg_normal
-        rad    = @radius ? @radius.to_f : (th.corner_radius || 6.0).to_f
-
-        # ウィンドウ背景カード
-        Zenoo::Window.draw_rect(
-          wx, wy, ww, wh,
-          radius: rad,
-          color: win_bg,
-          border_width: bw,
-          border_color: bc,
-          shadow_blur: sblur,
-          shadow_color: scol,
-          camera: @camera,
-          z: @z
-        )
-
-        # タイトルバー帯
-        title_bg = is_act ? (th.win_title_bg_active || th.bg_active) : (th.win_title_bg || th.bg_hover)
-        t_rad = [rad - 1.0, 0.0].max
-        bar_h = @collapsed ? [th_bar - 2.0, 0.0].max : th_bar
-        Zenoo::Window.draw_rect(
-          wx + 1.0, wy + 1.0, [ww - 2.0, 0.0].max, bar_h,
-          radius: t_rad,
-          color: title_bg,
-          camera: @camera,
-          z: @z
-        )
-
-        # タイトルバー境界線
-        unless @collapsed
-          Zenoo::Window.draw_rect(
-            wx + 1.0, wy + th_bar,
-            [ww - 2.0, 0.0].max, 1.0,
-            color: bc,
-            camera: @camera,
-            z: @z
-          )
-        end
-
-        # タイトルテキスト
-        unless @title.empty?
-          f_font = th.font || Font.default
-          f_size = ((th.font_size || 14).to_f * sy).to_i
-          f_size = 8 if f_size < 8
-          tcol = is_act ? th.text_color : (th.text_disabled || th.text_color)
-          Zenoo::Window.draw_text(
-            wx + 12.0 * sx, wy + (th_bar - f_size.to_f) * 0.5 + 1.0,
-            @title,
-            font: f_font, size: f_size, color: tcol,
-            camera: @camera, z: @z
-          )
-        end
-
-        # 折りたたみボタン
-        if @collapsible
-          btn_size = 22.0 * sy
-          bx = wx + ww - btn_size - 7.0 * sx
-          by = wy + (th_bar - btn_size) * 0.5
-          icon_col = is_act ? (th.text_color || Color::WHITE) : (th.text_disabled || Color.new(160, 160, 165))
-
-          if @btn_hover
-            Zenoo::Window.draw_rect(bx, by, btn_size, btn_size, radius: 4.0 * sy, color: Color.new(255, 255, 255, 45), camera: @camera, z: @z)
-          end
-
-          if @collapsed
-            Zenoo::Window.draw_rect(bx + 5.0 * sy, by + 5.0 * sy, 12.0 * sy, 12.0 * sy, radius: 2.0 * sy, color: nil, border_width: 1.5, border_color: icon_col, camera: @camera, z: @z)
-          else
-            Zenoo::Window.draw_line(bx + 5.0 * sy, by + 11.0 * sy, bx + 17.0 * sy, by + 11.0 * sy, color: icon_col, width: 2.0, camera: @camera, z: @z)
-          end
-        end
-
-        # リサイズグリップ
-        if @resizable && !@collapsed
-          rx = wx + ww - 15.0 * sx
-          ry = wy + wh - 15.0 * sy
-          Zenoo::Window.draw_line(rx + 8.0 * sx, ry + 12.0 * sy, rx + 12.0 * sx, ry + 8.0 * sy, color: bc, width: 1.5, camera: @camera, z: @z)
-          Zenoo::Window.draw_line(rx + 4.0 * sx, ry + 12.0 * sy, rx + 12.0 * sx, ry + 4.0 * sy, color: bc, width: 1.5, camera: @camera, z: @z)
-          Zenoo::Window.draw_line(rx + 0.0, ry + 12.0 * sy, rx + 12.0 * sx, ry + 0.0, color: bc, width: 1.5, camera: @camera, z: @z)
-        end
-      end
-
-      private
-
-      def in_title_bar?(px, py)
-        l = screen_left
-        t = screen_top
-        w = screen_width
-        th_bar = @title_bar_height * world_scale_y
-        px >= l && px <= (l + w) && py >= t && py <= (t + th_bar)
-      end
-
-      def in_collapse_button?(px, py)
-        l = screen_left
-        t = screen_top
-        w = screen_width
-        sx = world_scale_x
-        sy = world_scale_y
-        th_bar = @title_bar_height * sy
-        btn_size = 22.0 * sy
-        bx = l + w - btn_size - 7.0 * sx
-        by = t + (th_bar - btn_size) * 0.5
-        px >= bx && px <= (bx + btn_size) && py >= by && py <= (by + btn_size)
-      end
-
-      def in_resize_grip?(px, py)
-        l = screen_left
-        t = screen_top
-        w = screen_width
-        h = screen_height
-        gx = 18.0 * world_scale_x
-        gy = 18.0 * world_scale_y
-        px >= (l + w - gx) && px <= (l + w) && py >= (t + h - gy) && py <= (t + h)
-      end
-    end
-
-    # ==========================================================================
-    # ScrollView (ハードウェアクリッピング + スクロールバー + ホイール対応コンテナ)
-    # ==========================================================================
-    # スクロールバー・マウスホイール・ハードウェアクリッピングに対応した縦スクロールコンテナ
-    class ScrollView < Box
-      attr_reader :scroll_y, :content_height
-      attr_accessor :scrollbar_width, :wheel_step
-
-      # スクロールビューを初期化する
-      #
-      # - `x` (`Float`): X座標（デフォルト `0.0`）
-      # - `y` (`Float`): Y座標（デフォルト `0.0`）
-      # - `width` (`Float`): ビュー幅（デフォルト `300.0`）
-      # - `height` (`Float`): ビュー高さ（デフォルト `220.0`）
-      # - `padding` (`Float | Array<Float>`): 内側余白（デフォルト `10.0`）
-      # - `gap` (`Float`): 子要素間の間隔（デフォルト `8.0`）
-      # - `direction` (`Symbol`): 子要素の並び方向（デフォルト `:column`）
-      # - `align` (`Symbol`): 交差軸整列（デフォルト `:stretch`）
-      # - `justify` (`Symbol`): 主軸配置（デフォルト `:start`）
-      # - `content_height` (`Float | nil`): 固定コンテンツ高さ（省略時は子要素から自動計測）
-      # - `wheel_step` (`Float`): ホイール 1 ノッチあたりのスクロール量（デフォルト `32.0`）
-      # - `opts` (`Hash`): `Box#initialize` に渡す追加オプション
-      # - `&block`: 子ウィジェット構築用ブロック
-      # - 戻り値: `ScrollView`
-      def initialize(x = 0.0, y = 0.0, width: 300.0, height: 220.0,
-                     padding: 10.0, gap: 8.0,
-                     direction: :column, align: :stretch, justify: :start,
-                     content_height: nil, wheel_step: 32.0,
-                     **opts, &block)
-        @scroll_y             = 0.0
-        @fixed_content_height = content_height ? content_height.to_f : nil
-        @content_height       = @fixed_content_height || 0.0
-        @scrollbar_width      = 12.0
-        @wheel_step           = wheel_step.to_f
-        @dragging_scrollbar   = false
-        @sb_hover             = false
-
-        super(x, y, width: width, height: height,
-              direction: direction, padding: padding, gap: gap,
-              align: align, justify: justify,
-              auto_layout: true, clip: true,
-              interactive: true, **opts, &block)
-      end
-
-      # 現在の縦スクロール量を設定する（`0.0..max_scroll` にクランプされる）
-      #
-      # - `val` (`Float`): スクロール位置（ピクセル単位）
-      # - 戻り値: `Boolean | nil`
-      def scroll_y=(val)
-        max_s = max_scroll
-        new_y = [[val.to_f, 0.0].max, max_s].min
-        return if (@scroll_y - new_y).abs < 0.001
-        @scroll_y = new_y
-        mark_layout_dirty!
-      end
-
-      # 表示領域の内側高さを返す
-      #
-      # - 戻り値: `Float`
-      def view_height
-        [height - 4.0, 1.0].max
-      end
-
-      # スクロール可能な最大オフセット量を返す
-      #
-      # - 戻り値: `Float`
-      def max_scroll
-        [@content_height - view_height, 0.0].max
-      end
-
-      # コンテンツが表示領域を超えておりスクロールバーが必要かを返す
-      #
-      # - 戻り値: `Boolean`
-      def needs_scrollbar?
-        max_scroll > 0.5
-      end
-
-      def clip_bounds
-        l = screen_left
-        t = screen_top
-        w = screen_width
-        h = screen_height
-        sb_w = needs_scrollbar? ? (@scrollbar_width + 4.0) * world_scale_x : 0.0
-        [l + 2.0, t + 2.0, [w - sb_w - 4.0, 0.0].max, [h - 4.0, 0.0].max]
-      end
-
-      def find_hit_widget(px, py)
-        return nil if @vanished || !@visible || !@enabled
-
-        # スクロールバー領域上なら ScrollView 自身が受け取る
-        if needs_scrollbar? && point_in_ancestor_clips?(px, py) && in_scrollbar_track?(px, py)
-          return self
-        end
-
-        super(px, py)
-      end
-
-      def set_hovered_state(val)
-        @hovered = val
-        @sb_hover = false
-        return unless val && @enabled && @interactive
-
-        mx = Input.mouse_x.to_f
-        my = Input.mouse_y.to_f
-        if needs_scrollbar? && in_scrollbar_track?(mx, my)
-          @sb_hover = true
-          UI.set_mouse_cursor(:hand)
-        else
-          UI.set_mouse_cursor(:arrow)
-        end
-      end
-
-      def on_mouse_wheel(wheel_y)
-        return false unless needs_scrollbar?
-        old_s = @scroll_y
-        self.scroll_y = @scroll_y - wheel_y * @wheel_step
-        (@scroll_y - old_s).abs > 0.001
-      end
-
-      def on_pointer_down(mx, my)
-        super
-        if needs_scrollbar? && in_scrollbar_track?(mx, my)
-          @dragging_scrollbar = true
-          update_scroll_from_mouse(my)
-        else
-          @dragging_scrollbar = false
+          @sb_drag_off_y = thumb_h * 0.5
+          update_scroll_from_pointer(my, ty, th, thumb_h)
         end
       end
 
       def on_pointer_drag(_mx, my)
-        if @dragging_scrollbar
-          UI.set_mouse_cursor(:hand)
-          update_scroll_from_mouse(my)
-        end
+        super
+        return unless @dragging_sb
+        _tx, ty, _tw, th, _thumb_y, thumb_h = scrollbar_metrics
+        update_scroll_from_pointer(my, ty, th, thumb_h)
       end
 
       def on_pointer_up(mx, my, inside)
-        @dragging_scrollbar = false
+        @dragging_sb = false
         super
-      end
-
-      def perform_layout
-        @layout_dirty = false
-        ch_list = @children
-        return unless ch_list && !ch_list.empty?
-
-        # まずスクロールバーの有無を考慮した内側幅で子要素を配置し、コンテンツ総高さを計測
-        sb_reserve = (@scrollbar_width + 4.0)
-        inner_x = @pad_left
-        inner_w = [width - @pad_left - @pad_right - sb_reserve, 10.0].max
-
-        pw = width
-        ph = height
-        pax = @anchor_x * pw
-        pay = @anchor_y * ph
-
-        cur_y = @pad_top
-        vis_count = 0
-        i = 0
-        len = ch_list.length
-        while i < len
-          c = ch_list[i]
-          if c.is_a?(Widget) && c.visible && !c.vanished?
-            vis_count += 1
-            c_align = c.align_self || @align
-            if c_align == :stretch
-              c.width = inner_w if c.width != inner_w
-            end
-            cw = c.width
-            ch = c.height
-
-            ox = inner_x
-            if c_align == :center
-              ox += (inner_w - cw) * 0.5
-            elsif c_align == :end
-              ox += (inner_w - cw)
-            end
-
-            oy = cur_y - @scroll_y
-            c.x = ox - pax + c.anchor_x * cw
-            c.y = oy - pay + c.anchor_y * ch
-
-            cur_y += ch + @gap
-          end
-          i += 1
-        end
-
-        measured_h = vis_count > 0 ? (cur_y - @gap + @pad_bottom) : 0.0
-        @content_height = @fixed_content_height ? [@fixed_content_height, measured_h].max : measured_h
-
-        # 最大スクロール量を超えている場合はクランプして再配置
-        max_s = max_scroll
-        if @scroll_y > max_s
-          @scroll_y = max_s
-          cur_y = @pad_top
-          i = 0
-          while i < len
-            c = ch_list[i]
-            if c.is_a?(Widget) && c.visible && !c.vanished?
-              ch = c.height
-              oy = cur_y - @scroll_y
-              c.y = oy - pay + c.anchor_y * ch
-              cur_y += ch + @gap
-            end
-            i += 1
-          end
-        end
-
-        @layout_dirty = false
       end
 
       def draw
         return if @vanished || !@visible
-
-        update_layout_tree unless @parent.is_a?(Widget)
-        ensure_layout_updated
-
-        if @on_draw_proc
-          @on_draw_proc.call(screen_left, screen_top, screen_width, screen_height, visual_state)
-        else
-          draw_self
-        end
-
-        if @children
-          cx, cy, cw, ch = clip_bounds
-          if cw > 0.0 && ch > 0.0
-            prev_ox, prev_oy = Zenoo::Window.push_clip_scope(cx, cy, cw, ch, local: false, z: @z)
-            draw_children
-            Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
-          end
-        end
-        draw_scrollbar_self if needs_scrollbar?
+        super
+        draw_scrollbar if max_scroll_y > 0.0
       end
 
       def draw_self
         th = theme
-        rx = screen_left
-        ry = screen_top
-        rw = screen_width
-        rh = screen_height
-        track_b = th.track_border || th.border_normal
-
-        Zenoo::Window.draw_rect(
-          rx, ry, rw, rh,
-          radius: th.corner_radius || 6.0,
-          color: th.track_bg || th.bg_normal,
-          border_width: track_b ? track_b[0].to_f : 1.0,
-          border_color: track_b ? track_b[1] : nil,
-          camera: @camera,
-          z: @z
-        )
-      end
-
-      def draw_scrollbar_self
-        th = theme
-        l = screen_left
-        t = screen_top
-        w = screen_width
-        h = screen_height
-        sb_w = @scrollbar_width * world_scale_x
-        sb_x = l + w - sb_w - 3.0
-        sb_y = t + 3.0
-        sb_h = [h - 6.0, 10.0].max
-
-        # トラック
-        Zenoo::Window.draw_rect(sb_x, sb_y, sb_w, sb_h, radius: sb_w * 0.5, color: Color.new(15, 18, 25, 180), camera: @camera, z: @z)
-
-        tot = [@content_height, 1.0].max
-        vw  = view_height
-        thumb_h = [[(vw / tot) * sb_h, 22.0].max, sb_h].min
-        max_s = max_scroll
-        ratio = max_s > 0.0 ? (@scroll_y / max_s) : 0.0
-        thumb_y = sb_y + ratio * (sb_h - thumb_h)
-
-        thumb_col = if @dragging_scrollbar
-                      th.accent_hover || th.accent_color
-                    elsif @sb_hover
-                      th.accent_color
-                    else
-                      th.border_hover ? th.border_hover[1] : th.bg_active
-                    end
-
-        Zenoo::Window.draw_rect(
-          sb_x + 2.0, thumb_y, sb_w - 4.0, thumb_h,
-          radius: (sb_w - 4.0) * 0.5,
-          color: thumb_col,
-          camera: @camera,
-          z: @z
-        )
+        Zenoo::Window.draw_rect(screen_left, screen_top, screen_width, screen_height,
+                                radius: th.radius, color: th.track_bg, border_width: 1, border_color: th.track_border, camera: false, z: @z)
       end
 
       private
 
-      def in_scrollbar_track?(px, py)
-        l = screen_left
-        t = screen_top
-        w = screen_width
-        h = screen_height
-        sb_w = (@scrollbar_width + 6.0) * world_scale_x
-        px >= (l + w - sb_w) && px <= (l + w) && py >= t && py <= (t + h)
+      def scrollbar_metrics
+        sx = world_scale_x
+        sy = world_scale_y
+        pad = 3.0 * sy
+        sb_w = 6.0 * sx
+        tx = screen_left + screen_width - sb_w - 3.0 * sx
+        ty = screen_top + pad
+        th = [screen_height - pad * 2.0, 1.0].max
+        tot_h = [content_height * sy, 1.0].max
+        thumb_h = [th * (screen_height / tot_h), 18.0 * sy].max
+        thumb_h = th if thumb_h > th
+        max_s = max_scroll_y
+        ratio = max_s > 0.0 ? (@scroll_y / max_s) : 0.0
+        thumb_y = ty + (th - thumb_h) * ratio
+        [tx, ty, sb_w, th, thumb_y, thumb_h]
       end
 
-      def update_scroll_from_mouse(my)
-        t = screen_top + 3.0
-        sb_h = [screen_height - 6.0, 10.0].max
-        tot = [@content_height, 1.0].max
-        vw  = view_height
-        thumb_h = [[(vw / tot) * sb_h, 22.0].max, sb_h].min
-        avail = [sb_h - thumb_h, 1.0].max
-        ratio = (my - (t + thumb_h * 0.5)) / avail
-        ratio = 0.0 if ratio < 0.0
-        ratio = 1.0 if ratio > 1.0
-        self.scroll_y = ratio * max_scroll
+      def in_scrollbar_track?(mx, my)
+        sx = world_scale_x
+        left_x = screen_left + screen_width - (SB_WIDTH + 2.0) * sx
+        mx >= left_x && mx <= screen_left + screen_width && my >= screen_top && my <= screen_top + screen_height
+      end
+
+      def update_scroll_from_pointer(my, ty, th, thumb_h)
+        movable = th - thumb_h
+        return if movable <= 0.0
+        ratio = ((my - @sb_drag_off_y - ty) / movable).clamp(0.0, 1.0)
+        self.scroll_y = max_scroll_y * ratio
+      end
+
+      def draw_scrollbar
+        th = theme
+        tx, ty, tw, track_h, thumb_y, thumb_h = scrollbar_metrics
+        Zenoo::Window.draw_rect(tx, ty, tw, track_h, radius: tw * 0.5, color: [255, 255, 255, 16], camera: false, z: @z)
+        thumb_col = (@hover_sb || @dragging_sb) ? th.accent_hover : [130, 150, 185, 200]
+        Zenoo::Window.draw_rect(tx, thumb_y, tw, thumb_h, radius: tw * 0.5, color: thumb_col, camera: false, z: @z)
+      end
+    end
+
+    # 背景色・枠線・任意タイトル付きの固定コンテナ（ドラッグ移動なし）
+    class Panel < VBox
+      attr_accessor :title, :bg_color, :border_color, :border_width, :radius
+
+      def initialize(x = 0.0, y = 0.0, width: 200.0, height: 200.0, title: "",
+                     bg_color: nil, border_color: nil, border_width: 1.0, radius: nil, interactive: true, **opts, &block)
+        @title        = title.to_s
+        @bg_color     = bg_color
+        @border_color = border_color
+        @border_width = border_width.to_f
+        @radius       = radius ? radius.to_f : nil
+        super(x, y, width: width, height: height, clip_children: true, interactive: interactive, **opts, &block)
+      end
+
+      def collider_radius = @radius || (theme.radius + 2.0)
+
+      def top_padding
+        @title.empty? ? padding : (padding + theme.header_height)
+      end
+
+      def draw_self
+        th = theme
+        rad = @radius || (th.radius + 2.0)
+        bd = @border_color || th.win_border
+        Zenoo::Window.draw_rect(screen_left, screen_top, screen_width, screen_height,
+                                radius: rad, color: @bg_color || th.win_bg,
+                                border_width: @border_width, border_color: bd,
+                                camera: false, z: @z)
+        unless @title.empty?
+          hh = th.header_height * world_scale_y
+          Zenoo::Window.draw_text(screen_left + padding * world_scale_x, screen_top + hh * 0.5 + 1.0, @title,
+                                  size: th.font_size + 1, color: th.text_color, valign: :center, camera: false, z: @z)
+          Zenoo::Window.draw_line(screen_left + 1.0, screen_top + hh, screen_left + screen_width - 1.0, screen_top + hh,
+                                  color: bd, width: 1.0, camera: false, z: @z)
+        end
+      end
+    end
+
+    # ドラッグ移動・リサイズ・最前面化に対応したウィンドウ
+    class Window < Widget
+      include Draggable
+
+      # ウィンドウ右下のリサイズハンドル
+      class ResizeGrip < Widget
+        include Draggable
+
+        def initialize(owner_win)
+          super(owner_win.width - 16.0, owner_win.height - 16.0, width: 16.0, height: 16.0)
+          @owner = owner_win
+          self.drag_target = nil
+        end
+
+        def cursor_shape = :resize_nwse
+
+        def on_drag_start(_mx, _my)
+          @start_w = @owner.width
+          @start_h = @owner.height
+        end
+
+        def on_drag(_dx, _dy)
+          @owner.resize_to(@start_w + @drag_offset_x, @start_h + @drag_offset_y)
+        end
+
+        def draw_self
+          th = theme
+          col = (hovered? || dragging?) ? th.accent_hover : th.border_normal
+          Zenoo::Window.draw_line(screen_left + 4, screen_top + 12, screen_left + 12, screen_top + 4, color: col, width: 1.5, camera: false, z: @z)
+          Zenoo::Window.draw_line(screen_left + 8, screen_top + 12, screen_left + 12, screen_top + 8, color: col, width: 1.5, camera: false, z: @z)
+        end
+      end
+
+      attr_accessor :title
+      attr_reader :body
+
+      def initialize(title = "Window", x = 60.0, y = 60.0, width: 320.0, height: 260.0,
+                     resizable: false, padding: nil, gap: nil, min_width: 180.0, min_height: 120.0, **opts, &block)
+        @title      = title.to_s
+        @min_w      = min_width.to_f
+        @min_h      = min_height.to_f
+        super(x, y, width: width, height: height, **opts)
+        @header_h   = @title.empty? ? 0.0 : theme.header_height
+        @body       = VBox.new(0.0, @header_h, width: self.width, height: [self.height - @header_h, 0.0].max,
+                               padding: padding, gap: gap, clip_children: true)
+        add(@body)
+        if resizable
+          @grip = ResizeGrip.new(self)
+          add(@grip)
+        end
+        yield(@body) if block
+      end
+
+      def add(child)
+        return super(child) if child.equal?(@body) || (@grip && child.equal?(@grip))
+        @body.add(child)
+      end
+
+      def bring_to_front_on_click? = true
+      def cursor_shape             = :arrow
+      def collider_radius          = theme.radius + 2.0
+
+      def resize_to(nw, nh)
+        self.width  = [nw.to_f, @min_w].max
+        self.height = [nh.to_f, @min_h].max
+        @body.width  = width
+        @body.height = [height - @header_h, 0.0].max
+        @body.ensure_layout
+        if @grip
+          @grip.x = width - 16.0
+          @grip.y = height - 16.0
+        end
+      end
+
+      def draw_self
+        th = theme
+        bd = dragging? ? th.win_border_active : th.win_border
+        Zenoo::Window.draw_rect(screen_left, screen_top, screen_width, screen_height,
+                                radius: th.radius + 2.0, color: th.win_bg,
+                                border_width: 1.5, border_color: bd,
+                                shadow_blur: 10.0, shadow_color: [0, 0, 0, 140], camera: false, z: @z)
+        unless @title.empty?
+          Zenoo::Window.draw_text(screen_left + th.padding, screen_top + @header_h * 0.5 + 2.0, @title,
+                                  size: th.font_size + 1, color: th.text_color, valign: :center, camera: false, z: @z)
+        end
       end
     end
   end

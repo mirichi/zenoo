@@ -2,555 +2,162 @@
 
 module Zenoo
   module UI
-    # Sprite ベースの保持モード (Retained Mode) UI ウィジェット基底クラス
-    # すべての UI ウィジェットの基底クラス（`Sprite` を継承し、レイアウト・入力・クリッピング・テーマ機能を備える）
+    # Sprite ベースの軽量 UI 基底クラス
     class Widget < Sprite
-      attr_accessor :enabled, :interactive, :clip_children, :flex, :align_self, :id, :tooltip
-      attr_reader :hovered, :pressed, :clicked, :changed, :radius
+      attr_reader :interactive
+      attr_accessor :enabled, :clip_children, :flex
 
       # ウィジェットを初期化する
-      #
-      # - `x` (`Float`): X座標（デフォルト `0.0`）
-      # - `y` (`Float`): Y座標（デフォルト `0.0`）
-      # - `width` (`Float`): 幅（デフォルト `100.0`）
-      # - `height` (`Float`): 高さ（デフォルト `32.0`）
-      # - `anchor` (`Symbol | Array<Float>`): 基準アンカー位置（デフォルト `:top_left`）
-      # - `pivot` (`Symbol | Array<Float>`): 回転・拡大のピボット位置（デフォルト `:center`）
-      # - `z` (`Float`): 描画 Z 深度（デフォルト `0.0`）
-      # - `camera` (`Boolean | Camera`): カメラ追従設定（UI 用途のデフォルト `false`）
-      # - `parent` (`Sprite | Widget | nil`): 親オブジェクト
-      # - `enabled` (`Boolean`): 有効状態（`false` で操作無効化、デフォルト `true`）
-      # - `interactive` (`Boolean`): マウス・入力の当たり判定対象とするか（デフォルト `true`）
-      # - `flex` (`Float | nil`): 親 `Box` レイアウト内でのフレックス伸長係数
-      # - `align_self` (`Symbol | nil`): 親 `Box` の交差軸整列を個別に上書きする値（`:start`, `:center`, `:end`, `:stretch`）
-      # - `id` (`Symbol | String | nil`): 識別用 ID
-      # - `theme` (`Theme | Symbol | nil`): このウィジェット個別のテーマ（省略時は親またはグローバルテーマを参照）
-      # - `radius` (`Float | nil`): 角丸半径（ピクセル単位）
-      # - 戻り値: `Widget`
-      def initialize(x = 0.0, y = 0.0, width: 100.0, height: 32.0,
-                     anchor: :top_left, pivot: :center, z: 0.0,
-                     camera: false, parent: nil,
-                     enabled: true, interactive: true,
-                     flex: nil, align_self: nil, id: nil, theme: nil, radius: nil)
-        super(x, y, nil, width: width, height: height, anchor: anchor, pivot: pivot, z: z, camera: camera, parent: nil)
+      def initialize(x = 0.0, y = 0.0, width: 100.0, height: nil,
+                     anchor: :top_left, pivot: :center, z: 0.0, camera: false,
+                     enabled: true, visible: true, interactive: true, clip_children: false,
+                     flex: nil, theme: nil, **opts)
+        super(x, y, nil, width: width, height: height, anchor: anchor, pivot: pivot, z: z, camera: camera, **opts)
         @enabled       = enabled
-        @interactive   = interactive
-        @clip_children = false
+        @visible       = !!visible
+        @interactive   = !!interactive
+        @clip_children = clip_children
         @flex          = flex ? flex.to_f : nil
-        @align_self    = align_self
-        @id            = id
-        @theme         = theme
-        @radius        = radius ? radius.to_f : nil
-
-        @hovered = false
-        @pressed = false
-        @clicked = false
-        @changed = false
-
-        @on_click_proc  = nil
-        @on_change_proc = nil
-        @on_draw_proc   = nil
-
-        self.parent = parent if parent
-        update_collider_shape if @radius && @radius > 0.0
+        @theme         = theme.is_a?(Symbol) ? Theme.new(theme) : theme
+        @on_draw_proc  = nil
+        set_default_collider if @interactive
       end
 
-      # 角丸半径を設定しコライダー形状を更新する
-      #
-      # - `val` (`Float | nil`): 角丸半径（ピクセル単位）
-      # - 戻り値: `Float | nil`
-      def radius=(val)
-        vf = val ? val.to_f : nil
-        return if @radius == vf
-        @radius = vf
-        update_collider_shape
+      # 当たり判定の有効・無効を設定する
+      def interactive=(v)
+        @interactive = !!v
+        set_default_collider if @interactive && !@collider_shape
       end
 
-      def update_collider_shape
-        r = @radius ? @radius.to_f : 0.0
-        if @collider_shape.is_a?(Collision::Rect)
-          @collider_shape.radius = r
-        elsif @collider_shape.nil? && r > 0.0
-          set_collider(:rect, radius: r)
+      def collider_radius = nil
+
+      # 自身のサイズやテーマに合わせてコライダー形状を同期する
+      def sync_collider_shape
+        col = @collider_shape
+        return unless col && col.shape_type == Collision::TYPE_RECT
+        if (rad = collider_radius)
+          col.radius = rad
         end
       end
 
-      # このウィジェットに適用されるテーマを取得する（個別テーマ未設定時は親または `UI.theme` を継承）
-      #
-      # - 戻り値: `Theme`
+      # 既定コライダーを設定する
+      def set_default_collider
+        rad = collider_radius
+        if rad && rad > 0.0
+          set_collider(:rect, radius: rad)
+        else
+          set_collider(:default)
+        end
+      end
+
+      # 適用されるテーマを取得する（親からの継承または UI グローバルテーマ）
       def theme
         @theme || (@parent.is_a?(Widget) ? @parent.theme : UI.theme)
       end
 
-      # このウィジェット個別のテーマを設定する
-      #
-      # - `val` (`Theme | Symbol | nil`): `Theme` インスタンス、プリセット名シンボル、または `nil`（親継承に戻す）
-      # - 戻り値: `Theme | nil`
+      # このウィジェット用の個別テーマを設定する
       def theme=(val)
         @theme = val.is_a?(Symbol) ? Theme.new(val) : val
+        dirty_world_geom!
+        mark_layout_dirty!
       end
 
-      # マウスカーソルがこのウィジェット上にあるかを返す
-      #
-      # - 戻り値: `Boolean`
-      def hovered?
-        @hovered
+      def dirty_world_geom!
+        super
+        if (col = @collider_shape)
+          col.dirty_size!
+          sync_collider_shape
+        end
       end
 
-      # マウスボタンが押下中かを返す
-      #
-      # - 戻り値: `Boolean`
-      def pressed?
-        @pressed
-      end
-
-      # このフレームでクリックが成立したかを返す
-      #
-      # - 戻り値: `Boolean`
-      def clicked?
-        @clicked
-      end
-
-      # このフレームで値が変更されたかを返す
-      #
-      # - 戻り値: `Boolean`
-      def changed?
-        @changed
-      end
-
-      # 現在フォーカスを持っているかを返す
-      #
-      # - 戻り値: `Boolean`
-      def focused?
-        UI.focused_widget.equal?(self)
-      end
-
-      # このウィジェットにフォーカスを与える
-      #
-      # - 戻り値: `Widget`
-      def focus!
-        UI.focused_widget = self
-        self
-      end
-
-      # このウィジェットのフォーカスを解除する
-      #
-      # - 戻り値: `Widget`（`self`）
-      def blur!
-        UI.clear_focus if focused?
-        self
-      end
-
-      # クリック時のコールバックブロックを登録する
-      #
-      # - `&block`: クリック時に呼び出されるブロック（引数として `self` を受け取る）
-      # - 戻り値: `Widget`（`self`）
-      def on_click(&block)
-        @on_click_proc = block
-        self
-      end
-
-      # 値変更時のコールバックブロックを登録する
-      #
-      # - `&block`: 値変更時に呼び出されるブロック（変更後の値を受け取る）
-      # - 戻り値: `Widget`（`self`）
-      def on_change(&block)
-        @on_change_proc = block
-        self
-      end
-
-      # カスタム描画コールバックブロックを登録する
-      #
-      # - `&block`: 描画時に `(left, top, width, height, visual_state)` を受け取るブロック
-      # - 戻り値: `Widget`（`self`）
-      def on_draw(&block)
-        @on_draw_proc = block
-        self
-      end
-
-      # 子ウィジェットを追加する（`add` / `<<`）
-      #
-      # - `child` (`Widget`): 追加する子ウィジェット
-      # - `&block`: 追加後に `child` を引数に実行するセットアップ用ブロック
-      # - 戻り値: `Widget | nil`（追加した `child` 自身、`child` が `nil` の場合は `nil`）
-      def add(child, &block)
-        return nil unless child
-        child.parent = self
-        block.call(child) if block
-        child
-      end
-
-      # 子ウィジェットを追加する（`add` の演算子版）
-      #
-      # - `child` (`Widget`): 追加する子ウィジェット
-      # - `&block`: 追加後に `child` を引数に実行するセットアップ用ブロック
-      # - 戻り値: `Widget | nil`
-      def <<(child, &block)
-        add(child, &block)
-      end
-
-      def on_focus
-      end
-
-      def on_blur
-      end
-
-      # 状態を応じた視覚ステート (:normal, :hover, :active, :disabled)
-      # 現在の見た目の状態シンボルを返す
-      #
-      # - 戻り値: `Symbol`（`:disabled`, `:active`, `:hover`, `:normal` のいずれか）
-      def visual_state
-        return :disabled unless @enabled
-        return :active if @pressed
-        return :hover if @hovered
-        :normal
-      end
-
-      # ワールド空間での描画左上座標 (Pivot 中心スケーリング考慮)
-      # ウィジェット左端のスクリーン X 座標を返す
-      #
-      # - 戻り値: `Float`
-      def screen_left
-        world_pivot_x - @pivot_x * width * world_scale_x
-      end
-
-      # ウィジェット上端のスクリーン Y 座標を返す
-      #
-      # - 戻り値: `Float`
-      def screen_top
-        world_pivot_y - @pivot_y * height * world_scale_y
-      end
-
-      # スケール適用後のスクリーン上の幅を返す
-      #
-      # - 戻り値: `Float`
-      def screen_width
-        width * world_scale_x
-      end
-
-      # スケール適用後のスクリーン上の高さを返す
-      #
-      # - 戻り値: `Float`
-      def screen_height
-        height * world_scale_y
-      end
-
-      # 自身のクリッピング矩形 [x, y, w, h] (clip_children が有効なコンテナでオーバーライド可)
-      def clip_bounds
-        [screen_left, screen_top, screen_width, screen_height]
-      end
-
-      # 親を辿り、すべての clip_children スコープ内に (px, py) が収まっているか判定
-      def point_in_ancestor_clips?(px, py)
-        cur = @parent
+      # 祖先を含めてツリーが有効（表示・enabled・未消滅）かを返す
+      def tree_active?
+        cur = self
         while cur
-          if cur.is_a?(Widget) && cur.clip_children
-            cx, cy, cw, ch = cur.clip_bounds
-            return false if px < cx || px > (cx + cw) || py < cy || py > (cy + ch)
-          end
+          return false if cur.vanished? || !cur.visible
+          return false if cur.is_a?(Widget) && !cur.enabled
           cur = cur.parent
         end
         true
       end
 
-      # ワールド座標 (px, py) がこのウィジェット自身の領域内か判定
-      def hit_test_self?(px, py)
-        return false if @vanished || !@visible || !@enabled || !@interactive
-        return false unless point_in_ancestor_clips?(px, py)
+      def popup_open?  = (st = stage) ? st.popup_open?(self) : false
+      def open_popup!  = (stage&.open_popup(self); self)
+      def close_popup! = (stage&.close_popup(self); self)
 
-        if @collider_shape
-          col = self.collider
-          return false unless col
-          pt = UI.hit_test_point
-          pt.x = px
-          pt.y = py
-          pt.dirty_pos!
-          Collision.check(col, pt)
-        elsif world_angle == 0.0
-          l = screen_left
-          t = screen_top
-          px >= l && px <= (l + screen_width) && py >= t && py <= (t + screen_height)
-        else
-          dx = px - world_pivot_x
-          dy = py - world_pivot_y
-          cos = world_cos
-          sin = world_sin
-          rx = dx * cos + dy * sin
-          ry = -dx * sin + dy * cos
-          sx = world_scale_x
-          sy = world_scale_y
-          lx = (sx.abs > 0.0001 ? rx / sx : rx) + @pivot_x * width
-          ly = (sy.abs > 0.0001 ? ry / sy : ry) + @pivot_y * height
-          lx >= 0.0 && lx <= width && ly >= 0.0 && ly <= height
+      # 所属している最寄りの Stage を辿る
+      def stage
+        cur = self
+        while cur
+          return cur if cur.is_a?(Stage)
+          cur = cur.parent
         end
-      end
-
-      # 子孫を含めた最前面のヒットウィジェットを逆順（手前から奥へ）探索
-      def find_hit_widget(px, py)
-        return nil if @vanished || !@visible || !@enabled
-
-        if @clip_children
-          cx, cy, cw, ch = clip_bounds
-          if px >= cx && px <= (cx + cw) && py >= cy && py <= (cy + ch)
-            if (ch_list = @children)
-              i = ch_list.length - 1
-              while i >= 0
-                c = ch_list[i]
-                if c.is_a?(Widget) && !c.vanished?
-                  hit = c.find_hit_widget(px, py)
-                  return hit if hit
-                end
-                i -= 1
-              end
-            end
-          end
-        elsif (ch_list = @children)
-          i = ch_list.length - 1
-          while i >= 0
-            c = ch_list[i]
-            if c.is_a?(Widget) && !c.vanished?
-              hit = c.find_hit_widget(px, py)
-              return hit if hit
-            end
-            i -= 1
-          end
-        end
-
-        return self if hit_test_self?(px, py)
         nil
       end
 
-      # フレーム毎の状態リセット (ルートから再帰呼び出し)
-      def reset_frame_flags
-        @clicked = false
-        @changed = false
-        set_hovered_state(false) if @hovered
-        if (ch_list = @children)
-          i = 0
-          len = ch_list.length
-          while i < len
-            c = ch_list[i]
-            c.reset_frame_flags if c.is_a?(Widget)
-            i += 1
-          end
-        end
+      def hovered?
+        st = stage
+        st ? st.hovered?(self) : false
       end
 
-      # 親子のレイアウト計算フック
-      def update_layout_tree
-        if (ch_list = @children)
-          i = 0
-          len = ch_list.length
-          while i < len
-            c = ch_list[i]
-            c.update_layout_tree if c.is_a?(Widget) && !c.vanished?
-            i += 1
-          end
-        end
+      def focused?
+        st = stage
+        st ? st.focused?(self) : false
       end
 
-      # フレーム更新 (ルートウィジェットに対して update を呼ぶとツリー全体が更新されます)
-      # 毎フレームの入力処理・レイアウト・子要素更新を実行する
-      #
-      # - 戻り値: `nil`
-      def update
-        return if @vanished || !@visible
-
-        unless @parent.is_a?(Widget)
-          reset_frame_flags
-          update_layout_tree
-          process_root_input
-          update_layout_tree
-        end
-
-        update_self
-        super
+      # カスタム描画ブロックを設定する
+      def on_draw(&block)
+        @on_draw_proc = block
+        self
       end
 
-      # 各ウィジェット固有の毎フレーム更新フック
-      def update_self
+      # 明示 height 未指定時はテーマ基準の標準高さを返す
+      def height
+        @height || theme.control_height
       end
 
-      # ルートウィジェットによるポインタ・ホイール・フォーカス入力の一括ディスパッチ
-      def process_root_input
-        # ImGui (デバッグUI) がマウスを掴んでいる場合は保持モードGUIへの入力を遮断
-        return if ImGui.mouse_captured?
+      # 画面上の描画矩形 (Pivot・Scale 反映)
+      def screen_left   = world_pivot_x - @pivot_x * width * world_scale_x
+      def screen_top    = world_pivot_y - @pivot_y * height * world_scale_y
+      def screen_width  = width * world_scale_x
+      def screen_height = height * world_scale_y
 
-        mx = Input.mouse_x.to_f
-        my = Input.mouse_y.to_f
-        m_down = Input.mouse_pressed?(:left)
-        m_push = Input.mouse_push?(:left)
-        m_rel  = Input.mouse_release?(:left)
-        wheel_y = Input.mouse_wheel_y.to_f
-
-        # 0. 開いているポップアップ (Dropdown等) の優先処理
-        if (pop = UI.open_popup_widget) && UI.widget_tree_visible?(pop) && pop.enabled
-          if pop.handle_popup_input(mx, my, m_push, m_down, m_rel, wheel_y)
-            UI.mark_mouse_captured!
-            Input.consume_mouse! if m_push || m_down || m_rel
-            if (m_rel || !m_down) && (act = UI.active_widget) && act.root.equal?(self)
-              UI.active_widget = nil
-              act.on_pointer_up(mx, my, false)
-            end
-            return
-          end
-        end
-
-        # 1. ドラッグ中 (active_widget) のウィジェットが自身のツリー内にある場合
-        act = UI.active_widget
-        if act && act.root.equal?(self)
-          UI.mark_mouse_captured!
-          Input.consume_mouse!
-          in_self = act.hit_test_self?(mx, my)
-          act.set_hovered_state(in_self)
-          if m_rel || !m_down
-            UI.active_widget = nil
-            act.on_pointer_up(mx, my, in_self)
-          else
-            act.on_pointer_drag(mx, my)
-          end
-          return
-        elsif act
-          # 別のルートツリーがドラッグ中なら何もしない
-          return
-        end
-
-        # 2. マウス直下の最前面ウィジェットを探索
-        hit = find_hit_widget(mx, my)
-        if hit
-          UI.hovered_widget = hit
-          UI.mark_mouse_captured!
-          hit.set_hovered_state(true)
-
-          # マウスホイールイベントをヒット箇所から親へバブリング
-          if wheel_y != 0.0
-            cur = hit
-            while cur
-              break if cur.is_a?(Widget) && cur.on_mouse_wheel(wheel_y)
-              cur = cur.parent
-            end
-          end
-
-          if m_push
-            Input.consume_mouse!
-            # ウィンドウのクリック時最前面化 (Bring to Front)
-            hit.bring_ancestor_window_to_front!
-            # フォーカス遷移
-            if UI.focused_widget && !UI.focused_widget.equal?(hit)
-              UI.clear_focus
-            end
-            UI.active_widget = hit
-            hit.on_pointer_down(mx, my)
-            if m_rel
-              UI.active_widget = nil
-              hit.on_pointer_up(mx, my, true)
-            end
-          end
-        else
-          if m_push && UI.focused_widget && UI.focused_widget.root.equal?(self)
-            UI.clear_focus
-          end
-        end
+      def clip_bounds
+        [screen_left, screen_top, screen_width, screen_height]
       end
 
-      def set_hovered_state(val)
-        @hovered = val
-        if val && @enabled && @interactive
-          UI.set_mouse_cursor(hover_cursor_shape)
-        end
+      # 子ウィジェットを追加する
+      def add(child)
+        return nil unless child
+        child.parent = self
+        child
       end
 
-      def hover_cursor_shape
-        :arrow
+      def <<(child)
+        add(child)
+        self
       end
 
-      def mark_layout_dirty!
-      end
-
-      def ensure_layout_updated
-      end
-
-      def bring_to_front!
-        false
-      end
-
-      def bring_ancestor_window_to_front!
-        cur = self
-        while cur
-          break if cur.is_a?(Widget) && cur.bring_to_front!
-          cur = cur.parent
-        end
-      end
-
-      # ポインタイベントハンドラ (サブクラスでオーバーライド)
-      def on_pointer_down(_mx, _my)
-        @pressed = true
-      end
-
-      def on_pointer_drag(_mx, _my)
-      end
-
-      def on_pointer_up(_mx, _my, inside)
-        was_pressed = @pressed
-        @pressed = false
-        if was_pressed && inside && @enabled
-          trigger_click!
-        end
-      end
-
-      def on_mouse_wheel(_wheel_y)
-        false
-      end
-
-      # クリックイベントを発火し、`clicked?` を `true` にして `on_click` コールバックを実行する
-      #
-      # - 戻り値: `Object | nil`
-      def trigger_click!
-        @clicked = true
-        @on_click_proc.call(self) if @on_click_proc
-      end
-
-      # 値変更イベントを発火し、`changed?` を `true` にして `on_change` コールバックを実行する
-      #
-      # - `val` (`Object | nil`): コールバックへ渡す変更後の値
-      # - 戻り値: `Object | nil`
-      def trigger_change!(val = nil)
-        @changed = true
-        if @on_change_proc
-          if @on_change_proc.arity == 0
-            @on_change_proc.call
-          else
-            @on_change_proc.call(val)
-          end
-        end
-      end
-
-      # ウィジェットと子ウィジェットを描画する（ルートウィジェットではレイアウト自動更新も実行）
-      #
-      # - 戻り値: `nil`
       def draw
         return if @vanished || !@visible
 
-        update_layout_tree unless @parent.is_a?(Widget)
-        ensure_layout_updated
-
+        ensure_layout
         if @on_draw_proc
-          @on_draw_proc.call(screen_left, screen_top, screen_width, screen_height, visual_state)
+          @on_draw_proc.call(self)
         else
           draw_self
         end
 
-        if @children
-          if @clip_children
-            cx, cy, cw, ch = clip_bounds
-            if cw > 0.0 && ch > 0.0
-              prev_ox, prev_oy = Zenoo::Window.push_clip_scope(cx, cy, cw, ch, local: false, z: @z)
-              draw_children
-              Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
-            end
-          else
+        return unless @children
+        if @clip_children
+          cx, cy, cw, ch = clip_bounds
+          if cw > 0.0 && ch > 0.0
+            prev_ox, prev_oy = Zenoo::Window.push_clip_scope(cx, cy, cw, ch, local: false, z: @z)
             draw_children
+            Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
           end
+        else
+          draw_children
         end
       end
 
@@ -558,17 +165,58 @@ module Zenoo
         super if @image
       end
 
-      # width / height 変更時に親コンテナのレイアウトを再計算させる
+      # 自身への当たり判定 (Sprite の Collider による統合判定)
+      def hit_test_self?(px, py)
+        return false if @vanished || !@visible || !@enabled || !@interactive
+        col = self.collider
+        return false unless col
+        Collision.check(UI.point_collider(px, py), col)
+      end
+
+      # 手前(配列末尾)から奥(配列先頭)へ最前面のヒット対象を探索
+      def find_hit(px, py)
+        return nil if @vanished || !@visible || !@enabled
+
+        ensure_layout
+        if (ch_list = @children)
+          can_enter_children = true
+          if @clip_children
+            cx, cy, cw, ch = clip_bounds
+            can_enter_children = px >= cx && px <= (cx + cw) && py >= cy && py <= (cy + ch)
+          end
+
+          if can_enter_children
+            i = ch_list.length - 1
+            while i >= 0
+              c = ch_list[i]
+              if c.is_a?(Widget) && !c.vanished?
+                hit = c.find_hit(px, py)
+                return hit if hit
+              end
+              i -= 1
+            end
+          end
+        end
+
+        hit_test_self?(px, py) ? self : nil
+      end
+
       def width=(v)
         old_w = width
         super(v)
-        @parent.mark_layout_dirty! if width != old_w && @parent.is_a?(Widget)
+        if width != old_w
+          sync_collider_shape
+          @parent.mark_layout_dirty! if @parent.is_a?(Widget)
+        end
       end
 
       def height=(v)
         old_h = height
         super(v)
-        @parent.mark_layout_dirty! if height != old_h && @parent.is_a?(Widget)
+        if height != old_h
+          sync_collider_shape
+          @parent.mark_layout_dirty! if @parent.is_a?(Widget)
+        end
       end
 
       def visible=(v)
@@ -588,6 +236,165 @@ module Zenoo
       def __remove_child_internal(child)
         super(child)
         mark_layout_dirty!
+      end
+
+      # 指定の子を最前面（描画配列の末尾）へ移動する
+      def bring_child_to_front!(child)
+        return false unless @children && @children.include?(child)
+        return true if @children.last.equal?(child)
+        @children.delete(child)
+        @children << child
+        true
+      end
+
+      # --- イベント受け口 (Module / サブクラス向けフック) ---
+      def ensure_layout;                end
+      def mark_layout_dirty!;           end
+      def cursor_shape                 = :arrow
+      def can_focus?                   = false
+      def bring_to_front_on_click?     = false
+      def on_pointer_enter;            end
+      def on_pointer_move(_mx, _my);   end
+      def on_pointer_leave;            end
+      def on_pointer_down(_mx, _my);   end
+      def on_pointer_drag(_mx, _my);   end
+      def on_pointer_up(_mx, _my, _in); end
+      def on_wheel(_dy)                = false
+      def on_focus;                    end
+      def on_blur;                     end
+      def on_focused_update;           end
+      def hit_test_popup?(_mx, _my)    = false
+      def popup_cursor_shape           = :arrow
+      def on_popup_open;               end
+      def on_popup_close;              end
+      def on_popup_move(_mx, _my);     end
+      def on_popup_down(_mx, _my);     end
+      def on_popup_wheel(_dy)          = false
+      def draw_popup;                  end
+    end
+
+    # クリック操作を提供するミックスイン
+    module Clickable
+      def pressed? = !!@pressed
+      def clicked? = @clicked_frame == UI.frame
+      def cursor_shape = :hand
+
+      def on_click(&block)
+        @on_click_proc = block
+        self
+      end
+
+      def on_pointer_down(mx, my)
+        @pressed = true
+        super
+      end
+
+      def on_pointer_up(mx, my, inside)
+        was_pressed = @pressed
+        @pressed = false
+        trigger_click! if was_pressed && inside && @enabled
+        super
+      end
+
+      def trigger_click!
+        @clicked_frame = UI.frame
+        @on_click_proc&.call(self)
+      end
+    end
+
+    # ドラッグ操作を提供するミックスイン
+    module Draggable
+      def drag_target
+        @drag_target_initialized ? @drag_target : self
+      end
+
+      def drag_target=(target)
+        @drag_target_initialized = true
+        @drag_target = target
+      end
+
+      def dragging?    = !!@dragging
+      def on_drag_start(_mx, _my); end
+      def on_drag(_dx, _dy);       end
+      def on_drag_end;             end
+
+      def on_pointer_down(mx, my)
+        @dragging = true
+        @drag_start_mx = mx
+        @drag_start_my = my
+        @drag_offset_x = 0.0
+        @drag_offset_y = 0.0
+        if (tgt = drag_target)
+          @drag_origin_x = tgt.x
+          @drag_origin_y = tgt.y
+        end
+        on_drag_start(mx, my)
+        super
+      end
+
+      def on_pointer_drag(mx, my)
+        if @dragging
+          dx = mx - @drag_start_mx
+          dy = my - @drag_start_my
+          @drag_offset_x = dx
+          @drag_offset_y = dy
+          if (tgt = drag_target)
+            tgt.x = @drag_origin_x + dx
+            tgt.y = @drag_origin_y + dy
+          end
+          on_drag(dx, dy)
+        end
+        super
+      end
+
+      def on_pointer_up(mx, my, inside)
+        if @dragging
+          @dragging = false
+          on_drag_end
+        end
+        super
+      end
+    end
+
+    # キーボードフォーカス対象を表すミックスイン
+    module Focusable
+      def can_focus? = @enabled
+      def focus!     = (stage&.set_focus(self); self)
+      def blur!      = (stage&.set_focus(nil) if focused?; self)
+    end
+
+    # 縦スクロール操作を提供するミックスイン
+    module Scrollable
+      attr_reader :scroll_y
+
+      def init_scrollable
+        @scroll_y = 0.0
+        @clip_children = true
+      end
+
+      def scroll_y=(val)
+        max_s = max_scroll_y
+        v = val.to_f
+        v = 0.0 if v < 0.0
+        v = max_s if v > max_s
+        if @scroll_y != v
+          @scroll_y = v
+          mark_layout_dirty!
+        end
+      end
+
+      def max_scroll_y
+        [content_height - height, 0.0].max
+      end
+
+      def scroll_offset_y
+        @scroll_y || 0.0
+      end
+
+      def on_wheel(dy)
+        return false if max_scroll_y <= 0.0
+        self.scroll_y = (@scroll_y || 0.0) - dy * 28.0
+        true
       end
     end
   end
