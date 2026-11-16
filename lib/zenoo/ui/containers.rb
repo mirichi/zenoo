@@ -210,7 +210,7 @@ module Zenoo
     class Box < Widget
       attr_reader :direction, :align
 
-      def initialize(x = 0.0, y = 0.0, width: 200.0, height: 200.0,
+      def initialize(x = 0.0, y = 0.0, width: 200.0, height: nil,
                      direction: :column, padding: nil, gap: nil, align: :stretch,
                      clip_children: false, interactive: false, **opts, &block)
         @direction    = direction
@@ -224,9 +224,11 @@ module Zenoo
 
       def gap     = @explicit_gap || theme.gap
       def padding = @explicit_pad || theme.padding
+      def height  = @height || content_height
 
       def mark_layout_dirty!
         @layout_dirty = true
+        @parent.mark_layout_dirty! if @parent.is_a?(Widget)
       end
 
       def width=(v)
@@ -372,12 +374,12 @@ module Zenoo
       include Scrollable
       SB_WIDTH = 10.0
 
-      def initialize(x = 0.0, y = 0.0, padding: nil, gap: nil, **opts, &block)
+      def initialize(x = 0.0, y = 0.0, width: 200.0, height: 200.0, padding: nil, gap: nil, **opts, &block)
         init_scrollable
         @dragging_sb   = false
         @hover_sb      = false
         @sb_drag_off_y = 0.0
-        super(x, y, padding: padding, gap: gap, clip_children: true, interactive: true, **opts, &block)
+        super(x, y, width: width, height: height, padding: padding, gap: gap, clip_children: true, interactive: true, **opts, &block)
       end
 
       def collider_radius = theme.radius
@@ -518,8 +520,6 @@ module Zenoo
           hh = th.header_height * world_scale_y
           Zenoo::Window.draw_text(screen_left + padding * world_scale_x, screen_top + hh * 0.5 + 1.0, @title,
                                   size: th.font_size + 1, color: th.text_color, valign: :center, camera: false, z: @z)
-          Zenoo::Window.draw_line(screen_left + 1.0, screen_top + hh, screen_left + screen_width - 1.0, screen_top + hh,
-                                  color: bd, width: 1.0, camera: false, z: @z)
         end
       end
     end

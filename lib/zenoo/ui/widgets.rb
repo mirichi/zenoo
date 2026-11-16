@@ -157,10 +157,29 @@ module Zenoo
              end
         bd = (hovered? || active?) ? th.border_hover : th.border_normal
         py = pressed? ? 1.0 : 0.0
-        Zenoo::Window.draw_rect(screen_left, screen_top, screen_width, screen_height,
-                                radius: th.radius, color: bg, border_width: 1.0, border_color: bd, camera: false, z: @z)
-        Zenoo::Window.draw_text(screen_left + screen_width * 0.5, screen_top + screen_height * 0.5 + py,
-                                @label, size: th.font_size, color: th.text_color, align: :center, valign: :center, camera: false, z: @z)
+        ang = world_angle
+        lx = screen_left
+        ty = screen_top
+        rw = screen_width
+        rh = screen_height
+        Zenoo::Window.draw_rect(lx, ty, rw, rh,
+                                radius: th.radius, color: bg, border_width: 1.0, border_color: bd,
+                                angle: ang, pivot: [@pivot_x, @pivot_y], camera: false, z: @z)
+        cx = lx + rw * 0.5
+        cy = ty + rh * 0.5 + py
+        if ang != 0.0 && (@pivot_x != 0.5 || @pivot_y != 0.5)
+          pv_x = world_pivot_x
+          pv_y = world_pivot_y
+          rad = ang * (Math::PI / 180.0)
+          cos_a = Math.cos(rad)
+          sin_a = Math.sin(rad)
+          dx = cx - pv_x
+          dy = cy - pv_y
+          cx = pv_x + dx * cos_a - dy * sin_a
+          cy = pv_y + dx * sin_a + dy * cos_a
+        end
+        Zenoo::Window.draw_text(cx, cy, @label, size: th.font_size, color: th.text_color,
+                                align: :center, valign: :center, camera: false, z: @z)
       end
     end
 
