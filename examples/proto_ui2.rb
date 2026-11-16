@@ -2223,6 +2223,307 @@ module Zenoo
       end
     end
 
+    class Table < Widget
+      COL_HDR_BG   = [32, 38, 52]
+      COL_HDR_TXT  = [178, 194, 222]
+      COL_ROW_EVEN = [255, 255, 255, 9]
+      COL_SEP      = [255, 255, 255, 22]
+      COL_VAL_NUM  = [130, 210, 255]
+      COL_VAL_BOOL = [245, 195, 110]
+      COL_VAL_SYM  = [210, 160, 255]
+      COL_VAL_NIL  = [130, 140, 160]
+
+      attr_accessor :selectable, :label
+      attr_reader :columns, :rows, :selected_index, :scroll_y
+
+      def initialize(columns = [], rows = [], selected_index = nil, x = 0.0, y = 0.0,
+                     width: 320.0, height: 180.0, item_height: 20.0, selectable: true, label: "", **opts, &block)
+        @columns        = columns.dup
+        @rows           = rows.dup
+        @item_height    = [item_height.to_f, 14.0].max
+        @selectable     = !!selectable
+        @label          = label.to_s
+        @scroll_y       = 0.0
+        @hover_index    = nil
+        @on_change_proc = block
+        @selected_index = normalize_selected_index(selected_index)
+        super(x, y, width: width, height: height, **opts)
+      end
+
+      def cursor_shape = (@selectable && !@hover_index.nil?) ? :hand : :arrow
+      def on_change(&block) = (@on_change_proc = block; self)
+      def selected_row = (@selected_index && @selected_index >= 0) ? @rows[@selected_index] : nil
+
+      def columns=(val)
+        @columns = val.dup
+      end
+
+      def rows=(val)
+        @rows = val.dup
+        @selected_index = normalize_selected_index(@selected_index)
+        @scroll_y = @scroll_y.clamp(0.0, max_scroll_y)
+        @hover_index = nil if @hover_index && @hover_index >= @rows.length
+      end
+
+      def selected_index=(idx)
+        @selected_index = normalize_selected_index(idx)
+      end
+
+      def set_default_collider
+        ox, oy, tw, th_b, rad = table_local_bounds
+        set_collider(:rect, width: tw, height: th_b,
+                     offset_x: ox + tw * 0.5, offset_y: oy + th_b * 0.5,
+                     at: :top_left, radius: rad)
+      end
+
+      def sync_collider_shape
+        col = @collider_shape
+        return unless col && col.shape_type == Collision::TYPE_RECT
+        ox, oy, tw, th_b, rad = table_local_bounds
+        col.width = tw
+        col.height = th_b
+        col.offset_x = ox + tw * 0.5
+        col.offset_y = oy + th_b * 0.5
+        col.radius = rad
+      end
+
+      def on_pointer_move(mx, my)
+        @hover_index = @selectable ? row_index_at(mx, my) : nil
+      end
+
+      def on_pointer_leave
+        @hover_index = nil
+      end
+
+      def on_wheel(dy)
+        max_s = max_scroll_y
+        return false if max_s <= 0.0
+        @scroll_y = (@scroll_y - dy * @item_height * 1.5).clamp(0.0, max_s)
+        true
+      end
+
+      def on_pointer_down(mx, my)
+        super
+        return unless @selectable
+        idx = row_index_at(mx, my)
+        if idx && idx != @selected_index
+          @selected_index = idx
+          @on_change_proc&.call(@selected_index, @rows[@selected_index])
+        end
+      end
+
+      def draw_self
+        th = theme
+        sx = world_scale_x
+        sy = world_scale_y
+        tx, ty, tw, th_b, rad, header_h, body_x, body_y, body_w, body_h, scroll_w = table_metrics
+
+        unless @label.empty?
+          Zenoo::Window.draw_text(screen_left, screen_top + 10.0 * sy, @label,
+                                  size: [th.font_size - 1, 10].max, color: th.text_muted, valign: :center, camera: false, z: @z)
+        end
+
+        Zenoo::Window.draw_rect(tx, ty, tw, th_b, radius: rad, color: th.track_bg,
+                                border_width: 1.0, border_color: th.track_border, camera: false, z: @z)
+
+        col_names, col_widths = resolve_columns(body_w)
+        draw_header(tx + 2.0 * sx, ty + 2.0 * sy, tw - 4.0 * sx, header_h, col_names, col_widths, sy)
+
+        @scroll_y = @scroll_y.clamp(0.0, max_scroll_y)
+        row_h = @item_height * sy
+        f_size = [(th.font_size - 2) * sy, 10].max.round
+
+        prev_ox, prev_oy = Zenoo::Window.push_clip_scope(body_x, body_y, body_w, body_h, local: false, z: @z)
+        if !@rows.empty? && body_h > 0.0
+          first_idx = [(@scroll_y / row_h).floor, 0].max
+          last_idx  = [((@scroll_y + body_h) / row_h).ceil, @rows.length - 1].min
+          i = first_idx
+          while i <= last_idx
+            iy = body_y + i * row_h - @scroll_y
+            draw_row(th, body_x, iy, body_w, row_h, @rows[i], col_widths,
+                     i == @selected_index, i == @hover_index, i.even?, f_size)
+            i += 1
+          end
+        end
+        Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
+
+        if scroll_w > 0.0
+          max_s = max_scroll_y
+          total_h = @rows.length * row_h
+          track_x = tx + tw - scroll_w + 1.0
+          thumb_h = [body_h * (body_h / [total_h, 1.0].max), 16.0].max
+          ratio = max_s > 0.0 ? (@scroll_y / max_s) : 0.0
+          thumb_y = body_y + (body_h - thumb_h) * ratio
+          Zenoo::Window.draw_rect(track_x, thumb_y, [scroll_w - 4.0, 3.0].max, thumb_h,
+                                  radius: 2.0, color: th.accent_color, camera: false, z: @z)
+        end
+      end
+
+      private
+
+      def normalize_selected_index(idx)
+        return nil if idx.nil? || @rows.empty?
+        i = idx.to_i
+        (i >= 0 && i < @rows.length) ? i : nil
+      end
+
+      def table_local_bounds
+        th = theme
+        label_h = @label.empty? ? 0.0 : 20.0
+        th_b = [height - label_h, 24.0].max
+        [0.0, label_h, [width, 1.0].max, th_b, th.radius]
+      end
+
+      def table_metrics
+        ox, oy, tw_l, th_l, rad = table_local_bounds
+        sx = world_scale_x
+        sy = world_scale_y
+        tx = screen_left + ox * sx
+        ty = screen_top + oy * sy
+        tw = tw_l * sx
+        th_b = th_l * sy
+        header_h = [22.0 * sy, th_b * 0.45].min
+        body_y = ty + header_h + 3.0 * sy
+        body_h = [th_b - header_h - 5.0 * sy, 1.0].max
+        total_h = @rows.length * (@item_height * sy)
+        scroll_w = (total_h > body_h) ? (8.0 * sx) : 0.0
+        body_x = tx + 2.0 * sx
+        body_w = [tw - scroll_w - 4.0 * sx, 1.0].max
+        [tx, ty, tw, th_b, rad, header_h, body_x, body_y, body_w, body_h, scroll_w]
+      end
+
+      def max_scroll_y
+        _tx, _ty, _tw, _th_b, _rad, _hh, _bx, _by, _bw, body_h, = table_metrics
+        total_h = @rows.length * (@item_height * world_scale_y)
+        [total_h - body_h, 0.0].max
+      end
+
+      def row_index_at(mx, my)
+        _tx, _ty, _tw, _th_b, _rad, _hh, body_x, body_y, body_w, body_h, = table_metrics
+        return nil if @rows.empty? || mx < body_x || mx > body_x + body_w || my < body_y || my > body_y + body_h
+        row_h = @item_height * world_scale_y
+        idx = ((my - body_y + @scroll_y) / row_h).floor
+        (idx >= 0 && idx < @rows.length) ? idx : nil
+      end
+
+      def resolve_columns(content_w)
+        names = []
+        widths = []
+        fixed_total = 0.0
+        flex_count = 0
+        len = @columns.length
+        i = 0
+        while i < len
+          col = @columns[i]
+          if col.is_a?(Array)
+            cname = col[0].to_s
+            cw = col[1] ? col[1].to_f : nil
+          elsif col.is_a?(Hash)
+            cname = (col[:name] || col["name"]).to_s
+            cw = (col[:width] || col["width"]) ? (col[:width] || col["width"]).to_f : nil
+          else
+            cname = col.to_s
+            cw = nil
+          end
+          names << cname
+          if cw && cw > 0.0
+            widths << cw
+            fixed_total += cw
+          else
+            widths << nil
+            flex_count += 1
+          end
+          i += 1
+        end
+        flex_w = flex_count > 0 ? [((content_w - fixed_total) / flex_count.to_f), 20.0].max : 0.0
+        i = 0
+        while i < len
+          widths[i] ||= flex_w
+          i += 1
+        end
+        [names, widths]
+      end
+
+      def draw_header(hx, hy, hw, hh, col_names, col_widths, sy)
+        Zenoo::Window.draw_rect(hx, hy, hw, hh, radius: 2.0, color: COL_HDR_BG, camera: false, z: @z)
+        Zenoo::Window.draw_rect(hx, hy + hh - 1.0, hw, 1.0, color: COL_SEP, camera: false, z: @z)
+
+        f_size = [11 * sy, 9].max.round
+        cx = hx
+        len = col_names.length
+        i = 0
+        while i < len
+          cw = col_widths[i]
+          txt = truncate_to_width(col_names[i], cw - 10.0, f_size)
+          Zenoo::Window.draw_text(cx + 5.0, hy + hh * 0.5, txt, size: f_size, color: COL_HDR_TXT, valign: :center, camera: false, z: @z)
+          Zenoo::Window.draw_rect(cx + cw - 1.0, hy + 2.0, 1.0, [hh - 4.0, 1.0].max, color: COL_SEP, camera: false, z: @z) if i < len - 1
+          cx += cw
+          i += 1
+        end
+      end
+
+      def draw_row(th, rx, ry, rw, rh, row_data, col_widths, is_sel, is_hov, is_even, f_size)
+        if is_sel
+          Zenoo::Window.draw_rect(rx, ry, rw, rh, radius: 2.0, color: th.bg_active, camera: false, z: @z)
+          Zenoo::Window.draw_rect(rx + 1.0, ry + 2.0, 2.5, [rh - 4.0, 2.0].max, radius: 1.0, color: th.accent_color, camera: false, z: @z)
+        elsif is_hov
+          Zenoo::Window.draw_rect(rx, ry, rw, rh, radius: 2.0, color: th.bg_hover, camera: false, z: @z)
+        elsif is_even
+          Zenoo::Window.draw_rect(rx, ry, rw, rh, radius: 2.0, color: COL_ROW_EVEN, camera: false, z: @z)
+        end
+
+        cx = rx
+        len = col_widths.length
+        i = 0
+        while i < len
+          cw = col_widths[i]
+          val = row_data.is_a?(Array) ? row_data[i] : nil
+          val_col = value_color(th, val, is_sel || is_hov)
+          val_str = val.is_a?(String) ? val : (val.nil? ? "nil" : val.to_s)
+          txt = truncate_to_width(val_str, cw - 10.0, f_size)
+          Zenoo::Window.draw_text(cx + 6.0, ry + rh * 0.5, txt, size: f_size, color: val_col, valign: :center, camera: false, z: @z)
+          Zenoo::Window.draw_rect(cx + cw - 1.0, ry + 1.0, 1.0, [rh - 2.0, 1.0].max, color: COL_SEP, camera: false, z: @z) if i < len - 1
+          cx += cw
+          i += 1
+        end
+      end
+
+      def value_color(th, val, highlighted)
+        return [255, 255, 255] if highlighted
+        if val.is_a?(Numeric)
+          COL_VAL_NUM
+        elsif val == true || val == false
+          COL_VAL_BOOL
+        elsif val.is_a?(Symbol)
+          COL_VAL_SYM
+        elsif val.nil?
+          COL_VAL_NIL
+        else
+          th.text_color
+        end
+      end
+
+      def truncate_to_width(str, max_w, f_size)
+        return "" if str.empty? || max_w <= 4.0
+        f = Font.default
+        return str if f.text_width(str, f_size) <= max_w
+        ell = "..."
+        ew = f.text_width(ell, f_size)
+        return "" if ew > max_w
+        limit = max_w - ew
+        acc = 0.0
+        cut = 0
+        len = str.length
+        while cut < len
+          cw = f.text_width(str[cut], f_size)
+          break if acc + cw > limit
+          acc += cw
+          cut += 1
+        end
+        "#{str[0...cut]}#{ell}"
+      end
+    end
+
     # --------------------------------------------------------------------------
     # 6. 部品合成による Window (Window自体がDraggable + Body + ResizeGrip)
     # --------------------------------------------------------------------------
@@ -2369,6 +2670,7 @@ module Zenoo
       def dropdown(items = [], selected_index = 0, **opts, &block) = add(Dropdown.new(items, selected_index, **opts, &block))
       def text_box(text = "", **opts, &block)        = add(TextBox.new(text, **opts, &block))
       def tabs(items = [], selected_index = 0, **opts, &block) = add(Tabs.new(items, selected_index, **opts, &block))
+      def table(columns = [], rows = [], selected_index = nil, **opts, &block) = add(Table.new(columns, rows, selected_index, **opts, &block))
       def custom(width: 100.0, height: 32.0, **opts, &block) = add(Widget.new(0.0, 0.0, width: width, height: height, **opts)).on_draw(&block)
     end
 
@@ -2639,7 +2941,7 @@ preview_img_box = nil
 pbar = nil
 tab_panels = []
 win3 = stage.window("Controls Showcase", 748, 185, width: 256, height: 382, resizable: true)
-win3.tabs(["Controls", "Visual"], 0) do |idx, item|
+win3.tabs(["Controls", "Visual", "Table"], 0) do |idx, item|
   lbl_status.text = "Tab: #{item}"
   ti = 0
   while ti < tab_panels.length
@@ -2678,6 +2980,25 @@ tab_panels << win3.panel(flex: 1, visible: false) do |p1|
     brow.button("-15%", width: 64) { pbar.value = (pbar.value - 0.15).clamp(0.0, 1.0) }
     brow.button("+15%", width: 64) { pbar.value = (pbar.value + 0.15).clamp(0.0, 1.0) }
     brow.spacer(4, flex: 1)
+  end
+end
+
+tab_panels << win3.panel(flex: 1, visible: false) do |p2|
+  sample_rows = [
+    ["Player",  120.5, true,  :idle],
+    ["Enemy_1", 340.0, true,  :patrol],
+    ["Enemy_2", 512.8, false, :dead],
+    ["Boss",    880.0, true,  :phase2],
+    ["Bullet",  210.2, true,  :fly],
+    ["Item",    96.0,  false, nil],
+    ["Trigger", 400.0, true,  :active],
+    ["Effect",  64.0,  false, :fade],
+    ["Camera",  0.0,   true,  :follow],
+    ["Shadow",  120.5, true,  :cast]
+  ]
+  p2.table([["Name", 78], ["X", 50], ["Live", 44], "State"], sample_rows, 0,
+           flex: 1, item_height: 20, label: "Objects (Wheel Scroll)") do |idx, row|
+    lbl_status.text = "Row #{idx}: #{row[0]} (#{row[3].inspect})"
   end
 end
 
