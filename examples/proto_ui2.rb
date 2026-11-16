@@ -110,10 +110,11 @@ module Zenoo
 
       def initialize(x = 0.0, y = 0.0, width: 100.0, height: nil,
                      anchor: :top_left, pivot: :center, z: 0.0, camera: false,
-                     enabled: true, interactive: true, clip_children: false,
+                     enabled: true, visible: true, interactive: true, clip_children: false,
                      flex: nil, theme: nil, **opts)
         super(x, y, nil, width: width, height: height, anchor: anchor, pivot: pivot, z: z, camera: camera, **opts)
         @enabled       = enabled
+        @visible       = !!visible
         @interactive   = !!interactive
         @clip_children = clip_children
         @flex          = flex ? flex.to_f : nil
@@ -343,6 +344,7 @@ module Zenoo
       def can_focus?                   = false
       def bring_to_front_on_click?     = false
       def on_pointer_enter;            end
+      def on_pointer_move(_mx, _my);   end
       def on_pointer_leave;            end
       def on_pointer_down(_mx, _my);   end
       def on_pointer_drag(_mx, _my);   end
@@ -596,6 +598,7 @@ module Zenoo
             update_hover(hit)
 
             if hit
+              hit.on_pointer_move(mx, my)
               if wheel != 0.0
                 cur = hit
                 while cur && cur.is_a?(Widget)
@@ -843,9 +846,131 @@ module Zenoo
       end
     end
 
+    class Panel < VBox
+      attr_accessor :bg_color, :border_color, :border_width, :radius
+
+      def initialize(x = 0.0, y = 0.0, width: 200.0, height: 200.0,
+                     bg_color: nil, border_color: nil, border_width: 1.0, radius: nil, **opts, &block)
+        @bg_color     = bg_color
+        @border_color = border_color
+        @border_width = border_width.to_f
+        @radius       = radius ? radius.to_f : nil
+        super(x, y, width: width, height: height, **opts, &block)
+      end
+
+      def draw_self
+        th = theme
+        Zenoo::Window.draw_rect(screen_left, screen_top, screen_width, screen_height,
+                                radius: @radius || th.radius, color: @bg_color || [28, 33, 45],
+                                border_width: @border_width, border_color: @border_color || th.border_normal,
+                                camera: false, z: @z)
+      end
+    end
+
     # --------------------------------------------------------------------------
     # 5. 標準ウィジェット (ツール / 汎用)
     # --------------------------------------------------------------------------
+    class Divider < Widget
+      attr_accessor :color
+
+      def initialize(x = 0.0, y = 0.0, width: 200.0, height: 8.0, color: nil, **opts)
+        @color = color
+        super(x, y, width: width, height: height, interactive: false, **opts)
+      end
+
+      def draw_self
+        th = theme
+        ry = (screen_top + screen_height * 0.5).floor
+        Zenoo::Window.draw_rect(screen_left, ry, screen_width, 1.0, color: @color || th.border_normal, camera: false, z: @z)
+      end
+    end
+
+    class Spacer < Widget
+      def initialize(size = 8.0, flex: nil, **opts)
+        s = size.to_f
+        super(0.0, 0.0, width: s, height: s, flex: flex, interactive: false, **opts)
+      end
+    end
+
+    class ImageBox < Widget
+      attr_accessor :fit, :bg_color, :border_color, :border_width, :radius, :tint
+
+      def initialize(image = nil, x = 0.0, y = 0.0, width: nil, height: nil,
+                     fit: :contain, bg_color: nil, border_color: nil, border_width: 0.0, radius: 4.0,
+                     tint: nil, interactive: false, **opts)
+        @source_image = image
+        @fit          = fit
+        @bg_color     = bg_color
+        @border_color = border_color
+        @border_width = border_width.to_f
+        @radius       = radius.to_f
+        @tint         = tint
+        w = width ? width.to_f : (image ? image.width.to_f : 64.0)
+        h = height ? height.to_f : (image ? image.height.to_f : 64.0)
+        super(x, y, width: w, height: h, interactive: interactive, **opts)
+      end
+
+      def image = @source_image
+      def image=(val)
+        @source_image = val
+      end
+      def collider_radius = @radius
+
+      def draw_self
+        rx = screen_left
+        ry = screen_top
+        rw = screen_width
+        rh = screen_height
+        has_border = !@border_color.nil? && @border_width > 0.0
+        bw = has_border ? @border_width : 0.0
+
+        if @bg_color
+          Zenoo::Window.draw_rect(rx, ry, rw, rh, radius: @radius, color: @bg_color, camera: false, z: @z)
+        end
+
+        if (img = @source_image)
+          iw = img.width.to_f
+          ih = img.height.to_f
+          ix = rx + bw
+          iy = ry + bw
+          ax_w = [rw - bw * 2.0, 0.0].max
+          ax_h = [rh - bw * 2.0, 0.0].max
+          if iw > 0.0 && ih > 0.0 && ax_w > 0.0 && ax_h > 0.0
+            case @fit
+            when :stretch
+              dw = ax_w; dh = ax_h; dx = ix; dy = iy
+            when :center
+              dw = iw * world_scale_x
+              dh = ih * world_scale_y
+              dx = ix + (ax_w - dw) * 0.5
+              dy = iy + (ax_h - dh) * 0.5
+            else # :contain
+              sc = [ax_w / iw, ax_h / ih].min
+              dw = iw * sc
+              dh = ih * sc
+              dx = ix + (ax_w - dw) * 0.5
+              dy = iy + (ax_h - dh) * 0.5
+            end
+
+            inner_rad = [@radius - bw, 0.0].max
+            img_rad = (@fit == :stretch) ? inner_rad : [inner_rad, dw * 0.5, dh * 0.5].min
+            if @fit == :center && (dw > ax_w || dh > ax_h)
+              prev_ox, prev_oy = Zenoo::Window.push_clip_scope(ix, iy, ax_w, ax_h, local: false, z: @z)
+              Zenoo::Window.draw_rect(dx, dy, dw, dh, radius: img_rad, color: @tint || :white, image: img, camera: false, z: @z)
+              Zenoo::Window.pop_clip_scope(prev_ox, prev_oy)
+            else
+              Zenoo::Window.draw_rect(dx, dy, dw, dh, radius: img_rad, color: @tint || :white, image: img, camera: false, z: @z)
+            end
+          end
+        end
+
+        if has_border
+          Zenoo::Window.draw_rect(rx, ry, rw, rh, radius: @radius, color: nil,
+                                  border_width: @border_width, border_color: @border_color, camera: false, z: @z)
+        end
+      end
+    end
+
     class Label < Widget
       attr_accessor :text, :color
 
@@ -892,9 +1017,10 @@ module Zenoo
       end
     end
 
-    class Checkbox < Widget
+    class ToggleBase < Widget
       include Clickable
-      attr_accessor :label, :checked
+      attr_accessor :label
+      attr_reader :checked
 
       def initialize(label = "", checked = false, x = 0.0, y = 0.0, width: 200.0, height: nil, **opts, &block)
         @label   = label.to_s
@@ -903,24 +1029,344 @@ module Zenoo
         super(x, y, width: width, height: height, **opts)
       end
 
+      def checked? = @checked
+      def checked=(val)
+        @checked = !!val
+      end
       def on_change(&block) = (@on_change_proc = block; self)
 
       def trigger_click!
-        @checked = !@checked
+        self.checked = !@checked
         @on_change_proc&.call(@checked)
+        super
+      end
+    end
+
+    class Checkbox < ToggleBase
+      def draw_self
+        th = theme
+        lx = screen_left
+        sy = world_scale_y
+        box_sz = (th.font_size + 3).to_f * sy
+        ty = screen_top + (screen_height - box_sz) * 0.5
+        rad = [th.radius, 4.0].min
+        bd = hovered? ? th.border_hover : (@checked ? th.accent_color : th.border_normal)
+        bg = hovered? ? th.bg_hover : th.track_bg
+        Zenoo::Window.draw_rect(lx, ty, box_sz, box_sz, radius: rad, color: bg, border_width: 1.0, border_color: bd, camera: false, z: @z)
+        if @checked
+          pad = 3.5 * sy
+          inner_sz = [box_sz - pad * 2.0, 2.0].max
+          Zenoo::Window.draw_rect(lx + pad, ty + pad, inner_sz, inner_sz, radius: [rad - 1.5, 1.5].max, color: th.accent_color, camera: false, z: @z)
+        end
+        unless @label.empty?
+          Zenoo::Window.draw_text(lx + box_sz + 7.0, screen_top + screen_height * 0.5, @label, size: th.font_size, color: th.text_color, valign: :center, camera: false, z: @z)
+        end
+      end
+    end
+
+    # 丸ツマミが左右にスライドする今風のトグルスイッチ
+    class Switch < ToggleBase
+      def initialize(label = "", checked = false, x = 0.0, y = 0.0, width: 200.0, height: nil, **opts, &block)
+        super
+        @knob_t = @checked ? 1.0 : 0.0
+      end
+
+      def update
+        target = @checked ? 1.0 : 0.0
+        diff = target - @knob_t
+        if diff.abs <= 0.01
+          @knob_t = target
+        else
+          @knob_t += diff * 0.28
+        end
         super
       end
 
       def draw_self
         th = theme
         lx = screen_left
-        box_sz = (th.font_size + 3).to_f
-        ty = screen_top + (screen_height - box_sz) * 0.5
-        bd = hovered? ? th.border_hover : th.border_normal
-        bg = @checked ? th.accent_color : th.track_bg
-        Zenoo::Window.draw_rect(lx, ty, box_sz, box_sz, radius: [th.radius, 4.0].min, color: bg, border_width: 1.0, border_color: bd, camera: false, z: @z)
-        Zenoo::Window.draw_text(lx + box_sz * 0.5, ty + box_sz * 0.5, "v", size: [th.font_size - 2, 10].max, color: :white, align: :center, valign: :center, camera: false, z: @z) if @checked
-        Zenoo::Window.draw_text(lx + box_sz + 7.0, screen_top + screen_height * 0.5, @label, size: th.font_size, color: th.text_color, valign: :center, camera: false, z: @z)
+        sx = world_scale_x
+        sy = world_scale_y
+        sw_h = (th.font_size + 5).to_f * sy
+        sw_w = (sw_h * 1.85).round.to_f
+        ty = screen_top + (screen_height - sw_h) * 0.5
+        rad = sw_h * 0.5
+
+        off_c = th.track_bg
+        on_c  = hovered? ? th.accent_hover : th.accent_color
+        bg = [
+          (off_c[0] + (on_c[0] - off_c[0]) * @knob_t).round,
+          (off_c[1] + (on_c[1] - off_c[1]) * @knob_t).round,
+          (off_c[2] + (on_c[2] - off_c[2]) * @knob_t).round
+        ]
+        bd = hovered? ? th.border_hover : (@checked ? th.accent_color : th.border_normal)
+        Zenoo::Window.draw_rect(lx, ty, sw_w, sw_h, radius: rad, color: bg, border_width: 1.0, border_color: bd, camera: false, z: @z)
+
+        knob_r = [rad - 3.0 * sy, 3.0].max
+        knob_x = lx + rad + @knob_t * (sw_w - sw_h)
+        knob_col = @checked ? [255, 255, 255] : (hovered? ? th.text_color : th.text_muted)
+        Zenoo::Window.draw_circle(knob_x, ty + rad, knob_r, color: knob_col, camera: false, z: @z)
+
+        unless @label.empty?
+          Zenoo::Window.draw_text(lx + sw_w + 8.0 * sx, screen_top + screen_height * 0.5, @label,
+                                  size: th.font_size, color: th.text_color, valign: :center, camera: false, z: @z)
+        end
+      end
+    end
+
+    class RadioButton < Widget
+      include Clickable
+      attr_accessor :label, :checked, :group, :value
+
+      def initialize(label = "", checked = false, x = 0.0, y = 0.0, width: nil, height: nil,
+                     group: nil, value: nil, **opts, &block)
+        @label   = label.to_s
+        @checked = !!checked
+        @group   = group
+        @value   = value
+        @on_change_proc = block
+        super(x, y, width: width || 120.0, height: height, **opts)
+        if width.nil?
+          tw = @label.empty? ? 0.0 : Font.default.text_width(@label, theme.font_size)
+          self.width = 24.0 + tw + 8.0
+        end
+      end
+
+      def checked? = @checked
+      def on_change(&block) = (@on_change_proc = block; self)
+
+      def trigger_click!
+        unless @checked
+          if @parent && (ch = @parent.children)
+            i = 0
+            len = ch.length
+            while i < len
+              sib = ch[i]
+              sib.checked = false if sib.is_a?(RadioButton) && !sib.equal?(self) && sib.group == @group
+              i += 1
+            end
+          end
+          @checked = true
+          @on_change_proc&.call(@value.nil? ? true : @value)
+        end
+        super
+      end
+
+      def draw_self
+        th = theme
+        sy = world_scale_y
+        r = [((th.font_size + 2) * 0.5).round.to_f, 7.0].max * sy
+        cx = screen_left + r + 1.0
+        cy = screen_top + screen_height * 0.5
+
+        bd = hovered? ? th.border_hover : (@checked ? th.accent_color : th.border_normal)
+        bg = hovered? ? th.bg_hover : th.track_bg
+        Zenoo::Window.draw_circle(cx, cy, r, color: bg, border_width: 1.0, border_color: bd, camera: false, z: @z)
+        Zenoo::Window.draw_circle(cx, cy, r * 0.5, color: th.accent_color, camera: false, z: @z) if @checked
+
+        unless @label.empty?
+          Zenoo::Window.draw_text(screen_left + r * 2.0 + 7.0, cy, @label,
+                                  size: th.font_size, color: th.text_color, valign: :center, camera: false, z: @z)
+        end
+      end
+    end
+
+    class ProgressBar < Widget
+      attr_accessor :min, :max, :label, :fill_color, :bg_color, :show_percentage
+      attr_reader :value
+
+      def initialize(value = 0.0, min = 0.0, max = 1.0, x = 0.0, y = 0.0, width: 220.0, height: nil,
+                     label: nil, show_percentage: true, fill_color: nil, bg_color: nil, **opts)
+        @value           = value.to_f
+        @min             = min.to_f
+        @max             = max.to_f
+        @label           = label
+        @show_percentage = show_percentage
+        @fill_color      = fill_color
+        @bg_color        = bg_color
+        super(x, y, width: width, height: height, interactive: false, **opts)
+      end
+
+      def value=(v)
+        @value = v.to_f
+      end
+
+      def ratio
+        span = @max - @min
+        return 0.0 if span <= 0.00001
+        ((@value - @min) / span).clamp(0.0, 1.0)
+      end
+
+      def draw_self
+        th = theme
+        rx = screen_left
+        ry = screen_top
+        rw = screen_width
+        rh = screen_height
+        rad = th.radius
+
+        Zenoo::Window.draw_rect(rx, ry, rw, rh, radius: rad, color: @bg_color || th.track_bg,
+                                border_width: 1.0, border_color: th.track_border, camera: false, z: @z)
+
+        r = ratio
+        fw = (rw - 2.0) * r
+        if fw > 1.0
+          Zenoo::Window.draw_rect(rx + 1.0, ry + 1.0, fw, [rh - 2.0, 1.0].max,
+                                  radius: [rad - 1.0, 1.0].max, color: @fill_color || th.accent_color, camera: false, z: @z)
+        end
+
+        txt = if @label
+                @label.to_s
+              elsif @show_percentage
+                "#{(r * 100.0).round}%"
+              else
+                nil
+              end
+        if txt && !txt.empty?
+          Zenoo::Window.draw_text(rx + rw * 0.5, ry + rh * 0.5, txt,
+                                  size: [th.font_size - 1, 10].max, color: th.text_color, align: :center, valign: :center, camera: false, z: @z)
+        end
+      end
+    end
+
+    class Spinner < Widget
+      attr_accessor :label, :min, :max, :step, :format
+      attr_reader :value
+
+      def initialize(label = "", value = 0, x = 0.0, y = 0.0, min: nil, max: nil, step: 1,
+                     width: 220.0, height: nil, label_width: nil, format: nil, **opts, &block)
+        @label          = label.to_s
+        @min            = min
+        @max            = max
+        @step           = step
+        @label_width    = label_width ? label_width.to_f : nil
+        @format         = format
+        @value          = clamp_val(value)
+        @hover_part     = nil
+        @on_change_proc = block
+        super(x, y, width: width, height: height, **opts)
+      end
+
+      def cursor_shape = @hover_part ? :hand : :arrow
+      def on_change(&block) = (@on_change_proc = block; self)
+
+      def value=(val)
+        nv = clamp_val(val)
+        if nv != @value
+          @value = nv
+          @on_change_proc&.call(@value)
+        end
+      end
+
+      def set_default_collider
+        ox, oy, cw, ch, rad = ctrl_local_bounds
+        set_collider(:rect, width: cw, height: ch,
+                     offset_x: ox + cw * 0.5, offset_y: oy + ch * 0.5,
+                     at: :top_left, radius: rad)
+      end
+
+      def sync_collider_shape
+        col = @collider_shape
+        return unless col && col.shape_type == Collision::TYPE_RECT
+        ox, oy, cw, ch, rad = ctrl_local_bounds
+        col.width = cw
+        col.height = ch
+        col.offset_x = ox + cw * 0.5
+        col.offset_y = oy + ch * 0.5
+        col.radius = rad
+      end
+
+      def on_pointer_move(mx, _my)
+        @hover_part = hit_part(mx)
+      end
+
+      def on_pointer_leave
+        @hover_part = nil
+      end
+
+      def on_pointer_down(mx, _my)
+        super
+        part = hit_part(mx)
+        if part == :minus
+          self.value = @value - @step
+        elsif part == :plus
+          self.value = @value + @step
+        end
+      end
+
+      def draw_self
+        th = theme
+        lx = screen_left
+        ty = screen_top
+        rh = screen_height
+
+        unless @label.empty?
+          Zenoo::Window.draw_text(lx, ty + rh * 0.5, @label, size: th.font_size, color: th.text_muted, valign: :center, camera: false, z: @z)
+        end
+
+        cx, cw, btn_w, minus_x, plus_x, val_x, val_w = ctrl_screen_layout
+        rad = th.radius
+
+        Zenoo::Window.draw_rect(val_x, ty, val_w, rh, radius: [rad - 1.0, 2.0].max,
+                                color: th.track_bg, border_width: 1.0, border_color: th.track_border, camera: false, z: @z)
+        fmt = @format || (@value.is_a?(Float) ? "%.2f" : "%d")
+        val_str = sprintf(fmt, @value)
+        Zenoo::Window.draw_text(val_x + val_w * 0.5, ty + rh * 0.5, val_str,
+                                size: th.font_size, color: th.text_color, align: :center, valign: :center, camera: false, z: @z)
+
+        draw_step_button(th, minus_x, ty, btn_w, rh, rad, "-", @hover_part == :minus)
+        draw_step_button(th, plus_x,  ty, btn_w, rh, rad, "+", @hover_part == :plus)
+      end
+
+      private
+
+      def clamp_val(val)
+        v = val
+        v = @min if @min && v < @min
+        v = @max if @max && v > @max
+        v
+      end
+
+      def ctrl_local_bounds
+        th = theme
+        rw = width
+        ox = @label.empty? ? 0.0 : [(@label_width || 110.0), rw * 0.48].min
+        [ox, 0.0, [rw - ox, 1.0].max, height, th.radius]
+      end
+
+      def ctrl_screen_layout
+        ox, _oy, cw, _ch, = ctrl_local_bounds
+        sx = world_scale_x
+        cx = screen_left + ox * sx
+        cw_s = cw * sx
+        rh_s = screen_height
+        btn_w = [rh_s, cw_s * 0.28, 26.0 * sx].min
+        minus_x = cx
+        plus_x  = cx + cw_s - btn_w
+        val_x   = cx + btn_w + 2.0
+        val_w   = [cw_s - btn_w * 2.0 - 4.0, 4.0].max
+        [cx, cw_s, btn_w, minus_x, plus_x, val_x, val_w]
+      end
+
+      def hit_part(mx)
+        _cx, _cw, btn_w, minus_x, plus_x, = ctrl_screen_layout
+        if mx >= minus_x && mx <= minus_x + btn_w
+          :minus
+        elsif mx >= plus_x && mx <= plus_x + btn_w
+          :plus
+        else
+          nil
+        end
+      end
+
+      def draw_step_button(th, bx, by, bw, bh, rad, glyph, hov)
+        Zenoo::Window.draw_rect(bx, by, bw, bh, radius: rad,
+                                color: hov ? th.bg_hover : th.bg_normal,
+                                border_width: 1.0, border_color: hov ? th.border_hover : th.border_normal,
+                                camera: false, z: @z)
+        Zenoo::Window.draw_text(bx + bw * 0.5, by + bh * 0.5, glyph,
+                                size: th.font_size, color: hov ? [255, 255, 255] : th.text_color,
+                                align: :center, valign: :center, camera: false, z: @z)
       end
     end
 
@@ -1687,6 +2133,96 @@ module Zenoo
       end
     end
 
+    class Tabs < Widget
+      attr_reader :items, :selected_index
+
+      def initialize(items = [], selected_index = 0, x = 0.0, y = 0.0, width: 260.0, height: nil, **opts, &block)
+        @items          = items.map(&:to_s)
+        @selected_index = @items.empty? ? 0 : selected_index.to_i.clamp(0, @items.length - 1)
+        @hover_index    = nil
+        @on_change_proc = block
+        super(x, y, width: width, height: height, **opts)
+      end
+
+      def cursor_shape = :hand
+      def collider_radius = theme.radius
+      def on_change(&block) = (@on_change_proc = block; self)
+      def selected_item = @items[@selected_index]
+
+      def items=(val)
+        @items = val.map(&:to_s)
+        @selected_index = @items.empty? ? 0 : @selected_index.clamp(0, @items.length - 1)
+        @hover_index = nil
+      end
+
+      def selected_index=(idx)
+        @selected_index = @items.empty? ? 0 : idx.to_i.clamp(0, @items.length - 1)
+      end
+
+      def on_pointer_move(mx, _my)
+        @hover_index = tab_index_at(mx)
+      end
+
+      def on_pointer_leave
+        @hover_index = nil
+      end
+
+      def on_pointer_down(mx, _my)
+        super
+        idx = tab_index_at(mx)
+        if idx && idx != @selected_index
+          @selected_index = idx
+          @on_change_proc&.call(@selected_index, selected_item)
+        end
+      end
+
+      def draw_self
+        rx = screen_left
+        ry = screen_top
+        rw = screen_width
+        rh = screen_height
+        th = theme
+        rad = th.radius
+
+        Zenoo::Window.draw_rect(rx, ry, rw, rh, radius: rad, color: th.track_bg,
+                                border_width: 1.0, border_color: th.track_border, camera: false, z: @z)
+        return if @items.empty? || rw <= 0.0
+
+        count = @items.length
+        tab_w = rw / count.to_f
+        i = 0
+        while i < count
+          tx = rx + i * tab_w
+          is_sel = (i == @selected_index)
+          is_hov = (i == @hover_index)
+
+          if is_sel || is_hov
+            bg = is_sel ? th.bg_active : th.bg_hover
+            Zenoo::Window.draw_rect(tx + 2.0, ry + 2.0, [tab_w - 4.0, 2.0].max, [rh - 4.0, 2.0].max,
+                                    radius: [rad - 1.0, 2.0].max, color: bg, camera: false, z: @z)
+          end
+          if is_sel
+            Zenoo::Window.draw_rect(tx + 5.0, ry + rh - 3.5, [tab_w - 10.0, 2.0].max, 2.0,
+                                    radius: 1.0, color: th.accent_color, camera: false, z: @z)
+          end
+
+          tcol = is_sel ? [255, 255, 255] : (is_hov ? th.text_color : th.text_muted)
+          Zenoo::Window.draw_text(tx + tab_w * 0.5, ry + rh * 0.5, @items[i],
+                                  size: [th.font_size - 1, 10].max, color: tcol, align: :center, valign: :center, camera: false, z: @z)
+          i += 1
+        end
+      end
+
+      private
+
+      def tab_index_at(mx)
+        rw = screen_width
+        return nil if @items.empty? || rw <= 0.0
+        idx = ((mx - screen_left) / (rw / @items.length.to_f)).floor
+        (idx >= 0 && idx < @items.length) ? idx : nil
+      end
+    end
+
     # --------------------------------------------------------------------------
     # 6. 部品合成による Window (Window自体がDraggable + Body + ResizeGrip)
     # --------------------------------------------------------------------------
@@ -1812,13 +2348,27 @@ module Zenoo
         w
       end
 
+      def panel(x = 0.0, y = 0.0, **opts, &block)
+        w = add(Panel.new(x, y, **opts))
+        yield(w) if block
+        w
+      end
+
+      def divider(**opts)                               = add(Divider.new(**opts))
+      def spacer(size = 8.0, **opts)                    = add(Spacer.new(size, **opts))
+      def image_box(image = nil, **opts)                = add(ImageBox.new(image, **opts))
       def label(text = "", **opts)                      = add(Label.new(text, **opts))
       def button(label = "Button", **opts, &block)      = add(Button.new(label, **opts, &block))
       def checkbox(label = "", checked = false, **opts, &block) = add(Checkbox.new(label, checked, **opts, &block))
+      def switch(label = "", checked = false, **opts, &block)   = add(Switch.new(label, checked, **opts, &block))
+      def radio_button(label = "", checked = false, **opts, &block) = add(RadioButton.new(label, checked, **opts, &block))
+      def progress_bar(value = 0.0, min = 0.0, max = 1.0, **opts)   = add(ProgressBar.new(value, min, max, **opts))
+      def spinner(label = "", value = 0, **opts, &block)            = add(Spinner.new(label, value, **opts, &block))
       def slider(label = "", value = 0.0, min = 0.0, max = 100.0, **opts, &block) = add(Slider.new(label, value, min, max, **opts, &block))
       def stacked_slider(label = "", value = 0.0, min = 0.0, max = 100.0, **opts, &block) = add(StackedSlider.new(label, value, min, max, **opts, &block))
       def dropdown(items = [], selected_index = 0, **opts, &block) = add(Dropdown.new(items, selected_index, **opts, &block))
       def text_box(text = "", **opts, &block)        = add(TextBox.new(text, **opts, &block))
+      def tabs(items = [], selected_index = 0, **opts, &block) = add(Tabs.new(items, selected_index, **opts, &block))
       def custom(width: 100.0, height: 32.0, **opts, &block) = add(Widget.new(0.0, 0.0, width: width, height: height, **opts)).on_draw(&block)
     end
 
@@ -2074,14 +2624,62 @@ stage.window("Tool Window (:compact default)", 36, 52, width: 344, height: 540, 
 end
 
 # 右上ウィンドウ: :relaxed テーマを指定した例（同じ Widget / Dropdown も自動でゆったり高さ）
-win2 = stage.window("Game Settings (:relaxed theme)", 410, 52, width: 320, height: 330, resizable: true, theme: :relaxed)
+win2 = stage.window("Game Settings (:relaxed theme)", 410, 52, width: 320, height: 376, resizable: true, theme: :relaxed)
 win2.checkbox("Show Colliders", show_colliders) { |v| show_colliders = v }
+win2.switch("V-Sync (Switch)", true) { |v| lbl_status.text = "V-Sync: #{v}" }
 win2.text_box("", placeholder: "Search or type player name...") do |txt|
   lbl_status.text = "Filter: #{txt}"
 end
 win2.dropdown(["60 FPS", "120 FPS", "240 FPS", "Unlimited"], 0, label: "FPS Cap") { |_i, item| lbl_status.text = "FPS Cap: #{item}" }
 win2.stacked_slider("BGM Volume", 75.0, 0.0, 100.0, unit: "%") { |v| lbl_status.text = "BGM: #{v.round}%" }
 win2.add(Zenoo::UI2::Button.new("Apply Settings") { lbl_status.text = "Applied!" })
+
+# 右側ウィンドウ: 追加コントロール一覧 (Tabs / Panel / Switch / RadioButton / Spinner / ProgressBar / ImageBox)
+preview_img_box = nil
+pbar = nil
+tab_panels = []
+win3 = stage.window("Controls Showcase", 748, 185, width: 256, height: 382, resizable: true)
+win3.tabs(["Controls", "Visual"], 0) do |idx, item|
+  lbl_status.text = "Tab: #{item}"
+  ti = 0
+  while ti < tab_panels.length
+    tab_panels[ti].visible = (ti == idx)
+    ti += 1
+  end
+end
+
+tab_panels << win3.panel(flex: 1) do |p0|
+  p0.checkbox("Checkbox (Square)", true) { |v| lbl_status.text = "Checkbox: #{v}" }
+  p0.switch("Switch (Toggle)", true) { |v| lbl_status.text = "Switch: #{v}" }
+  p0.divider
+  p0.label("Radio Group:")
+  p0.hbox(padding: 0, gap: 6, height: 24, align: :center) do |rrow|
+    rrow.radio_button("Low",  false, group: :qual, value: :low)  { |v| lbl_status.text = "Quality: #{v}" }
+    rrow.radio_button("Mid",  true,  group: :qual, value: :mid)  { |v| lbl_status.text = "Quality: #{v}" }
+    rrow.radio_button("High", false, group: :qual, value: :high) { |v| lbl_status.text = "Quality: #{v}" }
+  end
+  p0.divider
+  p0.spinner("Count", 12, min: 0, max: 20, step: 2, label_width: 72) do |v|
+    lbl_status.text = "Spinner: #{v}"
+    pbar.value = v / 20.0 if pbar
+  end
+  pbar = p0.progress_bar(0.6, 0.0, 1.0, show_percentage: true)
+  p0.spacer(4, flex: 1)
+  p0.label("Try clicking [-] / [+] & Tabs!", color: [160, 175, 200])
+end
+
+tab_panels << win3.panel(flex: 1, visible: false) do |p1|
+  p1.label("ImageBox Preview:")
+  preview_img_box = p1.image_box(nil, width: 96, height: 96, fit: :contain,
+                                 bg_color: [16, 20, 28], border_color: [68, 80, 106], border_width: 1.0, radius: 6.0)
+  p1.divider
+  p1.label("Progress Bar Control:")
+  p1.hbox(padding: 0, gap: 6, height: 26, align: :center) do |brow|
+    brow.button("-15%", width: 64) { pbar.value = (pbar.value - 0.15).clamp(0.0, 1.0) }
+    brow.button("+15%", width: 64) { pbar.value = (pbar.value + 0.15).clamp(0.0, 1.0) }
+    brow.spacer(4, flex: 1)
+  end
+end
 
 # 下辺反転テスト用の配置ドロップダウン (画面下端近くで開くと自動で上向きに展開)
 bottom_dd = Zenoo::UI2::Dropdown.new(["Bottom Flip A", "Bottom Flip B", "Bottom Flip C", "Bottom Flip D"], 0, 760, 588, width: 220, label: "Bottom")
@@ -2095,16 +2693,25 @@ diamond_btn = DiamondButton.new("POLYGON", 890, 120)
 diamond_btn.on_click { lbl_status.text = "Polygon Collider clicked!" }
 stage << circle_btn << diamond_btn
 
-card1 = DraggableCard.new("Card A", 450, 410, color: [48, 64, 96])
+card1 = DraggableCard.new("Card A", 435, 460, color: [48, 64, 96])
 card1.on_click { lbl_status.text = "Card A clicked!" }
-card2 = DraggableCard.new("Card B (14deg)", 590, 425, color: [86, 52, 86], angle: 14.0)
+card2 = DraggableCard.new("Card B (14deg)", 585, 475, color: [86, 52, 86], angle: 14.0)
 card2.on_click { lbl_status.text = "Card B (rotated OBB) clicked!" }
 stage << card1 << card2
 
 test_max = ENV['ZENOO_TEST_FRAMES'] ? ENV['ZENOO_TEST_FRAMES'].to_i : 0
 frame = 0
 
+img = Zenoo::Image.new(64, 64)
+Zenoo::Image.render_to(img) do
+  Zenoo::Window.clear([24, 30, 44, 255])
+  Zenoo::Window.draw_circle(32, 32, 22, color: [72, 152, 242, 255])
+  Zenoo::Window.draw_triangle(32, 14, 16, 46, 48, 46, color: [240, 210, 80, 255])
+end
+preview_img_box.image = img
+
 Window.loop(1024, 640, "Zenoo UI2 Collider HitTest & Dropdown Prototype") do
+
   Window.clear([18, 22, 30])
   Window.draw_text(36, 18, "UI2 Prototype: Sprite Collider HitTest & Dropdown Popup", size: 16, color: :white)
 
