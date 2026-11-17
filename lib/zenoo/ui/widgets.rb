@@ -2,6 +2,25 @@
 
 module Zenoo
   module UI
+    # Spinel AOT で Float/RbVal の .clamp が未定義になるケースを避ける型明示ヘルパー
+    def self.clamp_f(val, min_val, max_val)
+      v = val.to_f
+      lo = min_val.to_f
+      hi = max_val.to_f
+      return lo if v < lo
+      return hi if v > hi
+      v
+    end
+
+    def self.clamp_i(val, min_val, max_val)
+      v = val.to_i
+      lo = min_val.to_i
+      hi = max_val.to_i
+      return lo if v < lo
+      return hi if v > hi
+      v
+    end
+
     # 水平区切り線
     class Divider < Widget
       attr_accessor :color
@@ -364,7 +383,7 @@ module Zenoo
       def ratio
         span = @max - @min
         return 0.0 if span <= 0.00001
-        ((@value - @min) / span).clamp(0.0, 1.0)
+        UI.clamp_f((@value - @min) / span, 0.0, 1.0)
       end
 
       def draw_self
@@ -409,7 +428,7 @@ module Zenoo
         @label          = label.to_s
         @min            = min.to_f
         @max            = max.to_f
-        @value          = value.to_f.clamp(@min, @max)
+        @value          = UI.clamp_f(value, @min, @max)
         @format         = format
         @unit           = unit.to_s
         @on_change_proc = block
@@ -439,7 +458,7 @@ module Zenoo
       def on_change(&block) = (@on_change_proc = block; self)
 
       def value=(v)
-        nv = v.to_f.clamp(@min, @max)
+        nv = UI.clamp_f(v, @min, @max)
         if nv != @value
           @value = nv
           @on_change_proc&.call(@value)
@@ -476,7 +495,7 @@ module Zenoo
 
       def update_value_from_x(mx)
         tx, tw = track_rect_bounds
-        ratio = ((mx - tx) / [tw, 1.0].max).clamp(0.0, 1.0)
+        ratio = UI.clamp_f((mx - tx) / [tw, 1.0].max, 0.0, 1.0)
         self.value = @min + (@max - @min) * ratio
       end
     end
@@ -529,7 +548,7 @@ module Zenoo
         end
 
         if tw_s > 8.0
-          kx = (tx + fill_w).clamp(tx + 2.0, tx + tw_s - 2.0)
+          kx = UI.clamp_f(tx + fill_w, tx + 2.0, tx + tw_s - 2.0)
           Zenoo::Window.draw_line(kx, bar_y + 2.0, kx, bar_y + bar_h_s - 2.0, color: [245, 250, 255, 220], width: 2.0, camera: false, z: @z)
         end
 
@@ -721,7 +740,7 @@ module Zenoo
       def initialize(items = [], selected_index = 0, x = 0.0, y = 0.0,
                      width: 200.0, height: nil, label: "", max_items: 8, **opts, &block)
         @items          = items.map(&:to_s)
-        @selected_index = (@items.empty? || selected_index.nil? || selected_index.to_i < 0) ? -1 : selected_index.to_i.clamp(0, @items.length - 1)
+        @selected_index = (@items.empty? || selected_index.nil? || selected_index.to_i < 0) ? -1 : UI.clamp_i(selected_index, 0, @items.length - 1)
         @label          = label.to_s
         @max_items      = [max_items.to_i, 1].max
         @hover_item_idx = nil
@@ -751,7 +770,7 @@ module Zenoo
         if idx.nil? || idx.to_i < 0 || @items.empty?
           @selected_index = -1
         else
-          @selected_index = idx.to_i.clamp(0, @items.length - 1)
+          @selected_index = UI.clamp_i(idx, 0, @items.length - 1)
         end
       end
 
@@ -794,7 +813,7 @@ module Zenoo
       def on_popup_wheel(dy)
         max_scroll = [@items.length - @max_items, 0].max
         return false if max_scroll <= 0
-        @scroll_index = (@scroll_index + (dy > 0.0 ? -1 : 1)).clamp(0, max_scroll)
+        @scroll_index = UI.clamp_i(@scroll_index + (dy > 0.0 ? -1 : 1), 0, max_scroll)
         true
       end
 
@@ -892,7 +911,7 @@ module Zenoo
 
       def clamp_scroll!
         max_s = [@items.length - @max_items, 0].max
-        @scroll_index = @scroll_index.clamp(0, max_s)
+        @scroll_index = UI.clamp_i(@scroll_index, 0, max_s)
       end
 
       def ensure_selected_visible
@@ -962,7 +981,7 @@ module Zenoo
 
       def text=(val)
         @text = val.to_s.dup
-        @cursor_pos = @cursor_pos.clamp(0, @text.length)
+        @cursor_pos = UI.clamp_i(@cursor_pos, 0, @text.length)
         @sel_anchor = nil
         @scroll_x = 0.0 if @text.empty?
       end
@@ -1105,7 +1124,8 @@ module Zenoo
           @cursor_pos = @text.length
           reset_blink = true
         elsif Input.key_push?(:enter)
-          @on_submit_proc&.call(@text)
+          t = @text.dup
+          @on_submit_proc&.call(t)
           blur!
           return
         elsif Input.key_push?(:escape)
@@ -1131,7 +1151,8 @@ module Zenoo
         @blink_start_frame = UI.frame if reset_blink
         if text_changed
           ensure_caret_visible
-          @on_change_proc&.call(@text)
+          t = @text.dup
+          @on_change_proc&.call(t)
         elsif reset_blink
           ensure_caret_visible
         end
@@ -1278,7 +1299,7 @@ module Zenoo
         elsif caret_ox > @scroll_x + avail_w
           @scroll_x = caret_ox - avail_w
         end
-        @scroll_x = @scroll_x.clamp(0.0, max_scroll)
+        @scroll_x = UI.clamp_f(@scroll_x, 0.0, max_scroll)
       end
 
       def index_at_mouse_x(mx)
@@ -1310,7 +1331,7 @@ module Zenoo
 
       def initialize(items = [], selected_index = 0, x = 0.0, y = 0.0, width: 260.0, height: nil, **opts, &block)
         @items          = items.map(&:to_s)
-        @selected_index = @items.empty? ? 0 : selected_index.to_i.clamp(0, @items.length - 1)
+        @selected_index = @items.empty? ? 0 : UI.clamp_i(selected_index, 0, @items.length - 1)
         @hover_index    = nil
         @on_change_proc = block
         super(x, y, width: width, height: height, **opts)
@@ -1323,12 +1344,12 @@ module Zenoo
 
       def items=(val)
         @items = val.map(&:to_s)
-        @selected_index = @items.empty? ? 0 : @selected_index.clamp(0, @items.length - 1)
+        @selected_index = @items.empty? ? 0 : UI.clamp_i(@selected_index, 0, @items.length - 1)
         @hover_index = nil
       end
 
       def selected_index=(idx)
-        @selected_index = @items.empty? ? 0 : idx.to_i.clamp(0, @items.length - 1)
+        @selected_index = @items.empty? ? 0 : UI.clamp_i(idx, 0, @items.length - 1)
       end
 
       def on_pointer_move(mx, _my)
@@ -1434,7 +1455,7 @@ module Zenoo
       def rows=(val)
         @rows = val.dup
         @selected_index = normalize_selected_index(@selected_index)
-        @scroll_y = @scroll_y.clamp(0.0, max_scroll_y)
+        @scroll_y = UI.clamp_f(@scroll_y, 0.0, max_scroll_y)
         @hover_index = nil if @hover_index && @hover_index >= @rows.length
       end
 
@@ -1471,7 +1492,7 @@ module Zenoo
       def on_wheel(dy)
         max_s = max_scroll_y
         return false if max_s <= 0.0
-        @scroll_y = (@scroll_y - dy * @item_height * 1.5).clamp(0.0, max_s)
+        @scroll_y = UI.clamp_f(@scroll_y - dy * @item_height * 1.5, 0.0, max_s)
         true
       end
 
@@ -1502,7 +1523,7 @@ module Zenoo
         col_names, col_widths = resolve_columns(body_w)
         draw_header(tx + 2.0 * sx, ty + 2.0 * sy, tw - 4.0 * sx, header_h, col_names, col_widths, sy)
 
-        @scroll_y = @scroll_y.clamp(0.0, max_scroll_y)
+        @scroll_y = UI.clamp_f(@scroll_y, 0.0, max_scroll_y)
         row_h = @item_height * sy
         f_size = [(th.font_size - 2) * sy, 10].max.round
 
@@ -1767,7 +1788,7 @@ module Zenoo
       private
 
       def graph_height
-        @show_legend ? [screen_height * 0.45, 70.0].max.clamp(40.0, screen_height) : screen_height
+        @show_legend ? UI.clamp_f([screen_height * 0.45, 70.0].max, 40.0, [screen_height, 40.0].max) : screen_height
       end
 
       def draw_guideline(rx, ry, rw, gh, ms, label_text, col)

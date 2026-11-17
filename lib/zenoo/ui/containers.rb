@@ -212,14 +212,13 @@ module Zenoo
 
       def initialize(x = 0.0, y = 0.0, width: 200.0, height: nil,
                      direction: :column, padding: nil, gap: nil, align: :stretch,
-                     clip_children: false, interactive: false, **opts, &block)
+                     clip_children: false, interactive: false, **opts)
         @direction    = direction
         @explicit_gap = gap ? gap.to_f : nil
         @explicit_pad = padding ? padding.to_f : nil
         @align        = align
         @layout_dirty = true
         super(x, y, width: width, height: height, clip_children: clip_children, interactive: interactive, **opts)
-        yield(self) if block
       end
 
       def gap     = @explicit_gap || theme.gap
@@ -357,15 +356,15 @@ module Zenoo
 
     # 縦積みレイアウトコンテナ
     class VBox < Box
-      def initialize(x = 0.0, y = 0.0, **opts, &block)
-        super(x, y, direction: :column, **opts, &block)
+      def initialize(x = 0.0, y = 0.0, **opts)
+        super(x, y, direction: :column, **opts)
       end
     end
 
     # 横並びレイアウトコンテナ
     class HBox < Box
-      def initialize(x = 0.0, y = 0.0, **opts, &block)
-        super(x, y, direction: :row, **opts, &block)
+      def initialize(x = 0.0, y = 0.0, **opts)
+        super(x, y, direction: :row, **opts)
       end
     end
 
@@ -374,12 +373,12 @@ module Zenoo
       include Scrollable
       SB_WIDTH = 10.0
 
-      def initialize(x = 0.0, y = 0.0, width: 200.0, height: 200.0, padding: nil, gap: nil, **opts, &block)
+      def initialize(x = 0.0, y = 0.0, width: 200.0, height: 200.0, padding: nil, gap: nil, **opts)
         init_scrollable
         @dragging_sb   = false
         @hover_sb      = false
         @sb_drag_off_y = 0.0
-        super(x, y, width: width, height: height, padding: padding, gap: gap, clip_children: true, interactive: true, **opts, &block)
+        super(x, y, width: width, height: height, padding: padding, gap: gap, clip_children: true, interactive: true, **opts)
       end
 
       def collider_radius = theme.radius
@@ -475,7 +474,9 @@ module Zenoo
       def update_scroll_from_pointer(my, ty, th, thumb_h)
         movable = th - thumb_h
         return if movable <= 0.0
-        ratio = ((my - @sb_drag_off_y - ty) / movable).clamp(0.0, 1.0)
+        ratio = (my - @sb_drag_off_y - ty) / movable
+        ratio = 0.0 if ratio < 0.0
+        ratio = 1.0 if ratio > 1.0
         self.scroll_y = max_scroll_y * ratio
       end
 
@@ -493,13 +494,13 @@ module Zenoo
       attr_accessor :title, :bg_color, :border_color, :border_width, :radius
 
       def initialize(x = 0.0, y = 0.0, width: 200.0, height: 200.0, title: "",
-                     bg_color: nil, border_color: nil, border_width: 1.0, radius: nil, interactive: true, **opts, &block)
+                     bg_color: nil, border_color: nil, border_width: 1.0, radius: nil, interactive: true, **opts)
         @title        = title.to_s
         @bg_color     = bg_color
         @border_color = border_color
         @border_width = border_width.to_f
         @radius       = radius ? radius.to_f : nil
-        super(x, y, width: width, height: height, clip_children: true, interactive: interactive, **opts, &block)
+        super(x, y, width: width, height: height, clip_children: true, interactive: interactive, **opts)
       end
 
       def collider_radius = @radius || (theme.radius + 2.0)
@@ -561,7 +562,7 @@ module Zenoo
       attr_reader :body
 
       def initialize(title = "Window", x = 60.0, y = 60.0, width: 320.0, height: 260.0,
-                     resizable: false, padding: nil, gap: nil, min_width: 180.0, min_height: 120.0, **opts, &block)
+                     resizable: false, padding: nil, gap: nil, min_width: 180.0, min_height: 120.0, **opts)
         @title      = title.to_s
         @min_w      = min_width.to_f
         @min_h      = min_height.to_f
@@ -574,7 +575,6 @@ module Zenoo
           @grip = ResizeGrip.new(self)
           add(@grip)
         end
-        yield(@body) if block
       end
 
       def add(child)
