@@ -61,13 +61,21 @@ module Zenoo
       s = 24.0 if s <= 0.0
       r_s = r_scale.to_f
       r_s = 1.0 if r_s <= 0.0
+      eff_scale = r_s < 1.0 ? 1.0 : r_s
+      use_bitmap = (mode == 2) || (mode != 1 && s < 36.0)
+      px_key = if use_bitmap
+                 px = (s * eff_scale).round
+                 px < 1 ? 1 : px
+               else
+                 0
+               end
       by_mode = (@glyph_cache[mode] ||= {})
       by_cp = (by_mode[cp] ||= {})
       by_size = (by_cp[s] ||= {})
-      g = by_size[r_s]
-      if g.nil? && !by_size.key?(r_s)
-        g = @native.get_glyph(cp, s, mode, r_s)
-        by_size[r_s] = g
+      g = by_size[px_key]
+      if g.nil? && !by_size.key?(px_key)
+        g = @native.get_glyph(cp, s, mode, eff_scale)
+        by_size[px_key] = g
       end
       g
     end

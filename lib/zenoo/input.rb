@@ -129,105 +129,109 @@ module Zenoo
 
   # キーボード・マウス・ゲームパッド・マルチタッチ・アクションマップを統合管理する入力モジュール。
   module Input
-    # キーシンボルからGLFWキーコードへのマッピング
+    # キーシンボルからSDL3スキャンコード(SDL_Scancode)へのマッピング
     KEY_MAP = {
       # 記号キー
-      apostrophe: 39,
-      comma: 44,
       minus: 45,
-      period: 46,
-      slash: 47,
-      semicolon: 59,
-      equal: 61,
-      left_bracket: 91,
-      backslash: 92,
-      right_bracket: 93,
-      grave_accent: 96,
+      equal: 46,
+      left_bracket: 47,
+      right_bracket: 48,
+      backslash: 49,
+      semicolon: 51,
+      apostrophe: 52,
+      grave_accent: 53,
+      comma: 54,
+      period: 55,
+      slash: 56,
 
       # 制御・移動キー
-      space: 32,
-      escape: 256,
-      enter: 257,
-      tab: 258,
-      backspace: 259,
-      insert: 260,
-      delete: 261,
-      right: 262,
-      left: 263,
-      down: 264,
-      up: 265,
-      page_up: 266,
-      page_down: 267,
-      home: 268,
-      end: 269,
+      enter: 40,
+      escape: 41,
+      backspace: 42,
+      tab: 43,
+      space: 44,
+      insert: 73,
+      home: 74,
+      page_up: 75,
+      delete: 76,
+      end: 77,
+      page_down: 78,
+      right: 79,
+      left: 80,
+      down: 81,
+      up: 82,
 
       # 特殊・ロック
-      caps_lock: 280,
-      scroll_lock: 281,
-      num_lock: 282,
-      print_screen: 283,
-      pause: 284,
+      caps_lock: 57,
+      print_screen: 70,
+      scroll_lock: 71,
+      pause: 72,
+      num_lock: 83,
 
       # テンキー
-      kp_0: 320,
-      kp_1: 321,
-      kp_2: 322,
-      kp_3: 323,
-      kp_4: 324,
-      kp_5: 325,
-      kp_6: 326,
-      kp_7: 327,
-      kp_8: 328,
-      kp_9: 329,
-      kp_decimal: 330,
-      kp_divide: 331,
-      kp_multiply: 332,
-      kp_subtract: 333,
-      kp_add: 334,
-      kp_enter: 335,
-      kp_equal: 336,
+      kp_divide: 84,
+      kp_multiply: 85,
+      kp_subtract: 86,
+      kp_add: 87,
+      kp_enter: 88,
+      kp_1: 89,
+      kp_2: 90,
+      kp_3: 91,
+      kp_4: 92,
+      kp_5: 93,
+      kp_6: 94,
+      kp_7: 95,
+      kp_8: 96,
+      kp_9: 97,
+      kp_0: 98,
+      kp_decimal: 99,
+      kp_equal: 103,
 
       # 修飾キー (左右別)
-      left_shift: 340,
-      left_control: 341,
-      left_ctrl: 341,
-      left_alt: 342,
-      left_super: 343,
-      left_win: 343,
-      left_command: 343,
-      right_shift: 344,
-      right_control: 345,
-      right_ctrl: 345,
-      right_alt: 346,
-      right_super: 347,
-      right_win: 347,
-      right_command: 347,
-      menu: 348,
+      left_control: 224,
+      left_ctrl: 224,
+      left_shift: 225,
+      left_alt: 226,
+      left_super: 227,
+      left_win: 227,
+      left_command: 227,
+      right_control: 228,
+      right_ctrl: 228,
+      right_shift: 229,
+      right_alt: 230,
+      right_super: 231,
+      right_win: 231,
+      right_command: 231,
+      menu: 101,
 
       # 修飾キー (左右統合エイリアス)
-      shift: 340,
-      control: 341,
-      ctrl: 341,
-      alt: 342,
-      super: 343,
-      win: 343,
-      command: 343
+      control: 224,
+      ctrl: 224,
+      shift: 225,
+      alt: 226,
+      super: 227,
+      win: 227,
+      command: 227,
+
+      # 数字キー 0
+      "0": 39,
+      num0: 39
     }
 
     # ファンクションキー (f1..f12)
     (1..12).each do |i|
-      KEY_MAP[:"f#{i}"] = 289 + i
+      KEY_MAP[:"f#{i}"] = 57 + i
     end
 
-    # アルファベットキー (a..z)
+    # アルファベットキー (a..z -> 4..29)
     (?a..?z).each do |ch|
-      KEY_MAP[ch.to_sym] = ch.upcase.ord
+      KEY_MAP[ch.to_sym] = ch.ord - 93
     end
 
-    # 数字キー (0..9, num0..num9)
-    (?0..?9).each do |ch|
-      KEY_MAP[ch.to_sym] = ch.ord
-      KEY_MAP[:"num#{ch}"] = ch.ord
+    # 数字キー (1..9, num1..num9 -> 30..38)
+    (1..9).each do |i|
+      KEY_MAP[:"#{i}"] = 29 + i
+      KEY_MAP[:"num#{i}"] = 29 + i
     end
 
     MOUSE_MAP = {
@@ -238,18 +242,18 @@ module Zenoo
 
     # 左右両側に対応する修飾キーエイリアスのキーコードペア
     KEY_ALIASES = {
-      shift:   [340, 344],
-      control: [341, 345],
-      ctrl:    [341, 345],
-      alt:     [342, 346],
-      super:   [343, 347],
-      win:     [343, 347],
-      command: [343, 347]
+      control: [224, 228],
+      ctrl:    [224, 228],
+      shift:   [225, 229],
+      alt:     [226, 230],
+      super:   [227, 231],
+      win:     [227, 231],
+      command: [227, 231]
     }
 
-    # キーシンボルまたはキーコードを内部 GLFW キーコードへ解決します。
+    # キーシンボルまたはキーコードを内部 SDL スキャンコードへ解決します。
     #
-    # - `key` (`Symbol`, `Integer`): `KEY_MAP` のキーシンボルまたは GLFW キーコード
+    # - `key` (`Symbol`, `Integer`): `KEY_MAP` のキーシンボルまたはキーコード
     # - 戻り値: `Integer`
     def self.resolve_key(key)
       return key if key.is_a?(Integer)
@@ -269,7 +273,7 @@ module Zenoo
       raise ArgumentError, "Unknown mouse button: #{button.inspect}"
     end
 
-    # 内部用: 単一 GLFW キーコードの押下判定（Dev パッチ等からのマスク適用ポイント）
+    # 内部用: 単一 SDL スキャンコードの押下判定（Dev パッチ等からのマスク適用ポイント）
     def self.__raw_key_pressed?(code)
       Native::Input.key_pressed?(code)
     end
@@ -548,17 +552,17 @@ module Zenoo
       when :b, :circle then 1
       when :x, :square then 2
       when :y, :triangle then 3
-      when :lb, :left_bumper, :l1 then 4
-      when :rb, :right_bumper, :r1 then 5
-      when :back, :select, :share then 6
-      when :start, :options, :menu then 7
-      when :guide, :home then 8
-      when :left_thumb, :lthumb, :l3 then 9
-      when :right_thumb, :rthumb, :r3 then 10
+      when :back, :select, :share then 4
+      when :guide, :home then 5
+      when :start, :options, :menu then 6
+      when :left_thumb, :lthumb, :l3 then 7
+      when :right_thumb, :rthumb, :r3 then 8
+      when :lb, :left_bumper, :l1 then 9
+      when :rb, :right_bumper, :r1 then 10
       when :dpad_up, :up then 11
-      when :dpad_right, :right then 12
-      when :dpad_down, :down then 13
-      when :dpad_left, :left then 14
+      when :dpad_down, :down then 12
+      when :dpad_left, :left then 13
+      when :dpad_right, :right then 14
       else
         raise ArgumentError, "Unknown gamepad button: #{btn.inspect}"
       end

@@ -395,10 +395,10 @@
         var rect = canvasElement.getBoundingClientRect();
         var cx = rect.left + rect.width / 2;
         var cy = rect.top + rect.height / 2;
-        var down = new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2 });
-        var up = new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2 });
-        canvasElement.dispatchEvent(down);
-        canvasElement.dispatchEvent(up);
+        var pdown = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2, buttons: 2, pointerType: 'mouse' });
+        var pup = new PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 2, buttons: 0, pointerType: 'mouse' });
+        canvasElement.dispatchEvent(pdown);
+        canvasElement.dispatchEvent(pup);
       });
     }
 
@@ -451,22 +451,25 @@
     }, { passive: false });
 
     // 余白部分(containerElement)のクリック/ドラッグをそのままの座標（マイナス/超過含む）でEmscriptenへ転送
-    function forwardMouseEventToCanvas(e) {
+    function forwardPointerEventToCanvas(e) {
       if (e.target === canvasElement || isUIElement(e.target)) return;
-      if (e.type === 'mousemove' && e.buttons === 0) return;
-      var evt = new MouseEvent(e.type, {
+      if (e.pointerType === 'touch') return;
+      if (e.type === 'pointermove' && e.buttons === 0) return;
+      var evt = new PointerEvent(e.type, {
         bubbles: true,
         cancelable: true,
         clientX: e.clientX,
         clientY: e.clientY,
         button: e.button,
-        buttons: e.buttons
+        buttons: e.buttons,
+        pointerId: e.pointerId,
+        pointerType: e.pointerType || 'mouse'
       });
       canvasElement.dispatchEvent(evt);
     }
-    containerElement.addEventListener('mousedown', forwardMouseEventToCanvas);
-    containerElement.addEventListener('mouseup', forwardMouseEventToCanvas);
-    containerElement.addEventListener('mousemove', forwardMouseEventToCanvas);
+    containerElement.addEventListener('pointerdown', forwardPointerEventToCanvas);
+    containerElement.addEventListener('pointerup', forwardPointerEventToCanvas);
+    containerElement.addEventListener('pointermove', forwardPointerEventToCanvas);
 
     // ----------------------------------------------------
     // バイブレーション安全停止 & 全画面安全解除 (画面遷移・非表示時)

@@ -1,16 +1,11 @@
 // ==========================================
-// 入力 (Input / IME / Gamepad) 実装
+// 入力 (Input / IME / Gamepad) 実装 (SDL3 バックエンド)
 // ==========================================
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "zenoo_internal.h"
 
-#ifdef _WIN32
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>
-#include <imm.h>
-#endif
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -37,87 +32,147 @@ static int s_char_queue_read_idx = 0;
 #define ZEN_GAMEPAD_BUTTON_COUNT 15
 #define ZEN_GAMEPAD_AXIS_COUNT 6
 
-static unsigned char s_gamepad_buttons_pressed[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_BUTTON_COUNT] = {{0}};
-static unsigned char s_gamepad_buttons_push[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_BUTTON_COUNT] = {{0}};
-static unsigned char s_gamepad_buttons_release[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_BUTTON_COUNT] = {{0}};
-static float s_gamepad_axes[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_AXIS_COUNT] = {{0}};
-static unsigned char s_gamepad_connected[ZEN_MAX_GAMEPADS] = {0};
+static SDL_Gamepad*   s_gamepads[ZEN_MAX_GAMEPADS] = {NULL};
+static SDL_JoystickID s_gamepad_ids[ZEN_MAX_GAMEPADS] = {0};
+static unsigned char  s_gamepad_buttons_pressed[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_BUTTON_COUNT] = {{0}};
+static unsigned char  s_gamepad_buttons_push[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_BUTTON_COUNT] = {{0}};
+static unsigned char  s_gamepad_buttons_release[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_BUTTON_COUNT] = {{0}};
+static float          s_gamepad_axes[ZEN_MAX_GAMEPADS][ZEN_GAMEPAD_AXIS_COUNT] = {{0}};
+static unsigned char  s_gamepad_connected[ZEN_MAX_GAMEPADS] = {0};
 
 // ------------------------------------------
-// GLFW コールバック
+// SDL3 イベント処理
 // ------------------------------------------
-static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    (void)window; (void)scancode; (void)mods;
-    if (key >= 0 && key < 512) {
-        if (action == GLFW_PRESS) {
-            s_keys_pressed[key] = 1;
-            s_keys_push[key] = 1;
-            s_keys_repeat[key] = 1;
-        } else if (action == GLFW_REPEAT) {
-            s_keys_repeat[key] = 1;
-        } else if (action == GLFW_RELEASE) {
-            s_keys_pressed[key] = 0;
-            s_keys_release[key] = 1;
-        }
+static int sdl_button_to_zen(Uint8 sdl_btn) {
+    if (sdl_btn == SDL_BUTTON_LEFT)   return ZEN_MOUSE_LEFT;
+    if (sdl_btn == SDL_BUTTON_RIGHT)  return ZEN_MOUSE_RIGHT;
+    if (sdl_btn == SDL_BUTTON_MIDDLE) return ZEN_MOUSE_MIDDLE;
+    if (sdl_btn >= 4 && sdl_btn <= 8) return (int)sdl_btn - 1;
+    return -1;
+}
+
+void zen__input_init(SDL_Window* window) {
+    if (window) {
+        SDL_StartTextInput(window);
     }
 }
 
-static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-    (void)window; (void)mods;
-    if (button >= 0 && button < 8) {
-        if (action == GLFW_PRESS) {
-            s_mouse_pressed[button] = 1;
-            s_mouse_push[button] = 1;
-#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
-            HWND hwnd = glfwGetWin32Window(window);
-            if (hwnd) SetCapture(hwnd);
+void zen__input_shutdown(void) {
+    for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
+        if (s_gamepads[i]) {
+            SDL_CloseGamepad(s_gamepads[i]);
+            s_gamepads[i] = NULL;
+        }
+        s_gamepad_ids[i] = 0;
+        s_gamepad_connected[i] = 0;
+    }
+}
+
+SDL_Gamepad* zen__input_gamepad(int id) {
+    if (id < 0 || id >= ZEN_MAX_GAMEPADS) return NULL;
+    return s_gamepads[id];
+}
+
+void zen__input_handle_event(const SDL_Event* event) {
+    if (!event) return;
+
+    switch (event->type) {
+    case SDL_EVENT_KEY_DOWN: {
+        int sc = (int)event->key.scancode;
+        if (sc > 0 && sc < 512) {
+            if (!event->key.repeat) {
+                s_keys_pressed[sc] = 1;
+                s_keys_push[sc] = 1;
+            }
+            s_keys_repeat[sc] = 1;
+        }
+        break;
+    }
+    case SDL_EVENT_KEY_UP: {
+        int sc = (int)event->key.scancode;
+        if (sc > 0 && sc < 512) {
+            s_keys_pressed[sc] = 0;
+            s_keys_release[sc] = 1;
+        }
+        break;
+    }
+    case SDL_EVENT_TEXT_INPUT: {
+#ifndef __EMSCRIPTEN__
+        const char* p = event->text.text;
+        if (p) {
+            while (*p && s_char_queue_count < ZEN_CHAR_QUEUE_MAX) {
+                Uint32 cp = SDL_StepUTF8(&p, NULL);
+                if (cp == 0) break;
+                if (cp != SDL_INVALID_UNICODE_CODEPOINT) {
+                    s_char_queue[s_char_queue_count++] = (uint32_t)cp;
+                }
+            }
+        }
 #endif
-        } else if (action == GLFW_RELEASE) {
-            s_mouse_pressed[button] = 0;
-            s_mouse_release[button] = 1;
-#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
+        break;
+    }
+    case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+        if (event->button.which == SDL_TOUCH_MOUSEID) break;
+        s_mouse_x = (double)event->button.x;
+        s_mouse_y = (double)event->button.y;
+        int btn = sdl_button_to_zen(event->button.button);
+        if (btn >= 0 && btn < 8) {
+            s_mouse_pressed[btn] = 1;
+            s_mouse_push[btn] = 1;
+#ifndef __EMSCRIPTEN__
+            SDL_CaptureMouse(true);
+#endif
+        }
+        break;
+    }
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
+        if (event->button.which == SDL_TOUCH_MOUSEID) break;
+        s_mouse_x = (double)event->button.x;
+        s_mouse_y = (double)event->button.y;
+        int btn = sdl_button_to_zen(event->button.button);
+        if (btn >= 0 && btn < 8) {
+            s_mouse_pressed[btn] = 0;
+            s_mouse_release[btn] = 1;
+#ifndef __EMSCRIPTEN__
             int any_pressed = 0;
             for (int i = 0; i < 8; i++) {
                 if (s_mouse_pressed[i]) any_pressed = 1;
             }
             if (!any_pressed) {
-                ReleaseCapture();
+                SDL_CaptureMouse(false);
             }
 #endif
         }
+        break;
     }
-}
-
-static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
-    (void)window;
-    s_mouse_x = xpos;
-    s_mouse_y = ypos;
-}
-
-static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    (void)window;
-    s_mouse_wheel_x += xoffset;
-    s_mouse_wheel_y += yoffset;
-}
-
-static void char_callback(GLFWwindow* window, unsigned int codepoint) {
-    (void)window;
+    case SDL_EVENT_MOUSE_MOTION:
+        if (event->motion.which == SDL_TOUCH_MOUSEID) break;
+        s_mouse_x = (double)event->motion.x;
+        s_mouse_y = (double)event->motion.y;
+        break;
+    case SDL_EVENT_MOUSE_WHEEL:
+        s_mouse_wheel_x += (double)event->wheel.x;
+        s_mouse_wheel_y += (double)event->wheel.y;
+        break;
 #ifndef __EMSCRIPTEN__
-    if (s_char_queue_count < ZEN_CHAR_QUEUE_MAX) {
-        s_char_queue[s_char_queue_count++] = (uint32_t)codepoint;
+    case SDL_EVENT_FINGER_DOWN:
+    case SDL_EVENT_FINGER_MOTION:
+    case SDL_EVENT_FINGER_UP:
+    case SDL_EVENT_FINGER_CANCELED: {
+        SDL_Window* win = zen__window();
+        int win_w = 1, win_h = 1;
+        if (win) SDL_GetWindowSize(win, &win_w, &win_h);
+        int ttype = 0;
+        if (event->type == SDL_EVENT_FINGER_MOTION) ttype = 1;
+        else if (event->type == SDL_EVENT_FINGER_UP) ttype = 2;
+        else if (event->type == SDL_EVENT_FINGER_CANCELED) ttype = 3;
+        zen_push_touch((int)(event->tfinger.fingerID & 0x7FFFFFFF), ttype, event->tfinger.x * (float)win_w, event->tfinger.y * (float)win_h);
+        break;
     }
-#else
-    // Emscripten環境では透明<input>経由 (zen_push_char) で英数・日本語とも入力されるため、
-    // GLFW onKeyPress からの二重注入を抑止する
-    (void)codepoint;
 #endif
-}
-
-static void window_focus_callback(GLFWwindow* window, int focused) {
-    (void)window;
-    if (!focused) {
-#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
-        ReleaseCapture();
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+#ifndef __EMSCRIPTEN__
+        SDL_CaptureMouse(false);
 #endif
         for (int i = 0; i < 8; i++) {
             if (s_mouse_pressed[i]) {
@@ -134,136 +189,92 @@ static void window_focus_callback(GLFWwindow* window, int focused) {
         s_mouse_wheel_x = 0.0;
         s_mouse_wheel_y = 0.0;
         zen__vibration_stop_all();
+        break;
+    default:
+        break;
     }
-}
-
-void zen__input_install(GLFWwindow* window) {
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetCharCallback(window, char_callback);
-    glfwSetMouseButtonCallback(window, mouse_button_callback);
-    glfwSetCursorPosCallback(window, cursor_pos_callback);
-    glfwSetScrollCallback(window, scroll_callback);
-    glfwSetWindowFocusCallback(window, window_focus_callback);
 }
 
 // ------------------------------------------
 // フレームごとのポーリング & クリア
 // ------------------------------------------
-// GLFW / Joydev のトリガー軸生値 (-1.0..1.0) を 0.0..1.0 に正規化する
-static float normalize_trigger_axis(float raw) {
-    float v = (raw + 1.0f) * 0.5f;
-    if (v < 0.0f) return 0.0f;
-    if (v > 1.0f) return 1.0f;
-    return v;
-}
-
 void zen__input_poll(void) {
-#ifdef __EMSCRIPTEN__
+    // 1. 切断されたゲームパッドをクローズ
     for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
-        int jid = GLFW_JOYSTICK_1 + i;
-        if (glfwJoystickPresent(jid)) {
-            int axes_count = 0;
-            const float* axes = glfwGetJoystickAxes(jid, &axes_count);
-            int btn_count = 0;
-            const unsigned char* buttons = glfwGetJoystickButtons(jid, &btn_count);
+        if (s_gamepads[i] && !SDL_GamepadConnected(s_gamepads[i])) {
+            SDL_CloseGamepad(s_gamepads[i]);
+            s_gamepads[i] = NULL;
+            s_gamepad_ids[i] = 0;
+            s_gamepad_connected[i] = 0;
+            memset(s_gamepad_buttons_pressed[i], 0, sizeof(s_gamepad_buttons_pressed[i]));
+            memset(s_gamepad_axes[i], 0, sizeof(s_gamepad_axes[i]));
+        }
+    }
 
-            if (axes || buttons) {
-                s_gamepad_connected[i] = 1;
-                if (axes) {
-                    for (int a = 0; a < ZEN_GAMEPAD_AXIS_COUNT; a++) {
-                        if (a >= axes_count) {
-                            s_gamepad_axes[i][a] = 0.0f;
-                        } else if (a == ZEN_GAMEPAD_AXIS_LEFT_TRIGGER || a == ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER) {
-                            s_gamepad_axes[i][a] = normalize_trigger_axis(axes[a]);
-                        } else {
-                            s_gamepad_axes[i][a] = axes[a];
+    // 2. 新規接続されたゲームパッドを空きスロットに割り当て
+    int count = 0;
+    SDL_JoystickID* ids = SDL_GetGamepads(&count);
+    if (ids) {
+        for (int j = 0; j < count; j++) {
+            SDL_JoystickID jid = ids[j];
+            int already_open = 0;
+            for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
+                if (s_gamepads[i] && s_gamepad_ids[i] == jid) {
+                    already_open = 1;
+                    break;
+                }
+            }
+            if (!already_open) {
+                for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
+                    if (!s_gamepads[i]) {
+                        SDL_Gamepad* pad = SDL_OpenGamepad(jid);
+                        if (pad) {
+                            s_gamepads[i] = pad;
+                            s_gamepad_ids[i] = jid;
                         }
+                        break;
                     }
                 }
-                if (buttons) {
-                    static const int html5_to_zen_btn[17] = {
-                        ZEN_GAMEPAD_BUTTON_A,            // 0 -> A
-                        ZEN_GAMEPAD_BUTTON_B,            // 1 -> B
-                        ZEN_GAMEPAD_BUTTON_X,            // 2 -> X
-                        ZEN_GAMEPAD_BUTTON_Y,            // 3 -> Y
-                        ZEN_GAMEPAD_BUTTON_LEFT_BUMPER,  // 4 -> LB
-                        ZEN_GAMEPAD_BUTTON_RIGHT_BUMPER, // 5 -> RB
-                        -1,                              // 6 -> LT
-                        -1,                              // 7 -> RT
-                        ZEN_GAMEPAD_BUTTON_BACK,         // 8 -> Back
-                        ZEN_GAMEPAD_BUTTON_START,        // 9 -> Start
-                        ZEN_GAMEPAD_BUTTON_LEFT_THUMB,   // 10 -> LThumb
-                        ZEN_GAMEPAD_BUTTON_RIGHT_THUMB,  // 11 -> RThumb
-                        ZEN_GAMEPAD_BUTTON_DPAD_UP,      // 12 -> Dpad Up
-                        ZEN_GAMEPAD_BUTTON_DPAD_DOWN,    // 13 -> Dpad Down
-                        ZEN_GAMEPAD_BUTTON_DPAD_LEFT,    // 14 -> Dpad Left
-                        ZEN_GAMEPAD_BUTTON_DPAD_RIGHT,   // 15 -> Dpad Right
-                        ZEN_GAMEPAD_BUTTON_GUIDE         // 16 -> Guide
-                    };
-                    unsigned char new_buttons[ZEN_GAMEPAD_BUTTON_COUNT] = {0};
-                    for (int h = 0; h < btn_count && h < 17; h++) {
-                        int zb = html5_to_zen_btn[h];
-                        if (zb >= 0 && zb < ZEN_GAMEPAD_BUTTON_COUNT) {
-                            new_buttons[zb] = buttons[h];
-                        }
-                    }
-                    if (btn_count > 6 && axes_count <= 4) {
-                        s_gamepad_axes[i][ZEN_GAMEPAD_AXIS_LEFT_TRIGGER] = buttons[6] ? 1.0f : 0.0f;
-                    }
-                    if (btn_count > 7 && axes_count <= 5) {
-                        s_gamepad_axes[i][ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER] = buttons[7] ? 1.0f : 0.0f;
-                    }
-
-                    for (int b = 0; b < ZEN_GAMEPAD_BUTTON_COUNT; b++) {
-                        unsigned char new_state = new_buttons[b];
-                        unsigned char old_state = s_gamepad_buttons_pressed[i][b];
-                        if (!old_state && new_state) {
-                            s_gamepad_buttons_push[i][b] = 1;
-                        } else if (old_state && !new_state) {
-                            s_gamepad_buttons_release[i][b] = 1;
-                        }
-                        s_gamepad_buttons_pressed[i][b] = new_state;
-                    }
-                }
-                continue;
             }
         }
-        s_gamepad_connected[i] = 0;
-        memset(s_gamepad_buttons_pressed[i], 0, sizeof(s_gamepad_buttons_pressed[i]));
-        memset(s_gamepad_axes[i], 0, sizeof(s_gamepad_axes[i]));
+        SDL_free(ids);
     }
-#else
+
+    // 3. 各スロットのボタン・アナログ軸状態を更新
     for (int i = 0; i < ZEN_MAX_GAMEPADS; i++) {
-        int jid = GLFW_JOYSTICK_1 + i;
-        if (glfwJoystickPresent(jid) && glfwJoystickIsGamepad(jid)) {
-            GLFWgamepadstate state;
-            if (glfwGetGamepadState(jid, &state)) {
-                s_gamepad_connected[i] = 1;
-                for (int b = 0; b < ZEN_GAMEPAD_BUTTON_COUNT; b++) {
-                    unsigned char new_state = state.buttons[b];
-                    unsigned char old_state = s_gamepad_buttons_pressed[i][b];
-                    if (!old_state && new_state) {
-                        s_gamepad_buttons_push[i][b] = 1;
-                    } else if (old_state && !new_state) {
-                        s_gamepad_buttons_release[i][b] = 1;
-                    }
-                    s_gamepad_buttons_pressed[i][b] = new_state;
+        SDL_Gamepad* pad = s_gamepads[i];
+        if (pad && SDL_GamepadConnected(pad)) {
+            s_gamepad_connected[i] = 1;
+            for (int b = 0; b < ZEN_GAMEPAD_BUTTON_COUNT; b++) {
+                unsigned char new_state = SDL_GetGamepadButton(pad, (SDL_GamepadButton)b) ? 1 : 0;
+                unsigned char old_state = s_gamepad_buttons_pressed[i][b];
+                if (!old_state && new_state) {
+                    s_gamepad_buttons_push[i][b] = 1;
+                } else if (old_state && !new_state) {
+                    s_gamepad_buttons_release[i][b] = 1;
                 }
-                for (int a = 0; a < ZEN_GAMEPAD_AXIS_COUNT; a++) {
-                    float v = state.axes[a];
-                    if (a == ZEN_GAMEPAD_AXIS_LEFT_TRIGGER || a == ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER) {
-                        v = normalize_trigger_axis(v);
-                    }
-                    s_gamepad_axes[i][a] = v;
-                }
-                continue;
+                s_gamepad_buttons_pressed[i][b] = new_state;
             }
+            for (int a = 0; a < ZEN_GAMEPAD_AXIS_COUNT; a++) {
+                Sint16 raw = SDL_GetGamepadAxis(pad, (SDL_GamepadAxis)a);
+                float v = 0.0f;
+                if (a == ZEN_GAMEPAD_AXIS_LEFT_TRIGGER || a == ZEN_GAMEPAD_AXIS_RIGHT_TRIGGER) {
+                    v = (float)raw / 32767.0f;
+                    if (v < 0.0f) v = 0.0f;
+                    if (v > 1.0f) v = 1.0f;
+                } else {
+                    v = (raw < 0) ? ((float)raw / 32768.0f) : ((float)raw / 32767.0f);
+                    if (v < -1.0f) v = -1.0f;
+                    if (v > 1.0f) v = 1.0f;
+                }
+                s_gamepad_axes[i][a] = v;
+            }
+        } else {
+            s_gamepad_connected[i] = 0;
+            memset(s_gamepad_buttons_pressed[i], 0, sizeof(s_gamepad_buttons_pressed[i]));
+            memset(s_gamepad_axes[i], 0, sizeof(s_gamepad_axes[i]));
         }
-        s_gamepad_connected[i] = 0;
-        memset(s_gamepad_buttons_pressed[i], 0, sizeof(s_gamepad_buttons_pressed[i]));
-        memset(s_gamepad_axes[i], 0, sizeof(s_gamepad_axes[i]));
     }
-#endif
 }
 
 void zen__input_end_frame(void) {
@@ -284,9 +295,9 @@ void zen__input_end_frame(void) {
 // 公開入力 API
 // ------------------------------------------
 void zen_get_mouse_pos(float* x, float* y) {
-    GLFWwindow* win = zen__window();
+    SDL_Window* win = zen__window();
     int win_w = 1, win_h = 1;
-    if (win) glfwGetWindowSize(win, &win_w, &win_h);
+    if (win) SDL_GetWindowSize(win, &win_w, &win_h);
     if (win_w <= 0) win_w = 1;
     if (win_h <= 0) win_h = 1;
 
@@ -401,46 +412,31 @@ void zen_push_char(unsigned int codepoint) {
     }
 }
 
-#if defined(_WIN32)
 void zen_set_ime_position(int x, int y) {
-    GLFWwindow* win = zen__window();
-    if (!win) return;
-    HWND hwnd = glfwGetWin32Window(win);
-    if (!hwnd) return;
-    HIMC himc = ImmGetContext(hwnd);
-    if (himc) {
-        if (x < 0 || y < 0) {
-            ImmReleaseContext(hwnd, himc);
-            return;
-        }
-        int win_w = 0, win_h = 0;
-        glfwGetWindowSize(win, &win_w, &win_h);
-        const ZenViewport* vp = zen__viewport();
-        float fb_to_win = (vp->fb_w > 0 && win_w > 0) ? ((float)win_w / (float)vp->fb_w) : 1.0f;
-        int screen_x = (int)((vp->x + (float)x * vp->scale) * fb_to_win);
-        int screen_y = (int)((vp->y + (float)y * vp->scale) * fb_to_win);
-
-        COMPOSITIONFORM cf;
-        cf.dwStyle = CFS_POINT;
-        cf.ptCurrentPos.x = screen_x;
-        cf.ptCurrentPos.y = screen_y;
-        ImmSetCompositionWindow(himc, &cf);
-        ImmReleaseContext(hwnd, himc);
-    }
-}
-#elif defined(__EMSCRIPTEN__)
-void zen_set_ime_position(int x, int y) {
+#if defined(__EMSCRIPTEN__)
     EM_ASM({
         if (window.zenooOnFocusTextInput) {
             window.zenooOnFocusTextInput($0, $1);
         }
     }, x, y);
-}
 #else
-void zen_set_ime_position(int x, int y) {
-    (void)x; (void)y;
-}
+    SDL_Window* win = zen__window();
+    if (!win) return;
+    if (x < 0 || y < 0) {
+        SDL_SetTextInputArea(win, NULL, 0);
+        return;
+    }
+    int win_w = 0, win_h = 0;
+    SDL_GetWindowSize(win, &win_w, &win_h);
+    const ZenViewport* vp = zen__viewport();
+    float fb_to_win = (vp->fb_w > 0 && win_w > 0) ? ((float)win_w / (float)vp->fb_w) : 1.0f;
+    int screen_x = (int)((vp->x + (float)x * vp->scale) * fb_to_win);
+    int screen_y = (int)((vp->y + (float)y * vp->scale) * fb_to_win);
+
+    SDL_Rect rect = { screen_x, screen_y, 1, 20 };
+    SDL_SetTextInputArea(win, &rect, 0);
 #endif
+}
 
 // ------------------------------------------
 // タッチ入力キュー
@@ -456,14 +452,14 @@ static ZenRawTouchEvent s_touch_queue[ZEN_TOUCH_QUEUE_MAX];
 static int s_touch_queue_count = 0;
 
 static void zen__screen_to_virtual(float win_x, float win_y, float* out_vx, float* out_vy) {
-    GLFWwindow* win = zen__window();
+    SDL_Window* win = zen__window();
     if (!win) {
         if (out_vx) *out_vx = win_x;
         if (out_vy) *out_vy = win_y;
         return;
     }
     int win_w = 1, win_h = 1;
-    glfwGetWindowSize(win, &win_w, &win_h);
+    SDL_GetWindowSize(win, &win_w, &win_h);
     if (win_w <= 0) win_w = 1;
     if (win_h <= 0) win_h = 1;
 
@@ -523,4 +519,3 @@ float zen_get_touch_event_y(int idx) {
 void zen_clear_touch_events(void) {
     s_touch_queue_count = 0;
 }
-

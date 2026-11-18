@@ -1,5 +1,5 @@
 module Zenoo
-  native_lib "glfw"
+  native_lib "SDL3"
   native_lib "GL"
   native_lib "m"
 
@@ -70,7 +70,7 @@ module Zenoo
   module Native
     # ==========================================
     # 3. Native::Window
-    # ※ GLFW / Emscripten ウィンドウ制御・論理解像度・DPI・フレームタイミングの C バインディング
+    # ※ SDL3 / Emscripten ウィンドウ制御・論理解像度・DPI・フレームタイミングの C バインディング
     # ==========================================
     module Window
       native_func :raw_init, [:int, :int, :string, :int], :int, "sp_zen_win_init"                              # 内部用: 基本初期化(w, h, title, fullscreen:0|1)

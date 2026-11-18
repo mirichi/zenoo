@@ -242,7 +242,7 @@ build_c_kernel_obj() {
     local obj="$2"
     if needs_c_rebuild "$src" "$obj"; then
         wait_c_slot
-        emcc -c "${OPT_LEVEL}" -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj" &
+        emcc -c "${OPT_LEVEL}" -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj" &
         C_PIDS+=($!)
     fi
 }
@@ -260,7 +260,7 @@ flush_c_jobs
 COMMON_EMCC_BASE_FLAGS=(
     "${OPT_LEVEL}"
     ${DEBUG_FLAGS}
-    -s USE_GLFW=3
+    -s USE_SDL=3
     -s MAX_WEBGL_VERSION=2
     -s MIN_WEBGL_VERSION=2
     -s STACK_SIZE=1048576

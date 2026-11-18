@@ -50,14 +50,14 @@ done
 emar rcs "${CACHE_DIR}/libspinel_rt.a" "${CACHE_DIR}/rt"/*.o "${CACHE_DIR}/regexp"/*.o
 
 echo "=== [3/4] Building Zenoo C Kernel for Wasm ==="
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_window.c -o "${CACHE_DIR}/zenoo_window.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_input.c -o "${CACHE_DIR}/zenoo_input.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_vibration.c -o "${CACHE_DIR}/zenoo_vibration.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_image.c -o "${CACHE_DIR}/zenoo_image.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${CACHE_DIR}/zenoo_gfx.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${CACHE_DIR}/zenoo_font.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_audio.c -o "${CACHE_DIR}/zenoo_audio.o"
-emcc -c -O2 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" ext/spinel/zenoo_spinel.c -o "${CACHE_DIR}/zenoo_spinel.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_window.c -o "${CACHE_DIR}/zenoo_window.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_input.c -o "${CACHE_DIR}/zenoo_input.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_vibration.c -o "${CACHE_DIR}/zenoo_vibration.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_image.c -o "${CACHE_DIR}/zenoo_image.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${CACHE_DIR}/zenoo_gfx.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${CACHE_DIR}/zenoo_font.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_audio.c -o "${CACHE_DIR}/zenoo_audio.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" ext/spinel/zenoo_spinel.c -o "${CACHE_DIR}/zenoo_spinel.o"
 
 # ビルドモード判定 (サイズより速度優先)
 #   BUILD_MODE=dev  (または fast) : -O1 (Clang最適化を軽量化し、ビルド時間を短縮)
@@ -76,7 +76,7 @@ case "${BUILD_MODE:-release}" in
 esac
 echo "=== [4/4] Linking Wasm + WebGL Application (Mode: ${BUILD_MODE:-release}, ${OPT_LEVEL}) ==="
 emcc ${OPT_LEVEL} \
-    -s USE_GLFW=3 \
+    -s USE_SDL=3 \
     -s MAX_WEBGL_VERSION=2 \
     -s MIN_WEBGL_VERSION=2 \
     -s STACK_SIZE=1048576 \

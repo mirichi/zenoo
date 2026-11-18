@@ -24,9 +24,13 @@ if Gem.win_platform?
     $LDFLAGS << " -L#{lib_dir}" if Dir.exist?(lib_dir)
   end
 
-  $libs << " -lglfw3 -lopengl32 -lgdi32 -luser32 -lkernel32 -lshell32 -lwinmm -limm32 -lole32"
+  $libs << " -lSDL3 -lopengl32 -lgdi32 -luser32 -lkernel32 -lshell32 -lwinmm -limm32 -lole32"
 else
-  $libs << " -lglfw -lGL -lX11 -lpthread -lXrandr -lXi -ldl -lm"
+  local_inc = File.expand_path("~/.local/include")
+  local_lib = File.expand_path("~/.local/lib/x86_64-linux-gnu")
+  $INCFLAGS << " -I#{local_inc}" if Dir.exist?(local_inc)
+  $LDFLAGS << " -L#{local_lib} -Wl,-rpath,#{local_lib}" if Dir.exist?(local_lib)
+  $libs << " -lSDL3 -lGL -lpthread -ldl -lm"
 end
 
 create_makefile('zenoo/zenoo')

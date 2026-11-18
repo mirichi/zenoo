@@ -69,7 +69,7 @@ build_c_kernel_obj() {
     src="$1"
     obj="$2"
     if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ]; then
-        emcc -c "${OPT_LEVEL}" -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj"
+        emcc -c "${OPT_LEVEL}" -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj"
     fi
 }
 build_c_kernel_obj "src/zenoo_window.c" "${CACHE_DIR}/zenoo_window.o"
@@ -84,7 +84,7 @@ build_c_kernel_obj "ext/spinel/zenoo_spinel.c" "${CACHE_DIR}/zenoo_spinel.o"
 COMMON_EMCC_FLAGS=(
     "${OPT_LEVEL}"
     ${DEBUG_FLAGS}
-    -s USE_GLFW=3
+    -s USE_SDL=3
     -s MAX_WEBGL_VERSION=2
     -s MIN_WEBGL_VERSION=2
     -s STACK_SIZE=1048576

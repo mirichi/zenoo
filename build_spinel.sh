@@ -6,18 +6,27 @@ if [ ! -f "$SPINEL_BIN" ]; then
     SPINEL_BIN="spinel"
 fi
 
+SDL_INC=""
+SDL_LINK_FLAGS=()
+if [ -d "${HOME}/.local/include/SDL3" ]; then
+    SDL_INC="-I${HOME}/.local/include"
+fi
+if [ -d "${HOME}/.local/lib/x86_64-linux-gnu" ]; then
+    SDL_LINK_FLAGS+=(--link "-L${HOME}/.local/lib/x86_64-linux-gnu" --link "-Wl,--disable-new-dtags,-rpath,${HOME}/.local/lib/x86_64-linux-gnu")
+fi
+
 echo "=== [1/2] Building Zenoo Spinel C Archive (libzenoo_spinel.a) ==="
 mkdir -p build
 rm -f build/libzenoo_spinel.a build/zenoo_core.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/glad.c -o build/glad.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_window.c -o build/zenoo_window.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_input.c -o build/zenoo_input.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_vibration.c -o build/zenoo_vibration.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_image.c -o build/zenoo_image.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_gfx.c -o build/zenoo_gfx.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_font.c -o build/zenoo_font.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c src/zenoo_audio.c -o build/zenoo_audio.o
-gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib -c ext/spinel/zenoo_spinel.c -o build/zenoo_spinel.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib ${SDL_INC} -c src/glad.c -o build/glad.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib ${SDL_INC} -c src/zenoo_window.c -o build/zenoo_window.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib ${SDL_INC} -c src/zenoo_input.c -o build/zenoo_input.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib ${SDL_INC} -c src/zenoo_vibration.c -o build/zenoo_vibration.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib ${SDL_INC} -c src/zenoo_image.c -o build/zenoo_image.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib ${SDL_INC} -c src/zenoo_gfx.c -o build/zenoo_gfx.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib ${SDL_INC} -c src/zenoo_font.c -o build/zenoo_font.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib ${SDL_INC} -c src/zenoo_audio.c -o build/zenoo_audio.o
+gcc -O2 -fPIC -Iinclude -Iext/spinel -I${HOME}/spinel/lib ${SDL_INC} -c ext/spinel/zenoo_spinel.c -o build/zenoo_spinel.o
 ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_window.o build/zenoo_input.o build/zenoo_vibration.o build/zenoo_image.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_audio.o build/zenoo_spinel.o
 echo "  -> build/libzenoo_spinel.a created successfully."
 
@@ -38,7 +47,8 @@ OUT_BIN="build/$(basename "${TARGET_RB}" .rb)"
 echo "=== [2/2] AOT Compiling Ruby app: ${TARGET_RB} ==="
 "$SPINEL_BIN" --no-inline-hot -Ilib "${TARGET_RB}" -o "${OUT_BIN}" \
     --link build/libzenoo_spinel.a \
-    --link -lglfw \
+    "${SDL_LINK_FLAGS[@]}" \
+    --link -lSDL3 \
     --link -lGL \
     --link -lpthread \
     --link -ldl \

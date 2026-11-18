@@ -16,7 +16,7 @@
 #else
 #include "glad/glad.h"
 #endif
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL.h>
 
 #ifndef GL_R8
 #define GL_R8 0x8229
@@ -41,16 +41,19 @@ typedef struct {
     float scale;            // 論理座標 → 物理ピクセルの倍率
 } ZenViewport;
 
-GLFWwindow*        zen__window(void);    // 未初期化なら NULL
+SDL_Window*        zen__window(void);    // 未初期化なら NULL
 const ZenViewport* zen__viewport(void);
 int                zen__is_wsl_d3d12(void); // WSLg (Mesa D3D12) 環境判定 (MSAA 回避用)
 
 // ------------------------------------------
 // input (zenoo_input.c)
 // ------------------------------------------
-void zen__input_install(GLFWwindow* window); // GLFW コールバック登録
-void zen__input_poll(void);                  // ゲームパッド状態の取得 (begin_frame から)
-void zen__input_end_frame(void);             // 押下/離上などワンショット入力のクリア (end_frame から)
+void         zen__input_init(SDL_Window* window);
+void         zen__input_handle_event(const SDL_Event* event);
+void         zen__input_poll(void);                  // ゲームパッド状態の取得 (begin_frame から)
+void         zen__input_end_frame(void);             // 押下/離上などワンショット入力のクリア (end_frame から)
+void         zen__input_shutdown(void);
+SDL_Gamepad* zen__input_gamepad(int id);
 
 // ------------------------------------------
 // vibration (zenoo_vibration.c)
