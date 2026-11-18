@@ -736,7 +736,8 @@ module Zenoo
         count: @max_particles,
         layout: [4, 4, 4, 4],
         shader: ParticleEmitter.default_shader,
-        blend: @blend
+        blend: @blend,
+        retain_data: false
       )
     end
 

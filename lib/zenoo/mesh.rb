@@ -1250,8 +1250,10 @@ module Zenoo
     # - `shader:` (`Shader`, `nil`): インスタンス描画用シェーダー
     # - `uniforms:` (`Hash`, `nil`): シェーダーユニフォーム
     # - `blend:` (`Symbol`): ブレンドモード
-    def initialize(data:, count:, layout:, image: nil, mesh: nil, shader: nil, uniforms: nil, blend: :alpha)
-      @data = data
+    # - `retain_data:` (`Boolean`): CPU側でバイナリデータの複製を保持し続けるか（大量パーティクル等の頻繁な部分更新時は `false` で高速化）
+    def initialize(data:, count:, layout:, image: nil, mesh: nil, shader: nil, uniforms: nil, blend: :alpha, retain_data: true)
+      @retain_data = retain_data
+      @data = @retain_data ? data : nil
       @count = count.to_i
       @layout = normalize_layout(layout)
       @image = image
@@ -1260,12 +1262,12 @@ module Zenoo
       @uniforms = uniforms
       @blend = blend || :alpha
 
-      if @data && @count > 0
+      if data && @count > 0
         @native_buffer = Native::Mesh.new(
           Backend::Topology::TRIANGLE_STRIP,
           @layout,
-          @data,
-          @data.bytesize,
+          data,
+          data.bytesize,
           @count,
           "",
           0
@@ -1284,10 +1286,12 @@ module Zenoo
     def update(binary_data, offset: 0, count: nil)
       return self unless binary_data
       @count = count.to_i if count
-      if @data && offset >= 0 && offset + binary_data.bytesize <= @data.bytesize
-        @data[offset, binary_data.bytesize] = binary_data
-      elsif offset == 0
-        @data = binary_data
+      if @retain_data
+        if @data && offset >= 0 && offset + binary_data.bytesize <= @data.bytesize
+          @data[offset, binary_data.bytesize] = binary_data
+        elsif offset == 0
+          @data = binary_data
+        end
       end
       @native_buffer&.update_vertices(binary_data, offset, @count)
       self
