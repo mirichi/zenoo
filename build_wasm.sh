@@ -21,6 +21,7 @@ SPINEL_BIN="${SPINEL_DIR}/bin/spinel"
 
 TARGET_RB="${1:-examples/game_zenoo.rb}"
 OUTPUT_DIR="${2:-build/wasm}"
+SHELL_FILE="${3:-${SHELL_FILE:-tools/templates/web_shell.html}}"
 CACHE_DIR="build/wasm_cache"
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${CACHE_DIR}/rt"
@@ -82,7 +83,9 @@ emcc ${OPT_LEVEL} \
     -s STACK_SIZE=1048576 \
     -s INITIAL_MEMORY=67108864 \
     -s ALLOW_MEMORY_GROWTH=1 \
+    -s NO_EXIT_RUNTIME=1 \
     -s WASM=1 \
+    -s MINIFY_HTML=0 \
     -s EXPORTED_FUNCTIONS="['_main','_zen_push_char','_zen_push_touch']" \
     --preload-file assets@/assets \
     -fmacro-prefix-map="${PWD}"=. \
@@ -99,7 +102,7 @@ emcc ${OPT_LEVEL} \
     "${CACHE_DIR}/zenoo_spinel.o" \
     "${CACHE_DIR}/libspinel_rt.a" \
     -o "${OUTPUT_DIR}/index.html" \
-    --shell-file examples/web/shell.html
+    --shell-file "${SHELL_FILE}"
 
 rm -f "${OUTPUT_DIR}/app.c"
 

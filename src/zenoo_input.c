@@ -51,10 +51,202 @@ static int sdl_button_to_zen(Uint8 sdl_btn) {
     return -1;
 }
 
+#ifdef __EMSCRIPTEN__
+static void zen__setup_web_input_bridge(void) {
+    /* ブラウザ側の IME テキスト入力 (<input>) とマルチタッチ入力を Zenoo エンジン側で自己完結させる */
+    EM_ASM({
+        if (window.__zen_input_bridge_installed) return;
+        window.__zen_input_bridge_installed = true;
+
+        var getCanvas = function() {
+            return (typeof Module !== "undefined" && Module.canvas)
+                || document.getElementById("canvas")
+                || document.querySelector("canvas");
+        };
+
+        /* 1. IME テキスト入力連携 (非表示 <input> を自動生成・制御) */
+        var hiddenInput = document.getElementById("zenoo-hidden-input");
+        if (!hiddenInput) {
+            hiddenInput = document.createElement("input");
+            hiddenInput.id = "zenoo-hidden-input";
+            hiddenInput.type = "text";
+            hiddenInput.setAttribute("autocomplete", "off");
+            hiddenInput.setAttribute("autocorrect", "off");
+            hiddenInput.setAttribute("autocapitalize", "off");
+            hiddenInput.setAttribute("spellcheck", "false");
+            var cv0 = getCanvas();
+            var host = (cv0 && cv0.parentElement) ? cv0.parentElement : document.body;
+            if (host) host.appendChild(hiddenInput);
+        }
+
+        hiddenInput.style.position = "fixed";
+        hiddenInput.style.top = "-9999px";
+        hiddenInput.style.left = "-9999px";
+        hiddenInput.style.width = "1px";
+        hiddenInput.style.height = "20px";
+        hiddenInput.style.padding = "0";
+        hiddenInput.style.border = "0";
+        hiddenInput.style.opacity = "0";
+        hiddenInput.style.pointerEvents = "none";
+        hiddenInput.style.fontSize = "16px";
+        hiddenInput.style.webkitUserSelect = "text";
+        hiddenInput.style.userSelect = "text";
+
+        var isComposing = false;
+
+        var sendStringToZenoo = function(text) {
+            if (!text) return;
+            for (var i = 0; i < text.length; i++) {
+                var code = text.charCodeAt(i);
+                if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length) {
+                    var high = code;
+                    var low = text.charCodeAt(++i);
+                    code = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
+                }
+                _zen_push_char(code);
+            }
+        };
+
+        /* SDL3 Emscripten の window 上 keypress リスナーによる preventDefault() を回避 */
+        hiddenInput.addEventListener("keypress", function(e) {
+            e.stopPropagation();
+        });
+
+        /* IME 変換中のキー操作 (Enter / Backspace / 矢印等) が SDL3 へバブリングしないようにする */
+        hiddenInput.addEventListener("keydown", function(e) {
+            if (isComposing || e.isComposing || e.keyCode === 229) {
+                e.stopPropagation();
+            }
+        });
+
+        hiddenInput.addEventListener("compositionstart", function() {
+            isComposing = true;
+        });
+
+        hiddenInput.addEventListener("compositionend", function(e) {
+            isComposing = false;
+            var text = e.data || hiddenInput.value;
+            if (text && text.length > 0) {
+                sendStringToZenoo(text);
+            }
+            hiddenInput.value = "";
+        });
+
+        hiddenInput.addEventListener("input", function() {
+            if (!isComposing && hiddenInput.value.length > 0) {
+                sendStringToZenoo(hiddenInput.value);
+                hiddenInput.value = "";
+            }
+        });
+
+        window.__zen_focus_text_input = function(x, y) {
+            if (x >= 0 && y >= 0) {
+                var cv = getCanvas();
+                if (cv) {
+                    var rect = cv.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0 && cv.width > 0 && cv.height > 0) {
+                        var sx = rect.width / cv.width;
+                        var sy = rect.height / cv.height;
+                        var ix = rect.left + x * sx;
+                        var iy = rect.top + y * sy;
+                        var maxX = Math.max(0, window.innerWidth - 2);
+                        var maxY = Math.max(0, window.innerHeight - 2);
+                        hiddenInput.style.left = Math.max(0, Math.min(maxX, ix)) + "px";
+                        hiddenInput.style.top = Math.max(0, Math.min(maxY, iy)) + "px";
+                    }
+                }
+                if (document.activeElement !== hiddenInput) {
+                    hiddenInput.focus({ preventScroll: true });
+                }
+            } else {
+                if (document.activeElement === hiddenInput) {
+                    hiddenInput.blur();
+                }
+            }
+        };
+
+        /* 2. マルチタッチイベント連携 (_zen_push_touch) */
+        var activeTouchIds = {};
+
+        var isHtmlUiTarget = function(target) {
+            return !!(target && target.closest && target.closest("button, a, input, textarea, select, label, [data-zenoo-ui]"));
+        };
+
+        var getCanvasOffset = function(cv, touch) {
+            var rect = cv.getBoundingClientRect();
+            var scaleX = rect.width > 0 ? (cv.width / rect.width) : 1.0;
+            var scaleY = rect.height > 0 ? (cv.height / rect.height) : 1.0;
+            var pos = {};
+            pos.x = (touch.clientX - rect.left) * scaleX;
+            pos.y = (touch.clientY - rect.top) * scaleY;
+            return pos;
+        };
+
+        var cvInit = getCanvas();
+        var touchStartTarget = cvInit;
+        if (cvInit && cvInit.parentElement) {
+            var pe = cvInit.parentElement;
+            if (pe.id === "canvas-container" || pe.hasAttribute("data-zenoo-touch-area")) {
+                touchStartTarget = pe;
+            }
+        }
+
+        if (touchStartTarget) {
+            touchStartTarget.addEventListener("touchstart", function(e) {
+                if (isHtmlUiTarget(e.target)) return;
+                var cv = getCanvas();
+                if (!cv) return;
+                if (e.cancelable) e.preventDefault();
+                var touches = e.changedTouches;
+                if (!touches) return;
+                for (var i = 0; i < touches.length; i++) {
+                    var t = touches[i];
+                    activeTouchIds[t.identifier] = true;
+                    var pos = getCanvasOffset(cv, t);
+                    _zen_push_touch(t.identifier, 0, pos.x, pos.y);
+                }
+            }, { passive: false });
+        }
+
+        var handleTrackedTouch = function(e, type) {
+            var touches = e.changedTouches;
+            if (!touches) return;
+            var matched = false;
+            for (var i = 0; i < touches.length; i++) {
+                if (activeTouchIds[touches[i].identifier]) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) return;
+            var cv = getCanvas();
+            if (!cv) return;
+            if (e.cancelable) e.preventDefault();
+            for (var j = 0; j < touches.length; j++) {
+                var t = touches[j];
+                if (!activeTouchIds[t.identifier]) continue;
+                var pos = getCanvasOffset(cv, t);
+                _zen_push_touch(t.identifier, type, pos.x, pos.y);
+                if (type === 2 || type === 3) {
+                    delete activeTouchIds[t.identifier];
+                }
+            }
+        };
+
+        window.addEventListener("touchmove", function(e) { handleTrackedTouch(e, 1); }, { passive: false });
+        window.addEventListener("touchend", function(e) { handleTrackedTouch(e, 2); }, { passive: false });
+        window.addEventListener("touchcancel", function(e) { handleTrackedTouch(e, 3); }, { passive: false });
+    });
+}
+#endif
+
 void zen__input_init(SDL_Window* window) {
     if (window) {
         SDL_StartTextInput(window);
     }
+#ifdef __EMSCRIPTEN__
+    zen__setup_web_input_bridge();
+#endif
 }
 
 void zen__input_shutdown(void) {
@@ -415,8 +607,8 @@ void zen_push_char(unsigned int codepoint) {
 void zen_set_ime_position(int x, int y) {
 #if defined(__EMSCRIPTEN__)
     EM_ASM({
-        if (window.zenooOnFocusTextInput) {
-            window.zenooOnFocusTextInput($0, $1);
+        if (window.__zen_focus_text_input) {
+            window.__zen_focus_text_input($0, $1);
         }
     }, x, y);
 #else

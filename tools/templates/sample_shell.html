@@ -139,14 +139,6 @@
     code[class*="language-"] {
       font-family: inherit;
     }
-    #zenoo-hidden-input {
-      position: absolute;
-      top: -9999px;
-      left: -9999px;
-      opacity: 0;
-      pointer-events: none;
-      font-size: 16px;
-    }
   </style>
 </head>
 <body>
@@ -166,7 +158,6 @@
       <div class="canvas-container" id="canvas-container">
         <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
         <div id="status">Loading WebAssembly...</div>
-        <input id="zenoo-hidden-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
       </div>
     </div>
 
@@ -217,70 +208,6 @@
     window.onerror = function() {
       Module.setStatus('Error loading WebAssembly');
     };
-
-    // マルチタッチ連携
-    function getCanvasOffset(touch) {
-      var rect = canvasElement.getBoundingClientRect();
-      var scaleX = rect.width > 0 ? (canvasElement.width / rect.width) : 1.0;
-      var scaleY = rect.height > 0 ? (canvasElement.height / rect.height) : 1.0;
-      return {
-        x: (touch.clientX - rect.left) * scaleX,
-        y: (touch.clientY - rect.top) * scaleY
-      };
-    }
-
-    function handleTouch(e, type) {
-      if (!Module._zen_push_touch) return;
-      if (e.cancelable) e.preventDefault();
-      var touches = e.changedTouches;
-      if (!touches) return;
-      for (var i = 0; i < touches.length; i++) {
-        var t = touches[i];
-        var pos = getCanvasOffset(t);
-        Module._zen_push_touch(t.identifier, type, pos.x, pos.y);
-      }
-    }
-
-    canvasElement.addEventListener('touchstart', function(e) { handleTouch(e, 0); }, { passive: false });
-    window.addEventListener('touchmove', function(e) { handleTouch(e, 1); }, { passive: false });
-    window.addEventListener('touchend', function(e) { handleTouch(e, 2); }, { passive: false });
-    window.addEventListener('touchcancel', function(e) { handleTouch(e, 3); }, { passive: false });
-
-    // IME日本語入力連携
-    var hiddenInput = document.getElementById('zenoo-hidden-input');
-    var isComposing = false;
-    window.zenooOnFocusTextInput = function(x, y) {
-      if (!hiddenInput) return;
-      if (x >= 0 && y >= 0) hiddenInput.focus();
-      else hiddenInput.blur();
-    };
-    function sendStringToZenoo(text) {
-      if (!text || !Module._zen_push_char) return;
-      for (var i = 0; i < text.length; i++) {
-        var code = text.charCodeAt(i);
-        if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length) {
-          var high = code;
-          var low = text.charCodeAt(++i);
-          code = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
-        }
-        Module._zen_push_char(code);
-      }
-    }
-    if (hiddenInput) {
-      hiddenInput.addEventListener('compositionstart', function() { isComposing = true; });
-      hiddenInput.addEventListener('compositionend', function(e) {
-        isComposing = false;
-        var text = e.data || hiddenInput.value;
-        if (text) sendStringToZenoo(text);
-        hiddenInput.value = '';
-      });
-      hiddenInput.addEventListener('input', function() {
-        if (!isComposing && hiddenInput.value.length > 0) {
-          sendStringToZenoo(hiddenInput.value);
-          hiddenInput.value = '';
-        }
-      });
-    }
   </script>
   {{{ SCRIPT }}}
 </body>
