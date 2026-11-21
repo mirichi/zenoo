@@ -254,6 +254,7 @@ build_c_kernel_obj "src/zenoo_image.c" "${CACHE_DIR}/zenoo_image.o"
 build_c_kernel_obj "src/zenoo_gfx.c" "${CACHE_DIR}/zenoo_gfx.o"
 build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
 build_c_kernel_obj "src/zenoo_audio.c" "${CACHE_DIR}/zenoo_audio.o"
+build_c_kernel_obj "src/zenoo_batch.c" "${CACHE_DIR}/zenoo_batch.o"
 build_c_kernel_obj "src/zenoo_ffi_shim.c" "${CACHE_DIR}/zenoo_ffi_shim.o"
 flush_c_jobs
 
@@ -290,6 +291,7 @@ COMMON_OBJS=(
     "${CACHE_DIR}/zenoo_gfx.o"
     "${CACHE_DIR}/zenoo_font.o"
     "${CACHE_DIR}/zenoo_audio.o"
+    "${CACHE_DIR}/zenoo_batch.o"
     "${CACHE_DIR}/zenoo_ffi_shim.o"
     "${CACHE_DIR}/libspinel_rt.a"
 )

@@ -156,41 +156,21 @@ module Zenoo
 
       # 画面キューのコマンド群をスナップショットとして保持
       def capture_screen_snapshot
+        @screen_snapshot ||= Backend::DrawSnapshot.new
+        @screen_snapshot.capture_screen
         q = Backend.screen_queue
-        # キューのソートを先に行う
-        q.sort
-        count = q.queue_count
         @snapshot_clear_color = q.clear_color || Zenoo::Window.bg_color
-        @snapshot_count = count
-
-        while @snapshot_pool.length < count
-          @snapshot_pool << Backend::DrawCommand.new
-        end
-
-        pool = q.command_pool
-        i = 0
-        while i < count
-          src = pool[i]
-          dst = @snapshot_pool[i]
-          dst.set(
-            src.target, src.z, src.order,
-            src.pipeline, src.data, src.count,
-            src.image, src.shader, src.uniforms, src.blend, src.clip,
-            src.mesh, src.inst_buffer
-          )
-          i += 1
-        end
         @has_snapshot = true
       end
 
       # ポーズ中: スナップショットのコマンド群を画面に再描画 (オフスクリーン描画はバイパス)
       def replay_screen_snapshot
-        return unless @has_snapshot
+        return unless @has_snapshot && @screen_snapshot
 
         clear_c = @snapshot_clear_color || Zenoo::Window.bg_color || :black
         Native::Window.clear(Backend.color_to_uint32(clear_c))
         Backend.mark_screen_cleared
-        Backend.execute_snapshot_commands(@snapshot_pool, @snapshot_count)
+        @screen_snapshot.execute_direct
       end
 
       # フレーム毎の更新フック

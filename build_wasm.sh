@@ -58,6 +58,7 @@ emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_image.c -o "$
 emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${CACHE_DIR}/zenoo_gfx.o"
 emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${CACHE_DIR}/zenoo_font.o"
 emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_audio.c -o "${CACHE_DIR}/zenoo_audio.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_batch.c -o "${CACHE_DIR}/zenoo_batch.o"
 emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_ffi_shim.c -o "${CACHE_DIR}/zenoo_ffi_shim.o"
 
 # ビルドモード判定 (サイズより速度優先)
@@ -99,6 +100,7 @@ emcc ${OPT_LEVEL} \
     "${CACHE_DIR}/zenoo_gfx.o" \
     "${CACHE_DIR}/zenoo_font.o" \
     "${CACHE_DIR}/zenoo_audio.o" \
+    "${CACHE_DIR}/zenoo_batch.o" \
     "${CACHE_DIR}/zenoo_ffi_shim.o" \
     "${CACHE_DIR}/libspinel_rt.a" \
     -o "${OUTPUT_DIR}/index.html" \

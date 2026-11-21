@@ -286,6 +286,8 @@ ZenImage* zen_image_load(const char* filepath) {
 void zen_image_destroy(ZenImage* image) {
     if (!image) return;
 
+    zen_batch_on_image_destroy(image);
+
     if (zen__gfx_render_target() == image) {
         zen_set_render_target(NULL);
     }
@@ -378,6 +380,10 @@ uint32_t zen_image_get_texture_id(const ZenImage* image) {
 
 static void zen__ensure_cpu_pixels(ZenImage* img) {
     if (!img || !img->texture || img->width <= 0 || img->height <= 0) return;
+    if (zen_batch_has_pending_draws(img)) {
+        img->cpu_dirty = 1;
+        zen_batch_flush_image(img);
+    }
     if (!img->pixels) {
         img->pixels = (uint32_t*)calloc((size_t)img->width * (size_t)img->height, sizeof(uint32_t));
         img->cpu_dirty = 1;

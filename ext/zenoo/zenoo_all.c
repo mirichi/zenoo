@@ -7,5 +7,6 @@
 #include "../../src/zenoo_gfx.c"
 #include "../../src/zenoo_font.c"
 #include "../../src/zenoo_audio.c"
+#include "../../src/zenoo_batch.c"
 #include "../../src/zenoo_ffi_shim.c"
 #include "zenoo_ext.c"

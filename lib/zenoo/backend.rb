@@ -9,7 +9,7 @@ module Zenoo
     NONE     = 3 # ブレンド無効（アルファを含めそのまま上書き）
   end
 
-  # Zenoo 内部パイプライン・レンダリングバックエンド
+  # Zenoo 内部パイプライン・レンダリングバックエンド (C 実装 `src/zenoo_batch.c` ラッパー)
   # ユーザー向け API (Window, Image 等) の裏側で描画コマンドのバッチング、
   # Z ソート、FBO レンダーターゲット追跡、オンデマンドフラッシュを統括します。
   module Backend
@@ -31,13 +31,13 @@ module Zenoo
     # ※ 各バイトが 1 つの頂点属性（attribute）の float 要素数（1..4）を表す
     # ----------------------------------------------------
     module Layout
-      POS2_COLOR4         = "\x02\x04"                 # 頂点: (x, y), (r, g, b, a)
-      POS2_UV2_COLOR4     = "\x02\x02\x04"             # 頂点: (x, y), (u, v), (r, g, b, a)
-      POS2_UV2_ALPHA1     = "\x02\x02\x04"             # 頂点: (x, y), (u, v), (color4)
-      LINE                = "\x02\x04"                 # 線分頂点: (x, y), (r, g, b, a)
+      POS2_COLOR4         = "\x02\x04"                     # 頂点: (x, y), (r, g, b, a)
+      POS2_UV2_COLOR4     = "\x02\x02\x04"                 # 頂点: (x, y), (u, v), (r, g, b, a)
+      POS2_UV2_ALPHA1     = "\x02\x02\x04"                 # 頂点: (x, y), (u, v), (color4)
+      LINE                = "\x02\x04"                     # 線分頂点: (x, y), (r, g, b, a)
       CARD_INSTANCED      = "\x04\x04\x04\x04\x04\x04\x04" # SDFカード用インスタンス属性 (vec4 x 7)
-      QUAD_INSTANCED      = CARD_INSTANCED             # 汎用インスタンス化矩形 (CARD_INSTANCED と共通)
-      SPRITE_INSTANCED    = "\x04\x04\x04\x04"         # スプライトバッチ用インスタンス属性 (vec4 x 4)
+      QUAD_INSTANCED      = CARD_INSTANCED                 # 汎用インスタンス化矩形 (CARD_INSTANCED と共通)
+      SPRITE_INSTANCED    = "\x04\x04\x04\x04"             # スプライトバッチ用インスタンス属性 (vec4 x 4)
       FONT_INSTANCED      = "\x04\x04\x04\x04\x04\x04\x04" # SDFフォント用インスタンス属性 (vec4 x 7)
     end
 
@@ -61,7 +61,7 @@ module Zenoo
     # 描画パイプライン定義 (トポロジー・レイアウト・Divisor・頂点数を集約)
     # ----------------------------------------------------
     class Pipeline
-      attr_reader :topology, :layout, :divisors, :base_vertex_count, :default_shader
+      attr_reader :id, :topology, :layout, :divisors, :base_vertex_count, :default_shader
 
       # パイプライン定義を初期化する
       #
@@ -69,30 +69,44 @@ module Zenoo
       # - `layout` (`String`): `Layout` の 1 バイト属性長列
       # - `divisors` (`String`): `Divisor` の属性 Divisor 列
       # - `base_vertex_count` (`Integer`): インスタンス描画時の 1 インスタンスあたり頂点数（非インスタンス時は `0`）
-      # - `default_shader` (`NativeShader | nil`): シェーダー未指定時に使われる既定シェーダー（起動後に `DefaultShaders` から設定される）
+      # - `default_shader` (`NativeShader | nil`): シェーダー未指定時に使われる既定シェーダー
+      # - `id` (`Integer | nil`): C 側組み込みパイプライン ID（カスタム時は自動登録）
       # - 戻り値: `Pipeline`
-      def initialize(topology, layout, divisors, base_vertex_count, default_shader = nil)
+      def initialize(topology, layout, divisors, base_vertex_count, default_shader = nil, id = nil)
         @topology = topology
         @layout = layout
         @divisors = divisors
         @base_vertex_count = base_vertex_count
         @default_shader = default_shader
+        @id = id || Native::C.zen_batch_register_pipeline(
+          topology.to_i,
+          layout.to_s,
+          layout.to_s.bytesize,
+          divisors.to_s,
+          divisors.to_s.bytesize,
+          base_vertex_count.to_i,
+          default_shader ? default_shader.__ptr : nil
+        )
+      end
+
+      def default_shader=(sh)
+        @default_shader = sh
+        Native::C.zen_batch_set_pipeline_default_shader(@id, sh ? sh.__ptr : nil)
       end
     end
 
-    # エンジン標準の描画パイプライン定義集
+    # エンジン標準の描画パイプライン定義集 (C enum ZenPipelineId 0..8 と 1:1 対応)
     module Pipelines
-      CARD                    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::CARD_INSTANCED, Divisor::CARD_INSTANCED, 4)         # 角丸・枠線・影付きカード矩形 (SDF)
-      SPRITE                  = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::SPRITE_INSTANCED, Divisor::SPRITE_INSTANCED, 4)     # テクスチャ付きスプライト / 画像描画
-      FONT                    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::FONT_INSTANCED, Divisor::FONT_INSTANCED, 4)         # MSDF/ビットマップテキスト文字描画
-      TRIANGLES               = Pipeline.new(Topology::TRIANGLES, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)                    # 単色三角形リスト
-      TRIANGLE_STRIP          = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)               # 単色三角形ストリップ
-      LINES                   = Pipeline.new(Topology::LINES, Layout::LINE, Divisor::LINE, 0)                                      # 線分リスト
-      POINTS                  = Pipeline.new(Topology::POINTS, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0)                       # 点リスト
-      TEXTURED_TRIANGLES      = Pipeline.new(Topology::TRIANGLES, Layout::POS2_UV2_COLOR4, Divisor::POS2_UV2_COLOR4, 0)            # テクスチャ + 頂点カラー三角形リスト
-      TEXTURED_TRIANGLE_STRIP = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::POS2_UV2_COLOR4, Divisor::POS2_UV2_COLOR4, 0)       # テクスチャ + 頂点カラー三角形ストリップ
+      CARD                    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::CARD_INSTANCED, Divisor::CARD_INSTANCED, 4, nil, 0)
+      SPRITE                  = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::SPRITE_INSTANCED, Divisor::SPRITE_INSTANCED, 4, nil, 1)
+      FONT                    = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::FONT_INSTANCED, Divisor::FONT_INSTANCED, 4, nil, 2)
+      TRIANGLES               = Pipeline.new(Topology::TRIANGLES, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0, nil, 3)
+      TRIANGLE_STRIP          = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0, nil, 4)
+      LINES                   = Pipeline.new(Topology::LINES, Layout::LINE, Divisor::LINE, 0, nil, 5)
+      POINTS                  = Pipeline.new(Topology::POINTS, Layout::POS2_COLOR4, Divisor::POS2_COLOR4, 0, nil, 6)
+      TEXTURED_TRIANGLES      = Pipeline.new(Topology::TRIANGLES, Layout::POS2_UV2_COLOR4, Divisor::POS2_UV2_COLOR4, 0, nil, 7)
+      TEXTURED_TRIANGLE_STRIP = Pipeline.new(Topology::TRIANGLE_STRIP, Layout::POS2_UV2_COLOR4, Divisor::POS2_UV2_COLOR4, 0, nil, 8)
     end
-
 
     # ----------------------------------------------------
     # ブレンドモード
@@ -193,667 +207,237 @@ module Zenoo
     end
 
     # ----------------------------------------------------
-    # 描画コマンド
-    # 1 回の描画要求（頂点・インスタンス・テクスチャ・シェーダー・クリップ等）を保持し、
-    # DrawQueue のプール内で GC アロケーションを避けて再利用される
+    # C 描画キュー用 Ruby 側互換ビュー (Scene / Dev が利用)
     # ----------------------------------------------------
-    class DrawCommand
-      attr_accessor :target, :z, :order, :pipeline, :data, :count, :image, :shader, :uniforms, :blend, :clip, :mesh, :inst_buffer
-
-      # 空の描画コマンドスロットを初期化する
-      #
-      # - 戻り値: `DrawCommand`
-      def initialize
-        @target = nil
-        @z = 0.0
-        @order = 0
-        @pipeline = nil
-        @data = nil
-        @count = 0
-        @image = nil
-        @shader = nil
-        @uniforms = nil
-        @blend = 0
-        @clip = nil
-        @mesh = nil
-        @inst_buffer = nil
+    class DrawQueueView
+      def initialize(screen)
+        @screen = screen
       end
 
-      # 再利用中のコマンドスロットに描画パラメータを設定する
-      #
-      # - `target` (`Image | nil`): 描画先レンダーターゲット（画面なら `nil`）
-      # - `z` (`Float`): 描画深度（小さいほど奥、大きいほど手前）
-      # - `order` (`Integer`): 登録順インデックス（同一 Z での安定ソート用）
-      # - `pipeline` (`Pipeline`): 使用する `Pipelines` 定数
-      # - `data` (`String | nil`): パック済み頂点／インスタンスバイナリデータ
-      # - `count` (`Integer`): 頂点数またはインスタンス数
-      # - `image` (`Image | nil`): バインドするテクスチャ画像
-      # - `shader` (`NativeShader | nil`): カスタムシェーダー（`nil` でパイプライン既定値）
-      # - `uniforms` (`Hash | nil`): シェーダーへ転送するユニフォーム変数ハッシュ
-      # - `blend` (`Integer`): `BlendMode` の整数値
-      # - `clip` (`Array<Numeric> | nil`): シザー矩形 `[x, y, w, h]`（デバイス／スクリーン座標系）
-      # - `mesh` (`Native::Mesh | nil`): VRAM 常駐ジオメトリメッシュ
-      # - `inst_buffer` (`Native::Mesh | nil`): VRAM 常駐インスタンスバッファ
-      # - 戻り値: `Native::Mesh | nil`
-      def set(target, z, order, pipeline, data, count, image = nil, shader = nil, uniforms = nil, blend = 0, clip = nil, mesh = nil, inst_buffer = nil)
-        @target = target
-        @z = z.to_f
-        @order = order
-        @pipeline = pipeline
-        @data = data
-        @count = count
-        @image = image
-        @shader = shader
-        @uniforms = uniforms
-        @blend = blend.to_i
-        @clip = clip
-        @mesh = mesh
-        @inst_buffer = inst_buffer
-      end
-    end
-
-    # ----------------------------------------------------
-    # 描画キュー管理クラス (画面用・各Image用で共通)
-    # ----------------------------------------------------
-    class DrawQueue
-      attr_reader :command_pool, :queue_count, :owner, :clear_color
-      attr_accessor :needs_z_sort, :auto_clear
-
-      # 描画キューを初期化する
-      #
-      # - `owner` (`Image | nil`): 描画先 `Image`（画面キューの場合は `nil`）
-      # - 戻り値: `DrawQueue`
-      def initialize(owner = nil)
-        @owner = owner # nil なら画面、Image ならその Image
-        @command_pool = []
-        @queue_count = 0
-        @needs_z_sort = false
-        @is_flushing = false
-        @auto_clear = (owner == nil)
-        @clear_color = nil
-        @cleared_this_frame = false
+      def queue_count
+        @screen ? Native::C.zen_batch_screen_queue_count : Native::C.zen_batch_active_queue_count
       end
 
-      # 画面キュー用: フレーム開始時にクリア状態をリセットする
-      #
-      # - 戻り値: `false`
-      def reset_frame
-        @cleared_this_frame = false
+      def clear_color
+        @screen ? Backend.screen_clear_color : nil
       end
 
-      # 画面キュー用: リプレイや外部フラッシュで画面クリアが行われたことを記録する
-      #
-      # - 戻り値: `true`
-      def mark_cleared
-        @cleared_this_frame = true
-      end
-
-      # 次回フラッシュ時に適用するクリア色を設定する
-      #
-      # - `color` (`Color | Symbol | Array<Numeric> | String | Integer | nil`): クリア色
-      # - 戻り値: `Color | Symbol | Array<Numeric> | String | Integer | nil`
-      def set_clear(color)
-        @clear_color = color
-      end
-
-      # 未実行の描画コマンド・クリア予約・自動クリア待ちが残っているかを返す
-      #
-      # - 戻り値: `Boolean`
-      def has_pending_draws?
-        @queue_count > 0 || !@clear_color.nil? || (@auto_clear && !@cleared_this_frame)
-      end
-
-      # コマンドプールから次の空き `DrawCommand` を取得または確保する
-      #
-      # - 戻り値: `DrawCommand`
-      def allocate_command
-        if @queue_count < @command_pool.length
-          @command_pool[@queue_count]
-        else
-          cmd = DrawCommand.new
-          @command_pool.push(cmd)
-          cmd
-        end
-      end
-
-      # キュー内の有効コマンド数を 1 増やす（`allocate_command` 後に直接 `set` した場合に使用）
-      #
-      # - 戻り値: `Integer`
-      def increment_count
-        @queue_count += 1
-      end
-
-      # 描画コマンドをこのキューの末尾へ積む
-      #
-      # - `pipeline` (`Pipeline`): 使用する `Pipelines` 定数
-      # - `data` (`String | nil`): パック済み頂点／インスタンスデータ
-      # - `count` (`Integer`): 頂点数またはインスタンス数
-      # - `image` (`Image | nil`): テクスチャ画像
-      # - `shader` (`NativeShader | nil`): カスタムシェーダー
-      # - `uniforms` (`Hash | nil`): ユニフォーム変数
-      # - `blend` (`Integer`): `BlendMode` 定数値
-      # - `z` (`Float`): Z 描画順（非 `0.0` を含む場合のみ Z ソートを有効化）
-      # - `mesh` (`Native::Mesh | nil`): VRAM メッシュ
-      # - `inst_buffer` (`Native::Mesh | nil`): VRAM インスタンスバッファ
-      # - 戻り値: `Integer`
-      def enqueue(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0, mesh: nil, inst_buffer: nil)
-        cmd = allocate_command
-        zf = z.to_f
-        @needs_z_sort = true if zf != 0.0
-        clip = Backend.current_clip
-        cmd.set(@owner, zf, @queue_count, pipeline, data, count, image, shader, uniforms, blend, clip, mesh, inst_buffer)
-        @queue_count += 1
-      end
-
-      # サブキュー（クリップ用）の内容をローカル Z 順でソートし、親キューへ指定 Z で一括転送する
-      #
-      # - `parent_queue` (`DrawQueue`): 転送先の親キュー
-      # - `target_z` (`Float`): 親キュー上での統一 Z 値
-      # - 戻り値: `false | nil`
-      def transfer_to(parent_queue, target_z)
-        return if @queue_count == 0
-
-        # 1. クリップ内部のコマンド群をローカル Z 順に安定ソート
-        sort
-
-        target_zf = target_z.to_f
-        parent_queue.needs_z_sort = true if target_zf != 0.0
-
-        # 2. ソートされた順序を保ったまま親キューへ転送
-        # (親キューでの z は target_zf に統一され、内部の前後関係は親キューの登録順序によって保持される)
-        i = 0
-        while i < @queue_count
-          cmd = @command_pool[i]
-          parent_cmd = parent_queue.allocate_command
-          parent_cmd.set(
-            parent_queue.owner, target_zf, parent_queue.queue_count,
-            cmd.pipeline, cmd.data, cmd.count,
-            cmd.image, cmd.shader, cmd.uniforms, cmd.blend, cmd.clip, cmd.mesh, cmd.inst_buffer
-          )
-          parent_queue.increment_count
-          i += 1
-        end
-
-        # 転送完了したのでサブキューをリセット
-        @queue_count = 0
-        @needs_z_sort = false
-      end
-
-      # キュー内の有効コマンド列を `(z, order)` の昇順で安定ソートする
-      #
-      # - 戻り値: `Array<DrawCommand> | nil`
       def sort
-        return unless @needs_z_sort
-        return if @queue_count <= 1
-
-        valid_cmds = @command_pool[0...@queue_count]
-        valid_cmds.sort! do |a, b|
-          comp = a.z <=> b.z
-          comp == 0 ? (a.order <=> b.order) : comp
-        end
-        @command_pool[0...@queue_count] = valid_cmds
+        Native::C.zen_batch_sort_screen_queue if @screen
+        nil
       end
 
-      # キューに溜まったクリア処理と描画コマンドを FBO または画面へ実際にフラッシュする
-      #
-      # - 戻り値: `false | nil`
       def flush
-        return if @is_flushing # 再帰 / 自己参照ガード
-        return unless has_pending_draws?
-
-        @is_flushing = true
-        sort
-
-        if @owner
-          # Image (FBO) への描画
-          old_target = Backend.active_gl_target
-          @owner.set_as_render_target
-          Backend.active_gl_target = @owner
-
-          if @clear_color
-            Native::Window.clear(Backend.color_to_uint32(@clear_color))
-            @clear_color = nil
-          end
-
-          Backend.execute_commands(@command_pool, @queue_count)
-
-          @queue_count = 0
-          @needs_z_sort = false
-          @is_flushing = false
-
-          # 元のレンダーターゲットを復元
-          if old_target
-            old_target.set_as_render_target
-          else
-            Native::Image.reset_render_target
-          end
-          Backend.active_gl_target = old_target
-          Backend.cleanup_empty_queues
+        bg = Backend.color_to_uint32(Zenoo::Window.bg_color || :black) & 0xFFFFFFFF
+        if @screen
+          Native::C.zen_batch_flush_screen(bg)
         else
-          # 画面への描画
-          if @clear_color
-            Native::Window.clear(Backend.color_to_uint32(@clear_color))
-            @clear_color = nil
-            @cleared_this_frame = true
-          elsif @auto_clear && !@cleared_this_frame
-            Native::Window.clear(Backend.color_to_uint32(Zenoo::Window.bg_color || :black))
-            @cleared_this_frame = true
-          end
-
-          Backend.execute_commands(@command_pool, @queue_count)
-          @queue_count = 0
-          @needs_z_sort = false
-          @is_flushing = false
+          Native::C.zen_batch_flush_active(bg)
         end
+        nil
       end
     end
 
     # ----------------------------------------------------
-    # クリップコンテキスト (クリップ矩形、独立描画キュー、親Z値のカプセル化)
-    # ----------------------------------------------------
-    class ClipContext
-      attr_accessor :rect, :queue, :z
-
-      # 空のクリップコンテキストを初期化する
-      #
-      # - 戻り値: `ClipContext`
-      def initialize
-        @rect = nil
-        @queue = DrawQueue.new(nil)
-        @z = 0.0
-      end
-
-      # クリップ矩形・親 Z 値・描画先オーナーを設定する
-      #
-      # - `rect` (`Array<Numeric>`): シザー矩形 `[x, y, w, h]`（デバイス／スクリーン座標）
-      # - `z` (`Float`): `pop_clip` 時に親キューへ転送する際の統一 Z 値
-      # - `owner` (`Image | nil`): 描画先 `Image`（画面時は `nil`）
-      # - 戻り値: `Image | nil`
-      def set(rect, z, owner)
-        @rect = rect
-        @z = z.to_f
-        @queue.instance_variable_set(:@owner, owner)
-      end
-
-      # プール返却前にコンテキストをリセットする
-      #
-      # - 戻り値: `false`
-      def reset
-        @rect = nil
-        @z = 0.0
-        @queue.instance_variable_set(:@queue_count, 0)
-        @queue.needs_z_sort = false
-      end
-    end
-
-    # ----------------------------------------------------
-    # 描画スナップショット (あるフレームの描画コマンド列を記録し、後のフレームで再投入)
-    # - 記録: キューの指定位置以降のコマンドを自前のプールへ浅くコピー (頂点データ String は共有)
-    # - 再投入: 現在のアクティブキュー (画面 / render_to 先 / クリップ) へ通常の描画として積み直す
-    #   → Z ソート・バッチング・ポストエフェクトの対象にそのまま乗る
-    # ※ Mesh / InstanceBuffer など GPU 側で書き換わるリソースは「再投入時点の内容」で描画されます
+    # 描画スナップショット (Scene / Dev ポーズ用 C バッファラッパー)
     # ----------------------------------------------------
     class DrawSnapshot
-      attr_reader :count
-
-      # 空のスナップショットを初期化する
-      #
-      # - 戻り値: `DrawSnapshot`
       def initialize
-        @pool = []
-        @count = 0
+        ptr = Native::C.zen_snapshot_create
+        raise RuntimeError, "Failed to create ZenSnapshot" unless ptr
+
+        @ptr = ptr
+        @box = [ptr]
+        @refs = nil
+        Native.install_finalizer(self, @box, Native::KIND_SNAPSHOT)
       end
 
-      # 記録されている描画コマンドが空かどうかを返す
-      #
-      # - 戻り値: `Boolean`
+      def count
+        Native::C.zen_snapshot_count(@ptr)
+      end
+
       def empty?
-        @count == 0
+        Native::C.zen_snapshot_count(@ptr) == 0
       end
 
-      # 指定キューの `from` 番目以降（このフレームに積まれた分）を記録する
-      #
-      # - `queue` (`DrawQueue`): 記録元の描画キュー
-      # - `from` (`Integer`): 記録開始コマンドインデックス（デフォルト `0`）
-      # - 戻り値: `Integer`
-      def capture(queue, from = 0)
-        n = queue.queue_count - from
-        n = 0 if n < 0
-        while @pool.length < n
-          @pool << DrawCommand.new
-        end
-
-        src_pool = queue.command_pool
-        i = 0
-        while i < n
-          s = src_pool[from + i]
-          @pool[i].set(nil, s.z, i, s.pipeline, s.data, s.count, s.image, s.shader, s.uniforms, s.blend, s.clip, s.mesh, s.inst_buffer)
-          i += 1
-        end
-
-        # 前回分の余りは参照を切って GC 可能にする
-        j = n
-        while j < @count
-          @pool[j].set(nil, 0.0, 0, nil, nil, 0)
-          j += 1
-        end
-        @count = n
+      def capture(_queue, from = 0)
+        Native::C.zen_snapshot_capture_active(@ptr, from.to_i)
+        @refs = Backend.retained_refs_copy
+        count
       end
 
-      # 記録したコマンド列を現在のアクティブキューへ再投入する
-      #
-      # - 戻り値: `Array<Image> | nil`
+      def capture_screen
+        Native::C.zen_snapshot_capture_screen(@ptr)
+        @refs = Backend.retained_refs_copy
+        count
+      end
+
       def replay
-        Backend.enqueue_snapshot(@pool, @count)
+        return if count == 0
+
+        Backend.retain_refs(@refs) if @refs
+        Native::C.zen_snapshot_replay_to_active(@ptr)
       end
 
-      # 保持している描画コマンド参照を解放して空にする
-      #
-      # - 戻り値: `Integer`
+      def execute_direct
+        return if count == 0
+
+        Native::C.zen_snapshot_execute_direct(@ptr)
+      end
+
       def clear
-        i = 0
-        while i < @count
-          @pool[i].set(nil, 0.0, 0, nil, nil, 0)
-          i += 1
-        end
-        @count = 0
+        @refs = nil
+        Native::C.zen_snapshot_clear(@ptr)
+        0
       end
     end
 
     # ----------------------------------------------------
-    # バックエンド状態管理
+    # バックエンド状態管理 (GC 保護 & ターゲット・クリップ追跡)
     # ----------------------------------------------------
-    @screen_queue = DrawQueue.new(nil)
+    @screen_queue = DrawQueueView.new(true)
+    @active_queue = DrawQueueView.new(false)
     @current_target = nil
     @active_gl_target = nil
-    @pending_images = []
-    @clip_stack = []        # ClipContext のスタック
-    @clip_context_pool = [] # 再利用可能な ClipContext プール
-    @batch_buffers = []     # 再入可能なバッチ結合用再利用バッファプール (Mesh等の元データを破壊しない)
-    @exec_depth = 0
-    @skip_ondemand_flush = false
+    @clip_rects = []
+    @retained_refs = []
+    @screen_clear_color = nil
 
-    # 現在有効なシザークリップ矩形 `[x, y, w, h]` を返す（未クリップ時は `nil`）
-    #
-    # - 戻り値: `Array<Numeric> | nil`
+    def self.screen_clear_color
+      @screen_clear_color
+    end
+
+    def self.retained_refs_copy
+      @retained_refs.dup
+    end
+
+    def self.retain_refs(refs)
+      @retained_refs.concat(refs) unless refs.empty?
+    end
+
     def self.current_clip
-      @clip_stack.last&.rect
+      @clip_rects.last
     end
 
-    # クリップスコープを開始し、専用の独立描画キューをスタックへ積む
-    #
-    # - `rect` (`Array<Numeric>`): シザー矩形 `[x, y, w, h]`
-    # - `z` (`Float`): `pop_clip` 時に親キューへ転送する際の Z 値（デフォルト `0.0`）
-    # - 戻り値: `Array<ClipContext>`
     def self.push_clip(rect, z = 0.0)
-      ctx = @clip_context_pool.pop || ClipContext.new
-      ctx.set(rect, z, @current_target)
-      @clip_stack.push(ctx)
+      r = [rect[0].to_f, rect[1].to_f, rect[2].to_f, rect[3].to_f]
+      @clip_rects.push(r)
+      Native::C.zen_batch_push_clip(r[0], r[1], r[2], r[3], z.to_f)
+      @clip_rects
     end
 
-    # 現在のクリップスコープを終了し、内部コマンドをソートして親キューへ転送する
-    #
-    # - 戻り値: `Array<ClipContext> | nil`
     def self.pop_clip
-      ctx = @clip_stack.pop
-      return unless ctx
-
-      parent_q = active_queue
-      ctx.queue.transfer_to(parent_q, ctx.z)
-      ctx.reset
-      @clip_context_pool.push(ctx)
+      popped = @clip_rects.pop
+      Native::C.zen_batch_pop_clip if popped
+      @clip_rects
     end
 
-    # 未終了のクリップスタックをすべて破棄してリセットする（フレーム終了時の安全網）
-    #
-    # - 戻り値: `nil`
     def self.clear_clips
-      while (ctx = @clip_stack.pop)
-        ctx.reset
-        @clip_context_pool.push(ctx)
-      end
+      @clip_rects.clear
+      Native::C.zen_batch_clear_clips
+      nil
     end
 
-    # 現在描画コマンドを受け付けるアクティブキュー（クリップ中→クリップキュー、`render_to` 中→Image キュー、それ以外→画面キュー）を返す
-    #
-    # - 戻り値: `DrawQueue`
     def self.active_queue
-      if !@clip_stack.empty?
-        @clip_stack.last.queue
-      elsif @current_target
-        queue_for(@current_target)
-      else
-        @screen_queue
-      end
+      @active_queue
     end
 
-    # メインウィンドウ画面用の描画キューを返す
-    #
-    # - 戻り値: `DrawQueue`
     def self.screen_queue
       @screen_queue
     end
 
-    # フレーム先頭で画面キューのクリア済みフラグをリセットする
-    #
-    # - 戻り値: `false`
     def self.reset_frame
-      @screen_queue.reset_frame
+      @screen_clear_color = nil
+      Native::C.zen_batch_reset_frame
+      false
     end
 
-    # 画面キューに対して今フレームのクリアが完了済みであることを記録する
-    #
-    # - 戻り値: `true`
     def self.mark_screen_cleared
-      @screen_queue.mark_cleared
+      Native::C.zen_batch_mark_screen_cleared
+      true
     end
 
-    # 現在の論理的な描画先レンダーターゲット（`Image` または画面 `nil`）を返す
-    #
-    # - 戻り値: `Image | nil`
     def self.current_target
       @current_target
     end
 
-    # 現在の論理的な描画先レンダーターゲットを設定する
-    #
-    # - `target` (`Image | nil`): 描画先 `Image`（画面に戻す場合は `nil`）
-    # - 戻り値: `Image | nil`
     def self.current_target=(target)
       @current_target = target
+      Native::C.zen_batch_set_current_target(target ? target.__ptr : nil)
+      target
     end
 
-    # OpenGL 側で実際にバインドされている FBO の `Image`（画面バックバッファ時は `nil`）を返す
-    #
-    # - 戻り値: `Image | nil`
     def self.active_gl_target
       @active_gl_target
     end
 
-    # 現在 OpenGL 側でバインドされている FBO の `Image` を記録する
-    #
-    # - `target` (`Image | nil`): バインド中の `Image`（または `nil`）
-    # - 戻り値: `Image | nil`
     def self.active_gl_target=(target)
       @active_gl_target = target
+      Native::C.zen_batch_set_active_gl_target(target ? target.__ptr : nil)
+      target
     end
 
-    # ブロック実行中だけ一時的に論理レンダーターゲットを切り替える
-    #
-    # - `target` (`Image | nil`): 一時的な描画先 `Image`
-    # - `&block`: 切り替え中に実行するブロック
-    # - 戻り値: `Image | nil`
     def self.with_target(target)
       old_target = @current_target
-      @current_target = target
+      self.current_target = target
       yield
-      @current_target = old_target
+      self.current_target = old_target
     end
 
-    @target_images = []
-    @target_queues = []
-
-    # 指定した `Image` に対応する描画キューを取得または新規作成する
-    #
-    # - `image` (`Image`): 描画先 `Image`
-    # - 戻り値: `DrawQueue`
-    def self.queue_for(image)
-      idx = @target_images.index(image)
-      if idx
-        @target_queues[idx]
-      else
-        q = DrawQueue.new(image)
-        @target_images << image
-        @target_queues << q
-        q
-      end
-    end
-
-    # 指定した `Image` に未フラッシュの描画やクリア予約が残っているかを返す
-    #
-    # - `image` (`Image`): 確認対象の `Image`
-    # - 戻り値: `Boolean`
     def self.has_pending_draws?(image)
-      idx = @target_images.index(image)
-      if idx
-        @target_queues[idx].has_pending_draws?
-      else
-        false
-      end
+      return false unless image
+
+      Native::C.zen_batch_has_pending_draws(image.__ptr) != 0
     end
 
-    # 指定した `Image` に溜まっている描画コマンドを即時に FBO へフラッシュする
-    #
-    # - `image` (`Image`): フラッシュ対象の `Image`
-    # - 戻り値: `false | nil`
     def self.flush_image(image)
-      idx = @target_images.index(image)
-      if idx
-        @target_queues[idx].flush
-      end
+      return nil unless image
+
+      Native::C.zen_batch_flush_image(image.__ptr)
+      nil
     end
 
-    # 描画予約が空になった `Image` キュー管理エントリを掃除する
-    #
-    # - 戻り値: `nil`
-    def self.cleanup_empty_queues
-      i = @target_images.length - 1
-      while i >= 0
-        unless @target_queues[i].has_pending_draws?
-          @target_images.delete_at(i)
-          @target_queues.delete_at(i)
-        end
-        i -= 1
-      end
-    end
-
-    # 未フラッシュ状態のオフスクリーン `Image` を保留リストに登録する
-    #
-    # - `img` (`Image`): 登録する `Image`
-    # - 戻り値: `Array<Image> | nil`
-    def self.register_pending_image(img)
-      @pending_images << img unless @pending_images.include?(img)
-    end
-
-    # 画面に依存されないまま残っている保留中 `Image` の描画キューを一括フラッシュする
-    #
-    # - 戻り値: `nil`
     def self.flush_pending_images
-      return if @pending_images.empty?
-
-      images = @pending_images.dup
-      @pending_images.clear
-      images.each do |img|
-        flush_image(img)
-      end
-      cleanup_empty_queues
+      Native::C.zen_batch_flush_pending_images
+      nil
     end
 
-    # 現在のアクティブキューに描画コマンドを 1 件登録する（`Window.draw_*` 等から呼ばれる中核入口）
-    #
-    # - `pipeline` (`Pipeline`): 使用する `Pipelines` 定数
-    # - `data` (`String | nil`): パック済み頂点／インスタンスバイナリデータ
-    # - `count` (`Integer`): 頂点数またはインスタンス数
-    # - `image` (`Image | nil`): テクスチャ画像
-    # - `shader` (`NativeShader | nil`): カスタムシェーダー
-    # - `uniforms` (`Hash | nil`): ユニフォーム変数ハッシュ
-    # - `blend` (`Integer`): `BlendMode` の整数値
-    # - `z` (`Float`): Z 描画順（小さいほど奥）
-    # - `mesh` (`Native::Mesh | nil`): VRAM メッシュ
-    # - `inst_buffer` (`Native::Mesh | nil`): VRAM インスタンスバッファ
-    # - 戻り値: `Array<Image> | nil`
-    def self.enqueue_draw(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0, mesh: nil, inst_buffer: nil)
-      active_queue.enqueue(pipeline, data, count, image: image, shader: shader, uniforms: uniforms, blend: blend, z: z, mesh: mesh, inst_buffer: inst_buffer)
-      register_pending_image(@current_target) if @current_target
-    end
+    def self.stage_uniforms(uniforms)
+      return unless uniforms && !uniforms.empty?
 
-    # `DrawSnapshot` に記録されたコマンド群を現在のアクティブキューへまとめて再投入する
-    #
-    # - `pool` (`Array<DrawCommand>`): スナップショット側のコマンドプール
-    # - `count` (`Integer`): 再投入するコマンド数
-    # - 戻り値: `Array<Image> | nil`
-    def self.enqueue_snapshot(pool, count)
-      return if count == 0
-      q = active_queue
-      i = 0
-      while i < count
-        s = pool[i]
-        cmd = q.allocate_command
-        cmd.set(q.owner, s.z, q.queue_count, s.pipeline, s.data, s.count, s.image, s.shader, s.uniforms, s.blend, s.clip, s.mesh, s.inst_buffer)
-        q.needs_z_sort = true if s.z != 0.0
-        q.increment_count
-        i += 1
-      end
-      register_pending_image(@current_target) if @current_target
-    end
-
-    # 現在の描画ターゲット（オフスクリーン `Image`・`sub_image`・メイン画面）に対してクリアを予約する
-    #
-    # - `color` (`Color | Symbol | Array<Numeric> | String | Integer | nil`): クリア色（省略時は対象に応じた既定色）
-    # - 戻り値: `Color | Symbol | Array<Numeric> | String | Integer | Array | nil`
-    def self.enqueue_clear(color = nil)
-      if @current_target
-        register_pending_image(@current_target)
-        if @current_target.sub_image?
-          # sub_image はアトラス等の部分領域のため、FBO全体を glClear すると他のスロットが消える
-          # そのため該当矩形領域のみを塗りつぶす (最奥 Z = -Infinity, アルファ0なら blend: :none で上書き)
-          actual_color = color || :clear
-          c4 = normalize_color(actual_color)
-          blend_mode = c4[3] <= 0.0001 ? :none : :alpha
-          Zenoo::Window.draw_rect(
-            0.0, 0.0, @current_target.width, @current_target.height,
-            color: actual_color,
-            blend: blend_mode,
-            z: -Float::INFINITY
-          )
-        else
-          color ||= :clear
-          q = queue_for(@current_target)
-          q.set_clear(color)
+      c = Native::C
+      c.zen_batch_begin_uniforms
+      uniforms.each do |k, v|
+        name = k.to_s
+        case v
+        when Zenoo::Image
+          @retained_refs << v
+          c.zen_batch_uniform_texture(name, v.__ptr)
+        when Integer
+          c.zen_batch_uniform_int(name, v)
+        when Float
+          c.zen_batch_uniform_float(name, v)
+        when String
+          cnt = v.bytesize / 16
+          c.zen_batch_uniform_vec4_array(name, cnt, v) if cnt > 0
+        when Array
+          len = v.length
+          if len == 2
+            c.zen_batch_uniform_vec2(name, v[0].to_f, v[1].to_f)
+          elsif len == 3
+            c.zen_batch_uniform_vec3(name, v[0].to_f, v[1].to_f, v[2].to_f)
+          elsif len == 4
+            c.zen_batch_uniform_vec4(name, v[0].to_f, v[1].to_f, v[2].to_f, v[3].to_f)
+          elsif len == 16
+            c.zen_batch_uniform_mat4(name, v.pack("f*"))
+          elsif len >= 8 && (len % 4).zero?
+            c.zen_batch_uniform_vec4_array(name, len / 4, v.pack("f*"))
+          end
         end
-      else
-        color ||= Zenoo::Window.bg_color
-        @screen_queue.set_clear(color)
-        Zenoo::Window.bg_color = color
       end
     end
 
-    # フレーム末にメイン画面と保留中オフスクリーン `Image` の描画キューをすべてフラッシュし、ブレンドモードを既定へ戻す
-    #
-    # - 戻り値: `nil`
-    def self.flush_screen
-      @exec_depth = 0
-      @screen_queue.flush
-      flush_pending_images
-      Native::Renderer.set_blend_mode(BlendMode::ALPHA)
-    end
-
-    # カスタムシェーダーへ Ruby ハッシュ形式の uniform 値（テクスチャ含む）を一括バインドする
-    # ※ `Zenoo::Image` が未フラッシュの場合はここでオンデマンド描画を行う
-    #
-    # - `shader` (`NativeShader | nil`): 適用先のシェーダー
-    # - `uniforms` (`Hash{Symbol, String => Object} | nil`): uniform 名と値（`Image`, `Integer`, `Float`, `Array`, `String`）
-    # - 戻り値: `Hash | nil`
+    # 直接 Ruby からシェーダーへ uniform をバインドする互換ヘルパー
     def self.apply_uniforms(shader, uniforms)
       return unless uniforms && shader
 
@@ -862,9 +446,7 @@ module Zenoo
         name = k.to_s
         case v
         when Zenoo::Image
-          if !@skip_ondemand_flush && has_pending_draws?(v)
-            flush_image(v)
-          end
+          flush_image(v) if has_pending_draws?(v)
           shader.set_texture(name, tex_unit, v) if tex_unit <= 15
           tex_unit += 1
         when Integer
@@ -886,186 +468,194 @@ module Zenoo
       end
     end
 
-    # スナップショット等の記録済みコマンドプールを、元コマンドを破壊せずに直接実行する
-    #
-    # - `pool` (`Array<DrawCommand>`): コマンド配列
-    # - `count` (`Integer`): 実行するコマンド数
-    # - 戻り値: `false | nil`
-    def self.execute_snapshot_commands(pool, count)
-      return if count == 0
-      Native::Image.reset_render_target
-      @skip_ondemand_flush = true
-      execute_commands(pool, count)
-      @skip_ondemand_flush = false
+    # 汎用描画コマンドエンキュー (Particle / Canvas / Tilemap / Mesh 等から利用)
+    def self.enqueue_draw(pipeline, data, count, image: nil, shader: nil, uniforms: nil, blend: 0, z: 0.0, mesh: nil, inst_buffer: nil)
+      @retained_refs << @current_target if @current_target
+      @retained_refs << image if image
+      @retained_refs << shader if shader
+      @retained_refs << mesh if mesh
+      @retained_refs << inst_buffer if inst_buffer
+      stage_uniforms(uniforms) if uniforms
+
+      data_str = data ? data.to_s : ""
+      Native::C.zen_batch_enqueue_draw(
+        pipeline.id,
+        data_str,
+        data_str.bytesize,
+        count.to_i,
+        image ? image.__ptr : nil,
+        shader ? shader.__ptr : nil,
+        blend.to_i,
+        z.to_f,
+        mesh ? mesh.__ptr : nil,
+        inst_buffer ? inst_buffer.__ptr : nil
+      )
+      nil
     end
 
-    # 描画コマンド列を動的バッチングしつつ OpenGL / Native レンダラーへ発行する
-    #
-    # - `pool` (`Array<DrawCommand>`): コマンド配列
-    # - `count` (`Integer`): 実行するコマンド数
-    # - 戻り値: `nil`
-    def self.execute_commands(pool, count)
-      return if count == 0
-
-      if Zenoo::Profiler.enabled
-        Zenoo::Profiler.measure(:draw) do
-          __execute_commands_internal(pool, count)
-        end
-      else
-        __execute_commands_internal(pool, count)
-      end
+    # ----------------------------------------------------
+    # ホットパス直接エンキュー群 (Window.draw_* 用・pack 不要)
+    # ----------------------------------------------------
+    def self.enqueue_flat_rect(x1, y1, x2, y2, r, g, b, a, shader, blend, z)
+      @retained_refs << @current_target if @current_target
+      @retained_refs << shader if shader
+      Native::C.zen_batch_enqueue_flat_rect(
+        x1, y1, x2, y2, r, g, b, a,
+        shader ? shader.__ptr : nil,
+        blend.to_i,
+        z.to_f
+      )
+      nil
     end
 
-    def self.__execute_commands_internal(pool, count)
-      depth = @exec_depth
-      @exec_depth = depth + 1
-      batch_buf = (@batch_buffers[depth] ||= String.new(encoding: Encoding::BINARY))
+    def self.stage_card_colors(cr, cg, cb, ca, br, bg, bb, ba, sr, sg, sb, sa)
+      Native::C.zen_batch_stage_card_colors(cr, cg, cb, ca, br, bg, bb, ba, sr, sg, sb, sa)
+    end
 
-      $last_draw_calls = 0 if depth == 0
-      active_gl_clip = :initial
+    def self.stage_card_params(rad, b_width, s_blur, mode, uv0, uv1, uv2, uv3, rot_rad, pv_x, pv_y)
+      Native::C.zen_batch_stage_card_params(rad, b_width, s_blur, mode, uv0, uv1, uv2, uv3, rot_rad, pv_x, pv_y)
+    end
 
-      i = 0
-      while i < count
-        cmd = pool[i]
+    def self.enqueue_sdf_card(x, y, w, h, image, shader, blend, z)
+      @retained_refs << @current_target if @current_target
+      @retained_refs << image if image
+      @retained_refs << shader if shader
+      Native::C.zen_batch_enqueue_sdf_card(
+        x, y, w, h,
+        image ? image.__ptr : nil,
+        shader ? shader.__ptr : nil,
+        blend.to_i,
+        z.to_f
+      )
+      nil
+    end
 
-        # 0. 描画元テクスチャ / uniform テクスチャに未消化キューがあれば先にフラッシュ (オンデマンド描画)
-        if !@skip_ondemand_flush
-          flushed_dep = false
-          if cmd.image && has_pending_draws?(cmd.image)
-            flush_image(cmd.image)
-            flushed_dep = true
-          end
-          if cmd.uniforms
-            cmd.uniforms.each_value do |v|
-              if v.is_a?(Zenoo::Image) && has_pending_draws?(v)
-                flush_image(v)
-                flushed_dep = true
-              end
-            end
-          end
-          active_gl_clip = :initial if flushed_dep
-        end
+    def self.stage_color_uv(c0, c1, c2, c3, uv0, uv1, uv2, uv3)
+      Native::C.zen_batch_stage_color_uv(c0, c1, c2, c3, uv0, uv1, uv2, uv3)
+    end
 
-        cur_pipeline = cmd.pipeline
-        cur_data = cmd.data
-        cur_count = cmd.count
-        cur_image = cmd.image
-        cur_shader = cmd.shader || cur_pipeline.default_shader
-        cur_uniforms = cmd.uniforms
-        cur_blend = cmd.blend
-        cur_clip = cmd.clip
-        cur_mesh = cmd.mesh
-        cur_inst_buffer = cmd.inst_buffer
+    def self.enqueue_sprite(m00, m01, m10, m11, tx, ty, image, shader, uniforms, blend, z, mesh)
+      @retained_refs << @current_target if @current_target
+      @retained_refs << image if image
+      @retained_refs << shader if shader
+      @retained_refs << mesh if mesh
+      stage_uniforms(uniforms) if uniforms
+      Native::C.zen_batch_enqueue_sprite(
+        m00, m01, m10, m11, tx, ty,
+        image ? image.__ptr : nil,
+        shader ? shader.__ptr : nil,
+        blend.to_i,
+        z.to_f,
+        mesh ? mesh.__ptr : nil
+      )
+      nil
+    end
 
-        # シザーテストの適用（変更があった場合のみ切り替え）
-        if cur_clip != active_gl_clip
-          if cur_clip
-            Native::Renderer.set_scissor(cur_clip[0].to_i, cur_clip[1].to_i, cur_clip[2].to_i, cur_clip[3].to_i)
-          else
-            Native::Renderer.reset_scissor
-          end
-          active_gl_clip = cur_clip
-        end
+    def self.enqueue_triangle_flat(x1, y1, x2, y2, x3, y3, r, g, b, a, shader, blend, z)
+      @retained_refs << @current_target if @current_target
+      @retained_refs << shader if shader
+      Native::C.zen_batch_enqueue_triangle_flat(
+        x1, y1, x2, y2, x3, y3, r, g, b, a,
+        shader ? shader.__ptr : nil,
+        blend.to_i,
+        z.to_f
+      )
+      nil
+    end
 
-        can_batch = !cur_data.nil? && cur_inst_buffer.nil? && (
-                      cur_pipeline.base_vertex_count > 0 ||
-                      cur_pipeline.topology == Topology::TRIANGLES ||
-                      cur_pipeline.topology == Topology::LINES ||
-                      cur_pipeline.topology == Topology::POINTS
-                    )
+    def self.stage_tri_colors(r1, g1, b1, a1, r2, g2, b2, a2, r3, g3, b3, a3)
+      Native::C.zen_batch_stage_tri_colors(r1, g1, b1, a1, r2, g2, b2, a2, r3, g3, b3, a3)
+    end
 
-        next_idx = i + 1
-        final_data = cur_data
-        if can_batch
-          batched = false
-          while next_idx < count
-            ncmd = pool[next_idx]
-            break if !@skip_ondemand_flush && ncmd.image && has_pending_draws?(ncmd.image)
+    def self.enqueue_triangle_grad(x1, y1, x2, y2, x3, y3, shader, blend, z)
+      @retained_refs << @current_target if @current_target
+      @retained_refs << shader if shader
+      Native::C.zen_batch_enqueue_triangle_grad(
+        x1, y1, x2, y2, x3, y3,
+        shader ? shader.__ptr : nil,
+        blend.to_i,
+        z.to_f
+      )
+      nil
+    end
 
-            n_shader = ncmd.shader || ncmd.pipeline.default_shader
-            same_image = (ncmd.image == cur_image) ||
-                         (ncmd.image && cur_image && ncmd.image.texture_id == cur_image.texture_id)
-            if ncmd.pipeline == cur_pipeline &&
-               ncmd.mesh == cur_mesh &&
-               ncmd.inst_buffer.nil? &&
-               !ncmd.data.nil? &&
-               same_image &&
-               n_shader == cur_shader &&
-               ncmd.uniforms == cur_uniforms &&
-               ncmd.blend == cur_blend &&
-               ncmd.clip == cur_clip
-              unless batched
-                batch_buf.clear
-                batch_buf << cur_data
-                batched = true
-              end
-              batch_buf << ncmd.data
-              cur_count += ncmd.count
-              unless @skip_ondemand_flush
-                ncmd.data = nil
-                ncmd.image = nil
-                ncmd.shader = nil
-                ncmd.target = nil
-                ncmd.pipeline = nil
-                ncmd.uniforms = nil
-                ncmd.clip = nil
-                ncmd.mesh = nil
-                ncmd.inst_buffer = nil
-              end
-              next_idx += 1
-            else
-              break
-            end
-          end
-          final_data = batch_buf if batched
-        end
+    # テキスト描画用高速ステージング API
+    def self.begin_text
+      Native::C.zen_batch_begin_text
+    end
 
-        Native::Renderer.set_blend_mode(cur_blend)
-        apply_uniforms(cur_shader, cur_uniforms) if cur_uniforms
+    def self.set_text_color_outline(cr, cg, cb, ca, p0_0, p0_1, p0_2, p0_3, p1_0, p1_1, p1_2, p1_3)
+      Native::C.zen_batch_set_text_color_outline(cr, cg, cb, ca, p0_0, p0_1, p0_2, p0_3, p1_0, p1_1, p1_2, p1_3)
+    end
 
-        $last_draw_calls = ($last_draw_calls || 0) + 1
-        if cur_mesh || cur_inst_buffer || cur_pipeline == Pipelines::SPRITE
-          inst_layout = final_data ? cur_pipeline.layout : nil
-          Native::Renderer.draw_mesh(
-            cur_mesh,
-            cur_inst_buffer,
-            inst_layout,
-            final_data,
-            cur_count,
-            cur_image,
-            cur_shader
+    def self.set_text_shadow_weight(p2_0, p2_1, p2_2, p2_3, weight)
+      Native::C.zen_batch_set_text_shadow_weight(p2_0, p2_1, p2_2, p2_3, weight)
+    end
+
+    def self.stage_text_line(native_font, utf8_text, pen_x, pen_y, f_size, mode, vp_scale, inv_vp_scale)
+      @retained_refs << native_font if native_font
+      Native::C.zen_batch_stage_text_line(
+        native_font ? native_font.__ptr : nil,
+        utf8_text,
+        pen_x, pen_y, f_size, mode, vp_scale, inv_vp_scale
+      )
+    end
+
+    def self.set_glyph_override(cr, cg, cb, ca, out_w, ocr, ocg, ocb, oca, weight)
+      Native::C.zen_batch_set_glyph_override(cr, cg, cb, ca, out_w, ocr, ocg, ocb, oca, weight)
+    end
+
+    def self.stage_glyph(gx, gy, gw, gh, is_bmp, u0, v0, uw, vh, has_override)
+      Native::C.zen_batch_stage_glyph(gx, gy, gw, gh, is_bmp, u0, v0, uw, vh, has_override)
+    end
+
+    def self.staged_glyph_count
+      Native::C.zen_batch_staged_glyph_count
+    end
+
+    def self.commit_text(atlas_image, shader, blend, z)
+      @retained_refs << @current_target if @current_target
+      @retained_refs << atlas_image if atlas_image
+      @retained_refs << shader if shader
+      Native::C.zen_batch_commit_text(
+        atlas_image ? atlas_image.__ptr : nil,
+        shader ? shader.__ptr : nil,
+        blend.to_i,
+        z.to_f
+      )
+      nil
+    end
+
+    def self.enqueue_clear(color = nil)
+      if @current_target
+        if @current_target.sub_image?
+          actual_color = color || :clear
+          c4 = normalize_color(actual_color)
+          blend_mode = c4[3] <= 0.0001 ? :none : :alpha
+          Zenoo::Window.draw_rect(
+            0.0, 0.0, @current_target.width, @current_target.height,
+            color: actual_color,
+            blend: blend_mode,
+            z: -Float::INFINITY
           )
         else
-          Native::Renderer.draw_buffer(
-            cur_pipeline.topology,
-            cur_pipeline.layout,
-            cur_pipeline.divisors,
-            cur_pipeline.base_vertex_count,
-            final_data,
-            cur_count,
-            cur_image,
-            cur_shader
-          )
+          @retained_refs << @current_target
+          Native::C.zen_batch_set_clear(color_to_uint32(color || :clear) & 0xFFFFFFFF)
         end
-
-        unless @skip_ondemand_flush
-          cmd.data = nil
-          cmd.image = nil
-          cmd.shader = nil
-          cmd.target = nil
-          cmd.pipeline = nil
-          cmd.uniforms = nil
-          cmd.clip = nil
-          cmd.mesh = nil
-          cmd.inst_buffer = nil
-        end
-
-        i = next_idx
+      else
+        actual = color || Zenoo::Window.bg_color
+        @screen_clear_color = actual
+        Zenoo::Window.bg_color = actual
+        Native::C.zen_batch_set_clear(color_to_uint32(actual) & 0xFFFFFFFF)
       end
+    end
 
-      # ループ完了後にシザーをリセット
-      Native::Renderer.reset_scissor if active_gl_clip != :initial
-      @exec_depth = depth
+    def self.flush_screen
+      bg = color_to_uint32(Zenoo::Window.bg_color || :black) & 0xFFFFFFFF
+      Native::C.zen_batch_flush_screen(bg)
+      $last_draw_calls = Native::C.zen_batch_last_draw_calls
+      @retained_refs.clear
+      nil
     end
   end
 end

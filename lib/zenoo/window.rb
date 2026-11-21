@@ -839,22 +839,7 @@ module Zenoo
         x2 = ax + wf
         y2 = ay + hf
         cr = c_color[0].to_f; cg = c_color[1].to_f; cb = c_color[2].to_f; ca = c_color[3].to_f
-        data = [
-          ax, ay, cr, cg, cb, ca,
-          ax, y2, cr, cg, cb, ca,
-          x2, ay, cr, cg, cb, ca,
-          x2, ay, cr, cg, cb, ca,
-          ax, y2, cr, cg, cb, ca,
-          x2, y2, cr, cg, cb, ca
-        ].pack("f*")
-        Backend.enqueue_draw(
-          Backend::Pipelines::TRIANGLES,
-          data,
-          6,
-          shader: flat_primitive_shader,
-          blend: b_mode,
-          z: z
-        )
+        Backend.enqueue_flat_rect(ax, ay, x2, y2, cr, cg, cb, ca, flat_primitive_shader, b_mode, z)
         return
       end
 
@@ -901,25 +886,13 @@ module Zenoo
         uv0 = 0.0; uv1 = 0.0; uv2 = 1.0; uv3 = 1.0
       end
 
-      data = [
-        ax, ay, wf, hf,
+      Backend.stage_card_colors(
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        rad, b_width, s_blur, mode,
         b0, b1, b2, b3,
-        s0, s1, s2, s3,
-        uv0, uv1, uv2, uv3,
-        rot_rad, pv_x, pv_y, 0.0
-      ].pack("f*")
-
-      Backend.enqueue_draw(
-        Backend::Pipelines::CARD,
-        data,
-        1,
-        image: image,
-        shader: card_shader,
-        blend: b_mode,
-        z: z
+        s0, s1, s2, s3
       )
+      Backend.stage_card_params(rad, b_width, s_blur, mode, uv0, uv1, uv2, uv3, rot_rad, pv_x, pv_y)
+      Backend.enqueue_sdf_card(ax, ay, wf, hf, image, card_shader, b_mode, z)
     end
 
     # SDF 円 / 楕円描画 (解析的アンチエイリアス・回転・画像マッピング・枠線・ドロップシャドウ対応)
@@ -1173,23 +1146,10 @@ module Zenoo
         uv0 = 0.0; uv1 = 0.0; uv2 = 1.0; uv3 = 1.0
       end
 
-      data = [
-        m00, m01, m10, m11,
-        tx, ty, 0.0, 0.0,
-        c0, c1, c2, c3,
-        uv0, uv1, uv2, uv3
-      ].pack("f*")
-
-      Backend.enqueue_draw(
-        Backend::Pipelines::SPRITE,
-        data,
-        1,
-        image: tex_img,
-        shader: effective_shader,
-        uniforms: effective_uniforms,
-        blend: b_mode,
-        z: z,
-        mesh: native_mesh
+      Backend.stage_color_uv(c0, c1, c2, c3, uv0, uv1, uv2, uv3)
+      Backend.enqueue_sprite(
+        m00, m01, m10, m11, tx, ty,
+        tex_img, effective_shader, effective_uniforms, b_mode, z, native_mesh
       )
     end
 
@@ -1230,29 +1190,20 @@ module Zenoo
         c1 = Backend.normalize_color(color[0])
         c2 = Backend.normalize_color(color[1])
         c3 = Backend.normalize_color(color[2])
-        data = [
-          ax1, ay1, c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
-          ax2, ay2, c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f,
-          ax3, ay3, c3[0].to_f, c3[1].to_f, c3[2].to_f, c3[3].to_f
-        ].pack("f*")
+        Backend.stage_tri_colors(
+          c1[0].to_f, c1[1].to_f, c1[2].to_f, c1[3].to_f,
+          c2[0].to_f, c2[1].to_f, c2[2].to_f, c2[3].to_f,
+          c3[0].to_f, c3[1].to_f, c3[2].to_f, c3[3].to_f
+        )
+        Backend.enqueue_triangle_grad(ax1, ay1, ax2, ay2, ax3, ay3, flat_primitive_shader, b_mode, z)
       else
         c = Backend.normalize_color(color)
-        cr = c[0].to_f; cg = c[1].to_f; cb = c[2].to_f; ca = c[3].to_f
-        data = [
-          ax1, ay1, cr, cg, cb, ca,
-          ax2, ay2, cr, cg, cb, ca,
-          ax3, ay3, cr, cg, cb, ca
-        ].pack("f*")
+        Backend.enqueue_triangle_flat(
+          ax1, ay1, ax2, ay2, ax3, ay3,
+          c[0].to_f, c[1].to_f, c[2].to_f, c[3].to_f,
+          flat_primitive_shader, b_mode, z
+        )
       end
-
-      Backend.enqueue_draw(
-        Backend::Pipelines::TRIANGLES,
-        data,
-        3,
-        shader: flat_primitive_shader,
-        blend: b_mode,
-        z: z
-      )
     end
 
     # SDF 線分描画 (解析的アンチエイリアス・端点形状・枠線・影対応)
@@ -1360,25 +1311,13 @@ module Zenoo
 
       mode = 0.0 # 角丸矩形モード (SDF)
 
-      data = [
-        bx, by, rect_w, rect_h,
+      Backend.stage_card_colors(
         c_color[0].to_f, c_color[1].to_f, c_color[2].to_f, c_color[3].to_f,
-        rad, b_width, s_blur, mode,
         b0, b1, b2, b3,
-        s0, s1, s2, s3,
-        0.0, 0.0, 1.0, 1.0,
-        rot_rad, 0.5, 0.5, 0.0
-      ].pack("f*")
-
-      Backend.enqueue_draw(
-        Backend::Pipelines::CARD,
-        data,
-        1,
-        image: nil,
-        shader: card_shader,
-        blend: b_mode,
-        z: z
+        s0, s1, s2, s3
       )
+      Backend.stage_card_params(rad, b_width, s_blur, mode, 0.0, 0.0, 1.0, 1.0, rot_rad, 0.5, 0.5)
+      Backend.enqueue_sdf_card(bx, by, rect_w, rect_h, nil, card_shader, b_mode, z)
     end
 
     @sdf_font_shader = nil
@@ -1539,9 +1478,7 @@ module Zenoo
       __prepare_text_draw(f_size, color, weight, outline_width, outline_color,
                           shadow_blur, shadow_color, shadow_dx, shadow_dy, sdf)
 
-      batch = (@text_batch ||= [])
-      batch.clear
-      @text_glyph_count = 0
+      Backend.begin_text
 
       vp_scale = @_txt_vp_scale
       inv_vp_scale = @_txt_inv_vp_scale
@@ -1616,105 +1553,83 @@ module Zenoo
         end
       end
 
-      if @text_glyph_count > 0
-        Backend.enqueue_draw(
-          Backend::Pipelines::FONT,
-          batch.pack("f*"),
-          @text_glyph_count,
-          image: font_atlas,
-          shader: sdf_font_shader,
-          blend: Backend.normalize_blend_mode(blend),
-          z: z
+      if Backend.staged_glyph_count > 0
+        Backend.commit_text(
+          font_atlas,
+          sdf_font_shader,
+          Backend.normalize_blend_mode(blend),
+          z
         )
       end
     end
 
     def self.__prepare_text_draw(f_size, color, weight, outline_width, outline_color,
                                  shadow_blur, shadow_color, shadow_dx, shadow_dy, sdf)
-      @_txt_color = Backend.normalize_color(color)
+      txt_c = Backend.normalize_color(color)
+      @_txt_color = txt_c
 
       outline_w = outline_width.to_f
       @_txt_outline_w = outline_w
-      @_txt_outline_c = (outline_w > 0.0) ? Backend.normalize_color(outline_color) : ZERO_COLOR_PARAMS
+      out_c = (outline_w > 0.0) ? Backend.normalize_color(outline_color) : ZERO_COLOR_PARAMS
+      @_txt_outline_c = out_c
 
       s_blur = shadow_blur.to_f
       s_dx = shadow_dx.to_f
       s_dy = shadow_dy.to_f
-      @_txt_shadow_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : ZERO_COLOR_PARAMS
+      shd_c = (s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0) ? Backend.normalize_color(shadow_color || DEFAULT_SHADOW_COLOR) : ZERO_COLOR_PARAMS
+      @_txt_shadow_c = shd_c
 
       s_weight = weight.to_f
       @_txt_weight = s_weight
 
-      @_txt_effective_sdf = if sdf.nil?
-                              (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0 || s_weight != 0.0) ? true : nil
-                            else
-                              sdf ? true : false
-                            end
+      eff_sdf = if sdf.nil?
+                  (outline_w > 0.0 || s_blur > 0.0 || s_dx != 0.0 || s_dy != 0.0 || s_weight != 0.0) ? true : nil
+                else
+                  sdf ? true : false
+                end
+      @_txt_effective_sdf = eff_sdf
+      @_txt_glyph_mode = (eff_sdf == true ? 1 : (eff_sdf.nil? ? 0 : 2))
 
       scale_ratio = Font::SDF_BASE_SIZE / f_size
       @_txt_scale_ratio = scale_ratio
-      @_txt_p0_0 = outline_w * scale_ratio
-      @_txt_p0_1 = s_blur * scale_ratio
-      @_txt_p0_2 = s_dx * scale_ratio
-      @_txt_p0_3 = s_dy * scale_ratio
+      p0_0 = outline_w * scale_ratio
+      p0_1 = s_blur * scale_ratio
+      p0_2 = s_dx * scale_ratio
+      p0_3 = s_dy * scale_ratio
+      @_txt_p0_0 = p0_0
+      @_txt_p0_1 = p0_1
+      @_txt_p0_2 = p0_2
+      @_txt_p0_3 = p0_3
 
       vp_scale = Backend.current_target ? 1.0 : Native::Window.scale.to_f
       vp_scale = 1.0 if vp_scale < 1.0
       @_txt_vp_scale = vp_scale
       @_txt_inv_vp_scale = 1.0 / vp_scale
+
+      Backend.set_text_color_outline(
+        txt_c[0].to_f, txt_c[1].to_f, txt_c[2].to_f, txt_c[3].to_f,
+        p0_0, p0_1, p0_2, p0_3,
+        out_c[0].to_f, out_c[1].to_f, out_c[2].to_f, out_c[3].to_f
+      )
+      Backend.set_text_shadow_weight(
+        shd_c[0].to_f, shd_c[1].to_f, shd_c[2].to_f, shd_c[3].to_f,
+        s_weight
+      )
     end
 
     def self.__draw_text_line_simple(line_text, pen_x, pen_y, target_font, f_size)
       return if line_text.empty?
 
-      batch = @text_batch
-      effective_sdf = @_txt_effective_sdf
-      vp_scale = @_txt_vp_scale
-      inv_vp_scale = @_txt_inv_vp_scale
-
-      c_color = @_txt_color
-      cr = c_color[0].to_f; cg = c_color[1].to_f; cb = c_color[2].to_f; ca = c_color[3].to_f
-      p0_0 = @_txt_p0_0; p0_1 = @_txt_p0_1; p0_2 = @_txt_p0_2; p0_3 = @_txt_p0_3
-      out_c = @_txt_outline_c
-      p1_0 = out_c[0].to_f; p1_1 = out_c[1].to_f; p1_2 = out_c[2].to_f; p1_3 = out_c[3].to_f
-      shd_c = @_txt_shadow_c
-      p2_0 = shd_c[0].to_f; p2_1 = shd_c[1].to_f; p2_2 = shd_c[2].to_f; p2_3 = shd_c[3].to_f
-      s_weight = @_txt_weight
-
-      glyph_count = @text_glyph_count
-      line_text.each_char do |ch|
-        glyph_data = target_font.get_glyph(ch, f_size, effective_sdf, vp_scale)
-        adv = glyph_data ? glyph_data[9].to_f : (f_size * 0.5)
-
-        if glyph_data && glyph_data[0] # visible == true
-          _visible, u0, v0, u1, v1, x0, y0, x1, y1, _adv, is_bitmap = glyph_data
-          if is_bitmap == true || is_bitmap == 1
-            is_bmp = 1.0
-            gx = (pen_x * vp_scale).round * inv_vp_scale + x0.to_f
-            gy = pen_y + y0.to_f
-          else
-            is_bmp = 0.0
-            gx = (pen_x + x0).to_f
-            gy = (pen_y + y0).to_f
-          end
-          gw = (x1 - x0).to_f
-          gh = (y1 - y0).to_f
-
-          batch.push(
-            gx, gy, gw, gh,
-            cr, cg, cb, ca,
-            p0_0, p0_1, p0_2, p0_3,
-            p1_0, p1_1, p1_2, p1_3,
-            p2_0, p2_1, p2_2, p2_3,
-            s_weight, is_bmp, s_weight, 0.0,
-            u0.to_f, v0.to_f, (u1 - u0).to_f, (v1 - v0).to_f
-          )
-          glyph_count += 1
-        end
-
-        pen_x += adv
-      end
-      @text_glyph_count = glyph_count
+      Backend.stage_text_line(
+        target_font.native,
+        line_text,
+        pen_x.to_f,
+        pen_y.to_f,
+        f_size.to_f,
+        @_txt_glyph_mode,
+        @_txt_vp_scale,
+        @_txt_inv_vp_scale
+      )
     end
 
     def self.__prepare_char_ctx(ctx, target_font, ch, char_index, line_index, pen_x, pen_y, f_size)
@@ -1744,7 +1659,7 @@ module Zenoo
       end
     end
 
-    def self.__push_char_ctx(batch, ctx)
+    def self.__push_char_ctx(ctx)
       return false unless ctx.visible
 
       cgx = ctx.x
@@ -1762,20 +1677,29 @@ module Zenoo
         cgy = cy - cgh * 0.5
       end
 
-      cur_color = ctx.color.equal?(@_txt_color) ? @_txt_color : Backend.normalize_color(ctx.color)
-      cur_out_w = (ctx.outline_width == @_txt_outline_w) ? @_txt_p0_0 : (ctx.outline_width.to_f * @_txt_scale_ratio)
-      cur_out_c = ctx.outline_color.equal?(@_txt_outline_c) ? @_txt_outline_c : Backend.normalize_color(ctx.outline_color)
-      cur_w = (ctx.weight == @_txt_weight) ? @_txt_weight : ctx.weight.to_f
-      shd_c = @_txt_shadow_c
+      color_changed = !ctx.color.equal?(@_txt_color)
+      out_w_changed = (ctx.outline_width != @_txt_outline_w)
+      out_c_changed = !ctx.outline_color.equal?(@_txt_outline_c)
+      weight_changed = (ctx.weight != @_txt_weight)
 
-      batch.push(
+      has_override = (color_changed || out_w_changed || out_c_changed || weight_changed) ? 1 : 0
+      if has_override == 1
+        cur_color = color_changed ? Backend.normalize_color(ctx.color) : @_txt_color
+        cur_out_w = out_w_changed ? (ctx.outline_width.to_f * @_txt_scale_ratio) : @_txt_p0_0
+        cur_out_c = out_c_changed ? Backend.normalize_color(ctx.outline_color) : @_txt_outline_c
+        cur_w = weight_changed ? ctx.weight.to_f : @_txt_weight
+        Backend.set_glyph_override(
+          cur_color[0].to_f, cur_color[1].to_f, cur_color[2].to_f, cur_color[3].to_f,
+          cur_out_w,
+          cur_out_c[0].to_f, cur_out_c[1].to_f, cur_out_c[2].to_f, cur_out_c[3].to_f,
+          cur_w
+        )
+      end
+
+      Backend.stage_glyph(
         cgx.to_f, cgy.to_f, cgw.to_f, cgh.to_f,
-        cur_color[0].to_f, cur_color[1].to_f, cur_color[2].to_f, cur_color[3].to_f,
-        cur_out_w, @_txt_p0_1, @_txt_p0_2, @_txt_p0_3,
-        cur_out_c[0].to_f, cur_out_c[1].to_f, cur_out_c[2].to_f, cur_out_c[3].to_f,
-        shd_c[0].to_f, shd_c[1].to_f, shd_c[2].to_f, shd_c[3].to_f,
-        cur_w, @_cur_is_bmp, cur_w, 0.0,
-        @_cur_u0, @_cur_v0, @_cur_uw, @_cur_vh
+        @_cur_is_bmp, @_cur_u0, @_cur_v0, @_cur_uw, @_cur_vh,
+        has_override
       )
       true
     end
@@ -1784,12 +1708,11 @@ module Zenoo
       return char_offset if line_text.empty?
 
       ctx = @char_ctx
-      batch = @text_batch
       line_text.each_char do |ch|
         __prepare_char_ctx(ctx, target_font, ch, char_offset, line_idx, pen_x, pen_y, f_size)
         if @_cur_glyph_visible
           yield(ctx)
-          @text_glyph_count += 1 if __push_char_ctx(batch, ctx)
+          __push_char_ctx(ctx)
         end
         pen_x += @_cur_glyph_adv
         char_offset += 1

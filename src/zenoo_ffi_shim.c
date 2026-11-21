@@ -9,11 +9,12 @@
 #include "zenoo.h"
 
 enum ZenFfiHandleKind {
-    ZEN_FFI_KIND_IMAGE  = 1,
-    ZEN_FFI_KIND_SHADER = 2,
-    ZEN_FFI_KIND_MESH   = 3,
-    ZEN_FFI_KIND_FONT   = 4,
-    ZEN_FFI_KIND_SOUND  = 5
+    ZEN_FFI_KIND_IMAGE    = 1,
+    ZEN_FFI_KIND_SHADER   = 2,
+    ZEN_FFI_KIND_MESH     = 3,
+    ZEN_FFI_KIND_FONT     = 4,
+    ZEN_FFI_KIND_SOUND    = 5,
+    ZEN_FFI_KIND_SNAPSHOT = 6
 };
 
 static int s_ffi_image_free_count = 0;
@@ -40,6 +41,9 @@ void zen_ffi_destroy_handle(void* ptr, int kind) {
             break;
         case ZEN_FFI_KIND_SOUND:
             zen_sound_destroy((ZenSound*)ptr);
+            break;
+        case ZEN_FFI_KIND_SNAPSHOT:
+            zen_snapshot_destroy((ZenSnapshot*)ptr);
             break;
         default:
             break;

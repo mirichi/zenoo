@@ -625,6 +625,92 @@ int64_t   zen_ffi_sound_get_loop_end_pcm(const ZenSound* sound);
 void      zen_ffi_sound_set_loop_start_pcm(ZenSound* sound, int64_t start_pcm);
 void      zen_ffi_sound_set_loop_end_pcm(ZenSound* sound, int64_t end_pcm);
 
+// ------------------------------------------
+// 8. C バックエンド描画キュー & バッチング API
+// ------------------------------------------
+enum ZenPipelineId {
+    ZEN_PIPE_CARD                    = 0,
+    ZEN_PIPE_SPRITE                  = 1,
+    ZEN_PIPE_FONT                    = 2,
+    ZEN_PIPE_TRIANGLES               = 3,
+    ZEN_PIPE_TRIANGLE_STRIP          = 4,
+    ZEN_PIPE_LINES                   = 5,
+    ZEN_PIPE_POINTS                  = 6,
+    ZEN_PIPE_TEXTURED_TRIANGLES      = 7,
+    ZEN_PIPE_TEXTURED_TRIANGLE_STRIP = 8
+};
+
+typedef struct ZenSnapshot ZenSnapshot;
+
+// パイプライン管理
+int  zen_batch_register_pipeline(int topology, const void* layout, int layout_len, const void* divisors, int div_len, int base_vertex_count, ZenShader* default_shader);
+void zen_batch_set_pipeline_default_shader(int pipe_id, ZenShader* shader);
+
+// フレーム・レンダーターゲット・クリップ制御
+void      zen_batch_reset_frame(void);
+void      zen_batch_mark_screen_cleared(void);
+void      zen_batch_set_current_target(ZenImage* target);
+ZenImage* zen_batch_get_current_target(void);
+void      zen_batch_set_active_gl_target(ZenImage* target);
+ZenImage* zen_batch_get_active_gl_target(void);
+void      zen_batch_push_clip(float x, float y, float w, float h, float z);
+void      zen_batch_pop_clip(void);
+void      zen_batch_clear_clips(void);
+int       zen_batch_has_pending_draws(ZenImage* image);
+void      zen_batch_flush_image(ZenImage* image);
+void      zen_batch_flush_pending_images(void);
+void      zen_batch_set_clear(uint32_t rgba_color);
+void      zen_batch_flush_screen(uint32_t default_bg_color);
+void      zen_batch_flush_active(uint32_t default_bg_color);
+int       zen_batch_last_draw_calls(void);
+int       zen_batch_active_queue_count(void);
+int       zen_batch_screen_queue_count(void);
+void      zen_batch_sort_screen_queue(void);
+void      zen_batch_on_image_destroy(ZenImage* image);
+
+// Uniform アリーナ登録
+void zen_batch_begin_uniforms(void);
+void zen_batch_uniform_int(const char* name, int val);
+void zen_batch_uniform_float(const char* name, float val);
+void zen_batch_uniform_vec2(const char* name, float x, float y);
+void zen_batch_uniform_vec3(const char* name, float x, float y, float z);
+void zen_batch_uniform_vec4(const char* name, float x, float y, float z, float w);
+void zen_batch_uniform_mat4(const char* name, const void* mat16_floats);
+void zen_batch_uniform_vec4_array(const char* name, int vec4_count, const void* float_data);
+void zen_batch_uniform_texture(const char* name, ZenImage* image);
+
+// 汎用エンキュー & ホットパス直接エンキュー（全関数 13 引数以下）
+void zen_batch_enqueue_draw(int pipeline_id, const void* data, int data_bytes, int count, ZenImage* image, ZenShader* shader, int blend, float z, ZenMesh* mesh, ZenMesh* inst_buffer);
+void zen_batch_enqueue_flat_rect(float x1, float y1, float x2, float y2, float r, float g, float b, float a, ZenShader* shader, int blend, float z);
+void zen_batch_stage_card_colors(float cr, float cg, float cb, float ca, float br, float bg, float bb, float ba, float sr, float sg, float sb, float sa);
+void zen_batch_stage_card_params(float rad, float b_width, float s_blur, float mode, float uv0, float uv1, float uv2, float uv3, float rot_rad, float pv_x, float pv_y);
+void zen_batch_enqueue_sdf_card(float x, float y, float w, float h, ZenImage* image, ZenShader* shader, int blend, float z);
+void zen_batch_stage_color_uv(float c0, float c1, float c2, float c3, float uv0, float uv1, float uv2, float uv3);
+void zen_batch_enqueue_sprite(float m00, float m01, float m10, float m11, float tx, float ty, ZenImage* image, ZenShader* shader, int blend, float z, ZenMesh* mesh);
+void zen_batch_enqueue_triangle_flat(float x1, float y1, float x2, float y2, float x3, float y3, float r, float g, float b, float a, ZenShader* shader, int blend, float z);
+void zen_batch_stage_tri_colors(float r1, float g1, float b1, float a1, float r2, float g2, float b2, float a2, float r3, float g3, float b3, float a3);
+void zen_batch_enqueue_triangle_grad(float x1, float y1, float x2, float y2, float x3, float y3, ZenShader* shader, int blend, float z);
+
+// テキスト高速ステージング＆コミット
+void zen_batch_begin_text(void);
+void zen_batch_set_text_color_outline(float cr, float cg, float cb, float ca, float p0_0, float p0_1, float p0_2, float p0_3, float p1_0, float p1_1, float p1_2, float p1_3);
+void zen_batch_set_text_shadow_weight(float p2_0, float p2_1, float p2_2, float p2_3, float weight);
+void zen_batch_stage_text_line(ZenFont* font, const char* utf8_text, float pen_x, float pen_y, float f_size, int mode, float vp_scale, float inv_vp_scale);
+void zen_batch_set_glyph_override(float cr, float cg, float cb, float ca, float out_w, float ocr, float ocg, float ocb, float oca, float weight);
+void zen_batch_stage_glyph(float gx, float gy, float gw, float gh, float is_bmp, float u0, float v0, float uw, float vh, int has_override);
+int  zen_batch_staged_glyph_count(void);
+void zen_batch_commit_text(ZenImage* atlas_image, ZenShader* shader, int blend, float z);
+
+// スナップショット (Scene / Dev)
+ZenSnapshot* zen_snapshot_create(void);
+void         zen_snapshot_destroy(ZenSnapshot* snap);
+int          zen_snapshot_count(const ZenSnapshot* snap);
+void         zen_snapshot_clear(ZenSnapshot* snap);
+void         zen_snapshot_capture_active(ZenSnapshot* snap, int from_index);
+void         zen_snapshot_capture_screen(ZenSnapshot* snap);
+void         zen_snapshot_replay_to_active(const ZenSnapshot* snap);
+void         zen_snapshot_execute_direct(const ZenSnapshot* snap);
+
 #ifdef __cplusplus
 }
 #endif

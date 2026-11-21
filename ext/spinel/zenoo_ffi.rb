@@ -254,6 +254,69 @@ module Zenoo
       ffi_func :zen_ffi_safe_area_top, [], :float
       ffi_func :zen_ffi_safe_area_right, [], :float
       ffi_func :zen_ffi_safe_area_bottom, [], :float
+
+      # ==========================================
+      # Batch Backend & Snapshot
+      # ==========================================
+      ffi_func :zen_batch_register_pipeline, [:int, :binstr, :int, :binstr, :int, :int, :ptr], :int
+      ffi_func :zen_batch_set_pipeline_default_shader, [:int, :ptr], :void
+      ffi_func :zen_batch_reset_frame, [], :void
+      ffi_func :zen_batch_mark_screen_cleared, [], :void
+      ffi_func :zen_batch_set_current_target, [:ptr], :void
+      ffi_func :zen_batch_get_current_target, [], :ptr
+      ffi_func :zen_batch_set_active_gl_target, [:ptr], :void
+      ffi_func :zen_batch_get_active_gl_target, [], :ptr
+      ffi_func :zen_batch_push_clip, [:float, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_pop_clip, [], :void
+      ffi_func :zen_batch_clear_clips, [], :void
+      ffi_func :zen_batch_has_pending_draws, [:ptr], :int
+      ffi_func :zen_batch_flush_image, [:ptr], :void
+      ffi_func :zen_batch_flush_pending_images, [], :void
+      ffi_func :zen_batch_set_clear, [:uint32], :void
+      ffi_func :zen_batch_flush_screen, [:uint32], :void
+      ffi_func :zen_batch_flush_active, [:uint32], :void
+      ffi_func :zen_batch_last_draw_calls, [], :int
+      ffi_func :zen_batch_active_queue_count, [], :int
+      ffi_func :zen_batch_screen_queue_count, [], :int
+      ffi_func :zen_batch_sort_screen_queue, [], :void
+
+      ffi_func :zen_batch_begin_uniforms, [], :void
+      ffi_func :zen_batch_uniform_int, [:str, :int], :void
+      ffi_func :zen_batch_uniform_float, [:str, :float], :void
+      ffi_func :zen_batch_uniform_vec2, [:str, :float, :float], :void
+      ffi_func :zen_batch_uniform_vec3, [:str, :float, :float, :float], :void
+      ffi_func :zen_batch_uniform_vec4, [:str, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_uniform_mat4, [:str, :binstr], :void
+      ffi_func :zen_batch_uniform_vec4_array, [:str, :int, :binstr], :void
+      ffi_func :zen_batch_uniform_texture, [:str, :ptr], :void
+
+      ffi_func :zen_batch_enqueue_draw, [:int, :binstr, :int, :int, :ptr, :ptr, :int, :float, :ptr, :ptr], :void
+      ffi_func :zen_batch_enqueue_flat_rect, [:float, :float, :float, :float, :float, :float, :float, :float, :ptr, :int, :float], :void
+      ffi_func :zen_batch_stage_card_colors, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_stage_card_params, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_enqueue_sdf_card, [:float, :float, :float, :float, :ptr, :ptr, :int, :float], :void
+      ffi_func :zen_batch_stage_color_uv, [:float, :float, :float, :float, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_enqueue_sprite, [:float, :float, :float, :float, :float, :float, :ptr, :ptr, :int, :float, :ptr], :void
+      ffi_func :zen_batch_enqueue_triangle_flat, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :ptr, :int, :float], :void
+      ffi_func :zen_batch_stage_tri_colors, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_enqueue_triangle_grad, [:float, :float, :float, :float, :float, :float, :ptr, :int, :float], :void
+
+      ffi_func :zen_batch_begin_text, [], :void
+      ffi_func :zen_batch_set_text_color_outline, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_set_text_shadow_weight, [:float, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_stage_text_line, [:ptr, :str, :float, :float, :float, :int, :float, :float], :void
+      ffi_func :zen_batch_set_glyph_override, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_stage_glyph, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :int], :void
+      ffi_func :zen_batch_staged_glyph_count, [], :int
+      ffi_func :zen_batch_commit_text, [:ptr, :ptr, :int, :float], :void
+
+      ffi_func :zen_snapshot_create, [], :ptr
+      ffi_func :zen_snapshot_count, [:ptr], :int
+      ffi_func :zen_snapshot_clear, [:ptr], :void
+      ffi_func :zen_snapshot_capture_active, [:ptr, :int], :void
+      ffi_func :zen_snapshot_capture_screen, [:ptr], :void
+      ffi_func :zen_snapshot_replay_to_active, [:ptr], :void
+      ffi_func :zen_snapshot_execute_direct, [:ptr], :void
     end
   end
 end

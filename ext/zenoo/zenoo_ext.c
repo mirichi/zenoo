@@ -1453,6 +1453,546 @@ static VALUE cruby_zen_ffi_safe_area_bottom(VALUE self) {
     return DBL2NUM((double)(ret));
 }
 
+static VALUE cruby_zen_batch_register_pipeline(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    VALUE s_arg1 = arg1; const void* c_arg1 = NULL;
+    if (!NIL_P(s_arg1)) { StringValue(s_arg1); c_arg1 = (const void*)RSTRING_PTR(s_arg1); }
+    int c_arg2 = NUM2INT(arg2);
+    VALUE s_arg3 = arg3; const void* c_arg3 = NULL;
+    if (!NIL_P(s_arg3)) { StringValue(s_arg3); c_arg3 = (const void*)RSTRING_PTR(s_arg3); }
+    int c_arg4 = NUM2INT(arg4);
+    int c_arg5 = NUM2INT(arg5);
+    void* c_arg6 = NIL_P(arg6) ? NULL : (void*)(uintptr_t)NUM2ULL(arg6);
+    int ret = zen_batch_register_pipeline(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_batch_set_pipeline_default_shader(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    void* c_arg1 = NIL_P(arg1) ? NULL : (void*)(uintptr_t)NUM2ULL(arg1);
+    zen_batch_set_pipeline_default_shader(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_reset_frame(VALUE self) {
+    (void)self;
+    zen_batch_reset_frame();
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_mark_screen_cleared(VALUE self) {
+    (void)self;
+    zen_batch_mark_screen_cleared();
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_set_current_target(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_batch_set_current_target(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_get_current_target(VALUE self) {
+    (void)self;
+    void* ret = (void*)(zen_batch_get_current_target());
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
+
+static VALUE cruby_zen_batch_set_active_gl_target(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_batch_set_active_gl_target(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_get_active_gl_target(VALUE self) {
+    (void)self;
+    void* ret = (void*)(zen_batch_get_active_gl_target());
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
+
+static VALUE cruby_zen_batch_push_clip(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    zen_batch_push_clip(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_pop_clip(VALUE self) {
+    (void)self;
+    zen_batch_pop_clip();
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_clear_clips(VALUE self) {
+    (void)self;
+    zen_batch_clear_clips();
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_has_pending_draws(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_batch_has_pending_draws(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_batch_flush_image(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_batch_flush_image(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_flush_pending_images(VALUE self) {
+    (void)self;
+    zen_batch_flush_pending_images();
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_set_clear(VALUE self, VALUE arg0) {
+    (void)self;
+    uint32_t c_arg0 = (uint32_t)NUM2LL(arg0);
+    zen_batch_set_clear(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_flush_screen(VALUE self, VALUE arg0) {
+    (void)self;
+    uint32_t c_arg0 = (uint32_t)NUM2LL(arg0);
+    zen_batch_flush_screen(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_flush_active(VALUE self, VALUE arg0) {
+    (void)self;
+    uint32_t c_arg0 = (uint32_t)NUM2LL(arg0);
+    zen_batch_flush_active(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_last_draw_calls(VALUE self) {
+    (void)self;
+    int ret = zen_batch_last_draw_calls();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_batch_active_queue_count(VALUE self) {
+    (void)self;
+    int ret = zen_batch_active_queue_count();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_batch_screen_queue_count(VALUE self) {
+    (void)self;
+    int ret = zen_batch_screen_queue_count();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_batch_sort_screen_queue(VALUE self) {
+    (void)self;
+    zen_batch_sort_screen_queue();
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_begin_uniforms(VALUE self) {
+    (void)self;
+    zen_batch_begin_uniforms();
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_uniform_int(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    int c_arg1 = NUM2INT(arg1);
+    zen_batch_uniform_int(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_uniform_float(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    zen_batch_uniform_float(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_uniform_vec2(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    zen_batch_uniform_vec2(c_arg0, c_arg1, c_arg2);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_uniform_vec3(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    zen_batch_uniform_vec3(c_arg0, c_arg1, c_arg2, c_arg3);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_uniform_vec4(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    zen_batch_uniform_vec4(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_uniform_mat4(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    VALUE s_arg1 = arg1; const void* c_arg1 = NULL;
+    if (!NIL_P(s_arg1)) { StringValue(s_arg1); c_arg1 = (const void*)RSTRING_PTR(s_arg1); }
+    zen_batch_uniform_mat4(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_uniform_vec4_array(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    int c_arg1 = NUM2INT(arg1);
+    VALUE s_arg2 = arg2; const void* c_arg2 = NULL;
+    if (!NIL_P(s_arg2)) { StringValue(s_arg2); c_arg2 = (const void*)RSTRING_PTR(s_arg2); }
+    zen_batch_uniform_vec4_array(c_arg0, c_arg1, c_arg2);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_uniform_texture(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    void* c_arg1 = NIL_P(arg1) ? NULL : (void*)(uintptr_t)NUM2ULL(arg1);
+    zen_batch_uniform_texture(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_enqueue_draw(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    VALUE s_arg1 = arg1; const void* c_arg1 = NULL;
+    if (!NIL_P(s_arg1)) { StringValue(s_arg1); c_arg1 = (const void*)RSTRING_PTR(s_arg1); }
+    int c_arg2 = NUM2INT(arg2);
+    int c_arg3 = NUM2INT(arg3);
+    void* c_arg4 = NIL_P(arg4) ? NULL : (void*)(uintptr_t)NUM2ULL(arg4);
+    void* c_arg5 = NIL_P(arg5) ? NULL : (void*)(uintptr_t)NUM2ULL(arg5);
+    int c_arg6 = NUM2INT(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    void* c_arg8 = NIL_P(arg8) ? NULL : (void*)(uintptr_t)NUM2ULL(arg8);
+    void* c_arg9 = NIL_P(arg9) ? NULL : (void*)(uintptr_t)NUM2ULL(arg9);
+    zen_batch_enqueue_draw(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_enqueue_flat_rect(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9, VALUE arg10) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    void* c_arg8 = NIL_P(arg8) ? NULL : (void*)(uintptr_t)NUM2ULL(arg8);
+    int c_arg9 = NUM2INT(arg9);
+    float c_arg10 = (float)NUM2DBL(arg10);
+    zen_batch_enqueue_flat_rect(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9, c_arg10);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_stage_card_colors(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9, VALUE arg10, VALUE arg11) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    float c_arg8 = (float)NUM2DBL(arg8);
+    float c_arg9 = (float)NUM2DBL(arg9);
+    float c_arg10 = (float)NUM2DBL(arg10);
+    float c_arg11 = (float)NUM2DBL(arg11);
+    zen_batch_stage_card_colors(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9, c_arg10, c_arg11);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_stage_card_params(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9, VALUE arg10) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    float c_arg8 = (float)NUM2DBL(arg8);
+    float c_arg9 = (float)NUM2DBL(arg9);
+    float c_arg10 = (float)NUM2DBL(arg10);
+    zen_batch_stage_card_params(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9, c_arg10);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_enqueue_sdf_card(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    void* c_arg4 = NIL_P(arg4) ? NULL : (void*)(uintptr_t)NUM2ULL(arg4);
+    void* c_arg5 = NIL_P(arg5) ? NULL : (void*)(uintptr_t)NUM2ULL(arg5);
+    int c_arg6 = NUM2INT(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    zen_batch_enqueue_sdf_card(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_stage_color_uv(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    zen_batch_stage_color_uv(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_enqueue_sprite(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9, VALUE arg10) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    void* c_arg6 = NIL_P(arg6) ? NULL : (void*)(uintptr_t)NUM2ULL(arg6);
+    void* c_arg7 = NIL_P(arg7) ? NULL : (void*)(uintptr_t)NUM2ULL(arg7);
+    int c_arg8 = NUM2INT(arg8);
+    float c_arg9 = (float)NUM2DBL(arg9);
+    void* c_arg10 = NIL_P(arg10) ? NULL : (void*)(uintptr_t)NUM2ULL(arg10);
+    zen_batch_enqueue_sprite(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9, c_arg10);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_enqueue_triangle_flat(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9, VALUE arg10, VALUE arg11, VALUE arg12) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    float c_arg8 = (float)NUM2DBL(arg8);
+    float c_arg9 = (float)NUM2DBL(arg9);
+    void* c_arg10 = NIL_P(arg10) ? NULL : (void*)(uintptr_t)NUM2ULL(arg10);
+    int c_arg11 = NUM2INT(arg11);
+    float c_arg12 = (float)NUM2DBL(arg12);
+    zen_batch_enqueue_triangle_flat(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9, c_arg10, c_arg11, c_arg12);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_stage_tri_colors(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9, VALUE arg10, VALUE arg11) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    float c_arg8 = (float)NUM2DBL(arg8);
+    float c_arg9 = (float)NUM2DBL(arg9);
+    float c_arg10 = (float)NUM2DBL(arg10);
+    float c_arg11 = (float)NUM2DBL(arg11);
+    zen_batch_stage_tri_colors(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9, c_arg10, c_arg11);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_enqueue_triangle_grad(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    void* c_arg6 = NIL_P(arg6) ? NULL : (void*)(uintptr_t)NUM2ULL(arg6);
+    int c_arg7 = NUM2INT(arg7);
+    float c_arg8 = (float)NUM2DBL(arg8);
+    zen_batch_enqueue_triangle_grad(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_begin_text(VALUE self) {
+    (void)self;
+    zen_batch_begin_text();
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_set_text_color_outline(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9, VALUE arg10, VALUE arg11) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    float c_arg8 = (float)NUM2DBL(arg8);
+    float c_arg9 = (float)NUM2DBL(arg9);
+    float c_arg10 = (float)NUM2DBL(arg10);
+    float c_arg11 = (float)NUM2DBL(arg11);
+    zen_batch_set_text_color_outline(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9, c_arg10, c_arg11);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_set_text_shadow_weight(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    zen_batch_set_text_shadow_weight(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_stage_text_line(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    int c_arg5 = NUM2INT(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    zen_batch_stage_text_line(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_set_glyph_override(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    float c_arg8 = (float)NUM2DBL(arg8);
+    float c_arg9 = (float)NUM2DBL(arg9);
+    zen_batch_set_glyph_override(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_stage_glyph(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7, VALUE arg8, VALUE arg9) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    float c_arg7 = (float)NUM2DBL(arg7);
+    float c_arg8 = (float)NUM2DBL(arg8);
+    int c_arg9 = NUM2INT(arg9);
+    zen_batch_stage_glyph(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7, c_arg8, c_arg9);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_staged_glyph_count(VALUE self) {
+    (void)self;
+    int ret = zen_batch_staged_glyph_count();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_batch_commit_text(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    void* c_arg1 = NIL_P(arg1) ? NULL : (void*)(uintptr_t)NUM2ULL(arg1);
+    int c_arg2 = NUM2INT(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    zen_batch_commit_text(c_arg0, c_arg1, c_arg2, c_arg3);
+    return Qnil;
+}
+
+static VALUE cruby_zen_snapshot_create(VALUE self) {
+    (void)self;
+    void* ret = (void*)(zen_snapshot_create());
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
+
+static VALUE cruby_zen_snapshot_count(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_snapshot_count(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_snapshot_clear(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_snapshot_clear(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_snapshot_capture_active(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    zen_snapshot_capture_active(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_snapshot_capture_screen(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_snapshot_capture_screen(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_snapshot_replay_to_active(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_snapshot_replay_to_active(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_snapshot_execute_direct(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_snapshot_execute_direct(c_arg0);
+    return Qnil;
+}
+
 void Init_zenoo(void) {
     rb_gc_register_address(&s_frame_callback_proc);
     zen_set_gc_trigger_callback(rb_zenoo_gc_hook);
@@ -1648,5 +2188,60 @@ void Init_zenoo(void) {
     rb_define_singleton_method(rb_mC, "zen_ffi_safe_area_top", cruby_zen_ffi_safe_area_top, 0);
     rb_define_singleton_method(rb_mC, "zen_ffi_safe_area_right", cruby_zen_ffi_safe_area_right, 0);
     rb_define_singleton_method(rb_mC, "zen_ffi_safe_area_bottom", cruby_zen_ffi_safe_area_bottom, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_register_pipeline", cruby_zen_batch_register_pipeline, 7);
+    rb_define_singleton_method(rb_mC, "zen_batch_set_pipeline_default_shader", cruby_zen_batch_set_pipeline_default_shader, 2);
+    rb_define_singleton_method(rb_mC, "zen_batch_reset_frame", cruby_zen_batch_reset_frame, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_mark_screen_cleared", cruby_zen_batch_mark_screen_cleared, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_set_current_target", cruby_zen_batch_set_current_target, 1);
+    rb_define_singleton_method(rb_mC, "zen_batch_get_current_target", cruby_zen_batch_get_current_target, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_set_active_gl_target", cruby_zen_batch_set_active_gl_target, 1);
+    rb_define_singleton_method(rb_mC, "zen_batch_get_active_gl_target", cruby_zen_batch_get_active_gl_target, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_push_clip", cruby_zen_batch_push_clip, 5);
+    rb_define_singleton_method(rb_mC, "zen_batch_pop_clip", cruby_zen_batch_pop_clip, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_clear_clips", cruby_zen_batch_clear_clips, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_has_pending_draws", cruby_zen_batch_has_pending_draws, 1);
+    rb_define_singleton_method(rb_mC, "zen_batch_flush_image", cruby_zen_batch_flush_image, 1);
+    rb_define_singleton_method(rb_mC, "zen_batch_flush_pending_images", cruby_zen_batch_flush_pending_images, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_set_clear", cruby_zen_batch_set_clear, 1);
+    rb_define_singleton_method(rb_mC, "zen_batch_flush_screen", cruby_zen_batch_flush_screen, 1);
+    rb_define_singleton_method(rb_mC, "zen_batch_flush_active", cruby_zen_batch_flush_active, 1);
+    rb_define_singleton_method(rb_mC, "zen_batch_last_draw_calls", cruby_zen_batch_last_draw_calls, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_active_queue_count", cruby_zen_batch_active_queue_count, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_screen_queue_count", cruby_zen_batch_screen_queue_count, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_sort_screen_queue", cruby_zen_batch_sort_screen_queue, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_begin_uniforms", cruby_zen_batch_begin_uniforms, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_uniform_int", cruby_zen_batch_uniform_int, 2);
+    rb_define_singleton_method(rb_mC, "zen_batch_uniform_float", cruby_zen_batch_uniform_float, 2);
+    rb_define_singleton_method(rb_mC, "zen_batch_uniform_vec2", cruby_zen_batch_uniform_vec2, 3);
+    rb_define_singleton_method(rb_mC, "zen_batch_uniform_vec3", cruby_zen_batch_uniform_vec3, 4);
+    rb_define_singleton_method(rb_mC, "zen_batch_uniform_vec4", cruby_zen_batch_uniform_vec4, 5);
+    rb_define_singleton_method(rb_mC, "zen_batch_uniform_mat4", cruby_zen_batch_uniform_mat4, 2);
+    rb_define_singleton_method(rb_mC, "zen_batch_uniform_vec4_array", cruby_zen_batch_uniform_vec4_array, 3);
+    rb_define_singleton_method(rb_mC, "zen_batch_uniform_texture", cruby_zen_batch_uniform_texture, 2);
+    rb_define_singleton_method(rb_mC, "zen_batch_enqueue_draw", cruby_zen_batch_enqueue_draw, 10);
+    rb_define_singleton_method(rb_mC, "zen_batch_enqueue_flat_rect", cruby_zen_batch_enqueue_flat_rect, 11);
+    rb_define_singleton_method(rb_mC, "zen_batch_stage_card_colors", cruby_zen_batch_stage_card_colors, 12);
+    rb_define_singleton_method(rb_mC, "zen_batch_stage_card_params", cruby_zen_batch_stage_card_params, 11);
+    rb_define_singleton_method(rb_mC, "zen_batch_enqueue_sdf_card", cruby_zen_batch_enqueue_sdf_card, 8);
+    rb_define_singleton_method(rb_mC, "zen_batch_stage_color_uv", cruby_zen_batch_stage_color_uv, 8);
+    rb_define_singleton_method(rb_mC, "zen_batch_enqueue_sprite", cruby_zen_batch_enqueue_sprite, 11);
+    rb_define_singleton_method(rb_mC, "zen_batch_enqueue_triangle_flat", cruby_zen_batch_enqueue_triangle_flat, 13);
+    rb_define_singleton_method(rb_mC, "zen_batch_stage_tri_colors", cruby_zen_batch_stage_tri_colors, 12);
+    rb_define_singleton_method(rb_mC, "zen_batch_enqueue_triangle_grad", cruby_zen_batch_enqueue_triangle_grad, 9);
+    rb_define_singleton_method(rb_mC, "zen_batch_begin_text", cruby_zen_batch_begin_text, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_set_text_color_outline", cruby_zen_batch_set_text_color_outline, 12);
+    rb_define_singleton_method(rb_mC, "zen_batch_set_text_shadow_weight", cruby_zen_batch_set_text_shadow_weight, 5);
+    rb_define_singleton_method(rb_mC, "zen_batch_stage_text_line", cruby_zen_batch_stage_text_line, 8);
+    rb_define_singleton_method(rb_mC, "zen_batch_set_glyph_override", cruby_zen_batch_set_glyph_override, 10);
+    rb_define_singleton_method(rb_mC, "zen_batch_stage_glyph", cruby_zen_batch_stage_glyph, 10);
+    rb_define_singleton_method(rb_mC, "zen_batch_staged_glyph_count", cruby_zen_batch_staged_glyph_count, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_commit_text", cruby_zen_batch_commit_text, 4);
+    rb_define_singleton_method(rb_mC, "zen_snapshot_create", cruby_zen_snapshot_create, 0);
+    rb_define_singleton_method(rb_mC, "zen_snapshot_count", cruby_zen_snapshot_count, 1);
+    rb_define_singleton_method(rb_mC, "zen_snapshot_clear", cruby_zen_snapshot_clear, 1);
+    rb_define_singleton_method(rb_mC, "zen_snapshot_capture_active", cruby_zen_snapshot_capture_active, 2);
+    rb_define_singleton_method(rb_mC, "zen_snapshot_capture_screen", cruby_zen_snapshot_capture_screen, 1);
+    rb_define_singleton_method(rb_mC, "zen_snapshot_replay_to_active", cruby_zen_snapshot_replay_to_active, 1);
+    rb_define_singleton_method(rb_mC, "zen_snapshot_execute_direct", cruby_zen_snapshot_execute_direct, 1);
     rb_define_singleton_method(rb_mC, "zen_ffi_image_get_pixels", cruby_zen_ffi_image_get_pixels, 2);
 }

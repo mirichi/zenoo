@@ -19,8 +19,9 @@ module Zenoo
     KIND_IMAGE  = 1
     KIND_SHADER = 2
     KIND_MESH   = 3
-    KIND_FONT   = 4
-    KIND_SOUND  = 5
+    KIND_FONT     = 4
+    KIND_SOUND    = 5
+    KIND_SNAPSHOT = 6
 
     # @api private
     RAW_PTR = Object.new
@@ -1041,6 +1042,10 @@ module Zenoo
     end
 
     class Font
+      def __ptr
+        @ptr
+      end
+
       def initialize(path, index = 0)
         p_str = path.to_s
         ptr = C.zen_font_load(p_str, index.to_i)

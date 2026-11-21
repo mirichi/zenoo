@@ -26,8 +26,9 @@ gcc -O2 -fPIC -Iinclude ${SDL_INC} -c src/zenoo_image.c -o build/zenoo_image.o
 gcc -O2 -fPIC -Iinclude ${SDL_INC} -c src/zenoo_gfx.c -o build/zenoo_gfx.o
 gcc -O2 -fPIC -Iinclude ${SDL_INC} -c src/zenoo_font.c -o build/zenoo_font.o
 gcc -O2 -fPIC -Iinclude ${SDL_INC} -c src/zenoo_audio.c -o build/zenoo_audio.o
+gcc -O2 -fPIC -Iinclude ${SDL_INC} -c src/zenoo_batch.c -o build/zenoo_batch.o
 gcc -O2 -fPIC -Iinclude ${SDL_INC} -c src/zenoo_ffi_shim.c -o build/zenoo_ffi_shim.o
-ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_window.o build/zenoo_input.o build/zenoo_vibration.o build/zenoo_image.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_audio.o build/zenoo_ffi_shim.o
+ar rcs build/libzenoo_spinel.a build/glad.o build/zenoo_window.o build/zenoo_input.o build/zenoo_vibration.o build/zenoo_image.o build/zenoo_gfx.o build/zenoo_font.o build/zenoo_audio.o build/zenoo_batch.o build/zenoo_ffi_shim.o
 echo "  -> build/libzenoo_spinel.a created successfully."
 
 ARG="${1:-examples/demo_gui_widgets.rb}"
