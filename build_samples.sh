@@ -95,6 +95,7 @@ COMMON_EMCC_FLAGS=(
     -s WASM=1
     -s MINIFY_HTML=0
     -s EXPORTED_FUNCTIONS="['_main','_zen_push_char','_zen_push_touch']"
+    -Wl,--wrap=sp_fin_run_exit
     --preload-file assets@/assets
     -fmacro-prefix-map="${PWD}"=.
     -fdebug-prefix-map="${PWD}"=.
@@ -150,7 +151,7 @@ build_single_sample() {
     rm -rf "${tmp_out}"
     mkdir -p "${tmp_out}"
 
-    "${SPINEL_BIN}" --no-inline-hot -Ilib "${src_rb}" -c -o "${tmp_out}/app.c"
+    "${SPINEL_BIN}" --cc=emcc --no-inline-hot -Ilib "${src_rb}" -c -o "${tmp_out}/app.c"
     strip_always_inline "${tmp_out}/app.c"
 
     emcc "${COMMON_EMCC_FLAGS[@]}" \

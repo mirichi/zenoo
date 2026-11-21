@@ -280,6 +280,7 @@ COMMON_EMCC_BASE_FLAGS=(
 
 COMMON_EMCC_FLAGS=(
     "${COMMON_EMCC_BASE_FLAGS[@]}"
+    -Wl,--wrap=sp_fin_run_exit
     --preload-file "${STAGE_DIR}/assets@/assets"
 )
 
@@ -330,7 +331,7 @@ build_item() {
     rm -rf "${tmp_out}"
     mkdir -p "${tmp_out}"
 
-    "${SPINEL_BIN}" --no-inline-hot -I"${STAGE_DIR}/lib" "${STAGE_DIR}/${src_rb}" -c -o "${tmp_out}/app.c"
+    "${SPINEL_BIN}" --cc=emcc --no-inline-hot -I"${STAGE_DIR}/lib" "${STAGE_DIR}/${src_rb}" -c -o "${tmp_out}/app.c"
     strip_always_inline "${tmp_out}/app.c"
 
     emcc "${COMMON_EMCC_FLAGS[@]}" \

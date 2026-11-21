@@ -1084,6 +1084,17 @@ int zen_update(void) {
 }
 
 #ifdef __EMSCRIPTEN__
+extern void __real_sp_fin_run_exit(void);
+static int s_wasm_loop_active = 0;
+
+void __wrap_sp_fin_run_exit(void) {
+    /* Emscripten のメインループ起動後は main() 復帰時にランタイム終了扱いとせず、
+       ウィンドウや画像・シェーダ等のファイナライザを即時発火させない */
+    if (!s_wasm_loop_active) {
+        __real_sp_fin_run_exit();
+    }
+}
+
 static zen_frame_fn s_frame_fn = NULL;
 static double s_wasm_accumulator = 0.0;
 static double s_wasm_prev_time = 0.0;
@@ -1115,6 +1126,10 @@ static void wasm_tick(void) {
 
     if (!zen_begin_frame()) {
         emscripten_cancel_main_loop();
+        if (s_wasm_loop_active) {
+            s_wasm_loop_active = 0;
+            __real_sp_fin_run_exit();
+        }
         return;
     }
     if (s_frame_fn) s_frame_fn();
@@ -1125,6 +1140,7 @@ void zen_run_loop(zen_frame_fn fn) {
     s_frame_fn = fn;
     s_wasm_prev_time = emscripten_get_now() * 0.001;
     s_wasm_accumulator = 0.0;
+    s_wasm_loop_active = 1;
     emscripten_set_main_loop(wasm_tick, 0, 0);
 }
 #else

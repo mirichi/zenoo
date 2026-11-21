@@ -28,7 +28,7 @@ mkdir -p "${CACHE_DIR}/rt"
 mkdir -p "${CACHE_DIR}/regexp"
 
 echo "=== [1/4] Generating C code with Spinel AOT (${TARGET_RB}) ==="
-"${SPINEL_BIN}" --no-inline-hot -Ilib "${TARGET_RB}" -c -o "${OUTPUT_DIR}/app.c"
+"${SPINEL_BIN}" --cc=emcc --no-inline-hot -Ilib "${TARGET_RB}" -c -o "${OUTPUT_DIR}/app.c"
 python3 -c "import sys, re; p=sys.argv[1]; s=open(p, 'r', encoding='utf-8', errors='ignore').read().replace('__attribute__((always_inline))', ''); s=re.sub(r'/mnt/c/Users/[^/\"\'\s]+', '/workspace', s); open(p, 'w', encoding='utf-8').write(s)" "${OUTPUT_DIR}/app.c"
 
 echo "=== [2/4] Building Spinel Runtime for Wasm ==="
@@ -88,6 +88,7 @@ emcc ${OPT_LEVEL} \
     -s WASM=1 \
     -s MINIFY_HTML=0 \
     -s EXPORTED_FUNCTIONS="['_main','_zen_push_char','_zen_push_touch']" \
+    -Wl,--wrap=sp_fin_run_exit \
     --preload-file assets@/assets \
     -fmacro-prefix-map="${PWD}"=. \
     -fdebug-prefix-map="${PWD}"=. \
