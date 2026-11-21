@@ -69,7 +69,7 @@ build_c_kernel_obj() {
     src="$1"
     obj="$2"
     if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ]; then
-        emcc -c "${OPT_LEVEL}" -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj"
+        emcc -c "${OPT_LEVEL}" -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" "$src" -o "$obj"
     fi
 }
 build_c_kernel_obj "src/zenoo_window.c" "${CACHE_DIR}/zenoo_window.o"
@@ -79,7 +79,7 @@ build_c_kernel_obj "src/zenoo_image.c" "${CACHE_DIR}/zenoo_image.o"
 build_c_kernel_obj "src/zenoo_gfx.c" "${CACHE_DIR}/zenoo_gfx.o"
 build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
 build_c_kernel_obj "src/zenoo_audio.c" "${CACHE_DIR}/zenoo_audio.o"
-build_c_kernel_obj "ext/spinel/zenoo_spinel.c" "${CACHE_DIR}/zenoo_spinel.o"
+build_c_kernel_obj "src/zenoo_ffi_shim.c" "${CACHE_DIR}/zenoo_ffi_shim.o"
 
 COMMON_EMCC_FLAGS=(
     "${OPT_LEVEL}"
@@ -97,7 +97,7 @@ COMMON_EMCC_FLAGS=(
     --preload-file assets@/assets
     -fmacro-prefix-map="${PWD}"=.
     -fdebug-prefix-map="${PWD}"=.
-    -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib"
+    -Iinclude -I"${SPINEL_DIR}/lib"
 )
 
 COMMON_OBJS=(
@@ -108,7 +108,7 @@ COMMON_OBJS=(
     "${CACHE_DIR}/zenoo_gfx.o"
     "${CACHE_DIR}/zenoo_font.o"
     "${CACHE_DIR}/zenoo_audio.o"
-    "${CACHE_DIR}/zenoo_spinel.o"
+    "${CACHE_DIR}/zenoo_ffi_shim.o"
     "${CACHE_DIR}/libspinel_rt.a"
 )
 

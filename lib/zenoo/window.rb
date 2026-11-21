@@ -148,11 +148,13 @@ module Zenoo
 
       if Native::Window.wasm?
         __setup_wasm_visibility_listener
-        @step_proc = proc { __step_frame }
-        Native::Window.start_wasm_loop(@step_proc)
+        step_cb = method(:__step_frame)
+        @step_proc = step_cb
+        Native::Window.start_wasm_loop(step_cb)
       else
-        @step_proc = proc { __step_frame }
-        Native::Window.set_frame_callback(@step_proc)
+        step_cb = method(:__step_frame)
+        @step_proc = step_cb
+        Native::Window.set_frame_callback(step_cb)
         while Native::Window.update
           __step_frame
         end

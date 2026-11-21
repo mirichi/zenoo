@@ -56,19 +56,6 @@ class Zenoo::Image
     img.slice_tiles(xcount, ycount, tile_width: tile_width, tile_height: tile_height)
   end
 
-  if RUBY_ENGINE == "spinel"
-    # テクスチャ全体における正規化 UV 座標 [u, v, uw, vh] (CRuby版は C 拡張で定義済み)
-    #
-    # - 戻り値: `Array<Float>` `[u, v, uw, vh]`（0.0 〜 1.0）
-    def uv
-      tw = texture_width.to_f
-      th = texture_height.to_f
-      return [0.0, 0.0, 1.0, 1.0] if tw <= 0.0 || th <= 0.0
-
-      [x.to_f / tw, y.to_f / th, width.to_f / tw, height.to_f / th]
-    end
-  end
-
   # ピクセル色取得: image.get_pixel(x, y) -> Color
   #
   # - `x` (`Integer`): X座標（ピクセル単位）
@@ -183,35 +170,5 @@ class Zenoo::Image
     filtered = apply_filter(shader, uniforms: uniforms)
     replace_texture!(filtered)
     self
-  end
-
-  if RUBY_ENGINE == "spinel"
-    # この画像に適用されているテクスチャ補間フィルタを取得します。
-    #
-    # - 戻り値: `Symbol` (`:nearest` または `:linear`)
-    def texture_filter
-      raw_texture_filter == 0 ? :nearest : :linear
-    end
-
-    # この画像の拡大・縮小時のテクスチャ補間フィルタを設定します。
-    #
-    # - `val` (`Symbol`): `:nearest`（ドット絵向け）または `:linear`（滑らか補間）
-    def texture_filter=(val)
-      self.raw_texture_filter = (val == :nearest) ? 0 : 1
-    end
-
-    # 新規作成される画像にデフォルトで適用されるテクスチャ補間フィルタを取得します。
-    #
-    # - 戻り値: `Symbol` (`:nearest` または `:linear`)
-    def self.default_texture_filter
-      raw_default_texture_filter == 0 ? :nearest : :linear
-    end
-
-    # 新規作成される画像のデフォルトのテクスチャ補間フィルタを設定します。
-    #
-    # - `val` (`Symbol`): `:nearest` または `:linear`
-    def self.default_texture_filter=(val)
-      self.raw_default_texture_filter = (val == :nearest) ? 0 : 1
-    end
   end
 end

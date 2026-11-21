@@ -1,6 +1,7 @@
 #ifndef ZENOO_H
 #define ZENOO_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -547,6 +548,82 @@ double      zen_js_eval_num(const char* code);
 const char* zen_js_eval_str(const char* code);
 int         zen_js_is_page_visible(void);
 void        zen_js_get_safe_area(float* left, float* top, float* right, float* bottom);
+
+// ------------------------------------------
+// FFI シム API (Spinel / CRuby 共通)
+// ------------------------------------------
+void zen_ffi_destroy_handle(void* ptr, int kind);
+int  zen_ffi_image_free_count(void);
+
+int   zen_ffi_win_init(int w, int h, const char* title, int fullscreen);
+int   zen_ffi_win_init_scaled(int base_w, int base_h, const char* title, int win_w, int win_h, int fullscreen, float scale);
+int   zen_ffi_screen_w(void);
+int   zen_ffi_screen_h(void);
+int   zen_ffi_window_w(void);
+int   zen_ffi_window_h(void);
+int   zen_ffi_window_pos_x(void);
+int   zen_ffi_window_pos_y(void);
+void  zen_ffi_clear_frame_callback(void);
+
+float zen_ffi_mouse_x(void);
+float zen_ffi_mouse_y(void);
+float zen_ffi_safe_area_left(void);
+float zen_ffi_safe_area_top(void);
+float zen_ffi_safe_area_right(void);
+float zen_ffi_safe_area_bottom(void);
+
+int   zen_ffi_image_width(const ZenImage* img);
+int   zen_ffi_image_height(const ZenImage* img);
+int   zen_ffi_image_x(const ZenImage* img);
+int   zen_ffi_image_y(const ZenImage* img);
+int   zen_ffi_image_tex_width(const ZenImage* img);
+int   zen_ffi_image_tex_height(const ZenImage* img);
+int   zen_ffi_image_is_sub(const ZenImage* img);
+int   zen_ffi_image_msaa_samples(const ZenImage* img);
+void  zen_ffi_image_set_pixel_rgba(ZenImage* img, int x, int y, int r, int g, int b, int a);
+void  zen_ffi_image_set_pixels(ZenImage* img, const void* in_pixels);
+
+ZenShader* zen_ffi_shader_create(const char* vert_src, const char* frag_src);
+void       zen_ffi_shader_set_vec4_array(ZenShader* shader, const char* name, int count, const void* data);
+void       zen_ffi_shader_set_mat4(ZenShader* shader, const char* name, const void* data);
+
+ZenMesh* zen_ffi_mesh_create(int topology, const void* layout, const void* vdata, int vbytes, int vcount, const void* idata, int icount, int dynamic);
+void     zen_ffi_mesh_update_vertices(ZenMesh* mesh, int offset_bytes, const void* vdata, int vbytes, int vcount);
+void     zen_ffi_mesh_update_indices(ZenMesh* mesh, const void* idata, int icount);
+int      zen_ffi_mesh_is_dynamic(const ZenMesh* mesh);
+int      zen_ffi_mesh_vertex_count(const ZenMesh* mesh);
+int      zen_ffi_mesh_index_count(const ZenMesh* mesh);
+
+void zen_ffi_draw_buffer(int topology, const void* layout, const void* divisors, int base_vertex_count, const void* vertex_data, int count, ZenImage* texture, ZenShader* shader);
+void zen_ffi_draw_mesh(ZenMesh* geom_mesh, ZenMesh* inst_buffer, const void* inst_layout, const void* inst_data, int instance_count, ZenImage* texture, ZenShader* shader);
+
+int   zen_ffi_font_query_glyph(ZenFont* font, int codepoint, float font_size, int mode, float render_scale);
+int   zen_ffi_glyph_visible(void);
+float zen_ffi_glyph_u0(void);
+float zen_ffi_glyph_v0(void);
+float zen_ffi_glyph_u1(void);
+float zen_ffi_glyph_v1(void);
+float zen_ffi_glyph_x0(void);
+float zen_ffi_glyph_y0(void);
+float zen_ffi_glyph_x1(void);
+float zen_ffi_glyph_y1(void);
+float zen_ffi_glyph_advance(void);
+int   zen_ffi_glyph_is_bitmap(void);
+float zen_ffi_font_ascent(ZenFont* font, float font_size);
+float zen_ffi_font_descent(ZenFont* font, float font_size);
+float zen_ffi_font_line_gap(ZenFont* font, float font_size);
+
+ZenSound* zen_ffi_sound_load_pcm(const void* pcm_data, int frame_count, int channels, int sample_rate);
+int64_t   zen_ffi_sound_get_length_pcm(const ZenSound* sound);
+void      zen_ffi_sound_set_loop_points_pcm(ZenSound* sound, int64_t start_frame, int64_t end_frame);
+float     zen_ffi_sound_get_loop_start_sec(const ZenSound* sound);
+float     zen_ffi_sound_get_loop_end_sec(const ZenSound* sound);
+void      zen_ffi_sound_set_loop_start_sec(ZenSound* sound, float start_sec);
+void      zen_ffi_sound_set_loop_end_sec(ZenSound* sound, float end_sec);
+int64_t   zen_ffi_sound_get_loop_start_pcm(const ZenSound* sound);
+int64_t   zen_ffi_sound_get_loop_end_pcm(const ZenSound* sound);
+void      zen_ffi_sound_set_loop_start_pcm(ZenSound* sound, int64_t start_pcm);
+void      zen_ffi_sound_set_loop_end_pcm(ZenSound* sound, int64_t end_pcm);
 
 #ifdef __cplusplus
 }

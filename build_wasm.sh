@@ -51,14 +51,14 @@ done
 emar rcs "${CACHE_DIR}/libspinel_rt.a" "${CACHE_DIR}/rt"/*.o "${CACHE_DIR}/regexp"/*.o
 
 echo "=== [3/4] Building Zenoo C Kernel for Wasm ==="
-emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_window.c -o "${CACHE_DIR}/zenoo_window.o"
-emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_input.c -o "${CACHE_DIR}/zenoo_input.o"
-emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_vibration.c -o "${CACHE_DIR}/zenoo_vibration.o"
-emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_image.c -o "${CACHE_DIR}/zenoo_image.o"
-emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${CACHE_DIR}/zenoo_gfx.o"
-emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${CACHE_DIR}/zenoo_font.o"
-emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" src/zenoo_audio.c -o "${CACHE_DIR}/zenoo_audio.o"
-emcc -c -O2 -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" ext/spinel/zenoo_spinel.c -o "${CACHE_DIR}/zenoo_spinel.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_window.c -o "${CACHE_DIR}/zenoo_window.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_input.c -o "${CACHE_DIR}/zenoo_input.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_vibration.c -o "${CACHE_DIR}/zenoo_vibration.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_image.c -o "${CACHE_DIR}/zenoo_image.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_gfx.c -o "${CACHE_DIR}/zenoo_gfx.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_font.c -o "${CACHE_DIR}/zenoo_font.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_audio.c -o "${CACHE_DIR}/zenoo_audio.o"
+emcc -c -O2 -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" src/zenoo_ffi_shim.c -o "${CACHE_DIR}/zenoo_ffi_shim.o"
 
 # ビルドモード判定 (サイズより速度優先)
 #   BUILD_MODE=dev  (または fast) : -O1 (Clang最適化を軽量化し、ビルド時間を短縮)
@@ -90,7 +90,7 @@ emcc ${OPT_LEVEL} \
     --preload-file assets@/assets \
     -fmacro-prefix-map="${PWD}"=. \
     -fdebug-prefix-map="${PWD}"=. \
-    -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" \
+    -Iinclude -I"${SPINEL_DIR}/lib" \
     "${OUTPUT_DIR}/app.c" \
     "${CACHE_DIR}/zenoo_window.o" \
     "${CACHE_DIR}/zenoo_input.o" \
@@ -99,7 +99,7 @@ emcc ${OPT_LEVEL} \
     "${CACHE_DIR}/zenoo_gfx.o" \
     "${CACHE_DIR}/zenoo_font.o" \
     "${CACHE_DIR}/zenoo_audio.o" \
-    "${CACHE_DIR}/zenoo_spinel.o" \
+    "${CACHE_DIR}/zenoo_ffi_shim.o" \
     "${CACHE_DIR}/libspinel_rt.a" \
     -o "${OUTPUT_DIR}/index.html" \
     --shell-file "${SHELL_FILE}"

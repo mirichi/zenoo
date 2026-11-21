@@ -2,8 +2,8 @@
 # Zenoo バインダのロード
 # ====================================================
 if RUBY_ENGINE == "spinel"
-  # Spinel AOT 環境
-  require_relative '../ext/spinel/zenoo_native'
+  # Spinel AOT 環境 (FFI 宣言)
+  require_relative '../ext/spinel/zenoo_ffi'
 else
   # CRuby C拡張 (.so) 環境
   begin
@@ -12,6 +12,8 @@ else
     # ロードできなかった場合は呼び出し側で処理
   end
 end
+
+require_relative 'zenoo/native'
 
 # ==========================================
 # 共通 Ruby レイヤー (CRuby / Spinel 完全共通)

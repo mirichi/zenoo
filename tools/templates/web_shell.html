@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Zenoo App</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background-color: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      touch-action: none;
+    }
+    #canvas-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background-color: #000;
+    }
+    canvas.emscripten {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      outline: none;
+      background-color: #000;
+      touch-action: none;
+    }
+    #status {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 8px 16px;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      font-size: 13px;
+      color: #e2e8f0;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #btn-fullscreen {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 100;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #e2e8f0;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      touch-action: manipulation;
+      opacity: 0.6;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    #btn-fullscreen:hover, #btn-fullscreen:active {
+      opacity: 1.0;
+      background: rgba(30, 41, 59, 0.9);
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container" data-zenoo-touch-area>
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <div id="status">Loading...</div>
+    <button id="btn-fullscreen" data-zenoo-ui>全画面</button>
+  </div>
+
+  <script type="text/javascript">
+    var statusElement = document.getElementById('status');
+    var canvasElement = document.getElementById('canvas');
+    var containerElement = document.getElementById('canvas-container');
+    var btnFullscreen = document.getElementById('btn-fullscreen');
+
+    var Module = {
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
+      canvas: canvasElement,
+      setStatus: function(text) {
+        if (!text) {
+          statusElement.style.display = 'none';
+        } else {
+          statusElement.style.display = 'block';
+          statusElement.innerText = text;
+        }
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Loading... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : '');
+      }
+    };
+    Module.setStatus('Downloading...');
+
+    window.onerror = function() {
+      Module.setStatus('Exception thrown, see JavaScript console');
+    };
+
+    function updateFullscreenButton() {
+      var active = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      btnFullscreen.innerText = active ? '✕ 全画面解除' : '全画面';
+    }
+
+    function toggleFullscreen(e) {
+      if (e) e.preventDefault();
+      var fsElement = document.fullscreenElement || document.webkitFullscreenElement;
+      if (!fsElement) {
+        if (containerElement.requestFullscreen) {
+          containerElement.requestFullscreen().catch(function() {});
+        } else if (containerElement.webkitRequestFullscreen) {
+          containerElement.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(function() {});
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      }
+    }
+
+    btnFullscreen.addEventListener('click', toggleFullscreen);
+    document.addEventListener('fullscreenchange', updateFullscreenButton);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

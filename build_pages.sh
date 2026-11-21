@@ -231,7 +231,7 @@ needs_c_rebuild() {
     [ ! -f "$obj" ] && return 0
     [ "$src" -nt "$obj" ] && return 0
     local h
-    for h in include/*.h ext/spinel/*.h; do
+    for h in include/*.h; do
         [ -e "$h" ] && [ "$h" -nt "$obj" ] && return 0
     done
     return 1
@@ -242,7 +242,7 @@ build_c_kernel_obj() {
     local obj="$2"
     if needs_c_rebuild "$src" "$obj"; then
         wait_c_slot
-        emcc -c "${OPT_LEVEL}" -s USE_SDL=3 -Iinclude -Iext/spinel -I"${SPINEL_DIR}/lib" "$src" -o "$obj" &
+        emcc -c "${OPT_LEVEL}" -s USE_SDL=3 -Iinclude -I"${SPINEL_DIR}/lib" "$src" -o "$obj" &
         C_PIDS+=($!)
     fi
 }
@@ -254,7 +254,7 @@ build_c_kernel_obj "src/zenoo_image.c" "${CACHE_DIR}/zenoo_image.o"
 build_c_kernel_obj "src/zenoo_gfx.c" "${CACHE_DIR}/zenoo_gfx.o"
 build_c_kernel_obj "src/zenoo_font.c" "${CACHE_DIR}/zenoo_font.o"
 build_c_kernel_obj "src/zenoo_audio.c" "${CACHE_DIR}/zenoo_audio.o"
-build_c_kernel_obj "ext/spinel/zenoo_spinel.c" "${CACHE_DIR}/zenoo_spinel.o"
+build_c_kernel_obj "src/zenoo_ffi_shim.c" "${CACHE_DIR}/zenoo_ffi_shim.o"
 flush_c_jobs
 
 COMMON_EMCC_BASE_FLAGS=(
@@ -274,7 +274,7 @@ COMMON_EMCC_BASE_FLAGS=(
     -fdebug-prefix-map="${PWD}"=.
     -fmacro-prefix-map="${STAGE_DIR}"=.
     -fdebug-prefix-map="${STAGE_DIR}"=.
-    -I"${STAGE_DIR}/include" -I"${STAGE_DIR}/ext/spinel" -I"${SPINEL_DIR}/lib"
+    -I"${STAGE_DIR}/include" -I"${SPINEL_DIR}/lib"
 )
 
 COMMON_EMCC_FLAGS=(
@@ -290,7 +290,7 @@ COMMON_OBJS=(
     "${CACHE_DIR}/zenoo_gfx.o"
     "${CACHE_DIR}/zenoo_font.o"
     "${CACHE_DIR}/zenoo_audio.o"
-    "${CACHE_DIR}/zenoo_spinel.o"
+    "${CACHE_DIR}/zenoo_ffi_shim.o"
     "${CACHE_DIR}/libspinel_rt.a"
 )
 

@@ -1,1980 +1,1652 @@
+/*
+ * AUTO-GENERATED FILE — DO NOT EDIT DIRECTLY.
+ * Generated from ext/spinel/zenoo_ffi.rb by tools/generate_cruby_ext.rb
+ */
 #include <ruby.h>
-#include "zenoo.h"
+#include <stdint.h>
+#include "../../include/zenoo.h"
 
-static VALUE rb_mZenoo;
-static VALUE rb_mNative;
-static VALUE rb_cNativeImage;
-static VALUE rb_cNativeShader;
-static VALUE rb_cNativeMesh;
-static VALUE rb_cNativeFont;
-static VALUE rb_cNativeSound;
 static VALUE s_frame_callback_proc = Qnil;
-static int   s_pending_jump_tag = 0;
+static int s_pending_jump_tag = 0;
 
-
-// ==========================================
-// GC トリガーコールバック
-// ==========================================
 static void rb_zenoo_gc_hook(void) {
     rb_gc();
 }
 
-// ==========================================
-// Zenoo::Native::Image (TypedData)
-// ==========================================
-static void image_free(void* ptr) {
-    ZenImage* img = (ZenImage*)ptr;
-    if (img) {
-        zen_image_destroy(img);
-    }
+static VALUE call_frame_callback_protected(VALUE arg) {
+    return rb_funcall(arg, rb_intern("call"), 0);
 }
 
-static size_t image_memsize(const void* ptr) {
-    return ptr ? sizeof(ZenImage) : 0;
-}
-
-static const rb_data_type_t zenoo_image_data_type = {
-    .wrap_struct_name = "Zenoo::Native::Image",
-    .function = {
-        .dmark = NULL,
-        .dfree = image_free,
-        .dsize = image_memsize,
-    },
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
-};
-
-static VALUE image_allocate(VALUE klass) {
-    return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, NULL);
-}
-
-static int parse_filter_value(VALUE val) {
-    if (SYMBOL_P(val)) {
-        ID id = SYM2ID(val);
-        if (id == rb_intern("nearest")) return ZEN_FILTER_NEAREST;
-        if (id == rb_intern("linear")) return ZEN_FILTER_LINEAR;
-    } else if (FIXNUM_P(val)) {
-        return FIX2INT(val);
-    }
-    return ZEN_FILTER_LINEAR;
-}
-
-static VALUE filter_to_sym(int filter) {
-    return (filter == ZEN_FILTER_NEAREST) ? ID2SYM(rb_intern("nearest")) : ID2SYM(rb_intern("linear"));
-}
-
-static VALUE image_init(int argc, VALUE* argv, VALUE self) {
-    VALUE rb_w, rb_h, rb_opt1, rb_opt2;
-    int count = rb_scan_args(argc, argv, "22", &rb_w, &rb_h, &rb_opt1, &rb_opt2);
-
-    int w = NUM2INT(rb_w);
-    int h = NUM2INT(rb_h);
-    VALUE rb_filter = Qnil;
-    int msaa_samples = 0;
-
-    if (count >= 3 && RB_TYPE_P(rb_opt1, T_HASH)) {
-        VALUE v_filter = rb_hash_aref(rb_opt1, ID2SYM(rb_intern("filter")));
-        if (!NIL_P(v_filter)) rb_filter = v_filter;
-        VALUE v_msaa = rb_hash_aref(rb_opt1, ID2SYM(rb_intern("msaa")));
-        if (RTEST(v_msaa)) {
-            msaa_samples = (FIXNUM_P(v_msaa)) ? FIX2INT(v_msaa) : 4;
-        }
-    } else {
-        if (count >= 3 && !NIL_P(rb_opt1)) {
-            rb_filter = rb_opt1;
-        }
-        if (count >= 4 && !NIL_P(rb_opt2)) {
-            if (RB_TYPE_P(rb_opt2, T_HASH)) {
-                VALUE v_msaa = rb_hash_aref(rb_opt2, ID2SYM(rb_intern("msaa")));
-                if (RTEST(v_msaa)) {
-                    msaa_samples = (FIXNUM_P(v_msaa)) ? FIX2INT(v_msaa) : 4;
-                }
-            } else if (RTEST(rb_opt2)) {
-                msaa_samples = (FIXNUM_P(rb_opt2)) ? FIX2INT(rb_opt2) : 4;
-            }
-        }
-    }
-
-    ZenImage* img = (msaa_samples > 0) ? zen_image_create_msaa(w, h, msaa_samples) : zen_image_create(w, h);
-    if (!img) {
-        rb_raise(rb_eRuntimeError, "Failed to create Image (%dx%d)", w, h);
-    }
-    if (!NIL_P(rb_filter)) {
-        zen_image_set_filter(img, parse_filter_value(rb_filter));
-    }
-    DATA_PTR(self) = img;
-    return self;
-}
-
-static VALUE image_get_msaa(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    return (img && img->msaa_samples > 0) ? Qtrue : Qfalse;
-}
-
-static VALUE image_get_msaa_samples(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    return img ? INT2NUM(img->msaa_samples) : INT2NUM(0);
-}
-
-static VALUE image_s_load(int argc, VALUE* argv, VALUE klass) {
-    VALUE rb_path, rb_filter;
-    rb_scan_args(argc, argv, "11", &rb_path, &rb_filter);
-
-    const char* path = StringValueCStr(rb_path);
-    ZenImage* img = zen_image_load(path);
-    if (!img) {
-        rb_raise(rb_eRuntimeError, "Failed to load image from file: %s", path);
-    }
-    if (!NIL_P(rb_filter)) {
-        zen_image_set_filter(img, parse_filter_value(rb_filter));
-    }
-    return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
-}
-
-static VALUE image_s_create_format(VALUE klass, VALUE rb_w, VALUE rb_h, VALUE rb_format) {
-    int w = NUM2INT(rb_w);
-    int h = NUM2INT(rb_h);
-    int format = NUM2INT(rb_format);
-    ZenImage* img = zen_image_create_format(w, h, format);
-    if (!img) {
-        rb_raise(rb_eRuntimeError, "Failed to create formatted Image (%dx%d, format=%d)", w, h, format);
-    }
-    return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
-}
-
-static VALUE image_s_create_r8(VALUE klass, VALUE rb_w, VALUE rb_h) {
-    int w = NUM2INT(rb_w);
-    int h = NUM2INT(rb_h);
-    ZenImage* img = zen_image_create_format(w, h, ZEN_IMAGE_FORMAT_R8);
-    if (!img) {
-        rb_raise(rb_eRuntimeError, "Failed to create R8 Image (%dx%d)", w, h);
-    }
-    return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
-}
-
-static VALUE image_s_create_msaa(int argc, VALUE* argv, VALUE klass) {
-    VALUE rb_w, rb_h, rb_samples;
-    int count = rb_scan_args(argc, argv, "21", &rb_w, &rb_h, &rb_samples);
-    int w = NUM2INT(rb_w);
-    int h = NUM2INT(rb_h);
-    int samples = (count >= 3 && !NIL_P(rb_samples)) ? NUM2INT(rb_samples) : 4;
-    ZenImage* img = zen_image_create_msaa(w, h, samples);
-    if (!img) {
-        rb_raise(rb_eRuntimeError, "Failed to create MSAA Image (%dx%d, samples=%d)", w, h, samples);
-    }
-    return TypedData_Wrap_Struct(klass, &zenoo_image_data_type, img);
-}
-
-static VALUE image_set_filter(VALUE self, VALUE rb_filter) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    zen_image_set_filter(img, parse_filter_value(rb_filter));
-    return rb_filter;
-}
-
-static VALUE image_get_filter(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    return filter_to_sym(zen_image_get_filter(img));
-}
-
-static VALUE image_s_set_default_filter(VALUE klass, VALUE rb_filter) {
-    (void)klass;
-    zen_set_default_texture_filter(parse_filter_value(rb_filter));
-    return rb_filter;
-}
-
-static VALUE image_s_get_default_filter(VALUE klass) {
-    (void)klass;
-    return filter_to_sym(zen_get_default_texture_filter());
-}
-
-static VALUE image_replace_texture(VALUE self, VALUE rb_other) {
-    ZenImage* dst;
-    ZenImage* src;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, dst);
-    TypedData_Get_Struct(rb_other, ZenImage, &zenoo_image_data_type, src);
-    zen_image_replace_texture(dst, src);
-    return self;
-}
-
-static VALUE image_get_width(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    int w = 0, h = 0;
-    zen_image_get_size(img, &w, &h);
-    return INT2NUM(w);
-}
-
-static VALUE image_get_height(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    int w = 0, h = 0;
-    zen_image_get_size(img, &w, &h);
-    return INT2NUM(h);
-}
-
-static VALUE image_set_as_render_target(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    zen_set_render_target(img);
-    return Qnil;
-}
-
-static VALUE image_s_reset_render_target(VALUE klass) {
-    (void)klass;
-    zen_set_render_target(NULL);
-    return Qnil;
-}
-
-static VALUE image_sub_image(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_w, VALUE rb_h) {
-    ZenImage* parent;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, parent);
-    int x = NUM2INT(rb_x);
-    int y = NUM2INT(rb_y);
-    int w = NUM2INT(rb_w);
-    int h = NUM2INT(rb_h);
-
-    ZenImage* sub = zen_image_sub_image(parent, x, y, w, h);
-    if (!sub) {
-        rb_raise(rb_eRuntimeError, "Failed to create SubImage (%d, %d, %dx%d)", x, y, w, h);
-    }
-    return TypedData_Wrap_Struct(rb_obj_class(self), &zenoo_image_data_type, sub);
-}
-
-static VALUE image_get_x(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    return INT2NUM(img ? img->x : 0);
-}
-
-static VALUE image_get_y(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    return INT2NUM(img ? img->y : 0);
-}
-
-static VALUE image_get_texture_width(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    int tw = 0, th = 0;
-    zen_image_get_texture_size(img, &tw, &th);
-    return INT2NUM(tw);
-}
-
-static VALUE image_get_texture_height(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    int tw = 0, th = 0;
-    zen_image_get_texture_size(img, &tw, &th);
-    return INT2NUM(th);
-}
-
-static VALUE image_get_texture_id(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    return UINT2NUM(zen_image_get_texture_id(img));
-}
-
-static VALUE image_get_uv(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    float u = 0.0f, v = 0.0f, uw = 1.0f, vh = 1.0f;
-    zen_image_get_uv(img, &u, &v, &uw, &vh);
-    return rb_ary_new_from_args(4, DBL2NUM(u), DBL2NUM(v), DBL2NUM(uw), DBL2NUM(vh));
-}
-
-static VALUE image_is_sub_image(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    if (!img || !img->texture) return Qfalse;
-    if (img->x != 0 || img->y != 0 ||
-        img->width != img->texture->width ||
-        img->height != img->texture->height) {
-        return Qtrue;
-    }
-    return Qfalse;
-}
-
-static VALUE image_get_pixel(VALUE self, VALUE rb_x, VALUE rb_y) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    int x = NUM2INT(rb_x);
-    int y = NUM2INT(rb_y);
-    uint32_t col = zen_image_get_pixel(img, x, y);
-    return UINT2NUM(col);
-}
-
-static VALUE image_set_pixel(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_color) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    int x = NUM2INT(rb_x);
-    int y = NUM2INT(rb_y);
-    uint32_t col = (uint32_t)NUM2LL(rb_color);
-    zen_image_set_pixel(img, x, y, col);
-    return self;
-}
-
-static VALUE image_set_pixel_rgba(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_r, VALUE rb_g, VALUE rb_b, VALUE rb_a) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    int x = NUM2INT(rb_x);
-    int y = NUM2INT(rb_y);
-    uint32_t r = (uint32_t)(NUM2INT(rb_r) & 0xFF);
-    uint32_t g = (uint32_t)(NUM2INT(rb_g) & 0xFF);
-    uint32_t b = (uint32_t)(NUM2INT(rb_b) & 0xFF);
-    uint32_t a = (uint32_t)(NUM2INT(rb_a) & 0xFF);
-    uint32_t col = (a << 24) | (b << 16) | (g << 8) | r;
-    zen_image_set_pixel(img, x, y, col);
-    return self;
-}
-
-static VALUE image_get_pixels(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    if (!img || img->width <= 0 || img->height <= 0) return rb_str_new("", 0);
-    size_t size = (size_t)img->width * (size_t)img->height * sizeof(uint32_t);
-    VALUE str = rb_str_new(NULL, size);
-    zen_image_get_pixels(img, (uint32_t*)RSTRING_PTR(str));
-    return str;
-}
-
-static VALUE image_set_pixels(VALUE self, VALUE rb_buf) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    if (!img) return self;
-    StringValue(rb_buf);
-    long required = (long)((size_t)img->width * (size_t)img->height * sizeof(uint32_t));
-    if (RSTRING_LEN(rb_buf) < required) {
-        rb_raise(rb_eArgError, "Pixel buffer too short (expected %ld bytes, got %ld)", required, RSTRING_LEN(rb_buf));
-    }
-    zen_image_set_pixels(img, (const uint32_t*)RSTRING_PTR(rb_buf));
-    return self;
-}
-
-static VALUE image_sync(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    zen_image_sync_to_gpu(img);
-    return self;
-}
-
-static VALUE image_clone(VALUE self) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    ZenImage* clone = zen_image_clone(img);
-    if (!clone) {
-        rb_raise(rb_eRuntimeError, "Failed to clone Image");
-    }
-    return TypedData_Wrap_Struct(rb_obj_class(self), &zenoo_image_data_type, clone);
-}
-
-static VALUE image_save(VALUE self, VALUE rb_path) {
-    ZenImage* img;
-    TypedData_Get_Struct(self, ZenImage, &zenoo_image_data_type, img);
-    const char* path = StringValueCStr(rb_path);
-    int ok = zen_image_save(img, path);
-    return ok ? Qtrue : Qfalse;
-}
-
-// ==========================================
-// Zenoo::Native::Shader (TypedData)
-// ==========================================
-static void shader_free(void* ptr) {
-    ZenShader* shader = (ZenShader*)ptr;
-    if (shader) {
-        zen_shader_destroy(shader);
-    }
-}
-
-static const rb_data_type_t zenoo_shader_data_type = {
-    .wrap_struct_name = "Zenoo::Native::Shader",
-    .function = {
-        .dmark = NULL,
-        .dfree = shader_free,
-        .dsize = NULL,
-    },
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
-};
-
-static VALUE shader_allocate(VALUE klass) {
-    return TypedData_Wrap_Struct(klass, &zenoo_shader_data_type, NULL);
-}
-
-static VALUE shader_init(VALUE self, VALUE rb_vert, VALUE rb_frag) {
-    const char* vert = (NIL_P(rb_vert)) ? NULL : StringValueCStr(rb_vert);
-    const char* frag = (NIL_P(rb_frag)) ? NULL : StringValueCStr(rb_frag);
-
-    ZenShader* shader = zen_shader_create(vert, frag);
-    if (!shader) {
-        rb_raise(rb_eRuntimeError, "Failed to compile/link Shader");
-    }
-    DATA_PTR(self) = shader;
-    return self;
-}
-
-static VALUE shader_set_int(VALUE self, VALUE rb_name, VALUE rb_val) {
-    ZenShader* shader;
-    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
-    zen_shader_set_int(shader, StringValueCStr(rb_name), NUM2INT(rb_val));
-    return Qnil;
-}
-
-static VALUE shader_set_float(VALUE self, VALUE rb_name, VALUE rb_val) {
-    ZenShader* shader;
-    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
-    zen_shader_set_float(shader, StringValueCStr(rb_name), (float)NUM2DBL(rb_val));
-    return Qnil;
-}
-
-static VALUE shader_set_vec2(VALUE self, VALUE rb_name, VALUE rb_x, VALUE rb_y) {
-    ZenShader* shader;
-    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
-    zen_shader_set_vec2(shader, StringValueCStr(rb_name), (float)NUM2DBL(rb_x), (float)NUM2DBL(rb_y));
-    return Qnil;
-}
-
-static VALUE shader_set_vec3(VALUE self, VALUE rb_name, VALUE rb_x, VALUE rb_y, VALUE rb_z) {
-    ZenShader* shader;
-    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
-    zen_shader_set_vec3(shader, StringValueCStr(rb_name), (float)NUM2DBL(rb_x), (float)NUM2DBL(rb_y), (float)NUM2DBL(rb_z));
-    return Qnil;
-}
-
-static VALUE shader_set_vec4(VALUE self, VALUE rb_name, VALUE rb_x, VALUE rb_y, VALUE rb_z, VALUE rb_w) {
-    ZenShader* shader;
-    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
-    zen_shader_set_vec4(shader, StringValueCStr(rb_name), (float)NUM2DBL(rb_x), (float)NUM2DBL(rb_y), (float)NUM2DBL(rb_z), (float)NUM2DBL(rb_w));
-    return Qnil;
-}
-
-static VALUE shader_set_vec4_array(VALUE self, VALUE rb_name, VALUE rb_data) {
-    ZenShader* shader;
-    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
-    if (RB_TYPE_P(rb_data, T_STRING)) {
-        int count = (int)(RSTRING_LEN(rb_data) / (4 * sizeof(float)));
-        if (count > 0) {
-            zen_shader_set_vec4_array(shader, StringValueCStr(rb_name), count, (const float*)RSTRING_PTR(rb_data));
-        }
-    } else if (RB_TYPE_P(rb_data, T_ARRAY)) {
-        long len = RARRAY_LEN(rb_data);
-        int count = (int)(len / 4);
-        if (count > 0) {
-            float* buf = (float*)malloc(sizeof(float) * count * 4);
-            if (buf) {
-                for (int i = 0; i < count * 4; i++) {
-                    buf[i] = (float)NUM2DBL(rb_ary_entry(rb_data, i));
-                }
-                zen_shader_set_vec4_array(shader, StringValueCStr(rb_name), count, buf);
-                free(buf);
-            }
-        }
-    } else {
-        rb_raise(rb_eArgError, "Expected packed float String or flat Array of floats for vec4_array");
-    }
-    return Qnil;
-}
-
-static VALUE shader_set_mat4(VALUE self, VALUE rb_name, VALUE rb_mat) {
-    ZenShader* shader;
-    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
-    float m[16];
-    if (RB_TYPE_P(rb_mat, T_ARRAY) && RARRAY_LEN(rb_mat) >= 16) {
-        for (int i = 0; i < 16; i++) {
-            m[i] = (float)NUM2DBL(rb_ary_entry(rb_mat, i));
-        }
-    } else if (RB_TYPE_P(rb_mat, T_STRING) && RSTRING_LEN(rb_mat) >= (long)(16 * sizeof(float))) {
-        memcpy(m, RSTRING_PTR(rb_mat), 16 * sizeof(float));
-    } else {
-        rb_raise(rb_eArgError, "Expected 16-element Array of floats or packed String for mat4");
-    }
-    zen_shader_set_mat4(shader, StringValueCStr(rb_name), m);
-    return Qnil;
-}
-
-static VALUE shader_set_texture(VALUE self, VALUE rb_name, VALUE rb_unit, VALUE rb_img) {
-    ZenShader* shader;
-    TypedData_Get_Struct(self, ZenShader, &zenoo_shader_data_type, shader);
-    ZenImage* img = NULL;
-    if (rb_obj_is_kind_of(rb_img, rb_cNativeImage)) {
-        TypedData_Get_Struct(rb_img, ZenImage, &zenoo_image_data_type, img);
-    }
-    zen_shader_set_texture(shader, StringValueCStr(rb_name), NUM2INT(rb_unit), img);
-    return Qnil;
-}
-
-// ==========================================
-// Zenoo::Native::Font (TypedData)
-// ==========================================
-static void font_free(void* ptr) {
-    ZenFont* font = (ZenFont*)ptr;
-    if (font) {
-        zen_font_destroy(font);
-    }
-}
-
-static const rb_data_type_t zenoo_font_data_type = {
-    .wrap_struct_name = "Zenoo::Native::Font",
-    .function = {
-        .dmark = NULL,
-        .dfree = font_free,
-        .dsize = NULL,
-    },
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
-};
-
-static VALUE font_allocate(VALUE klass) {
-    return TypedData_Wrap_Struct(klass, &zenoo_font_data_type, NULL);
-}
-
-static VALUE font_s_load(int argc, VALUE* argv, VALUE klass) {
-    VALUE rb_path, rb_index;
-    rb_scan_args(argc, argv, "11", &rb_path, &rb_index);
-    const char* path = StringValueCStr(rb_path);
-    int index = NIL_P(rb_index) ? 0 : NUM2INT(rb_index);
-    ZenFont* font = zen_font_load(path, index);
-    if (!font) {
-        rb_raise(rb_eRuntimeError, "Failed to load Font from file: %s (index: %d)", path, index);
-    }
-    return TypedData_Wrap_Struct(klass, &zenoo_font_data_type, font);
-}
-
-static VALUE font_get_glyph(int argc, VALUE* argv, VALUE self) {
-    VALUE rb_cp, rb_size, rb_mode, rb_r_scale;
-    rb_scan_args(argc, argv, "22", &rb_cp, &rb_size, &rb_mode, &rb_r_scale);
-
-    ZenFont* font;
-    TypedData_Get_Struct(self, ZenFont, &zenoo_font_data_type, font);
-
-    int cp = NUM2INT(rb_cp);
-    float size = (float)NUM2DBL(rb_size);
-    int mode = NIL_P(rb_mode) ? ZEN_FONT_MODE_AUTO : NUM2INT(rb_mode);
-    float r_scale = NIL_P(rb_r_scale) ? 1.0f : (float)NUM2DBL(rb_r_scale);
-
-    ZenGlyph g;
-    int ok = zen_font_get_glyph(font, cp, size, mode, r_scale, &g);
-    if (!ok) {
-        return Qnil;
-    }
-
-    VALUE ary = rb_ary_new_capa(11);
-    rb_ary_push(ary, g.visible ? Qtrue : Qfalse);
-    rb_ary_push(ary, DBL2NUM(g.u0));
-    rb_ary_push(ary, DBL2NUM(g.v0));
-    rb_ary_push(ary, DBL2NUM(g.u1));
-    rb_ary_push(ary, DBL2NUM(g.v1));
-    rb_ary_push(ary, DBL2NUM(g.x0));
-    rb_ary_push(ary, DBL2NUM(g.y0));
-    rb_ary_push(ary, DBL2NUM(g.x1));
-    rb_ary_push(ary, DBL2NUM(g.y1));
-    rb_ary_push(ary, DBL2NUM(g.advance_x));
-    rb_ary_push(ary, g.is_bitmap ? Qtrue : Qfalse);
-    return ary;
-}
-
-static VALUE font_get_metrics(VALUE self, VALUE rb_size) {
-    ZenFont* font;
-    TypedData_Get_Struct(self, ZenFont, &zenoo_font_data_type, font);
-
-    float size = (float)NUM2DBL(rb_size);
-    float ascent = 0, descent = 0, line_gap = 0;
-    zen_font_get_metrics(font, size, &ascent, &descent, &line_gap);
-
-    return rb_ary_new_from_args(3, DBL2NUM(ascent), DBL2NUM(descent), DBL2NUM(line_gap));
-}
-
-static VALUE font_helper_s_set_atlas_image(VALUE klass, VALUE rb_img) {
-    (void)klass;
-    ZenImage* img = NULL;
-    if (rb_obj_is_kind_of(rb_img, rb_cNativeImage)) {
-        TypedData_Get_Struct(rb_img, ZenImage, &zenoo_image_data_type, img);
-    }
-    if (img) {
-        zen_font_set_atlas_image(img);
-    }
-    return Qnil;
-}
-
-static VALUE font_helper_s_atlas_generation(VALUE klass) {
-    (void)klass;
-    return UINT2NUM(zen_font_atlas_generation());
-}
-
-static VALUE font_s_atlas_image(VALUE klass) {
-    (void)klass;
-    if (rb_const_defined(rb_mZenoo, rb_intern("Font"))) {
-        VALUE cFont = rb_const_get(rb_mZenoo, rb_intern("Font"));
-        return rb_funcall(cFont, rb_intern("atlas_image"), 0);
-    }
-    return Qnil;
-}
-
-// ==========================================
-// Zenoo::Native::Window
-// ==========================================
-static int parse_scale_mode(VALUE val) {
-    if (SYMBOL_P(val)) {
-        ID id = SYM2ID(val);
-        if (id == rb_intern("resize")) return ZEN_SCALE_RESIZE;
-        if (id == rb_intern("integer")) return ZEN_SCALE_INTEGER;
-        if (id == rb_intern("fit")) return ZEN_SCALE_FIT;
-    } else if (FIXNUM_P(val)) {
-        return FIX2INT(val);
-    }
-    return ZEN_SCALE_FIT;
-}
-
-static VALUE scale_mode_to_sym(int mode) {
-    if (mode == ZEN_SCALE_RESIZE) return ID2SYM(rb_intern("resize"));
-    if (mode == ZEN_SCALE_INTEGER) return ID2SYM(rb_intern("integer"));
-    return ID2SYM(rb_intern("fit"));
-}
-
-static VALUE win_init(int argc, VALUE* argv, VALUE self) {
-    (void)self;
-    VALUE rb_w, rb_h, rb_title, rb_fullscreen, rb_win_w, rb_win_h, rb_scale_mode, rb_scale;
-    rb_scan_args(argc, argv, "26", &rb_w, &rb_h, &rb_title, &rb_fullscreen, &rb_win_w, &rb_win_h, &rb_scale_mode, &rb_scale);
-
-    int w = NUM2INT(rb_w);
-    int h = NUM2INT(rb_h);
-    const char* title = NIL_P(rb_title) ? "Zenoo" : StringValueCStr(rb_title);
-    int fullscreen = RTEST(rb_fullscreen);
-    if (!fullscreen && (w <= 0 || h <= 0)) {
-        rb_raise(rb_eArgError, "Window width and height must be positive");
-    }
-    int win_w = NIL_P(rb_win_w) ? 0 : NUM2INT(rb_win_w);
-    int win_h = NIL_P(rb_win_h) ? 0 : NUM2INT(rb_win_h);
-    double init_scale = NIL_P(rb_scale) ? 1.0 : NUM2DBL(rb_scale);
-
-    if (!NIL_P(rb_scale_mode)) {
-        zen_set_scale_mode(parse_scale_mode(rb_scale_mode));
-    }
-
-    int ok = fullscreen ? zen_init_fullscreen(title) : zen_init_scaled_ex(w, h, title, win_w, win_h, (float)init_scale);
-    if (!ok) {
-        rb_raise(rb_eRuntimeError, "Failed to initialize Zenoo Window");
-    }
-    return Qtrue;
-}
-
-static VALUE win_set_scale_mode(VALUE self, VALUE rb_mode) {
-    (void)self;
-    zen_set_scale_mode(parse_scale_mode(rb_mode));
-    return rb_mode;
-}
-
-static VALUE win_get_scale_mode(VALUE self) {
-    (void)self;
-    return scale_mode_to_sym(zen_get_scale_mode());
-}
-
-static VALUE win_get_scale(VALUE self) {
-    (void)self;
-    return DBL2NUM((double)zen_get_scale());
-}
-
-static VALUE win_set_scale(VALUE self, VALUE rb_scale) {
-    (void)self;
-    zen_set_window_scale((float)NUM2DBL(rb_scale));
-    return rb_scale;
-}
-
-static VALUE win_get_window_scale(VALUE self) {
-    (void)self;
-    return DBL2NUM((double)zen_get_window_scale());
-}
-
-static VALUE win_get_dpi_scale(VALUE self) {
-    (void)self;
-    return DBL2NUM((double)zen_get_dpi_scale());
-}
-
-static VALUE win_set_window_size(VALUE self, VALUE rb_w, VALUE rb_h) {
-    (void)self;
-    zen_set_window_size(NUM2INT(rb_w), NUM2INT(rb_h));
-    return Qnil;
-}
-
-static VALUE win_set_msaa_samples(VALUE self, VALUE rb_samples) {
-    (void)self;
-    int samples = NUM2INT(rb_samples);
-    zen_window_set_msaa_samples(samples);
-    return rb_samples;
-}
-
-static VALUE win_get_msaa_samples(VALUE self) {
-    (void)self;
-    return INT2NUM(zen_window_get_msaa_samples());
-}
-
-static VALUE win_get_os_window_size(VALUE self) {
-    (void)self;
-    int w = 0, h = 0;
-    zen_get_window_size(&w, &h);
-    return rb_ary_new_from_args(2, INT2NUM(w), INT2NUM(h));
-}
-
-static VALUE win_set_title(VALUE self, VALUE rb_title) {
-    (void)self;
-    Check_Type(rb_title, T_STRING);
-    zen_set_window_title(StringValueCStr(rb_title));
-    return rb_title;
-}
-
-static VALUE win_get_title(VALUE self) {
-    (void)self;
-    return rb_str_new_cstr(zen_get_window_title());
-}
-
-static VALUE win_get_window_pos(VALUE self) {
-    (void)self;
-    int x = 0, y = 0;
-    zen_get_window_pos(&x, &y);
-    return rb_ary_new_from_args(2, INT2NUM(x), INT2NUM(y));
-}
-
-static VALUE win_set_window_pos(VALUE self, VALUE rb_x, VALUE rb_y) {
-    (void)self;
-    zen_set_window_pos(NUM2INT(rb_x), NUM2INT(rb_y));
-    return Qnil;
-}
-
-static VALUE win_is_focused(VALUE self) {
-    (void)self;
-    return zen_is_window_focused() ? Qtrue : Qfalse;
-}
-
-static VALUE win_is_minimized(VALUE self) {
-    (void)self;
-    return zen_is_window_minimized() ? Qtrue : Qfalse;
-}
-
-static VALUE win_is_maximized(VALUE self) {
-    (void)self;
-    return zen_is_window_maximized() ? Qtrue : Qfalse;
-}
-
-static VALUE win_is_hovered(VALUE self) {
-    (void)self;
-    return zen_is_window_hovered() ? Qtrue : Qfalse;
-}
-
-static VALUE win_is_resizing(VALUE self) {
-    (void)self;
-    return zen_is_resizing() ? Qtrue : Qfalse;
-}
-
-static VALUE win_set_live_resize(VALUE self, VALUE rb_val) {
-    (void)self;
-    zen_set_live_resize(RTEST(rb_val) ? 1 : 0);
-    return rb_val;
-}
-
-static VALUE win_get_live_resize(VALUE self) {
-    (void)self;
-    return zen_get_live_resize() ? Qtrue : Qfalse;
-}
-
-static VALUE call_frame_proc_protected(VALUE proc) {
-    return rb_funcall(proc, rb_intern("call"), 0);
-}
-
-static void cruby_frame_callback_wrapper(void) {
-    if (NIL_P(s_frame_callback_proc) || s_pending_jump_tag != 0) return;
+static void rb_zenoo_frame_callback(void) {
+    if (NIL_P(s_frame_callback_proc)) return;
     int state = 0;
-    rb_protect(call_frame_proc_protected, s_frame_callback_proc, &state);
-    if (state != 0) {
+    rb_protect(call_frame_callback_protected, s_frame_callback_proc, &state);
+    if (state) {
         s_pending_jump_tag = state;
-        zen_set_frame_callback(NULL);
     }
 }
 
-static VALUE win_set_frame_callback(VALUE self, VALUE rb_proc) {
+/* ==========================================
+ * Special CRuby Handlers (Callback / GC / Buffer)
+ * ========================================== */
+static VALUE cruby_zen_set_frame_callback(VALUE self, VALUE cb) {
     (void)self;
-    if (NIL_P(rb_proc)) {
-        s_frame_callback_proc = Qnil;
+    s_frame_callback_proc = cb;
+    if (NIL_P(cb)) {
         zen_set_frame_callback(NULL);
     } else {
-        s_frame_callback_proc = rb_proc;
-        zen_set_frame_callback(cruby_frame_callback_wrapper);
+        zen_set_frame_callback(rb_zenoo_frame_callback);
     }
     return Qnil;
 }
 
-static VALUE win_show_cursor(VALUE self, VALUE rb_show) {
+static VALUE cruby_zen_ffi_clear_frame_callback(VALUE self) {
     (void)self;
-    zen_window_show_cursor(RTEST(rb_show) ? 1 : 0);
+    s_frame_callback_proc = Qnil;
+    zen_set_frame_callback(NULL);
     return Qnil;
 }
 
-static VALUE win_set_cursor(VALUE self, VALUE rb_shape) {
+static VALUE cruby_zen_run_loop(VALUE self, VALUE cb) {
     (void)self;
-    zen_window_set_cursor(NUM2INT(rb_shape));
-    return Qnil;
-}
-
-static VALUE input_get_clipboard(VALUE self) {
-    (void)self;
-    const char* s = zen_window_get_clipboard_string();
-    return rb_utf8_str_new_cstr(s ? s : "");
-}
-
-static VALUE input_set_clipboard(VALUE self, VALUE rb_text) {
-    (void)self;
-    const char* s = StringValueCStr(rb_text);
-    zen_window_set_clipboard_string(s);
-    return Qnil;
-}
-
-static VALUE win_update(VALUE self) {
-    (void)self;
+    s_frame_callback_proc = cb;
     s_pending_jump_tag = 0;
-    int res = zen_update();
-    if (s_pending_jump_tag != 0) {
+    zen_run_loop(NIL_P(cb) ? NULL : rb_zenoo_frame_callback);
+    if (s_pending_jump_tag) {
         int tag = s_pending_jump_tag;
         s_pending_jump_tag = 0;
         rb_jump_tag(tag);
     }
-    return res ? Qtrue : Qfalse;
-}
-
-static VALUE win_clear(VALUE self, VALUE rb_color) {
-    (void)self;
-    zen_clear((uint32_t)NUM2LL(rb_color));
     return Qnil;
 }
 
-static VALUE win_get_size(VALUE self) {
+static VALUE cruby_zen_update(VALUE self) {
     (void)self;
-    int w = 0, h = 0;
-    zen_get_screen_size(&w, &h);
-    return rb_ary_new_from_args(2, INT2NUM(w), INT2NUM(h));
-}
-
-static VALUE win_get_size_w(VALUE self) {
-    (void)self;
-    int w = 0, h = 0;
-    zen_get_screen_size(&w, &h);
-    return INT2NUM(w);
-}
-
-static VALUE win_get_size_h(VALUE self) {
-    (void)self;
-    int w = 0, h = 0;
-    zen_get_screen_size(&w, &h);
-    return INT2NUM(h);
-}
-
-static VALUE win_set_vsync(VALUE self, VALUE rb_vsync) {
-    (void)self;
-    int vsync = 0;
-    if (FIXNUM_P(rb_vsync)) {
-        vsync = (NUM2INT(rb_vsync) != 0) ? 1 : 0;
-    } else {
-        vsync = RTEST(rb_vsync) ? 1 : 0;
+    s_pending_jump_tag = 0;
+    int res = zen_update();
+    if (s_pending_jump_tag) {
+        int tag = s_pending_jump_tag;
+        s_pending_jump_tag = 0;
+        rb_jump_tag(tag);
     }
-    zen_set_vsync(vsync);
-    return rb_vsync;
+    return INT2NUM(res);
 }
 
-static VALUE win_set_target_fps(VALUE self, VALUE rb_fps) {
+static VALUE cruby_zen_set_gc_trigger_callback(VALUE self, VALUE cb) {
     (void)self;
-    int fps = 0;
-    if (RTEST(rb_fps)) {
-        fps = NUM2INT(rb_fps);
-        if (fps < 0) fps = 0;
+    (void)cb;
+    zen_set_gc_trigger_callback(rb_zenoo_gc_hook);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_image_get_pixels(VALUE self, VALUE v_ptr, VALUE v_byte_size) {
+    (void)self;
+    ZenImage* img = NIL_P(v_ptr) ? NULL : (ZenImage*)(uintptr_t)NUM2ULL(v_ptr);
+    int byte_size = NUM2INT(v_byte_size);
+    if (!img || byte_size <= 0) {
+        return rb_str_new("", 0);
     }
-    zen_set_target_fps(fps);
-    return rb_fps;
+    int w = zen_ffi_image_width(img);
+    int h = zen_ffi_image_height(img);
+    if (w <= 0 || h <= 0) {
+        return rb_str_new("", 0);
+    }
+    long required = (long)w * (long)h * 4L;
+    long alloc_size = ((long)byte_size > required) ? (long)byte_size : required;
+    VALUE str = rb_str_new(NULL, alloc_size);
+    zen_image_get_pixels(img, (uint32_t*)RSTRING_PTR(str));
+    if (alloc_size > required) {
+        rb_str_set_len(str, required);
+    }
+    return str;
 }
 
-static VALUE win_get_target_fps(VALUE self) {
+/* ==========================================
+ * Auto-generated FFI Wrappers
+ * ========================================== */
+
+static VALUE cruby_zen_get_version(VALUE self) {
     (void)self;
-    return INT2NUM(zen_get_target_fps());
+    const char* ret = zen_get_version();
+    return (ret) ? rb_utf8_str_new_cstr(ret) : Qnil;
 }
 
-static VALUE win_get_delta_time(VALUE self) {
+static VALUE cruby_zen_ensure_context(VALUE self) {
     (void)self;
-    return DBL2NUM(zen_get_delta_time());
+    int ret = zen_ensure_context();
+    return INT2NUM(ret);
 }
 
-static VALUE win_get_time(VALUE self) {
+static VALUE cruby_zen_ffi_win_init(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
     (void)self;
-    return DBL2NUM(zen_get_time());
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    VALUE s_arg2 = arg2; const char* c_arg2 = NIL_P(s_arg2) ? NULL : StringValueCStr(s_arg2);
+    int c_arg3 = NUM2INT(arg3);
+    int ret = zen_ffi_win_init(c_arg0, c_arg1, c_arg2, c_arg3);
+    return INT2NUM(ret);
 }
 
-static VALUE win_ensure_context(VALUE self) {
+static VALUE cruby_zen_ffi_win_init_scaled(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6) {
     (void)self;
-    return zen_ensure_context() ? Qtrue : Qfalse;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    VALUE s_arg2 = arg2; const char* c_arg2 = NIL_P(s_arg2) ? NULL : StringValueCStr(s_arg2);
+    int c_arg3 = NUM2INT(arg3);
+    int c_arg4 = NUM2INT(arg4);
+    int c_arg5 = NUM2INT(arg5);
+    float c_arg6 = (float)NUM2DBL(arg6);
+    int ret = zen_ffi_win_init_scaled(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6);
+    return INT2NUM(ret);
 }
 
-static VALUE win_shutdown(VALUE self) {
+static VALUE cruby_zen_shutdown(VALUE self) {
     (void)self;
     zen_shutdown();
     return Qnil;
 }
 
-static VALUE win_wasm_p(VALUE self) {
+static VALUE cruby_zen_toggle_fullscreen(VALUE self) {
     (void)self;
-    return Qfalse;
-}
-
-// ==========================================
-// Zenoo::Native::Input
-// ==========================================
-static VALUE input_key_pressed(VALUE self, VALUE rb_key) {
-    (void)self;
-    return zen_is_key_pressed(NUM2INT(rb_key)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_key_push(VALUE self, VALUE rb_key) {
-    (void)self;
-    return zen_is_key_push(NUM2INT(rb_key)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_key_release(VALUE self, VALUE rb_key) {
-    (void)self;
-    return zen_is_key_release(NUM2INT(rb_key)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_key_repeat(VALUE self, VALUE rb_key) {
-    (void)self;
-    return zen_is_key_repeat(NUM2INT(rb_key)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_mouse_pos(VALUE self) {
-    (void)self;
-    float x = 0, y = 0;
-    zen_get_mouse_pos(&x, &y);
-    return rb_ary_new_from_args(2, DBL2NUM(x), DBL2NUM(y));
-}
-
-static VALUE input_mouse_x(VALUE self) {
-    (void)self;
-    float x = 0, y = 0;
-    zen_get_mouse_pos(&x, &y);
-    return DBL2NUM(x);
-}
-
-static VALUE input_mouse_y(VALUE self) {
-    (void)self;
-    float x = 0, y = 0;
-    zen_get_mouse_pos(&x, &y);
-    return DBL2NUM(y);
-}
-
-static VALUE input_mouse_pressed(VALUE self, VALUE rb_btn) {
-    (void)self;
-    return zen_is_mouse_pressed(NUM2INT(rb_btn)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_mouse_push(VALUE self, VALUE rb_btn) {
-    (void)self;
-    return zen_is_mouse_push(NUM2INT(rb_btn)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_mouse_release(VALUE self, VALUE rb_btn) {
-    (void)self;
-    return zen_is_mouse_release(NUM2INT(rb_btn)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_mouse_wheel_x(VALUE self) {
-    (void)self;
-    return DBL2NUM(zen_get_mouse_wheel_x());
-}
-
-static VALUE input_mouse_wheel_y(VALUE self) {
-    (void)self;
-    return DBL2NUM(zen_get_mouse_wheel_y());
-}
-
-static VALUE input_gamepad_connected(VALUE self, VALUE rb_id) {
-    (void)self;
-    return zen_is_gamepad_connected(NUM2INT(rb_id)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_gamepad_axis(VALUE self, VALUE rb_id, VALUE rb_axis) {
-    (void)self;
-    float val = zen_get_gamepad_axis(NUM2INT(rb_id), NUM2INT(rb_axis));
-    return DBL2NUM((double)val);
-}
-
-static VALUE input_gamepad_button_pressed(VALUE self, VALUE rb_id, VALUE rb_button) {
-    (void)self;
-    return zen_is_gamepad_button_pressed(NUM2INT(rb_id), NUM2INT(rb_button)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_gamepad_button_push(VALUE self, VALUE rb_id, VALUE rb_button) {
-    (void)self;
-    return zen_is_gamepad_button_push(NUM2INT(rb_id), NUM2INT(rb_button)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_gamepad_button_release(VALUE self, VALUE rb_id, VALUE rb_button) {
-    (void)self;
-    return zen_is_gamepad_button_release(NUM2INT(rb_id), NUM2INT(rb_button)) ? Qtrue : Qfalse;
-}
-
-static VALUE input_vibrate_gamepad(VALUE self, VALUE rb_id, VALUE rb_strong, VALUE rb_weak, VALUE rb_duration) {
-    (void)self;
-    zen_gamepad_vibrate(NUM2INT(rb_id), (float)NUM2DBL(rb_strong), (float)NUM2DBL(rb_weak), (float)NUM2DBL(rb_duration));
+    zen_toggle_fullscreen();
     return Qnil;
 }
 
-static VALUE input_vibrate(VALUE self, VALUE rb_duration) {
+static VALUE cruby_zen_begin_frame(VALUE self) {
     (void)self;
-    zen_vibrate((float)NUM2DBL(rb_duration));
+    int ret = zen_begin_frame();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_end_frame(VALUE self) {
+    (void)self;
+    zen_end_frame();
     return Qnil;
 }
 
-static int zen_ext_utf32_to_utf8(uint32_t cp, char* out) {
-    if (cp <= 0x7F) {
-        out[0] = (char)cp;
-        out[1] = '\0';
-        return 1;
-    } else if (cp <= 0x7FF) {
-        out[0] = (char)(0xC0 | (cp >> 6));
-        out[1] = (char)(0x80 | (cp & 0x3F));
-        out[2] = '\0';
-        return 2;
-    } else if (cp <= 0xFFFF) {
-        out[0] = (char)(0xE0 | (cp >> 12));
-        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        out[2] = (char)(0x80 | (cp & 0x3F));
-        out[3] = '\0';
-        return 3;
-    } else if (cp <= 0x10FFFF) {
-        out[0] = (char)(0xF0 | (cp >> 18));
-        out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-        out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        out[3] = (char)(0x80 | (cp & 0x3F));
-        out[4] = '\0';
-        return 4;
-    }
-    return 0;
-}
-
-static VALUE input_input_chars(VALUE self) {
+static VALUE cruby_zen_clear(VALUE self, VALUE arg0) {
     (void)self;
-    uint32_t buf[64];
-    int count = zen_get_char_queue(buf, 64);
-    VALUE ary = rb_ary_new_capa(count);
-    char utf8_buf[8];
-    for (int i = 0; i < count; i++) {
-        int len = zen_ext_utf32_to_utf8(buf[i], utf8_buf);
-        if (len > 0) {
-            rb_ary_push(ary, rb_utf8_str_new(utf8_buf, len));
-        }
-    }
-    return ary;
-}
-
-static VALUE input_set_ime_position(VALUE self, VALUE rb_x, VALUE rb_y) {
-    (void)self;
-    zen_set_ime_position(NUM2INT(rb_x), NUM2INT(rb_y));
+    uint32_t c_arg0 = (uint32_t)NUM2LL(arg0);
+    zen_clear(c_arg0);
     return Qnil;
 }
 
-static VALUE input_touch_event_count(VALUE self) {
+static VALUE cruby_zen_is_wasm(VALUE self) {
     (void)self;
-    return INT2NUM(zen_get_touch_count());
+    int ret = zen_is_wasm();
+    return INT2NUM(ret);
 }
 
-static VALUE input_touch_event_id(VALUE self, VALUE rb_idx) {
+static VALUE cruby_zen_ffi_destroy_handle(VALUE self, VALUE arg0, VALUE arg1) {
     (void)self;
-    return INT2NUM(zen_get_touch_event_id(NUM2INT(rb_idx)));
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    zen_ffi_destroy_handle(c_arg0, c_arg1);
+    return Qnil;
 }
 
-static VALUE input_touch_event_type(VALUE self, VALUE rb_idx) {
+static VALUE cruby_zen_ffi_image_free_count(VALUE self) {
     (void)self;
-    return INT2NUM(zen_get_touch_event_type(NUM2INT(rb_idx)));
+    int ret = zen_ffi_image_free_count();
+    return INT2NUM(ret);
 }
 
-static VALUE input_touch_event_x(VALUE self, VALUE rb_idx) {
+static VALUE cruby_zen_ffi_screen_w(VALUE self) {
     (void)self;
-    return DBL2NUM(zen_get_touch_event_x(NUM2INT(rb_idx)));
+    int ret = zen_ffi_screen_w();
+    return INT2NUM(ret);
 }
 
-static VALUE input_touch_event_y(VALUE self, VALUE rb_idx) {
+static VALUE cruby_zen_ffi_screen_h(VALUE self) {
     (void)self;
-    return DBL2NUM(zen_get_touch_event_y(NUM2INT(rb_idx)));
+    int ret = zen_ffi_screen_h();
+    return INT2NUM(ret);
 }
 
-static VALUE input_touch_clear_events(VALUE self) {
+static VALUE cruby_zen_ffi_window_w(VALUE self) {
+    (void)self;
+    int ret = zen_ffi_window_w();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_window_h(VALUE self) {
+    (void)self;
+    int ret = zen_ffi_window_h();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_set_window_size(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    zen_set_window_size(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_set_window_title(VALUE self, VALUE arg0) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    zen_set_window_title(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_get_window_title(VALUE self) {
+    (void)self;
+    const char* ret = zen_get_window_title();
+    return (ret) ? rb_utf8_str_new_cstr(ret) : Qnil;
+}
+
+static VALUE cruby_zen_ffi_window_pos_x(VALUE self) {
+    (void)self;
+    int ret = zen_ffi_window_pos_x();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_window_pos_y(VALUE self) {
+    (void)self;
+    int ret = zen_ffi_window_pos_y();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_set_window_pos(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    zen_set_window_pos(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_is_window_focused(VALUE self) {
+    (void)self;
+    int ret = zen_is_window_focused();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_window_minimized(VALUE self) {
+    (void)self;
+    int ret = zen_is_window_minimized();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_window_maximized(VALUE self) {
+    (void)self;
+    int ret = zen_is_window_maximized();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_window_hovered(VALUE self) {
+    (void)self;
+    int ret = zen_is_window_hovered();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_resizing(VALUE self) {
+    (void)self;
+    int ret = zen_is_resizing();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_set_live_resize(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    zen_set_live_resize(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_get_live_resize(VALUE self) {
+    (void)self;
+    int ret = zen_get_live_resize();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_set_scale_mode(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    zen_set_scale_mode(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_get_scale_mode(VALUE self) {
+    (void)self;
+    int ret = zen_get_scale_mode();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_get_scale(VALUE self) {
+    (void)self;
+    float ret = zen_get_scale();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_set_window_scale(VALUE self, VALUE arg0) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    zen_set_window_scale(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_get_window_scale(VALUE self) {
+    (void)self;
+    float ret = zen_get_window_scale();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_get_dpi_scale(VALUE self) {
+    (void)self;
+    float ret = zen_get_dpi_scale();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_set_target_fps(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    zen_set_target_fps(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_get_target_fps(VALUE self) {
+    (void)self;
+    int ret = zen_get_target_fps();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_set_vsync(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    zen_set_vsync(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_window_set_msaa_samples(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    zen_window_set_msaa_samples(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_window_get_msaa_samples(VALUE self) {
+    (void)self;
+    int ret = zen_window_get_msaa_samples();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_get_delta_time(VALUE self) {
+    (void)self;
+    float ret = zen_get_delta_time();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_get_time(VALUE self) {
+    (void)self;
+    double ret = zen_get_time();
+    return DBL2NUM(ret);
+}
+
+static VALUE cruby_zen_window_show_cursor(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    zen_window_show_cursor(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_window_set_cursor(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    zen_window_set_cursor(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_window_get_clipboard_string(VALUE self) {
+    (void)self;
+    const char* ret = zen_window_get_clipboard_string();
+    return (ret) ? rb_utf8_str_new_cstr(ret) : Qnil;
+}
+
+static VALUE cruby_zen_window_set_clipboard_string(VALUE self, VALUE arg0) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    zen_window_set_clipboard_string(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_is_key_pressed(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_is_key_pressed(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_key_push(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_is_key_push(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_key_release(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_is_key_release(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_key_repeat(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_is_key_repeat(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_mouse_x(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_mouse_x();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_ffi_mouse_y(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_mouse_y();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_is_mouse_pressed(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_is_mouse_pressed(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_mouse_push(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_is_mouse_push(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_mouse_release(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_is_mouse_release(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_get_mouse_wheel_x(VALUE self) {
+    (void)self;
+    float ret = zen_get_mouse_wheel_x();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_get_mouse_wheel_y(VALUE self) {
+    (void)self;
+    float ret = zen_get_mouse_wheel_y();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_is_gamepad_connected(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_is_gamepad_connected(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_get_gamepad_axis(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    float ret = zen_get_gamepad_axis(c_arg0, c_arg1);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_is_gamepad_button_pressed(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int ret = zen_is_gamepad_button_pressed(c_arg0, c_arg1);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_gamepad_button_push(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int ret = zen_is_gamepad_button_push(c_arg0, c_arg1);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_is_gamepad_button_release(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int ret = zen_is_gamepad_button_release(c_arg0, c_arg1);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_gamepad_vibrate(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    zen_gamepad_vibrate(c_arg0, c_arg1, c_arg2, c_arg3);
+    return Qnil;
+}
+
+static VALUE cruby_zen_vibrate(VALUE self, VALUE arg0) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    zen_vibrate(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_get_char(VALUE self) {
+    (void)self;
+    int ret = zen_get_char();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_set_ime_position(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    zen_set_ime_position(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_push_touch(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    zen_push_touch(c_arg0, c_arg1, c_arg2, c_arg3);
+    return Qnil;
+}
+
+static VALUE cruby_zen_get_touch_count(VALUE self) {
+    (void)self;
+    int ret = zen_get_touch_count();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_get_touch_event_id(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_get_touch_event_id(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_get_touch_event_type(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int ret = zen_get_touch_event_type(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_get_touch_event_x(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    float ret = zen_get_touch_event_x(c_arg0);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_get_touch_event_y(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    float ret = zen_get_touch_event_y(c_arg0);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_clear_touch_events(VALUE self) {
     (void)self;
     zen_clear_touch_events();
     return Qnil;
 }
 
-static VALUE input_push_touch(VALUE self, VALUE rb_id, VALUE rb_type, VALUE rb_x, VALUE rb_y) {
+static VALUE cruby_zen_set_default_texture_filter(VALUE self, VALUE arg0) {
     (void)self;
-    zen_push_touch(NUM2INT(rb_id), NUM2INT(rb_type), (float)NUM2DBL(rb_x), (float)NUM2DBL(rb_y));
+    int c_arg0 = NUM2INT(arg0);
+    zen_set_default_texture_filter(c_arg0);
     return Qnil;
 }
 
-
-// ==========================================
-// Zenoo::Native::Mesh (TypedData)
-// ==========================================
-static void mesh_free(void* ptr) {
-    ZenMesh* mesh = (ZenMesh*)ptr;
-    if (mesh) {
-        zen_mesh_destroy(mesh);
-    }
-}
-
-static size_t mesh_memsize(const void* ptr) {
-    return ptr ? sizeof(ZenMesh) : 0;
-}
-
-static const rb_data_type_t zenoo_mesh_data_type = {
-    .wrap_struct_name = "Zenoo::Native::Mesh",
-    .function = {
-        .dmark = NULL,
-        .dfree = mesh_free,
-        .dsize = mesh_memsize,
-    },
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
-};
-
-static VALUE mesh_allocate(VALUE klass) {
-    return TypedData_Wrap_Struct(klass, &zenoo_mesh_data_type, NULL);
-}
-
-static VALUE mesh_init(int argc, VALUE* argv, VALUE self) {
-    VALUE rb_topology, rb_layout, rb_vdata, rb_arg4, rb_arg5, rb_arg6, rb_arg7;
-    int n = rb_scan_args(argc, argv, "43", &rb_topology, &rb_layout, &rb_vdata, &rb_arg4, &rb_arg5, &rb_arg6, &rb_arg7);
-
-    int topology = NUM2INT(rb_topology);
-    const uint8_t* layout = (NIL_P(rb_layout) || RSTRING_LEN(rb_layout) == 0) ? NULL : (const uint8_t*)StringValuePtr(rb_layout);
-
-    const void* vdata = NULL;
-    size_t vbytes = 0;
-    if (!NIL_P(rb_vdata)) {
-        Check_Type(rb_vdata, T_STRING);
-        vdata = (const void*)RSTRING_PTR(rb_vdata);
-        vbytes = (size_t)RSTRING_LEN(rb_vdata);
-    }
-
-    int vcount = 0;
-    VALUE rb_idata = Qnil;
-    VALUE rb_icount = Qnil;
-    if (n == 7) {
-        // Spinel 互換の 7 引数: (topology, layout, vdata, vbytes, vcount, idata, icount)
-        vcount = NUM2INT(rb_arg5);
-        rb_idata = rb_arg6;
-        rb_icount = rb_arg7;
-    } else {
-        // 4..6 引数: (topology, layout, vdata, vcount, idata=nil, icount=nil)
-        vcount = NUM2INT(rb_arg4);
-        rb_idata = rb_arg5;
-        rb_icount = rb_arg6;
-    }
-
-    const uint32_t* idata = NULL;
-    int icount = 0;
-    if (!NIL_P(rb_idata)) {
-        Check_Type(rb_idata, T_STRING);
-        if (RSTRING_LEN(rb_idata) > 0) {
-            idata = (const uint32_t*)RSTRING_PTR(rb_idata);
-            icount = !NIL_P(rb_icount) ? NUM2INT(rb_icount) : (int)(RSTRING_LEN(rb_idata) / sizeof(uint32_t));
-        }
-    }
-
-    ZenMesh* mesh = zen_mesh_create(topology, layout, vdata, vbytes, vcount, idata, icount);
-    if (!mesh) {
-        rb_raise(rb_eRuntimeError, "Failed to create Native::Mesh");
-    }
-    DATA_PTR(self) = mesh;
-    return self;
-}
-
-static VALUE mesh_update_vertices(int argc, VALUE* argv, VALUE self) {
-    VALUE rb_vdata, rb_offset, rb_vcount;
-    rb_scan_args(argc, argv, "12", &rb_vdata, &rb_offset, &rb_vcount);
-
-    ZenMesh* mesh;
-    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
-    if (!mesh || NIL_P(rb_vdata)) return self;
-
-    Check_Type(rb_vdata, T_STRING);
-    const void* vdata = (const void*)RSTRING_PTR(rb_vdata);
-    size_t vbytes = (size_t)RSTRING_LEN(rb_vdata);
-    size_t offset = NIL_P(rb_offset) ? 0 : (size_t)NUM2ULONG(rb_offset);
-    int vcount = NIL_P(rb_vcount) ? 0 : NUM2INT(rb_vcount);
-
-    zen_mesh_update_vertices(mesh, offset, vdata, vbytes, vcount);
-    return self;
-}
-
-static VALUE mesh_update_indices(int argc, VALUE* argv, VALUE self) {
-    VALUE rb_idata, rb_icount;
-    rb_scan_args(argc, argv, "11", &rb_idata, &rb_icount);
-
-    ZenMesh* mesh;
-    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
-    if (!mesh) return self;
-
-    const uint32_t* idata = NULL;
-    int icount = 0;
-    if (!NIL_P(rb_idata)) {
-        Check_Type(rb_idata, T_STRING);
-        idata = (const uint32_t*)RSTRING_PTR(rb_idata);
-        icount = !NIL_P(rb_icount) ? NUM2INT(rb_icount) : (int)(RSTRING_LEN(rb_idata) / sizeof(uint32_t));
-    }
-    zen_mesh_update_indices(mesh, idata, icount);
-    return self;
-}
-
-static VALUE mesh_is_dynamic(VALUE self) {
-    ZenMesh* mesh;
-    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
-    return (mesh && mesh->is_dynamic) ? Qtrue : Qfalse;
-}
-
-static VALUE mesh_get_vertex_count(VALUE self) {
-    ZenMesh* mesh;
-    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
-    return mesh ? INT2NUM(mesh->vertex_count) : INT2NUM(0);
-}
-
-static VALUE mesh_get_index_count(VALUE self) {
-    ZenMesh* mesh;
-    TypedData_Get_Struct(self, ZenMesh, &zenoo_mesh_data_type, mesh);
-    return mesh ? INT2NUM(mesh->index_count) : INT2NUM(0);
-}
-
-// ==========================================
-// Zenoo::Native::Renderer
-// ==========================================
-static VALUE renderer_flush(VALUE self) {
+static VALUE cruby_zen_get_default_texture_filter(VALUE self) {
     (void)self;
+    int ret = zen_get_default_texture_filter();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_image_set_filter(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    zen_image_set_filter(c_arg0, c_arg1);
     return Qnil;
 }
 
-static VALUE renderer_set_blend_mode(VALUE self, VALUE rb_mode) {
+static VALUE cruby_zen_image_get_filter(VALUE self, VALUE arg0) {
     (void)self;
-    int mode = NUM2INT(rb_mode);
-    zen_set_blend_mode(mode);
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_image_get_filter(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_image_replace_texture(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    void* c_arg1 = NIL_P(arg1) ? NULL : (void*)(uintptr_t)NUM2ULL(arg1);
+    zen_image_replace_texture(c_arg0, c_arg1);
     return Qnil;
 }
 
-static VALUE renderer_draw_buffer(VALUE self, VALUE rb_topology, VALUE rb_layout, VALUE rb_divisors, VALUE rb_base_vertex_count, VALUE rb_data, VALUE rb_count, VALUE rb_tex, VALUE rb_shader) {
+static VALUE cruby_zen_image_create(VALUE self, VALUE arg0, VALUE arg1) {
     (void)self;
-    int topology = NUM2INT(rb_topology);
-    StringValue(rb_layout);
-    const uint8_t* layout = (const uint8_t*)RSTRING_PTR(rb_layout);
-    long layout_len = RSTRING_LEN(rb_layout);
-    int stride = 0;
-    long attr_count = 0;
-    for (long i = 0; i < layout_len && layout[i] != 0; i++) {
-        stride += (int)layout[i] * (int)sizeof(float);
-        attr_count++;
-    }
-    if (stride <= 0) {
-        rb_raise(rb_eArgError, "Invalid vertex layout");
-    }
-    const uint8_t* divisors = NULL;
-    if (!NIL_P(rb_divisors)) {
-        StringValue(rb_divisors);
-        if (RSTRING_LEN(rb_divisors) < attr_count) {
-            rb_raise(rb_eArgError, "Divisors length shorter than layout");
-        }
-        divisors = (const uint8_t*)RSTRING_PTR(rb_divisors);
-    }
-    int base_vertex_count = NUM2INT(rb_base_vertex_count);
-    Check_Type(rb_data, T_STRING);
-    int count = NUM2INT(rb_count);
-    if (count <= 0) return Qnil;
-    long min_bytes = (long)stride * (long)count;
-    if (RSTRING_LEN(rb_data) < min_bytes) {
-        rb_raise(rb_eArgError, "Draw buffer data too short");
-    }
-    const void* data = (const void*)RSTRING_PTR(rb_data);
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    void* ret = (void*)(zen_image_create(c_arg0, c_arg1));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
 
-    ZenImage* img = NULL;
-    if (rb_obj_is_kind_of(rb_tex, rb_cNativeImage)) {
-        TypedData_Get_Struct(rb_tex, ZenImage, &zenoo_image_data_type, img);
-    }
+static VALUE cruby_zen_image_create_format(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int c_arg2 = NUM2INT(arg2);
+    void* ret = (void*)(zen_image_create_format(c_arg0, c_arg1, c_arg2));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
 
-    ZenShader* sh = NULL;
-    if (rb_obj_is_kind_of(rb_shader, rb_cNativeShader)) {
-        TypedData_Get_Struct(rb_shader, ZenShader, &zenoo_shader_data_type, sh);
-    }
+static VALUE cruby_zen_image_create_msaa(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int c_arg2 = NUM2INT(arg2);
+    void* ret = (void*)(zen_image_create_msaa(c_arg0, c_arg1, c_arg2));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
 
-    zen_draw_buffer(topology, layout, divisors, base_vertex_count, data, count, img, sh);
+static VALUE cruby_zen_image_load(VALUE self, VALUE arg0) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    void* ret = (void*)(zen_image_load(c_arg0));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
+
+static VALUE cruby_zen_image_sub_image(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int c_arg2 = NUM2INT(arg2);
+    int c_arg3 = NUM2INT(arg3);
+    int c_arg4 = NUM2INT(arg4);
+    void* ret = (void*)(zen_image_sub_image(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
+
+static VALUE cruby_zen_image_clone(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    void* ret = (void*)(zen_image_clone(c_arg0));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
+
+static VALUE cruby_zen_set_render_target(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_set_render_target(c_arg0);
     return Qnil;
 }
 
-static VALUE renderer_draw_mesh(VALUE self, VALUE rb_geom_mesh, VALUE rb_inst_buffer, VALUE rb_inst_layout, VALUE rb_inst_data, VALUE rb_inst_count, VALUE rb_tex, VALUE rb_shader) {
+static VALUE cruby_zen_ffi_image_width(VALUE self, VALUE arg0) {
     (void)self;
-    ZenMesh* geom_mesh = NULL;
-    if (!NIL_P(rb_geom_mesh) && rb_obj_is_kind_of(rb_geom_mesh, rb_cNativeMesh)) {
-        TypedData_Get_Struct(rb_geom_mesh, ZenMesh, &zenoo_mesh_data_type, geom_mesh);
-    }
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_image_width(c_arg0);
+    return INT2NUM(ret);
+}
 
-    ZenMesh* inst_buffer = NULL;
-    if (!NIL_P(rb_inst_buffer) && rb_obj_is_kind_of(rb_inst_buffer, rb_cNativeMesh)) {
-        TypedData_Get_Struct(rb_inst_buffer, ZenMesh, &zenoo_mesh_data_type, inst_buffer);
-    }
+static VALUE cruby_zen_ffi_image_height(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_image_height(c_arg0);
+    return INT2NUM(ret);
+}
 
-    const uint8_t* inst_layout = NULL;
-    int inst_stride = 0;
-    if (!NIL_P(rb_inst_layout)) {
-        StringValue(rb_inst_layout);
-        long l_len = RSTRING_LEN(rb_inst_layout);
-        if (l_len > 0) {
-            inst_layout = (const uint8_t*)RSTRING_PTR(rb_inst_layout);
-            for (long i = 0; i < l_len && inst_layout[i] != 0; i++) {
-                inst_stride += (int)inst_layout[i] * (int)sizeof(float);
-            }
-        }
-    }
-    int inst_count = NUM2INT(rb_inst_count);
-    const void* inst_data = NULL;
-    if (!NIL_P(rb_inst_data)) {
-        Check_Type(rb_inst_data, T_STRING);
-        if (inst_stride > 0 && inst_count > 0) {
-            long min_bytes = (long)inst_stride * (long)inst_count;
-            if (RSTRING_LEN(rb_inst_data) < min_bytes) {
-                rb_raise(rb_eArgError, "Instance data buffer too short");
-            }
-        }
-        inst_data = (const void*)RSTRING_PTR(rb_inst_data);
-    }
+static VALUE cruby_zen_ffi_image_x(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_image_x(c_arg0);
+    return INT2NUM(ret);
+}
 
-    ZenImage* img = NULL;
-    if (rb_obj_is_kind_of(rb_tex, rb_cNativeImage)) {
-        TypedData_Get_Struct(rb_tex, ZenImage, &zenoo_image_data_type, img);
-    }
+static VALUE cruby_zen_ffi_image_y(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_image_y(c_arg0);
+    return INT2NUM(ret);
+}
 
-    ZenShader* sh = NULL;
-    if (rb_obj_is_kind_of(rb_shader, rb_cNativeShader)) {
-        TypedData_Get_Struct(rb_shader, ZenShader, &zenoo_shader_data_type, sh);
-    }
+static VALUE cruby_zen_ffi_image_tex_width(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_image_tex_width(c_arg0);
+    return INT2NUM(ret);
+}
 
-    zen_draw_mesh_instanced(geom_mesh, inst_buffer, inst_layout, inst_data, inst_count, img, sh);
+static VALUE cruby_zen_ffi_image_tex_height(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_image_tex_height(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_image_get_texture_id(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    uint32_t ret = zen_image_get_texture_id(c_arg0);
+    return ULONG2NUM((unsigned long)(ret));
+}
+
+static VALUE cruby_zen_ffi_image_is_sub(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_image_is_sub(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_image_msaa_samples(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_image_msaa_samples(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_image_get_pixel(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int c_arg2 = NUM2INT(arg2);
+    uint32_t ret = zen_image_get_pixel(c_arg0, c_arg1, c_arg2);
+    return ULONG2NUM((unsigned long)(ret));
+}
+
+static VALUE cruby_zen_image_set_pixel(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int c_arg2 = NUM2INT(arg2);
+    uint32_t c_arg3 = (uint32_t)NUM2LL(arg3);
+    zen_image_set_pixel(c_arg0, c_arg1, c_arg2, c_arg3);
     return Qnil;
 }
 
-static VALUE renderer_set_scissor(VALUE self, VALUE rb_x, VALUE rb_y, VALUE rb_w, VALUE rb_h) {
+static VALUE cruby_zen_ffi_image_set_pixel_rgba(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6) {
     (void)self;
-    int x = NUM2INT(rb_x);
-    int y = NUM2INT(rb_y);
-    int w = NUM2INT(rb_w);
-    int h = NUM2INT(rb_h);
-    zen_set_scissor(x, y, w, h);
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int c_arg2 = NUM2INT(arg2);
+    int c_arg3 = NUM2INT(arg3);
+    int c_arg4 = NUM2INT(arg4);
+    int c_arg5 = NUM2INT(arg5);
+    int c_arg6 = NUM2INT(arg6);
+    zen_ffi_image_set_pixel_rgba(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6);
     return Qnil;
 }
 
-static VALUE renderer_reset_scissor(VALUE self) {
+static VALUE cruby_zen_ffi_image_set_pixels(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const void* c_arg1 = NULL;
+    if (!NIL_P(s_arg1)) { StringValue(s_arg1); c_arg1 = (const void*)RSTRING_PTR(s_arg1); }
+    zen_ffi_image_set_pixels(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_image_sync_to_gpu(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_image_sync_to_gpu(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_image_save(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    int ret = zen_image_save(c_arg0, c_arg1);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_shader_create(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    void* ret = (void*)(zen_ffi_shader_create(c_arg0, c_arg1));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
+
+static VALUE cruby_zen_shader_set_int(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    int c_arg2 = NUM2INT(arg2);
+    zen_shader_set_int(c_arg0, c_arg1, c_arg2);
+    return Qnil;
+}
+
+static VALUE cruby_zen_shader_set_float(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    zen_shader_set_float(c_arg0, c_arg1, c_arg2);
+    return Qnil;
+}
+
+static VALUE cruby_zen_shader_set_vec2(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    zen_shader_set_vec2(c_arg0, c_arg1, c_arg2, c_arg3);
+    return Qnil;
+}
+
+static VALUE cruby_zen_shader_set_vec3(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    zen_shader_set_vec3(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4);
+    return Qnil;
+}
+
+static VALUE cruby_zen_shader_set_vec4(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    float c_arg3 = (float)NUM2DBL(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    float c_arg5 = (float)NUM2DBL(arg5);
+    zen_shader_set_vec4(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_shader_set_vec4_array(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    int c_arg2 = NUM2INT(arg2);
+    VALUE s_arg3 = arg3; const void* c_arg3 = NULL;
+    if (!NIL_P(s_arg3)) { StringValue(s_arg3); c_arg3 = (const void*)RSTRING_PTR(s_arg3); }
+    zen_ffi_shader_set_vec4_array(c_arg0, c_arg1, c_arg2, c_arg3);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_shader_set_mat4(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    VALUE s_arg2 = arg2; const void* c_arg2 = NULL;
+    if (!NIL_P(s_arg2)) { StringValue(s_arg2); c_arg2 = (const void*)RSTRING_PTR(s_arg2); }
+    zen_ffi_shader_set_mat4(c_arg0, c_arg1, c_arg2);
+    return Qnil;
+}
+
+static VALUE cruby_zen_shader_set_texture(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const char* c_arg1 = NIL_P(s_arg1) ? NULL : StringValueCStr(s_arg1);
+    int c_arg2 = NUM2INT(arg2);
+    void* c_arg3 = NIL_P(arg3) ? NULL : (void*)(uintptr_t)NUM2ULL(arg3);
+    zen_shader_set_texture(c_arg0, c_arg1, c_arg2, c_arg3);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_mesh_create(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    VALUE s_arg1 = arg1; const void* c_arg1 = NULL;
+    if (!NIL_P(s_arg1)) { StringValue(s_arg1); c_arg1 = (const void*)RSTRING_PTR(s_arg1); }
+    VALUE s_arg2 = arg2; const void* c_arg2 = NULL;
+    if (!NIL_P(s_arg2)) { StringValue(s_arg2); c_arg2 = (const void*)RSTRING_PTR(s_arg2); }
+    int c_arg3 = NUM2INT(arg3);
+    int c_arg4 = NUM2INT(arg4);
+    VALUE s_arg5 = arg5; const void* c_arg5 = NULL;
+    if (!NIL_P(s_arg5)) { StringValue(s_arg5); c_arg5 = (const void*)RSTRING_PTR(s_arg5); }
+    int c_arg6 = NUM2INT(arg6);
+    int c_arg7 = NUM2INT(arg7);
+    void* ret = (void*)(zen_ffi_mesh_create(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
+}
+
+static VALUE cruby_zen_ffi_mesh_update_vertices(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    VALUE s_arg2 = arg2; const void* c_arg2 = NULL;
+    if (!NIL_P(s_arg2)) { StringValue(s_arg2); c_arg2 = (const void*)RSTRING_PTR(s_arg2); }
+    int c_arg3 = NUM2INT(arg3);
+    int c_arg4 = NUM2INT(arg4);
+    zen_ffi_mesh_update_vertices(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_mesh_update_indices(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    VALUE s_arg1 = arg1; const void* c_arg1 = NULL;
+    if (!NIL_P(s_arg1)) { StringValue(s_arg1); c_arg1 = (const void*)RSTRING_PTR(s_arg1); }
+    int c_arg2 = NUM2INT(arg2);
+    zen_ffi_mesh_update_indices(c_arg0, c_arg1, c_arg2);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_mesh_is_dynamic(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_mesh_is_dynamic(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_mesh_vertex_count(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_mesh_vertex_count(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_mesh_index_count(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_ffi_mesh_index_count(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_set_blend_mode(VALUE self, VALUE arg0) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    zen_set_blend_mode(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_set_scissor(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    int c_arg2 = NUM2INT(arg2);
+    int c_arg3 = NUM2INT(arg3);
+    zen_set_scissor(c_arg0, c_arg1, c_arg2, c_arg3);
+    return Qnil;
+}
+
+static VALUE cruby_zen_reset_scissor(VALUE self) {
     (void)self;
     zen_reset_scissor();
     return Qnil;
 }
 
-// ==========================================
-// Zenoo::Native::Sound (TypedData)
-// ==========================================
-static void sound_free(void* ptr) {
-    ZenSound* sound = (ZenSound*)ptr;
-    if (sound) {
-        zen_sound_destroy(sound);
-    }
+static VALUE cruby_zen_ffi_draw_buffer(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7) {
+    (void)self;
+    int c_arg0 = NUM2INT(arg0);
+    VALUE s_arg1 = arg1; const void* c_arg1 = NULL;
+    if (!NIL_P(s_arg1)) { StringValue(s_arg1); c_arg1 = (const void*)RSTRING_PTR(s_arg1); }
+    VALUE s_arg2 = arg2; const void* c_arg2 = NULL;
+    if (!NIL_P(s_arg2)) { StringValue(s_arg2); c_arg2 = (const void*)RSTRING_PTR(s_arg2); }
+    int c_arg3 = NUM2INT(arg3);
+    VALUE s_arg4 = arg4; const void* c_arg4 = NULL;
+    if (!NIL_P(s_arg4)) { StringValue(s_arg4); c_arg4 = (const void*)RSTRING_PTR(s_arg4); }
+    int c_arg5 = NUM2INT(arg5);
+    void* c_arg6 = NIL_P(arg6) ? NULL : (void*)(uintptr_t)NUM2ULL(arg6);
+    void* c_arg7 = NIL_P(arg7) ? NULL : (void*)(uintptr_t)NUM2ULL(arg7);
+    zen_ffi_draw_buffer(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7);
+    return Qnil;
 }
 
-static size_t sound_memsize(const void* ptr) {
-    return ptr ? sizeof(ZenSound) : 0;
+static VALUE cruby_zen_ffi_draw_mesh(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    void* c_arg1 = NIL_P(arg1) ? NULL : (void*)(uintptr_t)NUM2ULL(arg1);
+    VALUE s_arg2 = arg2; const void* c_arg2 = NULL;
+    if (!NIL_P(s_arg2)) { StringValue(s_arg2); c_arg2 = (const void*)RSTRING_PTR(s_arg2); }
+    VALUE s_arg3 = arg3; const void* c_arg3 = NULL;
+    if (!NIL_P(s_arg3)) { StringValue(s_arg3); c_arg3 = (const void*)RSTRING_PTR(s_arg3); }
+    int c_arg4 = NUM2INT(arg4);
+    void* c_arg5 = NIL_P(arg5) ? NULL : (void*)(uintptr_t)NUM2ULL(arg5);
+    void* c_arg6 = NIL_P(arg6) ? NULL : (void*)(uintptr_t)NUM2ULL(arg6);
+    zen_ffi_draw_mesh(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6);
+    return Qnil;
 }
 
-static const rb_data_type_t zenoo_sound_data_type = {
-    .wrap_struct_name = "Zenoo::Native::Sound",
-    .function = {
-        .dmark = NULL,
-        .dfree = sound_free,
-        .dsize = sound_memsize,
-    },
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
-};
-
-static VALUE sound_allocate(VALUE klass) {
-    return TypedData_Wrap_Struct(klass, &zenoo_sound_data_type, NULL);
+static VALUE cruby_zen_font_load(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    int c_arg1 = NUM2INT(arg1);
+    void* ret = (void*)(zen_font_load(c_arg0, c_arg1));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
 }
 
-static VALUE sound_s_load(int argc, VALUE* argv, VALUE klass) {
-    VALUE rb_path, rb_stream;
-    rb_scan_args(argc, argv, "11", &rb_path, &rb_stream);
-    const char* path = StringValueCStr(rb_path);
-    int stream = RTEST(rb_stream) ? 1 : 0;
-    ZenSound* sound = zen_sound_load_file(path, stream);
-    if (!sound) {
-        rb_raise(rb_eRuntimeError, "Failed to load sound from file: %s", path);
-    }
-    return TypedData_Wrap_Struct(klass, &zenoo_sound_data_type, sound);
+static VALUE cruby_zen_ffi_font_query_glyph(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    int c_arg3 = NUM2INT(arg3);
+    float c_arg4 = (float)NUM2DBL(arg4);
+    int ret = zen_ffi_font_query_glyph(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4);
+    return INT2NUM(ret);
 }
 
-static VALUE sound_s_load_pcm(VALUE klass, VALUE rb_samples, VALUE rb_channels, VALUE rb_sample_rate) {
-    int channels = NUM2INT(rb_channels);
-    int sample_rate = NUM2INT(rb_sample_rate);
-    if (channels <= 0 || sample_rate <= 0) {
-        rb_raise(rb_eArgError, "Invalid channels or sample_rate");
-    }
-
-    ZenSound* sound = NULL;
-    if (RB_TYPE_P(rb_samples, T_STRING)) {
-        long bytes = RSTRING_LEN(rb_samples);
-        long sample_count = bytes / (long)sizeof(float);
-        int frame_count = (int)(sample_count / channels);
-        if (frame_count <= 0) {
-            rb_raise(rb_eArgError, "Empty samples data");
-        }
-        const float* ptr = (const float*)RSTRING_PTR(rb_samples);
-        sound = zen_sound_load_memory_pcm(ptr, frame_count, channels, sample_rate);
-    } else if (RB_TYPE_P(rb_samples, T_ARRAY)) {
-        long sample_count = RARRAY_LEN(rb_samples);
-        int frame_count = (int)(sample_count / channels);
-        if (frame_count <= 0) {
-            rb_raise(rb_eArgError, "Empty samples array");
-        }
-        float* buffer = (float*)malloc(sizeof(float) * sample_count);
-        if (!buffer) {
-            rb_raise(rb_eNoMemError, "Failed to allocate memory for PCM samples");
-        }
-        for (long i = 0; i < sample_count; i++) {
-            buffer[i] = (float)NUM2DBL(RARRAY_AREF(rb_samples, i));
-        }
-        sound = zen_sound_load_memory_pcm(buffer, frame_count, channels, sample_rate);
-        free(buffer);
-    } else {
-        rb_raise(rb_eTypeError, "Expected Array or binary String for samples");
-    }
-
-    if (!sound) {
-        rb_raise(rb_eRuntimeError, "Failed to create sound from PCM data");
-    }
-    return TypedData_Wrap_Struct(klass, &zenoo_sound_data_type, sound);
+static VALUE cruby_zen_ffi_glyph_visible(VALUE self) {
+    (void)self;
+    int ret = zen_ffi_glyph_visible();
+    return INT2NUM(ret);
 }
 
-static VALUE sound_play(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_play(sound);
-    return self;
+static VALUE cruby_zen_ffi_glyph_u0(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_glyph_u0();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_stop(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_stop(sound);
-    return self;
+static VALUE cruby_zen_ffi_glyph_v0(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_glyph_v0();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_pause(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_pause(sound);
-    return self;
+static VALUE cruby_zen_ffi_glyph_u1(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_glyph_u1();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_is_playing(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return zen_sound_is_playing(sound) ? Qtrue : Qfalse;
+static VALUE cruby_zen_ffi_glyph_v1(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_glyph_v1();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_set_volume(VALUE self, VALUE rb_vol) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_set_volume(sound, (float)NUM2DBL(rb_vol));
-    return rb_vol;
+static VALUE cruby_zen_ffi_glyph_x0(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_glyph_x0();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_get_volume(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return DBL2NUM((double)zen_sound_get_volume(sound));
+static VALUE cruby_zen_ffi_glyph_y0(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_glyph_y0();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_set_looping(VALUE self, VALUE rb_loop) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_set_looping(sound, RTEST(rb_loop) ? 1 : 0);
-    return rb_loop;
+static VALUE cruby_zen_ffi_glyph_x1(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_glyph_x1();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_is_looping(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return zen_sound_is_looping(sound) ? Qtrue : Qfalse;
+static VALUE cruby_zen_ffi_glyph_y1(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_glyph_y1();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_set_pitch(VALUE self, VALUE rb_pitch) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_set_pitch(sound, (float)NUM2DBL(rb_pitch));
-    return rb_pitch;
+static VALUE cruby_zen_ffi_glyph_advance(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_glyph_advance();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_get_pitch(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return DBL2NUM((double)zen_sound_get_pitch(sound));
+static VALUE cruby_zen_ffi_glyph_is_bitmap(VALUE self) {
+    (void)self;
+    int ret = zen_ffi_glyph_is_bitmap();
+    return INT2NUM(ret);
 }
 
-static VALUE sound_set_pan(VALUE self, VALUE rb_pan) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_set_pan(sound, (float)NUM2DBL(rb_pan));
-    return rb_pan;
+static VALUE cruby_zen_ffi_font_ascent(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float ret = zen_ffi_font_ascent(c_arg0, c_arg1);
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_get_pan(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return DBL2NUM((double)zen_sound_get_pan(sound));
+static VALUE cruby_zen_ffi_font_descent(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float ret = zen_ffi_font_descent(c_arg0, c_arg1);
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_seek(VALUE self, VALUE rb_sec) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_seek(sound, (float)NUM2DBL(rb_sec));
-    return rb_sec;
+static VALUE cruby_zen_ffi_font_line_gap(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float ret = zen_ffi_font_line_gap(c_arg0, c_arg1);
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE sound_get_cursor(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return DBL2NUM((double)zen_sound_get_cursor(sound));
+static VALUE cruby_zen_font_set_atlas_image(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_font_set_atlas_image(c_arg0);
+    return Qnil;
 }
 
-static VALUE sound_get_length(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return DBL2NUM((double)zen_sound_get_length(sound));
+static VALUE cruby_zen_font_atlas_generation(VALUE self) {
+    (void)self;
+    uint32_t ret = zen_font_atlas_generation();
+    return ULONG2NUM((unsigned long)(ret));
 }
 
-static VALUE sound_get_sample_rate(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return UINT2NUM(zen_sound_get_sample_rate(sound));
+static VALUE cruby_zen_audio_init(VALUE self) {
+    (void)self;
+    int ret = zen_audio_init();
+    return INT2NUM(ret);
 }
 
-static VALUE sound_get_length_pcm(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return ULL2NUM(zen_sound_get_length_pcm(sound));
-}
-
-static VALUE sound_set_loop_points_pcm(int argc, VALUE* argv, VALUE self) {
-    VALUE rb_start, rb_end;
-    rb_scan_args(argc, argv, "11", &rb_start, &rb_end);
-    uint64_t start_pcm = (uint64_t)NUM2ULL(rb_start);
-    uint64_t end_pcm = NIL_P(rb_end) ? 0 : (uint64_t)NUM2ULL(rb_end);
-
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_set_loop_points_pcm(sound, start_pcm, end_pcm);
-    return self;
-}
-
-static VALUE sound_get_loop_start_pcm(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    uint64_t start_pcm = 0;
-    zen_sound_get_loop_points_pcm(sound, &start_pcm, NULL);
-    return ULL2NUM(start_pcm);
-}
-
-static VALUE sound_set_loop_start_pcm(VALUE self, VALUE rb_start) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    uint64_t end_pcm = 0;
-    zen_sound_get_loop_points_pcm(sound, NULL, &end_pcm);
-    zen_sound_set_loop_points_pcm(sound, (uint64_t)NUM2ULL(rb_start), end_pcm);
-    return rb_start;
-}
-
-static VALUE sound_get_loop_end_pcm(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    uint64_t end_pcm = 0;
-    zen_sound_get_loop_points_pcm(sound, NULL, &end_pcm);
-    return ULL2NUM(end_pcm);
-}
-
-static VALUE sound_set_loop_end_pcm(VALUE self, VALUE rb_end) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    uint64_t start_pcm = 0;
-    zen_sound_get_loop_points_pcm(sound, &start_pcm, NULL);
-    zen_sound_set_loop_points_pcm(sound, start_pcm, (uint64_t)NUM2ULL(rb_end));
-    return rb_end;
-}
-
-static VALUE sound_set_loop_points_sec(int argc, VALUE* argv, VALUE self) {
-    VALUE rb_start, rb_end;
-    rb_scan_args(argc, argv, "11", &rb_start, &rb_end);
-    float start_sec = (float)NUM2DBL(rb_start);
-    float end_sec = NIL_P(rb_end) ? 0.0f : (float)NUM2DBL(rb_end);
-
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_set_loop_points_seconds(sound, start_sec, end_sec);
-    return self;
-}
-
-static VALUE sound_get_loop_start_sec(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    float start_sec = 0.0f;
-    zen_sound_get_loop_points_seconds(sound, &start_sec, NULL);
-    return DBL2NUM((double)start_sec);
-}
-
-static VALUE sound_set_loop_start_sec(VALUE self, VALUE rb_start) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    float end_sec = 0.0f;
-    zen_sound_get_loop_points_seconds(sound, NULL, &end_sec);
-    zen_sound_set_loop_points_seconds(sound, (float)NUM2DBL(rb_start), end_sec);
-    return rb_start;
-}
-
-static VALUE sound_get_loop_end_sec(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    float end_sec = 0.0f;
-    zen_sound_get_loop_points_seconds(sound, NULL, &end_sec);
-    return DBL2NUM((double)end_sec);
-}
-
-static VALUE sound_set_loop_end_sec(VALUE self, VALUE rb_end) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    float start_sec = 0.0f;
-    zen_sound_get_loop_points_seconds(sound, &start_sec, NULL);
-    zen_sound_set_loop_points_seconds(sound, start_sec, (float)NUM2DBL(rb_end));
-    return rb_end;
-}
-
-static VALUE sound_has_loop_points(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    return zen_sound_has_loop_points(sound) ? Qtrue : Qfalse;
-}
-
-static VALUE sound_clear_loop_points(VALUE self) {
-    ZenSound* sound;
-    TypedData_Get_Struct(self, ZenSound, &zenoo_sound_data_type, sound);
-    zen_sound_clear_loop_points(sound);
-    return self;
-}
-
-// ==========================================
-// Zenoo::Native::Audio
-// ==========================================
-static VALUE audio_s_init(VALUE klass) {
-    (void)klass;
-    return zen_audio_init() ? Qtrue : Qfalse;
-}
-
-static VALUE audio_s_shutdown(VALUE klass) {
-    (void)klass;
+static VALUE cruby_zen_audio_shutdown(VALUE self) {
+    (void)self;
     zen_audio_shutdown();
     return Qnil;
 }
 
-static VALUE audio_s_set_master_volume(VALUE klass, VALUE rb_vol) {
-    (void)klass;
-    zen_audio_set_master_volume((float)NUM2DBL(rb_vol));
-    return rb_vol;
-}
-
-static VALUE audio_s_get_master_volume(VALUE klass) {
-    (void)klass;
-    return DBL2NUM((double)zen_audio_get_master_volume());
-}
-
-static VALUE zenoo_s_version(VALUE klass) {
-    (void)klass;
-    return rb_str_new_cstr(zen_get_version());
-}
-
-// ==========================================
-// Native::Browser C-Ruby バインディング
-// ==========================================
-static VALUE browser_s_eval(VALUE klass, VALUE code) {
-    (void)klass;
-    zen_js_eval(StringValueCStr(code));
+static VALUE cruby_zen_audio_set_master_volume(VALUE self, VALUE arg0) {
+    (void)self;
+    float c_arg0 = (float)NUM2DBL(arg0);
+    zen_audio_set_master_volume(c_arg0);
     return Qnil;
 }
 
-static VALUE browser_s_eval_num(VALUE klass, VALUE code) {
-    (void)klass;
-    double val = zen_js_eval_num(StringValueCStr(code));
-    return DBL2NUM(val);
+static VALUE cruby_zen_audio_get_master_volume(VALUE self) {
+    (void)self;
+    float ret = zen_audio_get_master_volume();
+    return DBL2NUM((double)(ret));
 }
 
-static VALUE browser_s_eval_str(VALUE klass, VALUE code) {
-    (void)klass;
-    const char* str = zen_js_eval_str(StringValueCStr(code));
-    return rb_str_new_cstr(str ? str : "");
+static VALUE cruby_zen_sound_load_file(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    int c_arg1 = NUM2INT(arg1);
+    void* ret = (void*)(zen_sound_load_file(c_arg0, c_arg1));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
 }
 
-static VALUE browser_s_is_visible(VALUE klass) {
-    (void)klass;
-    return zen_js_is_page_visible() ? Qtrue : Qfalse;
+static VALUE cruby_zen_ffi_sound_load_pcm(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
+    (void)self;
+    VALUE s_arg0 = arg0; const void* c_arg0 = NULL;
+    if (!NIL_P(s_arg0)) { StringValue(s_arg0); c_arg0 = (const void*)RSTRING_PTR(s_arg0); }
+    int c_arg1 = NUM2INT(arg1);
+    int c_arg2 = NUM2INT(arg2);
+    int c_arg3 = NUM2INT(arg3);
+    void* ret = (void*)(zen_ffi_sound_load_pcm(c_arg0, c_arg1, c_arg2, c_arg3));
+    return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
 }
 
-static VALUE browser_s_safe_area_left(VALUE klass) {
-    (void)klass;
-    float l = 0, t = 0, r = 0, b = 0;
-    zen_js_get_safe_area(&l, &t, &r, &b);
-    return DBL2NUM((double)l);
+static VALUE cruby_zen_sound_play(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_sound_play(c_arg0);
+    return Qnil;
 }
 
-static VALUE browser_s_safe_area_top(VALUE klass) {
-    (void)klass;
-    float l = 0, t = 0, r = 0, b = 0;
-    zen_js_get_safe_area(&l, &t, &r, &b);
-    return DBL2NUM((double)t);
+static VALUE cruby_zen_sound_stop(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_sound_stop(c_arg0);
+    return Qnil;
 }
 
-static VALUE browser_s_safe_area_right(VALUE klass) {
-    (void)klass;
-    float l = 0, t = 0, r = 0, b = 0;
-    zen_js_get_safe_area(&l, &t, &r, &b);
-    return DBL2NUM((double)r);
+static VALUE cruby_zen_sound_pause(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_sound_pause(c_arg0);
+    return Qnil;
 }
 
-static VALUE browser_s_safe_area_bottom(VALUE klass) {
-    (void)klass;
-    float l = 0, t = 0, r = 0, b = 0;
-    zen_js_get_safe_area(&l, &t, &r, &b);
-    return DBL2NUM((double)b);
+static VALUE cruby_zen_sound_is_playing(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_sound_is_playing(c_arg0);
+    return INT2NUM(ret);
 }
 
-// ==========================================
-// C拡張初期化エントリポイント
-// ==========================================
+static VALUE cruby_zen_sound_set_volume(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    zen_sound_set_volume(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_sound_get_volume(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float ret = zen_sound_get_volume(c_arg0);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_sound_set_looping(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int c_arg1 = NUM2INT(arg1);
+    zen_sound_set_looping(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_sound_is_looping(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_sound_is_looping(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_sound_set_pitch(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    zen_sound_set_pitch(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_sound_get_pitch(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float ret = zen_sound_get_pitch(c_arg0);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_sound_set_pan(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    zen_sound_set_pan(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_sound_get_pan(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float ret = zen_sound_get_pan(c_arg0);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_sound_seek(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    zen_sound_seek(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_sound_get_cursor(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float ret = zen_sound_get_cursor(c_arg0);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_sound_get_length(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float ret = zen_sound_get_length(c_arg0);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_sound_get_sample_rate(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    uint32_t ret = zen_sound_get_sample_rate(c_arg0);
+    return ULONG2NUM((unsigned long)(ret));
+}
+
+static VALUE cruby_zen_ffi_sound_get_length_pcm(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int64_t ret = zen_ffi_sound_get_length_pcm(c_arg0);
+    return LL2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_sound_set_loop_points_pcm(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int64_t c_arg1 = (int64_t)NUM2LL(arg1);
+    int64_t c_arg2 = (int64_t)NUM2LL(arg2);
+    zen_ffi_sound_set_loop_points_pcm(c_arg0, c_arg1, c_arg2);
+    return Qnil;
+}
+
+static VALUE cruby_zen_sound_set_loop_points_seconds(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    float c_arg2 = (float)NUM2DBL(arg2);
+    zen_sound_set_loop_points_seconds(c_arg0, c_arg1, c_arg2);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_sound_get_loop_start_sec(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float ret = zen_ffi_sound_get_loop_start_sec(c_arg0);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_ffi_sound_get_loop_end_sec(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float ret = zen_ffi_sound_get_loop_end_sec(c_arg0);
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_ffi_sound_set_loop_start_sec(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    zen_ffi_sound_set_loop_start_sec(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_sound_set_loop_end_sec(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    float c_arg1 = (float)NUM2DBL(arg1);
+    zen_ffi_sound_set_loop_end_sec(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_sound_get_loop_start_pcm(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int64_t ret = zen_ffi_sound_get_loop_start_pcm(c_arg0);
+    return LL2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_sound_get_loop_end_pcm(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int64_t ret = zen_ffi_sound_get_loop_end_pcm(c_arg0);
+    return LL2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_sound_set_loop_start_pcm(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int64_t c_arg1 = (int64_t)NUM2LL(arg1);
+    zen_ffi_sound_set_loop_start_pcm(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_ffi_sound_set_loop_end_pcm(VALUE self, VALUE arg0, VALUE arg1) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int64_t c_arg1 = (int64_t)NUM2LL(arg1);
+    zen_ffi_sound_set_loop_end_pcm(c_arg0, c_arg1);
+    return Qnil;
+}
+
+static VALUE cruby_zen_sound_has_loop_points(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    int ret = zen_sound_has_loop_points(c_arg0);
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_sound_clear_loop_points(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_sound_clear_loop_points(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_js_eval(VALUE self, VALUE arg0) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    zen_js_eval(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_js_eval_num(VALUE self, VALUE arg0) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    double ret = zen_js_eval_num(c_arg0);
+    return DBL2NUM(ret);
+}
+
+static VALUE cruby_zen_js_eval_str(VALUE self, VALUE arg0) {
+    (void)self;
+    VALUE s_arg0 = arg0; const char* c_arg0 = NIL_P(s_arg0) ? NULL : StringValueCStr(s_arg0);
+    const char* ret = zen_js_eval_str(c_arg0);
+    return (ret) ? rb_utf8_str_new_cstr(ret) : Qnil;
+}
+
+static VALUE cruby_zen_js_is_page_visible(VALUE self) {
+    (void)self;
+    int ret = zen_js_is_page_visible();
+    return INT2NUM(ret);
+}
+
+static VALUE cruby_zen_ffi_safe_area_left(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_safe_area_left();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_ffi_safe_area_top(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_safe_area_top();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_ffi_safe_area_right(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_safe_area_right();
+    return DBL2NUM((double)(ret));
+}
+
+static VALUE cruby_zen_ffi_safe_area_bottom(VALUE self) {
+    (void)self;
+    float ret = zen_ffi_safe_area_bottom();
+    return DBL2NUM((double)(ret));
+}
+
 void Init_zenoo(void) {
-    // GCトリガーコールバック登録 (テクスチャ不足時に rb_gc() をキック)
-    zen_set_gc_trigger_callback(rb_zenoo_gc_hook);
     rb_gc_register_address(&s_frame_callback_proc);
+    zen_set_gc_trigger_callback(rb_zenoo_gc_hook);
 
-    rb_mZenoo = rb_define_module("Zenoo");
-    rb_define_const(rb_mZenoo, "VERSION", rb_str_new_cstr(ZENOO_VERSION));
-    rb_define_singleton_method(rb_mZenoo, "version", zenoo_s_version, 0);
+    VALUE rb_mZenoo = rb_define_module("Zenoo");
+    VALUE rb_mNative = rb_define_module_under(rb_mZenoo, "Native");
+    VALUE rb_mC = rb_define_module_under(rb_mNative, "C");
 
-    rb_mNative = rb_define_module_under(rb_mZenoo, "Native");
 
-    // 1. Window
-    VALUE mWindow = rb_define_module_under(rb_mNative, "Window");
-    rb_define_singleton_method(mWindow, "init", win_init, -1);
-    rb_define_singleton_method(mWindow, "update", win_update, 0);
-    rb_define_singleton_method(mWindow, "clear", win_clear, 1);
-    rb_define_singleton_method(mWindow, "size", win_get_size, 0);
-    rb_define_singleton_method(mWindow, "size_w", win_get_size_w, 0);
-    rb_define_singleton_method(mWindow, "size_h", win_get_size_h, 0);
-    rb_define_singleton_method(mWindow, "scale_mode=", win_set_scale_mode, 1);
-    rb_define_singleton_method(mWindow, "scale_mode", win_get_scale_mode, 0);
-    rb_define_singleton_method(mWindow, "scale=", win_set_scale, 1);
-    rb_define_singleton_method(mWindow, "scale", win_get_scale, 0);
-    rb_define_singleton_method(mWindow, "window_scale=", win_set_scale, 1);
-    rb_define_singleton_method(mWindow, "window_scale", win_get_window_scale, 0);
-    rb_define_singleton_method(mWindow, "dpi_scale", win_get_dpi_scale, 0);
-    rb_define_singleton_method(mWindow, "set_window_size", win_set_window_size, 2);
-    rb_define_singleton_method(mWindow, "window_size", win_get_os_window_size, 0);
-    rb_define_singleton_method(mWindow, "title=", win_set_title, 1);
-    rb_define_singleton_method(mWindow, "title", win_get_title, 0);
-    rb_define_singleton_method(mWindow, "window_position", win_get_window_pos, 0);
-    rb_define_singleton_method(mWindow, "set_window_position", win_set_window_pos, 2);
-    rb_define_singleton_method(mWindow, "focused?", win_is_focused, 0);
-    rb_define_singleton_method(mWindow, "minimized?", win_is_minimized, 0);
-    rb_define_singleton_method(mWindow, "maximized?", win_is_maximized, 0);
-    rb_define_singleton_method(mWindow, "hovered?", win_is_hovered, 0);
-    rb_define_singleton_method(mWindow, "resizing?", win_is_resizing, 0);
-    rb_define_singleton_method(mWindow, "live_resize=", win_set_live_resize, 1);
-    rb_define_singleton_method(mWindow, "live_resize", win_get_live_resize, 0);
-    rb_define_singleton_method(mWindow, "set_frame_callback", win_set_frame_callback, 1);
-    rb_define_singleton_method(mWindow, "msaa_samples=", win_set_msaa_samples, 1);
-    rb_define_singleton_method(mWindow, "msaa_samples", win_get_msaa_samples, 0);
-    rb_define_singleton_method(mWindow, "vsync=", win_set_vsync, 1);
-    rb_define_singleton_method(mWindow, "target_fps=", win_set_target_fps, 1);
-    rb_define_singleton_method(mWindow, "target_fps", win_get_target_fps, 0);
-    rb_define_singleton_method(mWindow, "delta_time", win_get_delta_time, 0);
-    rb_define_singleton_method(mWindow, "time", win_get_time, 0);
-    rb_define_singleton_method(mWindow, "shutdown", win_shutdown, 0);
-    rb_define_singleton_method(mWindow, "ensure_context", win_ensure_context, 0);
-    rb_define_singleton_method(mWindow, "wasm?", win_wasm_p, 0);
-    rb_define_singleton_method(mWindow, "show_cursor", win_show_cursor, 1);
-    rb_define_singleton_method(mWindow, "set_cursor", win_set_cursor, 1);
-
-    // 2. Input
-    VALUE mInput = rb_define_module_under(rb_mNative, "Input");
-    rb_define_singleton_method(mInput, "clipboard", input_get_clipboard, 0);
-    rb_define_singleton_method(mInput, "clipboard=", input_set_clipboard, 1);
-    rb_define_singleton_method(mInput, "key_pressed?", input_key_pressed, 1);
-    rb_define_singleton_method(mInput, "key_push?", input_key_push, 1);
-    rb_define_singleton_method(mInput, "key_release?", input_key_release, 1);
-    rb_define_singleton_method(mInput, "key_repeat?", input_key_repeat, 1);
-    rb_define_singleton_method(mInput, "mouse_pos", input_mouse_pos, 0);
-    rb_define_singleton_method(mInput, "mouse_x", input_mouse_x, 0);
-    rb_define_singleton_method(mInput, "mouse_y", input_mouse_y, 0);
-    rb_define_singleton_method(mInput, "mouse_pressed?", input_mouse_pressed, 1);
-    rb_define_singleton_method(mInput, "mouse_push?", input_mouse_push, 1);
-    rb_define_singleton_method(mInput, "mouse_release?", input_mouse_release, 1);
-    rb_define_singleton_method(mInput, "mouse_wheel_x", input_mouse_wheel_x, 0);
-    rb_define_singleton_method(mInput, "mouse_wheel_y", input_mouse_wheel_y, 0);
-    rb_define_singleton_method(mInput, "mouse_wheel", input_mouse_wheel_y, 0);
-    rb_define_singleton_method(mInput, "gamepad_connected?", input_gamepad_connected, 1);
-    rb_define_singleton_method(mInput, "gamepad_axis", input_gamepad_axis, 2);
-    rb_define_singleton_method(mInput, "gamepad_button_pressed?", input_gamepad_button_pressed, 2);
-    rb_define_singleton_method(mInput, "gamepad_button_push?", input_gamepad_button_push, 2);
-    rb_define_singleton_method(mInput, "gamepad_button_release?", input_gamepad_button_release, 2);
-    rb_define_singleton_method(mInput, "vibrate_gamepad", input_vibrate_gamepad, 4);
-    rb_define_singleton_method(mInput, "vibrate", input_vibrate, 1);
-    rb_define_singleton_method(mInput, "input_chars", input_input_chars, 0);
-    rb_define_singleton_method(mInput, "set_ime_position", input_set_ime_position, 2);
-    rb_define_singleton_method(mInput, "touch_event_count", input_touch_event_count, 0);
-    rb_define_singleton_method(mInput, "touch_event_id", input_touch_event_id, 1);
-    rb_define_singleton_method(mInput, "touch_event_type", input_touch_event_type, 1);
-    rb_define_singleton_method(mInput, "touch_event_x", input_touch_event_x, 1);
-    rb_define_singleton_method(mInput, "touch_event_y", input_touch_event_y, 1);
-    rb_define_singleton_method(mInput, "touch_clear_events", input_touch_clear_events, 0);
-    rb_define_singleton_method(mInput, "push_touch", input_push_touch, 4);
-
-    // 3. Image (Zenoo::Image)
-    rb_cNativeImage = rb_define_class_under(rb_mZenoo, "Image", rb_cObject);
-    rb_define_const(rb_mNative, "Image", rb_cNativeImage);
-    rb_define_alloc_func(rb_cNativeImage, image_allocate);
-    rb_define_method(rb_cNativeImage, "initialize", image_init, -1);
-    rb_define_singleton_method(rb_cNativeImage, "load", image_s_load, -1);
-    rb_define_method(rb_cNativeImage, "width", image_get_width, 0);
-    rb_define_method(rb_cNativeImage, "height", image_get_height, 0);
-    rb_define_method(rb_cNativeImage, "set_as_render_target", image_set_as_render_target, 0);
-    rb_define_singleton_method(rb_cNativeImage, "reset_render_target", image_s_reset_render_target, 0);
-    rb_define_method(rb_cNativeImage, "sub_image", image_sub_image, 4);
-    rb_define_method(rb_cNativeImage, "x", image_get_x, 0);
-    rb_define_method(rb_cNativeImage, "y", image_get_y, 0);
-    rb_define_method(rb_cNativeImage, "texture_width", image_get_texture_width, 0);
-    rb_define_method(rb_cNativeImage, "texture_height", image_get_texture_height, 0);
-    rb_define_method(rb_cNativeImage, "texture_id", image_get_texture_id, 0);
-    rb_define_method(rb_cNativeImage, "uv", image_get_uv, 0);
-    rb_define_method(rb_cNativeImage, "sub_image?", image_is_sub_image, 0);
-    rb_define_method(rb_cNativeImage, "texture_filter=", image_set_filter, 1);
-    rb_define_method(rb_cNativeImage, "texture_filter", image_get_filter, 0);
-    rb_define_method(rb_cNativeImage, "replace_texture!", image_replace_texture, 1);
-    rb_define_singleton_method(rb_cNativeImage, "create_format", image_s_create_format, 3);
-    rb_define_singleton_method(rb_cNativeImage, "create_r8", image_s_create_r8, 2);
-    rb_define_singleton_method(rb_cNativeImage, "create_msaa", image_s_create_msaa, -1);
-    rb_define_singleton_method(rb_cNativeImage, "default_texture_filter=", image_s_set_default_filter, 1);
-    rb_define_singleton_method(rb_cNativeImage, "default_texture_filter", image_s_get_default_filter, 0);
-    rb_define_method(rb_cNativeImage, "msaa?", image_get_msaa, 0);
-    rb_define_method(rb_cNativeImage, "msaa_samples", image_get_msaa_samples, 0);
-    rb_define_method(rb_cNativeImage, "raw_get_pixel", image_get_pixel, 2);
-    rb_define_method(rb_cNativeImage, "raw_set_pixel", image_set_pixel, 3);
-    rb_define_method(rb_cNativeImage, "raw_set_pixel_rgba", image_set_pixel_rgba, 6);
-    rb_define_method(rb_cNativeImage, "raw_get_pixels", image_get_pixels, 0);
-    rb_define_method(rb_cNativeImage, "raw_set_pixels", image_set_pixels, 1);
-    rb_define_method(rb_cNativeImage, "sync", image_sync, 0);
-    rb_define_method(rb_cNativeImage, "clone", image_clone, 0);
-    rb_define_method(rb_cNativeImage, "save", image_save, 1);
-
-    // 4. NativeShader (Zenoo::Native::NativeShader)
-    rb_cNativeShader = rb_define_class_under(rb_mNative, "NativeShader", rb_cObject);
-    rb_define_alloc_func(rb_cNativeShader, shader_allocate);
-    rb_define_method(rb_cNativeShader, "initialize", shader_init, 2);
-    rb_define_method(rb_cNativeShader, "set_int", shader_set_int, 2);
-    rb_define_method(rb_cNativeShader, "set_float", shader_set_float, 2);
-    rb_define_method(rb_cNativeShader, "set_vec2", shader_set_vec2, 3);
-    rb_define_method(rb_cNativeShader, "set_vec3", shader_set_vec3, 4);
-    rb_define_method(rb_cNativeShader, "set_vec4", shader_set_vec4, 5);
-    rb_define_method(rb_cNativeShader, "set_vec4_array", shader_set_vec4_array, 2);
-    rb_define_method(rb_cNativeShader, "set_mat4", shader_set_mat4, 2);
-    rb_define_method(rb_cNativeShader, "set_texture", shader_set_texture, 3);
-
-    // 4.5. Native::Mesh (Zenoo::Native::Mesh)
-    rb_cNativeMesh = rb_define_class_under(rb_mNative, "Mesh", rb_cObject);
-    rb_define_alloc_func(rb_cNativeMesh, mesh_allocate);
-    rb_define_method(rb_cNativeMesh, "initialize", mesh_init, -1);
-    rb_define_method(rb_cNativeMesh, "update_vertices", mesh_update_vertices, -1);
-    rb_define_method(rb_cNativeMesh, "update_indices", mesh_update_indices, -1);
-    rb_define_method(rb_cNativeMesh, "dynamic?", mesh_is_dynamic, 0);
-    rb_define_method(rb_cNativeMesh, "vertex_count", mesh_get_vertex_count, 0);
-    rb_define_method(rb_cNativeMesh, "index_count", mesh_get_index_count, 0);
-
-    // 5. Renderer
-    VALUE mRenderer = rb_define_module_under(rb_mNative, "Renderer");
-    rb_define_singleton_method(mRenderer, "draw_buffer", renderer_draw_buffer, 8);
-    rb_define_singleton_method(mRenderer, "draw_mesh", renderer_draw_mesh, 7);
-    rb_define_singleton_method(mRenderer, "flush", renderer_flush, 0);
-    rb_define_singleton_method(mRenderer, "set_blend_mode", renderer_set_blend_mode, 1);
-    rb_define_singleton_method(mRenderer, "set_scissor", renderer_set_scissor, 4);
-    rb_define_singleton_method(mRenderer, "reset_scissor", renderer_reset_scissor, 0);
-
-    // 6. Font (Zenoo::Native::Font)
-    rb_cNativeFont = rb_define_class_under(rb_mNative, "Font", rb_cObject);
-    rb_define_alloc_func(rb_cNativeFont, font_allocate);
-    rb_define_singleton_method(rb_cNativeFont, "load", font_s_load, -1);
-    rb_define_singleton_method(rb_cNativeFont, "atlas_image", font_s_atlas_image, 0);
-    rb_define_method(rb_cNativeFont, "get_glyph", font_get_glyph, -1);
-    rb_define_method(rb_cNativeFont, "metrics", font_get_metrics, 1);
-
-    VALUE mFontHelper = rb_define_module_under(rb_mNative, "FontHelper");
-    rb_define_singleton_method(mFontHelper, "set_atlas_image", font_helper_s_set_atlas_image, 1);
-    rb_define_singleton_method(mFontHelper, "atlas_generation", font_helper_s_atlas_generation, 0);
-
-    // 7. Sound (Zenoo::Native::Sound)
-    rb_cNativeSound = rb_define_class_under(rb_mNative, "Sound", rb_cObject);
-    rb_define_alloc_func(rb_cNativeSound, sound_allocate);
-    rb_define_singleton_method(rb_cNativeSound, "load", sound_s_load, -1);
-    rb_define_singleton_method(rb_cNativeSound, "load_pcm", sound_s_load_pcm, 3);
-    rb_define_method(rb_cNativeSound, "play", sound_play, 0);
-    rb_define_method(rb_cNativeSound, "stop", sound_stop, 0);
-    rb_define_method(rb_cNativeSound, "pause", sound_pause, 0);
-    rb_define_method(rb_cNativeSound, "playing?", sound_is_playing, 0);
-    rb_define_method(rb_cNativeSound, "volume=", sound_set_volume, 1);
-    rb_define_method(rb_cNativeSound, "volume", sound_get_volume, 0);
-    rb_define_method(rb_cNativeSound, "looping=", sound_set_looping, 1);
-    rb_define_method(rb_cNativeSound, "looping?", sound_is_looping, 0);
-    rb_define_method(rb_cNativeSound, "pitch=", sound_set_pitch, 1);
-    rb_define_method(rb_cNativeSound, "pitch", sound_get_pitch, 0);
-    rb_define_method(rb_cNativeSound, "pan=", sound_set_pan, 1);
-    rb_define_method(rb_cNativeSound, "pan", sound_get_pan, 0);
-    rb_define_method(rb_cNativeSound, "seek", sound_seek, 1);
-    rb_define_method(rb_cNativeSound, "cursor", sound_get_cursor, 0);
-    rb_define_method(rb_cNativeSound, "length", sound_get_length, 0);
-    rb_define_method(rb_cNativeSound, "sample_rate", sound_get_sample_rate, 0);
-    rb_define_method(rb_cNativeSound, "length_pcm", sound_get_length_pcm, 0);
-    rb_define_method(rb_cNativeSound, "set_loop_points", sound_set_loop_points_sec, -1);
-    rb_define_method(rb_cNativeSound, "set_loop_points_pcm", sound_set_loop_points_pcm, -1);
-    rb_define_method(rb_cNativeSound, "loop_start", sound_get_loop_start_sec, 0);
-    rb_define_method(rb_cNativeSound, "loop_start=", sound_set_loop_start_sec, 1);
-    rb_define_method(rb_cNativeSound, "loop_end", sound_get_loop_end_sec, 0);
-    rb_define_method(rb_cNativeSound, "loop_end=", sound_set_loop_end_sec, 1);
-    rb_define_method(rb_cNativeSound, "loop_start_pcm", sound_get_loop_start_pcm, 0);
-    rb_define_method(rb_cNativeSound, "loop_start_pcm=", sound_set_loop_start_pcm, 1);
-    rb_define_method(rb_cNativeSound, "loop_end_pcm", sound_get_loop_end_pcm, 0);
-    rb_define_method(rb_cNativeSound, "loop_end_pcm=", sound_set_loop_end_pcm, 1);
-    rb_define_method(rb_cNativeSound, "has_loop_points?", sound_has_loop_points, 0);
-    rb_define_method(rb_cNativeSound, "clear_loop_points", sound_clear_loop_points, 0);
-
-    // 8. Audio (Zenoo::Native::Audio)
-    VALUE mAudio = rb_define_module_under(rb_mNative, "Audio");
-    rb_define_singleton_method(mAudio, "init", audio_s_init, 0);
-    rb_define_singleton_method(mAudio, "shutdown", audio_s_shutdown, 0);
-    rb_define_singleton_method(mAudio, "master_volume=", audio_s_set_master_volume, 1);
-    rb_define_singleton_method(mAudio, "master_volume", audio_s_get_master_volume, 0);
-
-    // 9. Browser (Zenoo::Native::Browser)
-    VALUE mBrowser = rb_define_module_under(rb_mNative, "Browser");
-    rb_define_singleton_method(mBrowser, "raw_eval", browser_s_eval, 1);
-    rb_define_singleton_method(mBrowser, "raw_eval_num", browser_s_eval_num, 1);
-    rb_define_singleton_method(mBrowser, "raw_eval_str", browser_s_eval_str, 1);
-    rb_define_singleton_method(mBrowser, "visible?", browser_s_is_visible, 0);
-    rb_define_singleton_method(mBrowser, "raw_safe_area_left", browser_s_safe_area_left, 0);
-    rb_define_singleton_method(mBrowser, "raw_safe_area_top", browser_s_safe_area_top, 0);
-    rb_define_singleton_method(mBrowser, "raw_safe_area_right", browser_s_safe_area_right, 0);
-    rb_define_singleton_method(mBrowser, "raw_safe_area_bottom", browser_s_safe_area_bottom, 0);
+    rb_define_singleton_method(rb_mC, "zen_get_version", cruby_zen_get_version, 0);
+    rb_define_singleton_method(rb_mC, "zen_ensure_context", cruby_zen_ensure_context, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_win_init", cruby_zen_ffi_win_init, 4);
+    rb_define_singleton_method(rb_mC, "zen_ffi_win_init_scaled", cruby_zen_ffi_win_init_scaled, 7);
+    rb_define_singleton_method(rb_mC, "zen_shutdown", cruby_zen_shutdown, 0);
+    rb_define_singleton_method(rb_mC, "zen_toggle_fullscreen", cruby_zen_toggle_fullscreen, 0);
+    rb_define_singleton_method(rb_mC, "zen_update", cruby_zen_update, 0);
+    rb_define_singleton_method(rb_mC, "zen_begin_frame", cruby_zen_begin_frame, 0);
+    rb_define_singleton_method(rb_mC, "zen_end_frame", cruby_zen_end_frame, 0);
+    rb_define_singleton_method(rb_mC, "zen_clear", cruby_zen_clear, 1);
+    rb_define_singleton_method(rb_mC, "zen_run_loop", cruby_zen_run_loop, 1);
+    rb_define_singleton_method(rb_mC, "zen_set_frame_callback", cruby_zen_set_frame_callback, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_clear_frame_callback", cruby_zen_ffi_clear_frame_callback, 0);
+    rb_define_singleton_method(rb_mC, "zen_is_wasm", cruby_zen_is_wasm, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_gc_trigger_callback", cruby_zen_set_gc_trigger_callback, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_destroy_handle", cruby_zen_ffi_destroy_handle, 2);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_free_count", cruby_zen_ffi_image_free_count, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_screen_w", cruby_zen_ffi_screen_w, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_screen_h", cruby_zen_ffi_screen_h, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_window_w", cruby_zen_ffi_window_w, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_window_h", cruby_zen_ffi_window_h, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_window_size", cruby_zen_set_window_size, 2);
+    rb_define_singleton_method(rb_mC, "zen_set_window_title", cruby_zen_set_window_title, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_window_title", cruby_zen_get_window_title, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_window_pos_x", cruby_zen_ffi_window_pos_x, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_window_pos_y", cruby_zen_ffi_window_pos_y, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_window_pos", cruby_zen_set_window_pos, 2);
+    rb_define_singleton_method(rb_mC, "zen_is_window_focused", cruby_zen_is_window_focused, 0);
+    rb_define_singleton_method(rb_mC, "zen_is_window_minimized", cruby_zen_is_window_minimized, 0);
+    rb_define_singleton_method(rb_mC, "zen_is_window_maximized", cruby_zen_is_window_maximized, 0);
+    rb_define_singleton_method(rb_mC, "zen_is_window_hovered", cruby_zen_is_window_hovered, 0);
+    rb_define_singleton_method(rb_mC, "zen_is_resizing", cruby_zen_is_resizing, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_live_resize", cruby_zen_set_live_resize, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_live_resize", cruby_zen_get_live_resize, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_scale_mode", cruby_zen_set_scale_mode, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_scale_mode", cruby_zen_get_scale_mode, 0);
+    rb_define_singleton_method(rb_mC, "zen_get_scale", cruby_zen_get_scale, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_window_scale", cruby_zen_set_window_scale, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_window_scale", cruby_zen_get_window_scale, 0);
+    rb_define_singleton_method(rb_mC, "zen_get_dpi_scale", cruby_zen_get_dpi_scale, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_target_fps", cruby_zen_set_target_fps, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_target_fps", cruby_zen_get_target_fps, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_vsync", cruby_zen_set_vsync, 1);
+    rb_define_singleton_method(rb_mC, "zen_window_set_msaa_samples", cruby_zen_window_set_msaa_samples, 1);
+    rb_define_singleton_method(rb_mC, "zen_window_get_msaa_samples", cruby_zen_window_get_msaa_samples, 0);
+    rb_define_singleton_method(rb_mC, "zen_get_delta_time", cruby_zen_get_delta_time, 0);
+    rb_define_singleton_method(rb_mC, "zen_get_time", cruby_zen_get_time, 0);
+    rb_define_singleton_method(rb_mC, "zen_window_show_cursor", cruby_zen_window_show_cursor, 1);
+    rb_define_singleton_method(rb_mC, "zen_window_set_cursor", cruby_zen_window_set_cursor, 1);
+    rb_define_singleton_method(rb_mC, "zen_window_get_clipboard_string", cruby_zen_window_get_clipboard_string, 0);
+    rb_define_singleton_method(rb_mC, "zen_window_set_clipboard_string", cruby_zen_window_set_clipboard_string, 1);
+    rb_define_singleton_method(rb_mC, "zen_is_key_pressed", cruby_zen_is_key_pressed, 1);
+    rb_define_singleton_method(rb_mC, "zen_is_key_push", cruby_zen_is_key_push, 1);
+    rb_define_singleton_method(rb_mC, "zen_is_key_release", cruby_zen_is_key_release, 1);
+    rb_define_singleton_method(rb_mC, "zen_is_key_repeat", cruby_zen_is_key_repeat, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_mouse_x", cruby_zen_ffi_mouse_x, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_mouse_y", cruby_zen_ffi_mouse_y, 0);
+    rb_define_singleton_method(rb_mC, "zen_is_mouse_pressed", cruby_zen_is_mouse_pressed, 1);
+    rb_define_singleton_method(rb_mC, "zen_is_mouse_push", cruby_zen_is_mouse_push, 1);
+    rb_define_singleton_method(rb_mC, "zen_is_mouse_release", cruby_zen_is_mouse_release, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_mouse_wheel_x", cruby_zen_get_mouse_wheel_x, 0);
+    rb_define_singleton_method(rb_mC, "zen_get_mouse_wheel_y", cruby_zen_get_mouse_wheel_y, 0);
+    rb_define_singleton_method(rb_mC, "zen_is_gamepad_connected", cruby_zen_is_gamepad_connected, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_gamepad_axis", cruby_zen_get_gamepad_axis, 2);
+    rb_define_singleton_method(rb_mC, "zen_is_gamepad_button_pressed", cruby_zen_is_gamepad_button_pressed, 2);
+    rb_define_singleton_method(rb_mC, "zen_is_gamepad_button_push", cruby_zen_is_gamepad_button_push, 2);
+    rb_define_singleton_method(rb_mC, "zen_is_gamepad_button_release", cruby_zen_is_gamepad_button_release, 2);
+    rb_define_singleton_method(rb_mC, "zen_gamepad_vibrate", cruby_zen_gamepad_vibrate, 4);
+    rb_define_singleton_method(rb_mC, "zen_vibrate", cruby_zen_vibrate, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_char", cruby_zen_get_char, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_ime_position", cruby_zen_set_ime_position, 2);
+    rb_define_singleton_method(rb_mC, "zen_push_touch", cruby_zen_push_touch, 4);
+    rb_define_singleton_method(rb_mC, "zen_get_touch_count", cruby_zen_get_touch_count, 0);
+    rb_define_singleton_method(rb_mC, "zen_get_touch_event_id", cruby_zen_get_touch_event_id, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_touch_event_type", cruby_zen_get_touch_event_type, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_touch_event_x", cruby_zen_get_touch_event_x, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_touch_event_y", cruby_zen_get_touch_event_y, 1);
+    rb_define_singleton_method(rb_mC, "zen_clear_touch_events", cruby_zen_clear_touch_events, 0);
+    rb_define_singleton_method(rb_mC, "zen_set_default_texture_filter", cruby_zen_set_default_texture_filter, 1);
+    rb_define_singleton_method(rb_mC, "zen_get_default_texture_filter", cruby_zen_get_default_texture_filter, 0);
+    rb_define_singleton_method(rb_mC, "zen_image_set_filter", cruby_zen_image_set_filter, 2);
+    rb_define_singleton_method(rb_mC, "zen_image_get_filter", cruby_zen_image_get_filter, 1);
+    rb_define_singleton_method(rb_mC, "zen_image_replace_texture", cruby_zen_image_replace_texture, 2);
+    rb_define_singleton_method(rb_mC, "zen_image_create", cruby_zen_image_create, 2);
+    rb_define_singleton_method(rb_mC, "zen_image_create_format", cruby_zen_image_create_format, 3);
+    rb_define_singleton_method(rb_mC, "zen_image_create_msaa", cruby_zen_image_create_msaa, 3);
+    rb_define_singleton_method(rb_mC, "zen_image_load", cruby_zen_image_load, 1);
+    rb_define_singleton_method(rb_mC, "zen_image_sub_image", cruby_zen_image_sub_image, 5);
+    rb_define_singleton_method(rb_mC, "zen_image_clone", cruby_zen_image_clone, 1);
+    rb_define_singleton_method(rb_mC, "zen_set_render_target", cruby_zen_set_render_target, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_width", cruby_zen_ffi_image_width, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_height", cruby_zen_ffi_image_height, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_x", cruby_zen_ffi_image_x, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_y", cruby_zen_ffi_image_y, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_tex_width", cruby_zen_ffi_image_tex_width, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_tex_height", cruby_zen_ffi_image_tex_height, 1);
+    rb_define_singleton_method(rb_mC, "zen_image_get_texture_id", cruby_zen_image_get_texture_id, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_is_sub", cruby_zen_ffi_image_is_sub, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_msaa_samples", cruby_zen_ffi_image_msaa_samples, 1);
+    rb_define_singleton_method(rb_mC, "zen_image_get_pixel", cruby_zen_image_get_pixel, 3);
+    rb_define_singleton_method(rb_mC, "zen_image_set_pixel", cruby_zen_image_set_pixel, 4);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_set_pixel_rgba", cruby_zen_ffi_image_set_pixel_rgba, 7);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_set_pixels", cruby_zen_ffi_image_set_pixels, 2);
+    rb_define_singleton_method(rb_mC, "zen_image_sync_to_gpu", cruby_zen_image_sync_to_gpu, 1);
+    rb_define_singleton_method(rb_mC, "zen_image_save", cruby_zen_image_save, 2);
+    rb_define_singleton_method(rb_mC, "zen_ffi_shader_create", cruby_zen_ffi_shader_create, 2);
+    rb_define_singleton_method(rb_mC, "zen_shader_set_int", cruby_zen_shader_set_int, 3);
+    rb_define_singleton_method(rb_mC, "zen_shader_set_float", cruby_zen_shader_set_float, 3);
+    rb_define_singleton_method(rb_mC, "zen_shader_set_vec2", cruby_zen_shader_set_vec2, 4);
+    rb_define_singleton_method(rb_mC, "zen_shader_set_vec3", cruby_zen_shader_set_vec3, 5);
+    rb_define_singleton_method(rb_mC, "zen_shader_set_vec4", cruby_zen_shader_set_vec4, 6);
+    rb_define_singleton_method(rb_mC, "zen_ffi_shader_set_vec4_array", cruby_zen_ffi_shader_set_vec4_array, 4);
+    rb_define_singleton_method(rb_mC, "zen_ffi_shader_set_mat4", cruby_zen_ffi_shader_set_mat4, 3);
+    rb_define_singleton_method(rb_mC, "zen_shader_set_texture", cruby_zen_shader_set_texture, 4);
+    rb_define_singleton_method(rb_mC, "zen_ffi_mesh_create", cruby_zen_ffi_mesh_create, 8);
+    rb_define_singleton_method(rb_mC, "zen_ffi_mesh_update_vertices", cruby_zen_ffi_mesh_update_vertices, 5);
+    rb_define_singleton_method(rb_mC, "zen_ffi_mesh_update_indices", cruby_zen_ffi_mesh_update_indices, 3);
+    rb_define_singleton_method(rb_mC, "zen_ffi_mesh_is_dynamic", cruby_zen_ffi_mesh_is_dynamic, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_mesh_vertex_count", cruby_zen_ffi_mesh_vertex_count, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_mesh_index_count", cruby_zen_ffi_mesh_index_count, 1);
+    rb_define_singleton_method(rb_mC, "zen_set_blend_mode", cruby_zen_set_blend_mode, 1);
+    rb_define_singleton_method(rb_mC, "zen_set_scissor", cruby_zen_set_scissor, 4);
+    rb_define_singleton_method(rb_mC, "zen_reset_scissor", cruby_zen_reset_scissor, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_draw_buffer", cruby_zen_ffi_draw_buffer, 8);
+    rb_define_singleton_method(rb_mC, "zen_ffi_draw_mesh", cruby_zen_ffi_draw_mesh, 7);
+    rb_define_singleton_method(rb_mC, "zen_font_load", cruby_zen_font_load, 2);
+    rb_define_singleton_method(rb_mC, "zen_ffi_font_query_glyph", cruby_zen_ffi_font_query_glyph, 5);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_visible", cruby_zen_ffi_glyph_visible, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_u0", cruby_zen_ffi_glyph_u0, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_v0", cruby_zen_ffi_glyph_v0, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_u1", cruby_zen_ffi_glyph_u1, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_v1", cruby_zen_ffi_glyph_v1, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_x0", cruby_zen_ffi_glyph_x0, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_y0", cruby_zen_ffi_glyph_y0, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_x1", cruby_zen_ffi_glyph_x1, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_y1", cruby_zen_ffi_glyph_y1, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_advance", cruby_zen_ffi_glyph_advance, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_glyph_is_bitmap", cruby_zen_ffi_glyph_is_bitmap, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_font_ascent", cruby_zen_ffi_font_ascent, 2);
+    rb_define_singleton_method(rb_mC, "zen_ffi_font_descent", cruby_zen_ffi_font_descent, 2);
+    rb_define_singleton_method(rb_mC, "zen_ffi_font_line_gap", cruby_zen_ffi_font_line_gap, 2);
+    rb_define_singleton_method(rb_mC, "zen_font_set_atlas_image", cruby_zen_font_set_atlas_image, 1);
+    rb_define_singleton_method(rb_mC, "zen_font_atlas_generation", cruby_zen_font_atlas_generation, 0);
+    rb_define_singleton_method(rb_mC, "zen_audio_init", cruby_zen_audio_init, 0);
+    rb_define_singleton_method(rb_mC, "zen_audio_shutdown", cruby_zen_audio_shutdown, 0);
+    rb_define_singleton_method(rb_mC, "zen_audio_set_master_volume", cruby_zen_audio_set_master_volume, 1);
+    rb_define_singleton_method(rb_mC, "zen_audio_get_master_volume", cruby_zen_audio_get_master_volume, 0);
+    rb_define_singleton_method(rb_mC, "zen_sound_load_file", cruby_zen_sound_load_file, 2);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_load_pcm", cruby_zen_ffi_sound_load_pcm, 4);
+    rb_define_singleton_method(rb_mC, "zen_sound_play", cruby_zen_sound_play, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_stop", cruby_zen_sound_stop, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_pause", cruby_zen_sound_pause, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_is_playing", cruby_zen_sound_is_playing, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_set_volume", cruby_zen_sound_set_volume, 2);
+    rb_define_singleton_method(rb_mC, "zen_sound_get_volume", cruby_zen_sound_get_volume, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_set_looping", cruby_zen_sound_set_looping, 2);
+    rb_define_singleton_method(rb_mC, "zen_sound_is_looping", cruby_zen_sound_is_looping, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_set_pitch", cruby_zen_sound_set_pitch, 2);
+    rb_define_singleton_method(rb_mC, "zen_sound_get_pitch", cruby_zen_sound_get_pitch, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_set_pan", cruby_zen_sound_set_pan, 2);
+    rb_define_singleton_method(rb_mC, "zen_sound_get_pan", cruby_zen_sound_get_pan, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_seek", cruby_zen_sound_seek, 2);
+    rb_define_singleton_method(rb_mC, "zen_sound_get_cursor", cruby_zen_sound_get_cursor, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_get_length", cruby_zen_sound_get_length, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_get_sample_rate", cruby_zen_sound_get_sample_rate, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_get_length_pcm", cruby_zen_ffi_sound_get_length_pcm, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_set_loop_points_pcm", cruby_zen_ffi_sound_set_loop_points_pcm, 3);
+    rb_define_singleton_method(rb_mC, "zen_sound_set_loop_points_seconds", cruby_zen_sound_set_loop_points_seconds, 3);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_get_loop_start_sec", cruby_zen_ffi_sound_get_loop_start_sec, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_get_loop_end_sec", cruby_zen_ffi_sound_get_loop_end_sec, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_set_loop_start_sec", cruby_zen_ffi_sound_set_loop_start_sec, 2);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_set_loop_end_sec", cruby_zen_ffi_sound_set_loop_end_sec, 2);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_get_loop_start_pcm", cruby_zen_ffi_sound_get_loop_start_pcm, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_get_loop_end_pcm", cruby_zen_ffi_sound_get_loop_end_pcm, 1);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_set_loop_start_pcm", cruby_zen_ffi_sound_set_loop_start_pcm, 2);
+    rb_define_singleton_method(rb_mC, "zen_ffi_sound_set_loop_end_pcm", cruby_zen_ffi_sound_set_loop_end_pcm, 2);
+    rb_define_singleton_method(rb_mC, "zen_sound_has_loop_points", cruby_zen_sound_has_loop_points, 1);
+    rb_define_singleton_method(rb_mC, "zen_sound_clear_loop_points", cruby_zen_sound_clear_loop_points, 1);
+    rb_define_singleton_method(rb_mC, "zen_js_eval", cruby_zen_js_eval, 1);
+    rb_define_singleton_method(rb_mC, "zen_js_eval_num", cruby_zen_js_eval_num, 1);
+    rb_define_singleton_method(rb_mC, "zen_js_eval_str", cruby_zen_js_eval_str, 1);
+    rb_define_singleton_method(rb_mC, "zen_js_is_page_visible", cruby_zen_js_is_page_visible, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_safe_area_left", cruby_zen_ffi_safe_area_left, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_safe_area_top", cruby_zen_ffi_safe_area_top, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_safe_area_right", cruby_zen_ffi_safe_area_right, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_safe_area_bottom", cruby_zen_ffi_safe_area_bottom, 0);
+    rb_define_singleton_method(rb_mC, "zen_ffi_image_get_pixels", cruby_zen_ffi_image_get_pixels, 2);
 }
