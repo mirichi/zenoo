@@ -431,6 +431,21 @@
       background: #f472b6;
       box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
     }
+    .card.neon_abyss::before {
+      background: linear-gradient(90deg, #00ffcc, #38bdf8, #c084fc);
+    }
+    .card.neon_abyss .card-tag {
+      color: #00ffcc;
+    }
+    .card.neon_abyss .btn-launch {
+      background: linear-gradient(135deg, #00ffcc, #38bdf8);
+      color: #0b0d14;
+    }
+    .card.neon_abyss .btn-launch:hover {
+      background: linear-gradient(135deg, #38bdf8, #c084fc);
+      color: #0b0d14;
+      box-shadow: 0 0 22px rgba(56, 189, 248, 0.45);
+    }
 
     .card-actions {
       display: flex;
@@ -476,6 +491,28 @@
   </header>
 
   <main class="showcase-grid">
+    <!-- NEON ABYSS Flagship Tech Demo Card -->
+    <div class="card neon_abyss">
+      <div>
+        <div class="card-tag">Flagship Tech Demo &bull; 2D GI &amp; Shaders</div>
+        <h2>NEON ABYSS: Luminous Leviathan</h2>
+        <p class="desc">
+          9段マルチパスFBO、最大12灯2Dレイマーチング影＆ゴッドレイ、10,000 GPUパーティクル、26節メッシュ変形＆FABRIK IK触角を持つ光の巨龍、リアルタイム鏡面反射湖とPCMシンセを統合したフルスペックデモ。
+        </p>
+        <ul class="features">
+          <li>2D レイマーチング・ソフトシャドウ &amp; ボリュメトリック光条 (12灯)</li>
+          <li>10,000 GPU フローパーティクル (InstanceBuffer・毎フレーム 0 pack)</li>
+          <li>2層 set_ribbon メッシュ＋10関節×2 FABRIK IK 触角＋波打ちヒレ</li>
+          <li>鏡面水面反射・重力レンズ歪み・色収差・2段 Separable Bloom</li>
+          <li>[左長押し/Space] 衝撃波、[右長押し/V] 特異点、[1-4/T] テーマ、[G] モード</li>
+        </ul>
+      </div>
+      <div class="card-actions">
+        <a href="neon_abyss/" class="btn-launch">NEON ABYSS を起動 (Launch Demo) →</a>
+        <a href="https://github.com/mirichi/zenoo/blob/master/examples/demo_neon_abyss.rb" target="_blank" rel="noopener noreferrer" class="btn-source-card">📄 ソース</a>
+      </div>
+    </div>
+
     <!-- Sprite Animation & Tilemap Demo Card -->
     <div class="card sprite-animation">
       <div>

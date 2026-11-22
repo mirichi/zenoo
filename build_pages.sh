@@ -117,6 +117,7 @@ DEMOS=(
     "particle_editor|GPU Particle Designer & Editor|particle_editor|tools/particle_editor.rb|examples/web/shell_particle_editor.html"
     "sprite_animation|Diagonal Sprite & Multi-Layer Tilemap|sprite_animation|examples/demo_sprite_animation.rb|examples/web/shell_sprite_animation.html"
     "procedural_runner|Procedural Runner & Sword IK Demo|procedural_runner|examples/demo_procedural_runner.rb|examples/web/shell_procedural_runner.html"
+    "neon_abyss|NEON ABYSS: Luminous Leviathan & 2D GI|neon_abyss|examples/demo_neon_abyss.rb|examples/web/shell_neon_abyss.html"
 )
 
 # ターゲット検証 (all または定義済みターゲットか)
@@ -469,4 +470,5 @@ echo " Scene      : ${DOCS_DIR}/scene/index.html"
 echo " SFX Gen    : ${DOCS_DIR}/sound_generator/index.html"
 echo " ParticleEd : ${DOCS_DIR}/particle_editor/index.html"
 echo " ProcRunner : ${DOCS_DIR}/procedural_runner/index.html"
+echo " NeonAbyss  : ${DOCS_DIR}/neon_abyss/index.html"
 echo "=========================================================="

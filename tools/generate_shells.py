@@ -29,6 +29,7 @@ DOCS_MAP = {
     "shell_gui.html": "gui",
     "shell_image.html": "image",
     "shell_mesh_deform.html": "mesh_deform",
+    "shell_neon_abyss.html": "neon_abyss",
     "shell_particle_editor.html": "particle_editor",
     "shell_particles.html": "particles",
     "shell_procedural_runner.html": "procedural_runner",
@@ -145,6 +146,13 @@ DEMOS = {
         "heading": "Zenoo 2D Mesh Deformation &amp; 2-Stream Instancing",
         "desc": "Pure Ruby + WebGL 2.0 (Spinel AOT) | 2ストリームVBO &amp; Mesh変形API",
         "src": "https://github.com/mirichi/zenoo/blob/master/examples/demo_mesh_deform.rb",
+        "menu": False
+    },
+    "shell_neon_abyss.html": {
+        "title": "NEON ABYSS — Luminous Leviathan &amp; 2D GI (Spinel Wasm)",
+        "heading": "NEON ABYSS: Luminous Leviathan &amp; 2D Global Illumination",
+        "desc": "Multi-Pass FBO, 12-Light 2D Raymarching GI, 10,000 GPU Particles, FABRIK IK &amp; Mirror Water | Powered by Spinel AOT &amp; WebGL 2.0",
+        "src": "https://github.com/mirichi/zenoo/blob/master/examples/demo_neon_abyss.rb",
         "menu": False
     },
     "shell_particle_editor.html": {
