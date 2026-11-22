@@ -1764,17 +1764,13 @@ static VALUE cruby_zen_batch_enqueue_sdf_card(VALUE self, VALUE arg0, VALUE arg1
     return Qnil;
 }
 
-static VALUE cruby_zen_batch_stage_color_uv(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3, VALUE arg4, VALUE arg5, VALUE arg6, VALUE arg7) {
+static VALUE cruby_zen_batch_stage_color(VALUE self, VALUE arg0, VALUE arg1, VALUE arg2, VALUE arg3) {
     (void)self;
     float c_arg0 = (float)NUM2DBL(arg0);
     float c_arg1 = (float)NUM2DBL(arg1);
     float c_arg2 = (float)NUM2DBL(arg2);
     float c_arg3 = (float)NUM2DBL(arg3);
-    float c_arg4 = (float)NUM2DBL(arg4);
-    float c_arg5 = (float)NUM2DBL(arg5);
-    float c_arg6 = (float)NUM2DBL(arg6);
-    float c_arg7 = (float)NUM2DBL(arg7);
-    zen_batch_stage_color_uv(c_arg0, c_arg1, c_arg2, c_arg3, c_arg4, c_arg5, c_arg6, c_arg7);
+    zen_batch_stage_color(c_arg0, c_arg1, c_arg2, c_arg3);
     return Qnil;
 }
 
@@ -2223,7 +2219,7 @@ void Init_zenoo(void) {
     rb_define_singleton_method(rb_mC, "zen_batch_stage_card_colors", cruby_zen_batch_stage_card_colors, 12);
     rb_define_singleton_method(rb_mC, "zen_batch_stage_card_params", cruby_zen_batch_stage_card_params, 11);
     rb_define_singleton_method(rb_mC, "zen_batch_enqueue_sdf_card", cruby_zen_batch_enqueue_sdf_card, 8);
-    rb_define_singleton_method(rb_mC, "zen_batch_stage_color_uv", cruby_zen_batch_stage_color_uv, 8);
+    rb_define_singleton_method(rb_mC, "zen_batch_stage_color", cruby_zen_batch_stage_color, 4);
     rb_define_singleton_method(rb_mC, "zen_batch_enqueue_sprite", cruby_zen_batch_enqueue_sprite, 11);
     rb_define_singleton_method(rb_mC, "zen_batch_enqueue_triangle_flat", cruby_zen_batch_enqueue_triangle_flat, 13);
     rb_define_singleton_method(rb_mC, "zen_batch_stage_tri_colors", cruby_zen_batch_stage_tri_colors, 12);

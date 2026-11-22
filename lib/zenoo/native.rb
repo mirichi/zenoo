@@ -73,6 +73,26 @@ module Zenoo
       @ptr = ptr
       @box = [ptr]
       Native.install_finalizer(self, @box, Native::KIND_IMAGE)
+      __refresh_metrics
+    end
+
+    # 内部用: C側の画像寸法・正規化UVをRubyインスタンス変数へ同期する
+    # @api private
+    def __refresh_metrics
+      @width = Native::C.zen_ffi_image_width(@ptr)
+      @height = Native::C.zen_ffi_image_height(@ptr)
+      @x = Native::C.zen_ffi_image_x(@ptr)
+      @y = Native::C.zen_ffi_image_y(@ptr)
+      @texture_width = Native::C.zen_ffi_image_tex_width(@ptr)
+      @texture_height = Native::C.zen_ffi_image_tex_height(@ptr)
+      tw = @texture_width.to_f
+      th = @texture_height.to_f
+      if tw > 0.0 && th > 0.0
+        @uv_cached = [@x.to_f / tw, @y.to_f / th, @width.to_f / tw, @height.to_f / th].freeze
+      else
+        @uv_cached = [0.0, 0.0, 1.0, 1.0].freeze
+      end
+      nil
     end
 
     # 新しい `Image` を生成する（ファイルパス指定、幅・高さ指定、またはオプション付き生成）。
@@ -198,42 +218,42 @@ module Zenoo
     #
     # - 戻り値: `Integer`
     def width
-      Native::C.zen_ffi_image_width(@ptr)
+      @width
     end
 
     # 画像の論理高さをピクセル単位で返します。
     #
     # - 戻り値: `Integer`
     def height
-      Native::C.zen_ffi_image_height(@ptr)
+      @height
     end
 
     # 親テクスチャ内におけるこの画像の切り出し開始 X 座標（ピクセル）を返します。
     #
     # - 戻り値: `Integer`
     def x
-      Native::C.zen_ffi_image_x(@ptr)
+      @x
     end
 
     # 親テクスチャ内におけるこの画像の切り出し開始 Y 座標（ピクセル）を返します。
     #
     # - 戻り値: `Integer`
     def y
-      Native::C.zen_ffi_image_y(@ptr)
+      @y
     end
 
     # GPU 上の物理テクスチャ全体の幅をピクセル単位で返します。
     #
     # - 戻り値: `Integer`
     def texture_width
-      Native::C.zen_ffi_image_tex_width(@ptr)
+      @texture_width
     end
 
     # GPU 上の物理テクスチャ全体の高さをピクセル単位で返します。
     #
     # - 戻り値: `Integer`
     def texture_height
-      Native::C.zen_ffi_image_tex_height(@ptr)
+      @texture_height
     end
 
     # OpenGL / WebGL のネイティブテクスチャ ID を返します。
@@ -247,11 +267,7 @@ module Zenoo
     #
     # - 戻り値: `Array<Float>` `[u, v, uw, vh]`（0.0 〜 1.0）
     def uv
-      tw = texture_width.to_f
-      th = texture_height.to_f
-      return [0.0, 0.0, 1.0, 1.0] if tw <= 0.0 || th <= 0.0
-
-      [x.to_f / tw, y.to_f / th, width.to_f / tw, height.to_f / th]
+      @uv_cached
     end
 
     # この画像が親テクスチャの一部を切り出したサブ画像かどうかを返します。
@@ -281,6 +297,7 @@ module Zenoo
     # - 戻り値: `nil`
     def replace_texture!(src)
       Native::C.zen_image_replace_texture(@ptr, src ? src.__ptr : nil)
+      __refresh_metrics
       nil
     end
 

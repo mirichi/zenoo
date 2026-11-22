@@ -142,7 +142,8 @@ static int            s_last_draw_calls = 0;
 /* Hotpath Staging State */
 static float s_card_rgba[12];  /* fill(4), border(4), shadow(4) */
 static float s_card_params[11];/* rad, b_width, s_blur, mode, uv(4), rot_rad, pv(2) */
-static float s_sprite_cu[8];   /* c(4), uv(4) */
+static float s_sprite_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+static int   s_sprite_color_staged = 0;
 static float s_tri_rgba[12];   /* c1(4), c2(4), c3(4) */
 
 /* Text Staging State */
@@ -827,6 +828,7 @@ static void flush_queue(ZenDrawQueue* q, uint32_t default_bg_color) {
 void zen_batch_reset_frame(void) {
     s_screen_queue.cleared_this_frame = 0;
     s_uniform_staging_active = 0;
+    s_sprite_color_staged = 0;
     s_text_glyphs = 0;
 }
 
@@ -1124,12 +1126,12 @@ void zen_batch_enqueue_sdf_card(
     cmd->blend       = blend;
 }
 
-void zen_batch_stage_color_uv(
-    float c0, float c1, float c2, float c3,
-    float uv0, float uv1, float uv2, float uv3
-) {
-    s_sprite_cu[0]=c0;  s_sprite_cu[1]=c1;  s_sprite_cu[2]=c2;  s_sprite_cu[3]=c3;
-    s_sprite_cu[4]=uv0; s_sprite_cu[5]=uv1; s_sprite_cu[6]=uv2; s_sprite_cu[7]=uv3;
+void zen_batch_stage_color(float c0, float c1, float c2, float c3) {
+    s_sprite_color[0] = c0;
+    s_sprite_color[1] = c1;
+    s_sprite_color[2] = c2;
+    s_sprite_color[3] = c3;
+    s_sprite_color_staged = 1;
 }
 
 void zen_batch_enqueue_sprite(
@@ -1140,12 +1142,30 @@ void zen_batch_enqueue_sprite(
     const uint32_t bytes = 16u * (uint32_t)sizeof(float);
     float* v = NULL;
     uint32_t off = alloc_vertex_bytes(bytes, &v);
-    if (off == UINT32_MAX || !v) return;
+    if (off == UINT32_MAX || !v) {
+        s_sprite_color_staged = 0;
+        return;
+    }
 
     v[0]=m00; v[1]=m01; v[2]=m10; v[3]=m11;
     v[4]=tx;  v[5]=ty;  v[6]=0.0f; v[7]=0.0f;
-    v[8]=s_sprite_cu[0];  v[9]=s_sprite_cu[1];  v[10]=s_sprite_cu[2]; v[11]=s_sprite_cu[3];
-    v[12]=s_sprite_cu[4]; v[13]=s_sprite_cu[5]; v[14]=s_sprite_cu[6]; v[15]=s_sprite_cu[7];
+    if (s_sprite_color_staged) {
+        v[8]=s_sprite_color[0]; v[9]=s_sprite_color[1]; v[10]=s_sprite_color[2]; v[11]=s_sprite_color[3];
+        s_sprite_color_staged = 0;
+    } else {
+        v[8]=1.0f; v[9]=1.0f; v[10]=1.0f; v[11]=1.0f;
+    }
+
+    if (image && image->texture && image->texture->width > 0 && image->texture->height > 0) {
+        float inv_tw = 1.0f / (float)image->texture->width;
+        float inv_th = 1.0f / (float)image->texture->height;
+        v[12] = (float)image->x * inv_tw;
+        v[13] = (float)image->y * inv_th;
+        v[14] = (float)image->width * inv_tw;
+        v[15] = (float)image->height * inv_th;
+    } else {
+        v[12]=0.0f; v[13]=0.0f; v[14]=1.0f; v[15]=1.0f;
+    }
 
     ZenDrawCmd* cmd = push_cmd_slot(active_queue(), z);
     if (!cmd) return;

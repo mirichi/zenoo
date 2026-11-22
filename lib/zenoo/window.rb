@@ -1063,7 +1063,7 @@ module Zenoo
         eff_blend = blend || :alpha
       end
 
-      if color.nil? && (alpha.nil? || alpha == 255)
+      if (color.nil? || color == :white) && (alpha.nil? || alpha == 255)
         c0 = 1.0; c1 = 1.0; c2 = 1.0; c3 = 1.0
       else
         c_color = Backend.normalize_color(color || :white)
@@ -1078,14 +1078,32 @@ module Zenoo
 
       draw_w = (width || image.width).to_f
       draw_h = (height || image.height).to_f
-
       anc_x, anc_y = Collision.parse_anchor(anchor)
       pv_x, pv_y = Collision.parse_pivot(pivot)
-      wpv_x = x.to_f + (pv_x - anc_x) * draw_w
-      wpv_y = y.to_f + (pv_y - anc_y) * draw_h
-
       sx = scale ? scale.to_f : scale_x.to_f
       sy = scale ? scale.to_f : scale_y.to_f
+      b_mode = Backend.normalize_blend_mode(eff_blend)
+
+      __draw_sprite_fast(
+        x.to_f, y.to_f, draw_w, draw_h,
+        anc_x, anc_y, pv_x, pv_y,
+        sx, sy, angle ? angle.to_f : 0.0,
+        c0, c1, c2, c3,
+        b_mode, tex_img, effective_shader, effective_uniforms,
+        camera, z.to_f, is_mesh, native_mesh
+      )
+    end
+
+    # 内部用: Sprite / Window.draw 共通の配列生成・キーワード引数レスなスプライト登録パス
+    # @api private
+    def self.__draw_sprite_fast(x, y, draw_w, draw_h,
+                                anc_x, anc_y, pv_x, pv_y,
+                                sx, sy, ang,
+                                c0, c1, c2, c3,
+                                b_mode, tex_img, effective_shader, effective_uniforms,
+                                camera, z, is_mesh, native_mesh)
+      wpv_x = x + (pv_x - anc_x) * draw_w
+      wpv_y = y + (pv_y - anc_y) * draw_h
 
       cam = if camera.is_a?(Camera)
               camera
@@ -1104,49 +1122,50 @@ module Zenoo
         coy = @offset_y
       end
 
-      ang = angle ? angle.to_f : 0.0
       if ang == 0.0
-        c_rot = 1.0
-        s_rot = 0.0
+        if is_mesh
+          m00 = sx * cz
+          m01 = 0.0
+          m10 = 0.0
+          m11 = sy * cz
+          local_px = pv_x * draw_w
+          local_py = pv_y * draw_h
+        else
+          m00 = draw_w * sx * cz
+          m01 = 0.0
+          m10 = 0.0
+          m11 = draw_h * sy * cz
+          local_px = pv_x
+          local_py = pv_y
+        end
+        tx = (wpv_x * cz + cox) - m00 * local_px
+        ty = (wpv_y * cz + coy) - m11 * local_py
       else
         rad = ang * (Math::PI / 180.0)
         c_rot = Math.cos(rad)
         s_rot = Math.sin(rad)
+        if is_mesh
+          m00 = sx * c_rot * cz
+          m01 = -sy * s_rot * cz
+          m10 = sx * s_rot * cz
+          m11 = sy * c_rot * cz
+          local_px = pv_x * draw_w
+          local_py = pv_y * draw_h
+        else
+          m00 = draw_w * sx * c_rot * cz
+          m01 = -draw_h * sy * s_rot * cz
+          m10 = draw_w * sx * s_rot * cz
+          m11 = draw_h * sy * c_rot * cz
+          local_px = pv_x
+          local_py = pv_y
+        end
+        tx = (wpv_x * cz + cox) - (m00 * local_px + m01 * local_py)
+        ty = (wpv_y * cz + coy) - (m10 * local_px + m11 * local_py)
       end
 
-      if is_mesh
-        m00 = sx * c_rot * cz
-        m01 = -sy * s_rot * cz
-        m10 = sx * s_rot * cz
-        m11 = sy * c_rot * cz
-        local_px = pv_x * draw_w
-        local_py = pv_y * draw_h
-      else
-        m00 = draw_w * sx * c_rot * cz
-        m01 = -draw_h * sy * s_rot * cz
-        m10 = draw_w * sx * s_rot * cz
-        m11 = draw_h * sy * c_rot * cz
-        local_px = pv_x
-        local_py = pv_y
+      if c0 != 1.0 || c1 != 1.0 || c2 != 1.0 || c3 != 1.0
+        Backend.stage_color(c0, c1, c2, c3)
       end
-
-      tx = (wpv_x * cz + cox) - (m00 * local_px + m01 * local_py)
-      ty = (wpv_y * cz + coy) - (m10 * local_px + m11 * local_py)
-
-      b_mode = Backend.normalize_blend_mode(eff_blend)
-
-      if tex_img
-        tw = tex_img.texture_width.to_f
-        th = tex_img.texture_height.to_f
-        uv0 = tw > 0.0 ? tex_img.x.to_f / tw : 0.0
-        uv1 = th > 0.0 ? tex_img.y.to_f / th : 0.0
-        uv2 = tw > 0.0 ? tex_img.width.to_f / tw : 1.0
-        uv3 = th > 0.0 ? tex_img.height.to_f / th : 1.0
-      else
-        uv0 = 0.0; uv1 = 0.0; uv2 = 1.0; uv3 = 1.0
-      end
-
-      Backend.stage_color_uv(c0, c1, c2, c3, uv0, uv1, uv2, uv3)
       Backend.enqueue_sprite(
         m00, m01, m10, m11, tx, ty,
         tex_img, effective_shader, effective_uniforms, b_mode, z, native_mesh

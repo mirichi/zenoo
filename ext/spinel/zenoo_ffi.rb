@@ -295,7 +295,7 @@ module Zenoo
       ffi_func :zen_batch_stage_card_colors, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float], :void
       ffi_func :zen_batch_stage_card_params, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float], :void
       ffi_func :zen_batch_enqueue_sdf_card, [:float, :float, :float, :float, :ptr, :ptr, :int, :float], :void
-      ffi_func :zen_batch_stage_color_uv, [:float, :float, :float, :float, :float, :float, :float, :float], :void
+      ffi_func :zen_batch_stage_color, [:float, :float, :float, :float], :void
       ffi_func :zen_batch_enqueue_sprite, [:float, :float, :float, :float, :float, :float, :ptr, :ptr, :int, :float, :ptr], :void
       ffi_func :zen_batch_enqueue_triangle_flat, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :ptr, :int, :float], :void
       ffi_func :zen_batch_stage_tri_colors, [:float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float, :float], :void

@@ -142,8 +142,8 @@ module Zenoo
 
     EMPTY_CHILDREN = [].freeze
 
-    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image, :parent
-    attr_accessor :blend, :shader, :uniforms, :camera
+    attr_reader :x, :y, :z, :angle, :scale_x, :scale_y, :pivot, :anchor_x, :anchor_y, :alpha, :color, :visible, :image, :parent, :blend
+    attr_accessor :shader, :uniforms, :camera
 
     # 新しい `Sprite` インスタンスを初期化します。
     #
@@ -177,8 +177,17 @@ module Zenoo
       self.anchor = anchor
       self.pivot = pivot
       @alpha = 255
+      @alpha_f = 1.0
+      @cached_alpha = 255
       @color = nil
+      @cached_color = nil
+      @cr = 1.0
+      @cg = 1.0
+      @cb = 1.0
+      @ca = 1.0
       @blend = blend || :alpha
+      @cached_blend = @blend
+      @blend_id = Backend.normalize_blend_mode(@blend)
       @shader = shader
       @uniforms = uniforms
       @camera = camera.nil? ? true : camera
@@ -484,12 +493,59 @@ module Zenoo
     # 不透明度（`0 〜 255`）を設定します。
     #
     # - `v` (`Numeric`): 不透明度（`0` = 完全透明 〜 `255` = 完全不透明）
-    def alpha=(v); @alpha = v; end
+    def alpha=(v)
+      @alpha = v
+      __sync_alpha_cache(v)
+    end
 
     # 乗算カラー（ティント色）を設定します。
     #
     # - `v` (`Color`, `Symbol`, `Array<Integer>`, `nil`): 色指定（`nil` で無着色）
-    def color=(v); @color = v; end
+    def color=(v)
+      @color = v
+      __sync_color_cache(v)
+    end
+
+    # 描画ブレンドモードを設定します。
+    #
+    # - `v` (`Symbol`, `Integer`, `nil`): ブレンドモード (`:alpha`, `:add`, `:multiply`, `:none` 等)
+    def blend=(v)
+      @blend = v
+      __sync_blend_cache(v)
+    end
+
+    def __sync_alpha_cache(v)
+      @cached_alpha = v
+      if v.nil? || v == 255
+        @alpha_f = 1.0
+      else
+        af = v.to_f / 255.0
+        af = 0.0 if af < 0.0
+        af = 1.0 if af > 1.0
+        @alpha_f = af
+      end
+    end
+
+    def __sync_color_cache(v)
+      @cached_color = v
+      if v.nil? || v == :white
+        @cr = 1.0
+        @cg = 1.0
+        @cb = 1.0
+        @ca = 1.0
+      else
+        cf = Backend.normalize_color(v)
+        @cr = cf[0].to_f
+        @cg = cf[1].to_f
+        @cb = cf[2].to_f
+        @ca = cf[3].to_f
+      end
+    end
+
+    def __sync_blend_cache(v)
+      @cached_blend = v
+      @blend_id = Backend.normalize_blend_mode(v)
+    end
 
     # 表示・非表示を設定します。
     #
@@ -1149,14 +1205,15 @@ module Zenoo
       anim_oy = animation_offset_y
 
       if @parent
-        pv = [@pivot_x, @pivot_y]
         wpv_x = world_pivot_x
         wpv_y = world_pivot_y
+        wsx = world_scale_x
+        wsy = world_scale_y
+        w_ang = world_angle
 
         if anim_ox != 0.0 || anim_oy != 0.0
-          sox = anim_ox * world_scale_x
-          soy = anim_oy * world_scale_y
-          w_ang = world_angle
+          sox = anim_ox * wsx
+          soy = anim_oy * wsy
           if w_ang == 0.0
             dx = wpv_x + sox
             dy = wpv_y + soy
@@ -1171,25 +1228,20 @@ module Zenoo
           dy = wpv_y
         end
 
-        Window.draw(
-          dx, dy, @image,
-          width: @width, height: @height,
-          anchor: pv, pivot: pv,
-          scale_x: world_scale_x, scale_y: world_scale_y,
-          angle: world_angle,
-          color: @color, alpha: @alpha,
-          blend: @blend, shader: @shader, uniforms: @uniforms,
-          camera: @camera, z: @z
-        )
+        anc_x = @pivot_x
+        anc_y = @pivot_y
       else
+        wsx = @scale_x
+        wsy = @scale_y
+        w_ang = @angle
         if anim_ox != 0.0 || anim_oy != 0.0
-          sox = anim_ox * @scale_x
-          soy = anim_oy * @scale_y
-          if @angle == 0.0
+          sox = anim_ox * wsx
+          soy = anim_oy * wsy
+          if w_ang == 0.0
             dx = @x + sox
             dy = @y + soy
           else
-            rad = @angle * (Math::PI / 180.0)
+            rad = w_ang * (Math::PI / 180.0)
             cos = Math.cos(rad)
             sin = Math.sin(rad)
             dx = @x + sox * cos - soy * sin
@@ -1200,15 +1252,34 @@ module Zenoo
           dy = @y
         end
 
+        anc_x = @anchor_x
+        anc_y = @anchor_y
+      end
+
+      if @image.is_a?(Mesh)
         Window.draw(
           dx, dy, @image,
           width: @width, height: @height,
-          anchor: [@anchor_x, @anchor_y], pivot: [@pivot_x, @pivot_y],
-          scale_x: @scale_x, scale_y: @scale_y,
-          angle: @angle,
+          anchor: [anc_x, anc_y], pivot: [@pivot_x, @pivot_y],
+          scale_x: wsx, scale_y: wsy,
+          angle: w_ang,
           color: @color, alpha: @alpha,
           blend: @blend, shader: @shader, uniforms: @uniforms,
           camera: @camera, z: @z
+        )
+      else
+        __sync_color_cache(@color) unless @cached_color.equal?(@color)
+        __sync_alpha_cache(@alpha) unless @cached_alpha == @alpha
+        __sync_blend_cache(@blend) unless @cached_blend.equal?(@blend)
+        draw_w = (@width || @image.width).to_f
+        draw_h = (@height || @image.height).to_f
+        Window.__draw_sprite_fast(
+          dx, dy, draw_w, draw_h,
+          anc_x, anc_y, @pivot_x, @pivot_y,
+          wsx, wsy, w_ang,
+          @cr, @cg, @cb, @ca * @alpha_f,
+          @blend_id, @image, @shader || Window.default_sprite_shader, @uniforms,
+          @camera, @z, false, nil
         )
       end
     end

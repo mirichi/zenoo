@@ -685,7 +685,7 @@ void zen_batch_enqueue_flat_rect(float x1, float y1, float x2, float y2, float r
 void zen_batch_stage_card_colors(float cr, float cg, float cb, float ca, float br, float bg, float bb, float ba, float sr, float sg, float sb, float sa);
 void zen_batch_stage_card_params(float rad, float b_width, float s_blur, float mode, float uv0, float uv1, float uv2, float uv3, float rot_rad, float pv_x, float pv_y);
 void zen_batch_enqueue_sdf_card(float x, float y, float w, float h, ZenImage* image, ZenShader* shader, int blend, float z);
-void zen_batch_stage_color_uv(float c0, float c1, float c2, float c3, float uv0, float uv1, float uv2, float uv3);
+void zen_batch_stage_color(float c0, float c1, float c2, float c3);
 void zen_batch_enqueue_sprite(float m00, float m01, float m10, float m11, float tx, float ty, ZenImage* image, ZenShader* shader, int blend, float z, ZenMesh* mesh);
 void zen_batch_enqueue_triangle_flat(float x1, float y1, float x2, float y2, float x3, float y3, float r, float g, float b, float a, ZenShader* shader, int blend, float z);
 void zen_batch_stage_tri_colors(float r1, float g1, float b1, float a1, float r2, float g2, float b2, float a2, float r3, float g3, float b3, float a3);

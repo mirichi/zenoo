@@ -131,16 +131,19 @@ module Zenoo
     # ----------------------------------------------------
     # カラーマップと色変換
     # ----------------------------------------------------
+    WHITE_F4 = [1.0, 1.0, 1.0, 1.0].freeze
+    CLEAR_F4 = [0.0, 0.0, 0.0, 0.0].freeze
+
     COLOR_MAP = {
-      white:   [1.0, 1.0, 1.0, 1.0],
-      black:   [0.0, 0.0, 0.0, 1.0],
-      red:     [1.0, 0.2, 0.2, 1.0],
-      green:   [0.2, 1.0, 0.3, 1.0],
-      blue:    [0.1, 0.5, 1.0, 1.0],
-      cyan:    [0.0, 0.9, 1.0, 1.0],
-      magenta: [1.0, 0.2, 0.8, 1.0],
-      yellow:  [1.0, 0.9, 0.1, 1.0],
-      clear:   [0.0, 0.0, 0.0, 0.0]
+      white:   WHITE_F4,
+      black:   [0.0, 0.0, 0.0, 1.0].freeze,
+      red:     [1.0, 0.2, 0.2, 1.0].freeze,
+      green:   [0.2, 1.0, 0.3, 1.0].freeze,
+      blue:    [0.1, 0.5, 1.0, 1.0].freeze,
+      cyan:    [0.0, 0.9, 1.0, 1.0].freeze,
+      magenta: [1.0, 0.2, 0.8, 1.0].freeze,
+      yellow:  [1.0, 0.9, 0.1, 1.0].freeze,
+      clear:   CLEAR_F4
     }.freeze
 
     # 各種色指定（シンボル・`Color`・`0..255` 配列・16進文字列・整数）をシェーダー送出用の正規化 Float 配列 `[r, g, b, a]`（`0.0..1.0`）へ変換する
@@ -148,23 +151,17 @@ module Zenoo
     # - `col` (`Color | Symbol | Array<Numeric> | String | Integer | nil`): ユーザー指定の色（配列の各要素は `0..255` 基準、`nil` は透明黒）
     # - 戻り値: `Array<Float>`（`[r, g, b, a]`、各要素 `0.0..1.0`）
     def self.normalize_color(col)
-      return [0.0, 0.0, 0.0, 0.0] if col.nil?
+      return CLEAR_F4 if col.nil?
       return COLOR_MAP[col] if COLOR_MAP.key?(col)
 
       if col.is_a?(Color)
         col.to_f4
       elsif col.is_a?(Array)
-        r = 0.0
-        g = 0.0
-        b = 0.0
-        a = 255.0
-        col.each_with_index do |v, i|
-          vf = v.to_f
-          r = vf if i == 0
-          g = vf if i == 1
-          b = vf if i == 2
-          a = vf if i == 3
-        end
+        len = col.length
+        r = len > 0 ? col[0].to_f : 0.0
+        g = len > 1 ? col[1].to_f : 0.0
+        b = len > 2 ? col[2].to_f : 0.0
+        a = len > 3 ? col[3].to_f : 255.0
         [r / 255.0, g / 255.0, b / 255.0, a / 255.0]
       elsif col.is_a?(String)
         Color.hex(col).to_f4
@@ -175,7 +172,7 @@ module Zenoo
         a = (col & 0xFF) / 255.0
         [r, g, b, a]
       else
-        [1.0, 1.0, 1.0, 1.0]
+        WHITE_F4
       end
     end
 
@@ -301,6 +298,10 @@ module Zenoo
     @active_gl_target = nil
     @clip_rects = []
     @retained_refs = []
+    @last_retained_target = nil
+    @last_retained_image = nil
+    @last_retained_shader = nil
+    @last_retained_mesh = nil
     @screen_clear_color = nil
 
     def self.screen_clear_color
@@ -348,6 +349,10 @@ module Zenoo
 
     def self.reset_frame
       @screen_clear_color = nil
+      @last_retained_target = nil
+      @last_retained_image = nil
+      @last_retained_shader = nil
+      @last_retained_mesh = nil
       Native::C.zen_batch_reset_frame
       false
     end
@@ -530,15 +535,27 @@ module Zenoo
       nil
     end
 
-    def self.stage_color_uv(c0, c1, c2, c3, uv0, uv1, uv2, uv3)
-      Native::C.zen_batch_stage_color_uv(c0, c1, c2, c3, uv0, uv1, uv2, uv3)
+    def self.stage_color(c0, c1, c2, c3)
+      Native::C.zen_batch_stage_color(c0, c1, c2, c3)
     end
 
     def self.enqueue_sprite(m00, m01, m10, m11, tx, ty, image, shader, uniforms, blend, z, mesh)
-      @retained_refs << @current_target if @current_target
-      @retained_refs << image if image
-      @retained_refs << shader if shader
-      @retained_refs << mesh if mesh
+      if @current_target && !@last_retained_target.equal?(@current_target)
+        @last_retained_target = @current_target
+        @retained_refs << @current_target
+      end
+      if image && !@last_retained_image.equal?(image)
+        @last_retained_image = image
+        @retained_refs << image
+      end
+      if shader && !@last_retained_shader.equal?(shader)
+        @last_retained_shader = shader
+        @retained_refs << shader
+      end
+      if mesh && !@last_retained_mesh.equal?(mesh)
+        @last_retained_mesh = mesh
+        @retained_refs << mesh
+      end
       stage_uniforms(uniforms) if uniforms
       Native::C.zen_batch_enqueue_sprite(
         m00, m01, m10, m11, tx, ty,
@@ -655,6 +672,10 @@ module Zenoo
       Native::C.zen_batch_flush_screen(bg)
       $last_draw_calls = Native::C.zen_batch_last_draw_calls
       @retained_refs.clear
+      @last_retained_target = nil
+      @last_retained_image = nil
+      @last_retained_shader = nil
+      @last_retained_mesh = nil
       nil
     end
   end
