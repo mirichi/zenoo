@@ -421,14 +421,16 @@ module Zenoo
     # スライダー共通基底
     class SliderBase < Widget
       include Draggable
+      attr_accessor :step
       attr_reader :value, :min, :max
 
       def initialize(label = "", value = 0.0, min = 0.0, max = 100.0, x = 0.0, y = 0.0,
-                     width: 220.0, height: nil, format: nil, unit: "", **opts, &block)
+                     width: 220.0, height: nil, step: nil, format: nil, unit: "", **opts, &block)
         @label          = label.to_s
         @min            = min.to_f
         @max            = max.to_f
-        @value          = UI.clamp_f(value, @min, @max)
+        @step           = (step && step.to_f > 0.0) ? step.to_f : nil
+        @value          = snap_value(UI.clamp_f(value, @min, @max))
         @format         = format
         @unit           = unit.to_s
         @on_change_proc = block
@@ -458,7 +460,7 @@ module Zenoo
       def on_change(&block) = (@on_change_proc = block; self)
 
       def value=(v)
-        nv = UI.clamp_f(v, @min, @max)
+        nv = snap_value(UI.clamp_f(v, @min, @max))
         if nv != @value
           @value = nv
           @on_change_proc&.call(@value)
@@ -476,6 +478,13 @@ module Zenoo
       end
 
       private
+
+      def snap_value(v)
+        return v unless @step && @step > 0.0
+        steps = ((v - @min) / @step).round
+        snapped = (@min + steps * @step).round(6)
+        UI.clamp_f(snapped, @min, @max)
+      end
 
       def value_ratio
         (@max > @min) ? (@value - @min) / (@max - @min) : 0.0
@@ -503,9 +512,9 @@ module Zenoo
     # 1段インライン型スライダー
     class Slider < SliderBase
       def initialize(label = "", value = 0.0, min = 0.0, max = 100.0, x = 0.0, y = 0.0,
-                     width: 220.0, height: nil, label_width: nil, format: nil, unit: "", **opts, &block)
+                     width: 220.0, height: nil, label_width: nil, step: nil, format: nil, unit: "", **opts, &block)
         @label_width = label_width ? label_width.to_f : nil
-        super(label, value, min, max, x, y, width: width, height: height, format: format, unit: unit, **opts, &block)
+        super(label, value, min, max, x, y, width: width, height: height, step: step, format: format, unit: unit, **opts, &block)
       end
 
       def track_local_bounds
@@ -755,6 +764,11 @@ module Zenoo
       def collider_radius    = theme.radius
       def on_change(&block)  = (@on_change_proc = block; self)
       def selected_item      = (@selected_index >= 0) ? @items[@selected_index] : nil
+
+      def open_popup!
+        return self if @items.empty?
+        super
+      end
 
       def items=(val)
         @items = val.map(&:to_s)

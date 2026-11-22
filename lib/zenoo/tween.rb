@@ -416,30 +416,65 @@ module Zenoo
     def finish
       return if @completed
 
-      @steps.each do |step|
-        case step[:type]
-        when :property
-          props = step[:props]
-          props.each do |prop, to_val|
-            if prop == :color
-              nc = Backend.normalize_color(to_val)
-              Tween._set_prop(@target, :color, [
-                (nc[0] * 255.0).round.clamp(0, 255),
-                (nc[1] * 255.0).round.clamp(0, 255),
-                (nc[2] * 255.0).round.clamp(0, 255),
-                (nc[3] * 255.0).round.clamp(0, 255)
-              ])
-            else
-              val = step[:round] ? to_val.round : to_val
-              Tween._set_prop(@target, prop, val)
+      if @yoyo
+        # yoyo は往路→復路で終了するため、逆順で開始状態へ戻す（未開始の場合は何もしない）
+        i = @steps.size - 1
+        while i >= 0
+          step = @steps[i]
+          case step[:type]
+          when :property
+            if (init_props = step[:initial_props])
+              init_props.each do |prop, range|
+                val = step[:round] ? range[0].round : range[0]
+                Tween._set_prop(@target, prop, val)
+              end
             end
+            if (ic = step[:initial_color])
+              c0 = ic[0]
+              Tween._set_prop(@target, :color, [
+                c0[0].round.clamp(0, 255),
+                c0[1].round.clamp(0, 255),
+                c0[2].round.clamp(0, 255),
+                c0[3].round.clamp(0, 255)
+              ])
+            end
+          when :value
+            if step.key?(:initial_from)
+              val = step[:initial_from]
+              val = val.round if val && (step[:round] == true || (step[:round].nil? && step[:is_integer]))
+              step[:block]&.call(val)
+            end
+          when :call
+            call_step_block(step[:block])
           end
-        when :value
-          val = step[:to]
-          val = val.round if val && (step[:round] == true || (step[:round].nil? && val.is_a?(Integer)))
-          step[:block]&.call(val)
-        when :call
-          call_step_block(step[:block])
+          i -= 1
+        end
+      else
+        @steps.each do |step|
+          case step[:type]
+          when :property
+            props = step[:props]
+            props.each do |prop, to_val|
+              if prop == :color
+                nc = Backend.normalize_color(to_val)
+                Tween._set_prop(@target, :color, [
+                  (nc[0] * 255.0).round.clamp(0, 255),
+                  (nc[1] * 255.0).round.clamp(0, 255),
+                  (nc[2] * 255.0).round.clamp(0, 255),
+                  (nc[3] * 255.0).round.clamp(0, 255)
+                ])
+              else
+                val = step[:round] ? to_val.round : to_val
+                Tween._set_prop(@target, prop, val)
+              end
+            end
+          when :value
+            val = step[:to]
+            val = val.round if val && (step[:round] == true || (step[:round].nil? && val.is_a?(Integer)))
+            step[:block]&.call(val)
+          when :call
+            call_step_block(step[:block])
+          end
         end
       end
 
@@ -820,10 +855,12 @@ module Zenoo
       while i < @tweens.size
         t = @tweens[i]
         t.__update(dt)
-        if t.completed?
-          @tweens.delete_at(i)
-        else
-          i += 1
+        if @tweens[i].equal?(t)
+          if t.completed?
+            @tweens.delete_at(i)
+          else
+            i += 1
+          end
         end
       end
     end

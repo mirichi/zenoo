@@ -651,6 +651,8 @@ void      zen_batch_reset_frame(void);
 void      zen_batch_mark_screen_cleared(void);
 void      zen_batch_set_current_target(ZenImage* target);
 ZenImage* zen_batch_get_current_target(void);
+void      zen_batch_push_target(ZenImage* target);
+void      zen_batch_pop_target(void);
 void      zen_batch_set_active_gl_target(ZenImage* target);
 ZenImage* zen_batch_get_active_gl_target(void);
 void      zen_batch_push_clip(float x, float y, float w, float h, float z);

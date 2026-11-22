@@ -210,11 +210,25 @@ module Zenoo
       "/assets/fonts/#{filename}"
     end
 
-    # 内部用: 標準の M PLUS フォント（見つからない場合は Windows 標準 MS ゴシック）を読み込む
+    # 内部用: 標準の M PLUS フォント（見つからない場合は OS 標準フォント）を読み込む
     def self.load_default_font
       path = find_font_file("MPLUS1p-Regular.ttf")
-      if !File.exist?(path) && File.exist?("C:/Windows/Fonts/msgothic.ttc")
-        path = "C:/Windows/Fonts/msgothic.ttc"
+      unless File.exist?(path)
+        fallbacks = [
+          "C:/Windows/Fonts/msgothic.ttc",
+          "C:/Windows/Fonts/meiryo.ttc",
+          "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+          "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+          "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+          "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "/System/Library/Fonts/Helvetica.ttc"
+        ]
+        fallbacks.each do |fb|
+          if File.exist?(fb)
+            path = fb
+            break
+          end
+        end
       end
       new(path)
     end

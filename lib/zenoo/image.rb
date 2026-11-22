@@ -101,33 +101,31 @@ class Zenoo::Image
 
   def self.__begin_render_to(target)
     is_sub = target.sub_image?
-    old_target = Zenoo::Backend.current_target
-    Zenoo::Backend.current_target = target
+    cam_state = Zenoo::Window.__save_and_reset_camera_state
+    prev_ox = Zenoo::Window.__offset_x
+    prev_oy = Zenoo::Window.__offset_y
 
-    # オフスクリーン描画中はワールドカメラの影響を遮断 (ローカル座標系にリセット)
-    old_camera = Zenoo::Window.camera
-    Zenoo::Window.camera = nil
+    Zenoo::Backend.push_target(target)
 
-    prev_ox = 0.0
-    prev_oy = 0.0
     if is_sub
-      prev_ox = Zenoo::Window.__offset_x
-      prev_oy = Zenoo::Window.__offset_y
       Zenoo::Window.__offset_x = target.x.to_f
       Zenoo::Window.__offset_y = target.y.to_f
       Zenoo::Backend.push_clip([target.x.to_f, target.y.to_f, target.width.to_f, target.height.to_f], 0.0)
+    else
+      Zenoo::Window.__offset_x = 0.0
+      Zenoo::Window.__offset_y = 0.0
     end
-    [is_sub, old_target, old_camera, prev_ox, prev_oy]
+    [is_sub, cam_state, prev_ox, prev_oy]
   end
 
   def self.__end_render_to(state)
     if state[0]
       Zenoo::Backend.pop_clip
-      Zenoo::Window.__offset_x = state[3]
-      Zenoo::Window.__offset_y = state[4]
     end
-    Zenoo::Window.camera = state[2]
-    Zenoo::Backend.current_target = state[1]
+    Zenoo::Window.__offset_x = state[2]
+    Zenoo::Window.__offset_y = state[3]
+    Zenoo::Window.__restore_camera_state(state[1])
+    Zenoo::Backend.pop_target
   end
 
   # 画像のクリア (引数省略時は透明色 [0, 0, 0, 0])

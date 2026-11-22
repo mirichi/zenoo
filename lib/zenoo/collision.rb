@@ -1553,35 +1553,48 @@ module Zenoo
       false
     end
 
-    # Sweep and Prune 用ヘルパー: アイテムから Shape と AABB (min_x, max_x) を抽出
-    def self.__extract_sap_entry(item, group_id = nil)
-      return nil if item.respond_to?(:vanished?) && item.vanished?
-      shape = item.respond_to?(:collider) ? item.collider : item
-      return nil unless shape
-
-      shape.update_cache if shape.dirty?
-      r = shape.bounding_radius.to_f
-      cx = shape.center_x.to_f
-      min_x = cx - r
-      max_x = cx + r
-
-      # 子スプライトが存在する場合、子スプライトのバウンディングも包含
-      if item.respond_to?(:children) && (ch = item.children) && !ch.empty?
+    def self.__expand_sprite_x_bounds(sprite, bounds)
+      if (shape = sprite.collider)
+        shape.update_cache if shape.dirty?
+        r = shape.bounding_radius.to_f
+        cx = shape.center_x.to_f
+        c_min = cx - r
+        c_max = cx + r
+        bounds[0] = c_min if c_min < bounds[0]
+        bounds[1] = c_max if c_max > bounds[1]
+        bounds[2] = true
+      end
+      if (ch = sprite.children) && !ch.empty?
         ci = 0
         clen = ch.length
         while ci < clen
           child = ch[ci]
-          if !child.vanished? && (c_shape = child.collider)
-            c_shape.update_cache if c_shape.dirty?
-            c_r = c_shape.bounding_radius.to_f
-            c_cx = c_shape.center_x.to_f
-            c_min = c_cx - c_r
-            c_max = c_cx + c_r
-            min_x = c_min if c_min < min_x
-            max_x = c_max if c_max > max_x
-          end
+          __expand_sprite_x_bounds(child, bounds) if child && !child.vanished?
           ci += 1
         end
+      end
+    end
+
+    # Sweep and Prune 用ヘルパー: アイテムから Shape と AABB (min_x, max_x) を抽出
+    def self.__extract_sap_entry(item, group_id = nil)
+      return nil if item.respond_to?(:vanished?) && item.vanished?
+
+      if item.is_a?(Sprite)
+        bounds = [1.0e30, -1.0e30, false]
+        __expand_sprite_x_bounds(item, bounds)
+        return nil unless bounds[2]
+        min_x = bounds[0]
+        max_x = bounds[1]
+        shape = item.collider
+      else
+        shape = item.respond_to?(:collider) ? item.collider : item
+        return nil unless shape
+
+        shape.update_cache if shape.dirty?
+        r = shape.bounding_radius.to_f
+        cx = shape.center_x.to_f
+        min_x = cx - r
+        max_x = cx + r
       end
 
       if group_id
@@ -1601,7 +1614,20 @@ module Zenoo
       elsif item_b.respond_to?(:collide?)
         item_b.collide?(item_a)
       else
-        shape_b && check(shape_a, shape_b)
+        shape_a && shape_b && check(shape_a, shape_b)
+      end
+    end
+
+    def self.__penetration_pair(item_a, item_b, shape_a, shape_b)
+      if item_a.is_a?(Sprite)
+        item_a.penetration(item_b)
+      elsif item_b.is_a?(Sprite)
+        hit = item_b.penetration(item_a)
+        hit ? hit.flipped : nil
+      elsif shape_a && shape_b
+        penetration(shape_a, shape_b)
+      else
+        nil
       end
     end
 
@@ -1634,8 +1660,9 @@ module Zenoo
       while i < len_a
         item_a = arr_a[i]
         if item_a && !__vanished?(item_a)
-          shape_a = item_a.respond_to?(:collider) ? item_a.collider : item_a
-          if shape_a
+          is_sp_a = item_a.is_a?(Sprite)
+          shape_a = is_sp_a ? item_a.collider : (item_a.respond_to?(:collider) ? item_a.collider : item_a)
+          if shape_a || is_sp_a
             j = same_group ? (i + 1) : 0
             while j < len_b
               item_b = arr_b[j]
@@ -1852,15 +1879,17 @@ module Zenoo
       while i < len_a
         item_a = arr_a[i]
         if item_a && !__vanished?(item_a)
-          shape_a = item_a.respond_to?(:collider) ? item_a.collider : item_a
-          if shape_a
+          is_sp_a = item_a.is_a?(Sprite)
+          shape_a = is_sp_a ? item_a.collider : (item_a.respond_to?(:collider) ? item_a.collider : item_a)
+          if shape_a || is_sp_a
             j = same_group ? (i + 1) : 0
             while j < len_b
               item_b = arr_b[j]
               if item_b && !item_a.equal?(item_b) && !__vanished?(item_b)
-                shape_b = item_b.respond_to?(:collider) ? item_b.collider : item_b
-                if shape_b
-                  hit = penetration(shape_a, shape_b)
+                is_sp_b = item_b.is_a?(Sprite)
+                shape_b = is_sp_b ? item_b.collider : (item_b.respond_to?(:collider) ? item_b.collider : item_b)
+                if shape_b || is_sp_b
+                  hit = __penetration_pair(item_a, item_b, shape_a, shape_b)
                   if hit
                     if block_given?
                       yield(item_a, item_b, hit)
@@ -1897,7 +1926,7 @@ module Zenoo
             break if e_b[0] > max_a
             item_b = e_b[2]
             if !item_a.equal?(item_b) && !__vanished?(item_b)
-              hit = penetration(shape_a, e_b[3])
+              hit = __penetration_pair(item_a, item_b, shape_a, e_b[3])
               if hit
                 if block_given?
                   yield(item_a, item_b, hit)
@@ -1947,7 +1976,7 @@ module Zenoo
             if e_b[1] >= min_a
               item_b = e_b[2]
               if !item_a.equal?(item_b) && !__vanished?(item_b)
-                hit = penetration(shape_a, e_b[3])
+                hit = __penetration_pair(item_a, item_b, shape_a, e_b[3])
                 if hit
                   if block_given?
                     yield(item_a, item_b, hit)
@@ -2201,6 +2230,13 @@ module Zenoo
 
     # 多角形・楕円等を含む汎用 2D SAT 押し出し
     def self.penetration_generic_sat(shape_a, shape_b, dx, dy)
+      if shape_a.shape_type == TYPE_POINT
+        return penetration_point_generic(shape_a, shape_b, dx, dy)
+      elsif shape_b.shape_type == TYPE_POINT
+        hit = penetration_point_generic(shape_b, shape_a, -dx, -dy)
+        return hit ? hit.flipped : nil
+      end
+
       needs_gjk_verify =
         (shape_a.shape_type == TYPE_RECT && shape_a.is_rounded) ||
         (shape_b.shape_type == TYPE_RECT && shape_b.is_rounded) ||
@@ -2247,6 +2283,47 @@ module Zenoo
       cx, cy = calculate_contact_point(shape_a, shape_b, best_nx, best_ny, min_overlap)
 
       Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, cx, cy)
+    end
+
+    # 点 vs 汎用凸形状 (多角形・楕円・非等倍矩形) の押し出しベクトル算出
+    def self.penetration_point_generic(pt, shape, dx, dy)
+      return nil unless gjk(pt, shape, dx, dy, dx * dx + dy * dy)
+
+      axes = collect_sat_axes(pt, shape)
+      return nil if axes.empty?
+
+      px = pt.center_x
+      py = pt.center_y
+      min_overlap = 1.0e30
+      best_nx = 0.0
+      best_ny = 0.0
+
+      axes.each do |axis|
+        ax = axis[0]
+        ay = axis[1]
+        p_d = px * ax + py * ay
+        min_b, max_b = project_shape(ax, ay, shape)
+
+        d_min = p_d - min_b
+        d_max = max_b - p_d
+        return nil if d_min <= 0.0 || d_max <= 0.0
+
+        if d_min < d_max
+          if d_min < min_overlap
+            min_overlap = d_min
+            best_nx = -ax
+            best_ny = -ay
+          end
+        else
+          if d_max < min_overlap
+            min_overlap = d_max
+            best_nx = ax
+            best_ny = ay
+          end
+        end
+      end
+
+      Hit.new(min_overlap, best_nx, best_ny, best_nx * min_overlap, best_ny * min_overlap, px, py)
     end
 
     # 接触点導出 (法線コーン摂動により、どちらが「面 (Reference)」でどちらが「角 (Incident)」かを幾何学的に判定)
@@ -2631,6 +2708,24 @@ module Zenoo
             x = item.x.to_f
             y = item.y.to_f
             r = item.hit_radius.to_f
+          elsif item.is_a?(Sprite)
+            c = item.instance_variable_get(:@collider_shape)
+            ch = item.instance_variable_get(:@children)
+            if c && (ch.nil? || ch.empty?)
+              c.update_cache if c.dirty?
+              x = c.center_x
+              y = c.center_y
+              r = c.bounding_radius
+            else
+              sp_bounds = [1.0e30, 1.0e30, -1.0e30, -1.0e30, false]
+              __expand_sprite_xy_bounds(item, sp_bounds)
+              next unless sp_bounds[4]
+              x = (sp_bounds[0] + sp_bounds[2]) * 0.5
+              y = (sp_bounds[1] + sp_bounds[3]) * 0.5
+              hx = (sp_bounds[2] - sp_bounds[0]) * 0.5
+              hy = (sp_bounds[3] - sp_bounds[1]) * 0.5
+              r = Math.hypot(hx, hy)
+            end
           elsif (c = item.instance_variable_get(:@collider_shape))
             c.update_cache if c.dirty?
             x = c.center_x
@@ -2780,13 +2875,36 @@ module Zenoo
         end
       end
 
+      def __expand_sprite_xy_bounds(sprite, bounds)
+        if (c = sprite.collider)
+          c.update_cache if c.dirty?
+          cr = c.bounding_radius
+          cx = c.center_x
+          cy = c.center_y
+          bounds[0] = cx - cr if (cx - cr) < bounds[0]
+          bounds[1] = cy - cr if (cy - cr) < bounds[1]
+          bounds[2] = cx + cr if (cx + cr) > bounds[2]
+          bounds[3] = cy + cr if (cy + cr) > bounds[3]
+          bounds[4] = true
+        end
+        if (ch = sprite.children) && !ch.empty?
+          i = 0
+          len = ch.length
+          while i < len
+            child = ch[i]
+            __expand_sprite_xy_bounds(child, bounds) if child && !child.vanished?
+            i += 1
+          end
+        end
+      end
+
       # 衝突判定込みペア列挙 (ナローフェーズ)
       def each_collision
         hits = block_given? ? nil : []
         each_pair do |e1, e2|
           s1 = e1.respond_to?(:collider) ? e1.collider : e1
           s2 = e2.respond_to?(:collider) ? e2.collider : e2
-          if s1 && s2 && Collision.check(s1, s2)
+          if Collision.__check_pair(e1, e2, s1, s2)
             if block_given?
               yield(e1, e2)
             else
@@ -2801,7 +2919,9 @@ module Zenoo
       def each_penetration
         hits = block_given? ? nil : []
         each_pair do |e1, e2|
-          hit = Collision.penetration(e1, e2)
+          s1 = e1.respond_to?(:collider) ? e1.collider : e1
+          s2 = e2.respond_to?(:collider) ? e2.collider : e2
+          hit = Collision.__penetration_pair(e1, e2, s1, s2)
           if hit
             if block_given?
               yield(e1, e2, hit)

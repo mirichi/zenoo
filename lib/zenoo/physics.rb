@@ -1058,14 +1058,25 @@ module Zenoo
       vax = a.vx.to_f
       vay = a.vy.to_f
       wa = a.omega.to_f
-      xb = b.x.to_f
-      yb = b.y.to_f
-      vbx = b.vx.to_f
-      vby = b.vy.to_f
-      wb = b.omega.to_f
-
       pax, pay = local_to_world(a, anchor_a ? anchor_a[0].to_f : 0.0, anchor_a ? anchor_a[1].to_f : 0.0)
-      pbx, pby = local_to_world(b, anchor_b ? anchor_b[0].to_f : 0.0, anchor_b ? anchor_b[1].to_f : 0.0)
+
+      is_fixed = b.is_a?(Array)
+      if is_fixed
+        xb = b[0].to_f
+        yb = b[1].to_f
+        vbx = 0.0
+        vby = 0.0
+        wb = 0.0
+        pbx = xb
+        pby = yb
+      else
+        xb = b.x.to_f
+        yb = b.y.to_f
+        vbx = b.vx.to_f
+        vby = b.vy.to_f
+        wb = b.omega.to_f
+        pbx, pby = local_to_world(b, anchor_b ? anchor_b[0].to_f : 0.0, anchor_b ? anchor_b[1].to_f : 0.0)
+      end
 
       dx = pbx - pax
       dy = pby - pay
@@ -1094,12 +1105,12 @@ module Zenoo
       end
 
       inv_ma = inv_mass_of(a)
-      inv_mb = inv_mass_of(b)
+      inv_mb = is_fixed ? 0.0 : inv_mass_of(b)
       inv_m_total = inv_ma + inv_mb
       return nil if inv_m_total <= 0.000001
 
       inv_ia = inv_inertia_of(a)
-      inv_ib = inv_inertia_of(b)
+      inv_ib = is_fixed ? 0.0 : inv_inertia_of(b)
 
       rax = pax - xa
       ray = pay - ya
@@ -1120,9 +1131,9 @@ module Zenoo
       a.y += inv_ma * py_imp
       a.angle += ((rax * py_imp - ray * px_imp) * inv_ia * RAD_TO_DEG)
 
-      b.x -= inv_mb * px_imp
-      b.y -= inv_mb * py_imp
-      b.angle -= ((rbx * py_imp - rby * px_imp) * inv_ib * RAD_TO_DEG)
+      b.x -= inv_mb * px_imp unless is_fixed
+      b.y -= inv_mb * py_imp unless is_fixed
+      b.angle -= ((rbx * py_imp - rby * px_imp) * inv_ib * RAD_TO_DEG) unless is_fixed
 
       # 速度補正
       w_rad_a = wa * DEG_TO_RAD
@@ -1142,9 +1153,11 @@ module Zenoo
         a.vy = vay + inv_ma * vy_imp
         a.omega = wa + ((rax * vy_imp - ray * vx_imp) * inv_ia * RAD_TO_DEG)
 
-        b.vx = vbx - inv_mb * vx_imp
-        b.vy = vby - inv_mb * vy_imp
-        b.omega = wb - ((rbx * vy_imp - rby * vx_imp) * inv_ib * RAD_TO_DEG)
+        unless is_fixed
+          b.vx = vbx - inv_mb * vx_imp
+          b.vy = vby - inv_mb * vy_imp
+          b.omega = wb - ((rbx * vy_imp - rby * vx_imp) * inv_ib * RAD_TO_DEG)
+        end
       end
 
       true

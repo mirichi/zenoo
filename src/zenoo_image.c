@@ -406,32 +406,47 @@ static void zen__ensure_cpu_pixels(ZenImage* img) {
             glBindFramebuffer(GL_FRAMEBUFFER, img->fbo);
         }
 
+        int tw = img->texture->width;
         int th = img->texture->height;
-        int gl_y = th - (img->y + img->height);
-        if (gl_y < 0) gl_y = 0;
+        int rx0 = (img->x < 0) ? 0 : img->x;
+        int ry0 = (img->y < 0) ? 0 : img->y;
+        int rx1 = (img->x + img->width > tw) ? tw : (img->x + img->width);
+        int ry1 = (img->y + img->height > th) ? th : (img->y + img->height);
+        int rw = rx1 - rx0;
+        int rh = ry1 - ry0;
 
-        if (img->texture->format == ZEN_IMAGE_FORMAT_R8) {
-            unsigned char* temp = (unsigned char*)malloc((size_t)img->width * (size_t)img->height);
+        if (rw <= 0 || rh <= 0) {
+            memset(img->pixels, 0, (size_t)img->width * (size_t)img->height * sizeof(uint32_t));
+        } else if (img->texture->format == ZEN_IMAGE_FORMAT_R8) {
+            if (rw != img->width || rh != img->height) {
+                memset(img->pixels, 0, (size_t)img->width * (size_t)img->height * sizeof(uint32_t));
+            }
+            unsigned char* temp = (unsigned char*)malloc((size_t)rw * (size_t)rh);
             if (temp) {
                 glPixelStorei(GL_PACK_ALIGNMENT, 1);
-                glReadPixels(img->x, gl_y, img->width, img->height, GL_RED, GL_UNSIGNED_BYTE, temp);
+                glReadPixels(rx0, ry0, rw, rh, GL_RED, GL_UNSIGNED_BYTE, temp);
                 glPixelStorei(GL_PACK_ALIGNMENT, 4);
-                for (int r = 0; r < img->height; r++) {
-                    int src_r = img->height - 1 - r;
-                    for (int c = 0; c < img->width; c++) {
-                        uint32_t v = (uint32_t)temp[src_r * img->width + c];
-                        img->pixels[r * img->width + c] = 0xFF000000u | (v << 16) | (v << 8) | v;
+                int dst_ox = rx0 - img->x;
+                int dst_oy = ry0 - img->y;
+                for (int r = 0; r < rh; r++) {
+                    for (int c = 0; c < rw; c++) {
+                        uint32_t v = (uint32_t)temp[r * rw + c];
+                        img->pixels[(dst_oy + r) * img->width + (dst_ox + c)] = 0xFF000000u | (v << 16) | (v << 8) | v;
                     }
                 }
                 free(temp);
             }
+        } else if (rx0 == img->x && ry0 == img->y && rw == img->width && rh == img->height) {
+            glReadPixels(img->x, img->y, img->width, img->height, GL_RGBA, GL_UNSIGNED_BYTE, img->pixels);
         } else {
-            uint32_t* temp = (uint32_t*)malloc((size_t)img->width * (size_t)img->height * sizeof(uint32_t));
+            memset(img->pixels, 0, (size_t)img->width * (size_t)img->height * sizeof(uint32_t));
+            uint32_t* temp = (uint32_t*)malloc((size_t)rw * (size_t)rh * sizeof(uint32_t));
             if (temp) {
-                glReadPixels(img->x, gl_y, img->width, img->height, GL_RGBA, GL_UNSIGNED_BYTE, temp);
-                for (int r = 0; r < img->height; r++) {
-                    int src_r = img->height - 1 - r;
-                    memcpy(&img->pixels[r * img->width], &temp[src_r * img->width], (size_t)img->width * sizeof(uint32_t));
+                glReadPixels(rx0, ry0, rw, rh, GL_RGBA, GL_UNSIGNED_BYTE, temp);
+                int dst_ox = rx0 - img->x;
+                int dst_oy = ry0 - img->y;
+                for (int r = 0; r < rh; r++) {
+                    memcpy(&img->pixels[(dst_oy + r) * img->width + dst_ox], &temp[r * rw], (size_t)rw * sizeof(uint32_t));
                 }
                 free(temp);
             }

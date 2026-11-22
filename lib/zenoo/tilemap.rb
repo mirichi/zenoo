@@ -1310,6 +1310,7 @@ module Zenoo
     # - 戻り値: `Boolean`
     def collide?(target)
       return false unless target
+      return target.collide?(self) if target.is_a?(Sprite)
       col_shape = target.respond_to?(:collider) ? target.collider : target
       return false unless col_shape && col_shape.respond_to?(:center_x)
 

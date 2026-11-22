@@ -437,8 +437,7 @@ module Zenoo
     #
     # - `button` (`Symbol`, `Integer`): 判定対象ボタン（`:left`, `:right`, `:middle`、デフォルト: `:left`）
     # - 戻り値: `Boolean`
-    def self.mouse_pressed?(button = :left)
-      return false if @mouse_consumed
+    def self.__raw_mouse_pressed?(button = :left)
       b = resolve_mouse(button)
       if @using_touch
         if b == 0 # 左クリックのみタッチでエミュレート
@@ -450,6 +449,11 @@ module Zenoo
       else
         Native::Input.mouse_pressed?(b)
       end
+    end
+
+    def self.mouse_pressed?(button = :left)
+      return false if @mouse_consumed
+      __raw_mouse_pressed?(button)
     end
 
     # マウスボタンが押された瞬間（トリガー）かどうかを返します（`consume_mouse!` 済み時は `false`）。
@@ -734,8 +738,8 @@ module Zenoo
     # ==========================================
     @actions = {}
     @action_prev_masks = {}
-    @tracked_gamepad_mask = 1
-    @tracked_gamepad_ids = [0]
+    @tracked_gamepad_mask = 0xF
+    @tracked_gamepad_ids = [0, 1, 2, 3]
     @virtual_pad = nil
     @vpad_actions_cur = {}
     @vpad_rx = 0.0
@@ -941,6 +945,14 @@ module Zenoo
     # - `id` (`Integer`): 対象ゲームパッド番号（デフォルト: 0）
     # - 戻り値: `Boolean`
     def self.action_pressed?(name, id = 0)
+      __action_pressed_impl?(name, id, true)
+    end
+
+    def self.__raw_action_pressed?(name, id = 0)
+      __action_pressed_impl?(name, id, false)
+    end
+
+    def self.__action_pressed_impl?(name, id, check_consume)
       sym = name.to_sym
       vpad_val = @vpad_actions_cur[sym] || 0.0
       return true if vpad_val >= 0.5
@@ -960,7 +972,11 @@ module Zenoo
 
       # マウスボタン (タッチ・consume_mouse! 経由で判定)
       act[:mouse].each do |m|
-        return true if mouse_pressed?(m)
+        if check_consume
+          return true if mouse_pressed?(m)
+        else
+          return true if __raw_mouse_pressed?(m)
+        end
       end
 
       # アナログ軸
@@ -1212,7 +1228,7 @@ module Zenoo
       j = 0
       while j < id_len
         pid = ids[j]
-        mask |= (1 << pid) if action_pressed?(sym, pid)
+        mask |= (1 << pid) if __raw_action_pressed?(sym, pid)
         j += 1
       end
       @action_prev_masks[sym] = mask

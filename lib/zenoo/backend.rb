@@ -297,6 +297,7 @@ module Zenoo
     @current_target = nil
     @active_gl_target = nil
     @clip_rects = []
+    @target_stack = []
     @retained_refs = []
     @last_retained_target = nil
     @last_retained_image = nil
@@ -353,6 +354,9 @@ module Zenoo
       @last_retained_image = nil
       @last_retained_shader = nil
       @last_retained_mesh = nil
+      @clip_rects.clear
+      @target_stack.clear
+      @current_target = nil
       Native::C.zen_batch_reset_frame
       false
     end
@@ -372,6 +376,27 @@ module Zenoo
       target
     end
 
+    def self.push_target(target)
+      @target_stack.push([@current_target, @clip_rects])
+      @current_target = target
+      @clip_rects = []
+      Native::C.zen_batch_push_target(target ? target.__ptr : nil)
+      target
+    end
+
+    def self.pop_target
+      prev = @target_stack.pop
+      if prev
+        @current_target = prev[0]
+        @clip_rects = prev[1]
+      else
+        @current_target = nil
+        @clip_rects = []
+      end
+      Native::C.zen_batch_pop_target
+      @current_target
+    end
+
     def self.active_gl_target
       @active_gl_target
     end
@@ -383,10 +408,9 @@ module Zenoo
     end
 
     def self.with_target(target)
-      old_target = @current_target
-      self.current_target = target
+      push_target(target)
       yield
-      self.current_target = old_target
+      pop_target
     end
 
     def self.has_pending_draws?(image)

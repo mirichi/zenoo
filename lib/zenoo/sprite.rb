@@ -212,13 +212,23 @@ module Zenoo
     # スプライトに消滅フラグを立て、実行中の全 Tween を停止します（子スプライトにも再帰的に伝搬し、`Sprite.clean` で配列から一括除去されます）。
     def vanish!
       return if @vanished
+      if (p = @parent)
+        p.__remove_child_internal(self)
+        @parent = nil
+      end
+      __vanish_recursive
+    end
+
+    # @api private
+    def __vanish_recursive
+      return if @vanished
       @vanished = true
       Tween.kill(self)
       if (ch = @children)
         i = 0
         len = ch.length
         while i < len
-          ch[i].vanish!
+          ch[i].__vanish_recursive
           i += 1
         end
       end

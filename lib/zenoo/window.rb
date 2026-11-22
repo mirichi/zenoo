@@ -113,6 +113,20 @@ module Zenoo
           "  window.addEventListener('pagehide', function() {" \
           "    updateAudio(true);" \
           "  });" \
+          "  var unlockAudio = function() {" \
+          "    if (window.miniaudio && window.miniaudio.devices) {" \
+          "      for (var i = 0; i < window.miniaudio.devices.length; i++) {" \
+          "        var dev = window.miniaudio.devices[i];" \
+          "        if (dev && dev.webaudio && dev.webaudio.state === 'suspended' && !dev.__zen_suspended) {" \
+          "          dev.webaudio.resume();" \
+          "        }" \
+          "      }" \
+          "    }" \
+          "  };" \
+          "  window.addEventListener('pointerdown', unlockAudio, { capture: true, passive: true });" \
+          "  window.addEventListener('mousedown', unlockAudio, { capture: true, passive: true });" \
+          "  window.addEventListener('touchend', unlockAudio, { capture: true, passive: true });" \
+          "  window.addEventListener('keydown', unlockAudio, { capture: true, passive: true });" \
           "}"
         )
       end
@@ -570,6 +584,22 @@ module Zenoo
 
     def self.__sync_active_camera
       @active_camera = @camera_disabled_depth.zero? ? @camera : nil
+    end
+
+    # @api private
+    def self.__save_and_reset_camera_state
+      state = [@camera, @camera_disabled_depth]
+      @camera = nil
+      @camera_disabled_depth = 0
+      __sync_active_camera
+      state
+    end
+
+    # @api private
+    def self.__restore_camera_state(state)
+      @camera = state[0]
+      @camera_disabled_depth = state[1]
+      __sync_active_camera
     end
 
     # 現在描画に実際に適用されているカメラを取得します（`Window.without_camera` ブロック内では `nil` を返します）。

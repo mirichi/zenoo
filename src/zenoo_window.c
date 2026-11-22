@@ -920,6 +920,7 @@ int zen_init_fullscreen(const char* title) {
 }
 
 void zen_shutdown(void) {
+    zen_audio_shutdown();
     zen__vibration_shutdown();
     zen__input_shutdown();
     zen__gfx_shutdown();
@@ -1110,17 +1111,17 @@ static void wasm_tick(void) {
     // 極端なラグ時（タブバックグラウンド移行等）のスパイラル防止
     if (dt > 0.2) dt = 0.2;
     if (dt <= 0.0) dt = 0.0001;
-    s_wasm_accumulator += dt;
 
-    double fixed_step = 1.0 / (double)((s_target_fps > 0) ? s_target_fps : 60);
-    if (s_wasm_accumulator < fixed_step) return;
-
-    int steps = 0;
-    while (s_wasm_accumulator >= fixed_step && steps < 2) {
-        s_wasm_accumulator -= fixed_step;
-        steps++;
-    }
-    if (s_wasm_accumulator > fixed_step * 2.0) {
+    if (s_target_fps > 0) {
+        s_wasm_accumulator += dt;
+        double fixed_step = 1.0 / (double)s_target_fps;
+        // requestAnimationFrame の 16.3ms 等の微少ジッターによるフレーム落ちを防止
+        if (s_wasm_accumulator + 0.002 < fixed_step) return;
+        while (s_wasm_accumulator >= fixed_step) {
+            s_wasm_accumulator -= fixed_step;
+        }
+        if (s_wasm_accumulator < 0.0) s_wasm_accumulator = 0.0;
+    } else {
         s_wasm_accumulator = 0.0;
     }
 

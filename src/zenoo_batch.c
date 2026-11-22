@@ -125,9 +125,17 @@ static int            s_pending_cap    = 0;
 static ZenImage*      s_current_target   = NULL;
 static ZenImage*      s_active_gl_target = NULL;
 
+typedef struct ZenTargetScope {
+    ZenImage* target;
+    int       clip_base;
+} ZenTargetScope;
+
 static ZenClipCtx*    s_clip_stack = NULL;
 static int            s_clip_depth = 0;
 static int            s_clip_cap   = 0;
+static int            s_clip_base  = 0;
+static ZenTargetScope s_target_scopes[ZEN_MAX_EXEC_DEPTH];
+static int            s_target_scope_depth = 0;
 
 typedef struct ZenBatchBuf {
     uint8_t* data;
@@ -367,7 +375,7 @@ static ZenDrawQueue* queue_for_target(ZenImage* image, int create) {
 }
 
 static ZenDrawQueue* active_queue(void) {
-    if (s_clip_depth > 0) {
+    if (s_clip_depth > s_clip_base) {
         return &s_clip_stack[s_clip_depth - 1].queue;
     }
     if (s_current_target) {
@@ -411,7 +419,7 @@ static ZenDrawCmd* push_cmd_slot(ZenDrawQueue* q, float z) {
     cmd->target = q->owner;
     cmd->z      = z;
     cmd->order  = q->count;
-    if (s_clip_depth > 0) {
+    if (s_clip_depth > s_clip_base) {
         const ZenClipCtx* top = &s_clip_stack[s_clip_depth - 1];
         cmd->has_clip = 1;
         cmd->clip_x = top->x;
@@ -468,6 +476,11 @@ void zen_batch_on_image_destroy(ZenImage* image) {
     if (!image) return;
     if (s_current_target == image) s_current_target = NULL;
     if (s_active_gl_target == image) s_active_gl_target = NULL;
+    for (int i = 0; i < s_target_scope_depth; i++) {
+        if (s_target_scopes[i].target == image) {
+            s_target_scopes[i].target = NULL;
+        }
+    }
     for (int i = s_pending_count - 1; i >= 0; i--) {
         if (s_pending_images[i] == image) {
             if (i != s_pending_count - 1) {
@@ -830,6 +843,8 @@ void zen_batch_reset_frame(void) {
     s_uniform_staging_active = 0;
     s_sprite_color_staged = 0;
     s_text_glyphs = 0;
+    s_clip_base = 0;
+    s_target_scope_depth = 0;
 }
 
 void zen_batch_mark_screen_cleared(void) {
@@ -842,6 +857,30 @@ void zen_batch_set_current_target(ZenImage* target) {
 
 ZenImage* zen_batch_get_current_target(void) {
     return s_current_target;
+}
+
+void zen_batch_push_target(ZenImage* target) {
+    if (s_target_scope_depth < ZEN_MAX_EXEC_DEPTH) {
+        s_target_scopes[s_target_scope_depth].target = s_current_target;
+        s_target_scopes[s_target_scope_depth].clip_base = s_clip_base;
+        s_target_scope_depth++;
+    }
+    s_current_target = target;
+    s_clip_base = s_clip_depth;
+}
+
+void zen_batch_pop_target(void) {
+    while (s_clip_depth > s_clip_base) {
+        zen_batch_pop_clip();
+    }
+    if (s_target_scope_depth > 0) {
+        s_target_scope_depth--;
+        s_current_target = s_target_scopes[s_target_scope_depth].target;
+        s_clip_base = s_target_scopes[s_target_scope_depth].clip_base;
+    } else {
+        s_current_target = NULL;
+        s_clip_base = 0;
+    }
 }
 
 void zen_batch_set_active_gl_target(ZenImage* target) {
@@ -878,7 +917,7 @@ void zen_batch_push_clip(float x, float y, float w, float h, float z) {
 }
 
 void zen_batch_pop_clip(void) {
-    if (s_clip_depth <= 0) return;
+    if (s_clip_depth <= s_clip_base) return;
     ZenClipCtx* ctx = &s_clip_stack[--s_clip_depth];
     ZenDrawQueue* src = &ctx->queue;
     if (src->count <= 0) {
@@ -931,6 +970,8 @@ void zen_batch_clear_clips(void) {
         s_clip_stack[i].queue.needs_z_sort = 0;
     }
     s_clip_depth = 0;
+    s_clip_base = 0;
+    s_target_scope_depth = 0;
 }
 
 int zen_batch_has_pending_draws(ZenImage* image) {

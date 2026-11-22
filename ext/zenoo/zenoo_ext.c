@@ -1501,6 +1501,19 @@ static VALUE cruby_zen_batch_get_current_target(VALUE self) {
     return (ret) ? ULL2NUM((unsigned long long)(uintptr_t)(ret)) : Qnil;
 }
 
+static VALUE cruby_zen_batch_push_target(VALUE self, VALUE arg0) {
+    (void)self;
+    void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
+    zen_batch_push_target(c_arg0);
+    return Qnil;
+}
+
+static VALUE cruby_zen_batch_pop_target(VALUE self) {
+    (void)self;
+    zen_batch_pop_target();
+    return Qnil;
+}
+
 static VALUE cruby_zen_batch_set_active_gl_target(VALUE self, VALUE arg0) {
     (void)self;
     void* c_arg0 = NIL_P(arg0) ? NULL : (void*)(uintptr_t)NUM2ULL(arg0);
@@ -2190,6 +2203,8 @@ void Init_zenoo(void) {
     rb_define_singleton_method(rb_mC, "zen_batch_mark_screen_cleared", cruby_zen_batch_mark_screen_cleared, 0);
     rb_define_singleton_method(rb_mC, "zen_batch_set_current_target", cruby_zen_batch_set_current_target, 1);
     rb_define_singleton_method(rb_mC, "zen_batch_get_current_target", cruby_zen_batch_get_current_target, 0);
+    rb_define_singleton_method(rb_mC, "zen_batch_push_target", cruby_zen_batch_push_target, 1);
+    rb_define_singleton_method(rb_mC, "zen_batch_pop_target", cruby_zen_batch_pop_target, 0);
     rb_define_singleton_method(rb_mC, "zen_batch_set_active_gl_target", cruby_zen_batch_set_active_gl_target, 1);
     rb_define_singleton_method(rb_mC, "zen_batch_get_active_gl_target", cruby_zen_batch_get_active_gl_target, 0);
     rb_define_singleton_method(rb_mC, "zen_batch_push_clip", cruby_zen_batch_push_clip, 5);

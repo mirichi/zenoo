@@ -206,7 +206,7 @@ module Zenoo
     class Button
       attr_accessor :action, :x, :y, :radius, :hit_radius, :label, :font_size
       attr_accessor :color, :active_color, :border_color, :active_border_color
-      attr_accessor :pressed
+      attr_accessor :pressed, :touch
 
       # バーチャルパッドの円形アクションボタンを初期化します。
       # `x:` / `y:` に負値を指定すると画面右端／下端からの相対座標として配置されます。
@@ -237,6 +237,7 @@ module Zenoo
         @border_color        = border_color
         @active_border_color = active_border_color
         @pressed             = false
+        @touch               = nil
       end
 
       # 現在の画面幅に応じたボタン中心の絶対 X 座標を返します（負値は右端基準）。
@@ -258,6 +259,7 @@ module Zenoo
       # ボタンの押下状態をリセットします。
       def reset
         @pressed = false
+        @touch = nil
       end
 
       # ボタン本体とラベルを描画します。
@@ -733,7 +735,14 @@ module Zenoo
 
       i = 0
       while i < btn_len
-        @buttons[i].pressed = false
+        btn = @buttons[i]
+        t = btn.touch
+        if t && t.active? && !t.cancelled?
+          btn.pressed = true
+        else
+          btn.touch = nil
+          btn.pressed = false
+        end
         i += 1
       end
 
@@ -748,17 +757,20 @@ module Zenoo
           bi = 0
           while bi < btn_len
             btn = @buttons[bi]
-            bx = btn.screen_x(win_w)
-            by = btn.screen_y(win_h)
-            dist = Math.hypot(t.x - bx, t.y - by)
-            if dist <= btn.hit_radius && dist < best_dist
-              best_dist = dist
-              best_btn = btn
+            if btn.touch.nil?
+              bx = btn.screen_x(win_w)
+              by = btn.screen_y(win_h)
+              dist = Math.hypot(t.x - bx, t.y - by)
+              if dist <= btn.hit_radius && dist < best_dist
+                best_dist = dist
+                best_btn = btn
+              end
             end
             bi += 1
           end
 
           if best_btn
+            best_btn.touch = t
             best_btn.pressed = true
             t.consume!
           end

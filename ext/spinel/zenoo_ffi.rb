@@ -151,7 +151,7 @@ module Zenoo
           end
           y += 1
         end
-        pixels.pack("L*")
+        pixels.pack("V*")
       end
 
       # ==========================================
@@ -264,6 +264,8 @@ module Zenoo
       ffi_func :zen_batch_mark_screen_cleared, [], :void
       ffi_func :zen_batch_set_current_target, [:ptr], :void
       ffi_func :zen_batch_get_current_target, [], :ptr
+      ffi_func :zen_batch_push_target, [:ptr], :void
+      ffi_func :zen_batch_pop_target, [], :void
       ffi_func :zen_batch_set_active_gl_target, [:ptr], :void
       ffi_func :zen_batch_get_active_gl_target, [], :ptr
       ffi_func :zen_batch_push_clip, [:float, :float, :float, :float, :float], :void

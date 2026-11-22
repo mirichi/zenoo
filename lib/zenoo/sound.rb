@@ -62,12 +62,12 @@ module Zenoo
         b = bus.to_sym
         v = vol.to_f
         @bus_volumes[b] = v
-        # このバスを使用している全サウンドの実効音量を更新
+        # このバス（:master の場合は全サウンド）の実効音量を更新
         i = 0
         len = @active_sounds.length
         while i < len
           s = @active_sounds[i]
-          s.__update_volume if s && s.bus == b
+          s.__update_volume if s && (b == :master || s.bus == b)
           i += 1
         end
         v
@@ -136,7 +136,7 @@ module Zenoo
         len = @paused_sounds.length
         while i < len
           s = @paused_sounds[i]
-          s.__resume_from_pause if s && s.paused?
+          s.resume if s && s.paused?
           i += 1
         end
         @paused_sounds.clear
@@ -304,8 +304,10 @@ module Zenoo
       __start_voice(check_cooldown: true, reset_fade: true)
     end
 
-    # 一時停止状態から再生を再開する内部ヘルパー
-    def __resume_from_pause
+    # 一時停止していた再生を途中位置から再開します。
+    #
+    # - 戻り値: `self`
+    def resume
       return self unless @paused
 
       @paused = false
@@ -376,7 +378,7 @@ module Zenoo
         @fade_volume = 0.0
         @fade_speed = 1.0 / sec
         __update_volume
-        __resume_from_pause
+        resume
       elsif !playing?
         @fade_volume = 0.0
         @fade_speed = 1.0 / sec
@@ -482,7 +484,8 @@ module Zenoo
 
     # 実効音量の再計算と全ボイスへの反映
     def __update_volume
-      bus_vol = Audio.bus_volume(@bus)
+      master_vol = Audio.bus_volume(:master)
+      bus_vol = (@bus == :master) ? master_vol : (master_vol * Audio.bus_volume(@bus))
       eff = @base_volume * bus_vol * @fade_volume
       i = 0
       while i < @voices.length
@@ -492,7 +495,8 @@ module Zenoo
     end
 
     def __update_voice_volume(voice)
-      bus_vol = Audio.bus_volume(@bus)
+      master_vol = Audio.bus_volume(:master)
+      bus_vol = (@bus == :master) ? master_vol : (master_vol * Audio.bus_volume(@bus))
       voice.volume = @base_volume * bus_vol * @fade_volume
     end
 
