@@ -373,4 +373,179 @@ module Zenoo
       @scene_snapshot.replay if @scene_snapshot
     end
   end
+
+  # ====================================================================
+  # Zenoo::GameScene - オブジェクト管理 + 2層(Game/UI)レイヤー付きゲーム用シーン
+  # ====================================================================
+  # `Scene` を継承し、ゲーム制作の定石となる 1 フレームの実行パイプラインを提供します:
+  # 1. `ui.update`     : UI 入力とクリック消費 (`Input.consume_mouse!`) を最優先で処理
+  # 2. `update`        : ゲーム固有の更新・当たり判定 (`Sprite.check` など)
+  # 3. スプライト更新  : `add` / `sprite_list` で登録した全スプライトの `update` と `clean`
+  # 4. `camera.update` : カメラのターゲット追従と画面シェイク更新
+  # 5. Game レイヤー   : カメラ座標系で `draw_game` と登録スプライトを描画し、Z 順を確定 (`flush`)
+  # 6. UI レイヤー     : スクリーン固定座標系で `draw_ui` と `ui` (`UI::Stage`) を最前面に描画
+  #
+  # 使用例:
+  #   class PlayScene < GameScene
+  #     def enter
+  #       @player  = add(Player.new(400, 300))
+  #       @enemies = sprite_list
+  #       @bullets = sprite_list
+  #       camera.target = @player
+  #
+  #       ui.hbox(16, 16, gap: 12) do |bar|
+  #         bar.button("PAUSE") { Scene.push(PauseScene.new) }
+  #       end
+  #     end
+  #
+  #     def update
+  #       @enemies << Enemy.new if frames % 60 == 0
+  #       Sprite.check(@bullets, @enemies) { |b, e| b.vanish; e.vanish }
+  #     end
+  #
+  #     def draw_game
+  #       @tilemap.draw
+  #     end
+  #
+  #     def draw_ui
+  #       Window.draw_text(16, 60, "ENEMIES: #{@enemies.length}")
+  #     end
+  #   end
+  # ====================================================================
+  class GameScene < Scene
+    attr_accessor :camera
+    attr_reader :ui, :sprites, :sprite_lists
+
+    def initialize(&block)
+      super(&block)
+      __init_game_scene
+    end
+
+    # 単体の `Sprite` をシーンの管理対象に追加し、そのスプライト自身を返します。
+    # 追加されたスプライトは毎フレーム自動で `update` / `draw` され、`vanish` 時に自動除去されます。
+    #
+    # - `sprite` (`Sprite`): 追加するスプライト
+    # - 戻り値: `Sprite` 引数の `sprite`
+    def add(sprite)
+      @sprites << sprite
+      sprite
+    end
+
+    # シーンが自動管理する新しいスプライト用配列 (`Array<Sprite>`) を生成して返します。
+    # 返された配列に `@enemies << Enemy.new` のように追加するだけで、毎フレーム自動で `Sprite.update` / `Sprite.clean` / `Sprite.draw` が実行され、`Sprite.check(@bullets, @enemies)` にもそのまま渡せます。
+    #
+    # - 戻り値: `Array<Sprite>` 新しく登録された空配列
+    def sprite_list
+      list = []
+      @sprite_lists << list
+      list
+    end
+
+    # 管理中の全スプライト（`sprites` およびすべての `sprite_list` の中身）を一括消去します。
+    def clear_sprites
+      @sprites.clear
+      i = 0
+      len = @sprite_lists.length
+      while i < len
+        @sprite_lists[i].clear
+        i += 1
+      end
+      nil
+    end
+
+    # 毎フレームのゲーム進行・衝突判定ロジック（サブクラスで上書き）
+    def update; end
+
+    # Game レイヤー（カメラ座標系）の描画フック（サブクラスで上書き）
+    # 背景、タイルマップ (`Tilemap`)、パーティクルなど、管理スプライトより奥に描画したいワールド要素を記述します。
+    def draw_game; end
+
+    # UI レイヤー（スクリーン固定座標系）の描画フック（サブクラスで上書き）
+    # カメラの影響を受けない HUD テキストやゲージなどを記述します（`ui` ステージのウィジェットは自動でこの上に描画されます）。
+    def draw_ui; end
+
+    # 1 フレーム分の標準パイプライン実行 (`Scene#call` の実装)
+    def call
+      # 1. UI 更新 (最前面かつ非フェード時のみポインタ入力を受け付け、ゲーム側への誤クリック貫通を防止)
+      if active? && !Scene.transitioning?
+        @ui.update
+      end
+
+      # 2. ゲーム固有ロジック更新
+      update
+
+      # 3. 登録スプライトの一括更新 & 消滅オブジェクト除去
+      __update_and_clean_sprites
+
+      # 4. カメラ更新 (プレイヤー移動後の最新座標に追従)
+      @camera.update(Window.delta_time.to_f) if @camera
+
+      # 5. Game レイヤー描画 (カメラ適用 + フラッシュによる Z オーダー分離)
+      __run_game_layer
+
+      # 6. UI レイヤー描画 (カメラ無効化・スクリーン固定座標)
+      __run_ui_layer
+    end
+
+    # --- 以下はパイプライン内部メソッド ---
+    def __init_game_scene
+      w = Window.width > 0 ? Window.width : 1280
+      h = Window.height > 0 ? Window.height : 720
+      @camera       ||= Camera.new(x: w * 0.5, y: h * 0.5)
+      @ui           ||= UI::Stage.new
+      @sprites      ||= []
+      @sprite_lists ||= []
+    end
+
+    def __attach(below)
+      super(below)
+      __init_game_scene
+    end
+
+    def __update_and_clean_sprites
+      unless @sprites.empty?
+        Sprite.update(@sprites)
+        Sprite.clean(@sprites)
+      end
+
+      i = 0
+      len = @sprite_lists.length
+      while i < len
+        list = @sprite_lists[i]
+        unless list.empty?
+          Sprite.update(list)
+          Sprite.clean(list)
+        end
+        i += 1
+      end
+    end
+
+    def __draw_all_sprites
+      Sprite.draw(@sprites) unless @sprites.empty?
+
+      i = 0
+      len = @sprite_lists.length
+      while i < len
+        list = @sprite_lists[i]
+        Sprite.draw(list) unless list.empty?
+        i += 1
+      end
+    end
+
+    def __run_game_layer
+      old_cam = Window.camera
+      Window.camera = @camera
+      draw_game
+      __draw_all_sprites
+      Window.camera = old_cam
+      Backend.active_queue.flush
+    end
+
+    def __run_ui_layer
+      Window.without_camera do
+        draw_ui
+        @ui.draw
+      end
+    end
+  end
 end

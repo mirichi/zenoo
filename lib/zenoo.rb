@@ -79,6 +79,7 @@ Tilemap       = Zenoo::Tilemap
 PhysicsSprite = Zenoo::PhysicsSprite
 Profiler      = Zenoo::Profiler
 Scene         = Zenoo::Scene
+GameScene     = Zenoo::GameScene
 
 # ====================================================
 # CRuby 専用 開発支援モジュール (Spinel 静的走査回避)
